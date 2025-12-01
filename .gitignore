@@ -13,6 +13,7 @@ model_artifacts/
 *.pkl
 # data
 data/raw/
+data/processed/
 data/interim/
 # logs
 logs/
