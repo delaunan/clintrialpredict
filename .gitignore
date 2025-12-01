@@ -1,1 +1,21 @@
-raw_data/
+# virtual envs
+.venv/
+env/
+venv/
+# python version
+.python-version
+# OS
+.DS_Store
+# jupyter
+.ipynb_checkpoints/
+# model artifacts
+model_artifacts/
+*.pkl
+# data
+data/raw/
+data/interim/
+# logs
+logs/
+# cache
+__pycache__/
+*.pyc
