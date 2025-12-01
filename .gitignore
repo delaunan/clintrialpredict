@@ -12,6 +12,7 @@ venv/
 model_artifacts/
 *.pkl
 # data
+data/
 data/raw/
 data/processed/
 data/interim/
