@@ -1,0 +1,95 @@
+PIPELINE BLUEPRINT & DATA AUDIT
+Rows: 105,884
+Cols: 31
+================================================================================
+
+[TARGET]
+  > Strategy:  Label (None) | None
+  > Rationale: Outcome variable (0=Completed, 1=Failed).
+--------------------------------------------------------------------------------
+  COLUMN NAME                    | MISSING  | STATS / DISTRIBUTION
+--------------------------------------------------------------------------------
+  • target                       |    0.0% | Unique: 2    | Dominant Cat: 80.5%
+
+[NUMERIC_SKEWED]
+  > Strategy:  Numeric (Passthrough) | Log1p + StandardScaler
+  > Rationale: High Skewness expected. Log1p compresses outliers; Scaler normalizes range.
+--------------------------------------------------------------------------------
+  COLUMN NAME                    | MISSING  | STATS / DISTRIBUTION
+--------------------------------------------------------------------------------
+  • number_of_arms               |    8.2% | Mean: 2.4 | Max: 44 | Skew: 3.97 | Zeros: 0.0%
+  • start_year                   |    0.0% | Mean: 2012.8 | Max: 2027 | Skew: -0.06 | Zeros: 0.0%
+  • competition_niche            |    0.0% | Mean: 273.9 | Max: 1627 | Skew: 1.76 | Zeros: 23.9%
+  • competition_broad            |    0.0% | Mean: 882.9 | Max: 2983 | Skew: 1.04 | Zeros: 0.0%
+
+[ORDINAL]
+  > Strategy:  Numeric (Passthrough) | MinMax (Optional) or None
+  > Rationale: Ordinal nature (1 < 2 < 3). Preserving magnitude is important.
+--------------------------------------------------------------------------------
+  COLUMN NAME                    | MISSING  | STATS / DISTRIBUTION
+--------------------------------------------------------------------------------
+  • phase_ordinal                |    0.0% | Mean: 1.9 | Max: 3 | Skew: 0.20 | Zeros: 0.0%
+
+[CATEGORICAL_BINARY]
+  > Strategy:  OneHotEncoder (drop='if_binary') | None
+  > Rationale: Already Boolean. Dropping one column prevents multicollinearity.
+--------------------------------------------------------------------------------
+  COLUMN NAME                    | MISSING  | STATS / DISTRIBUTION
+--------------------------------------------------------------------------------
+  ❌ includes_us                  | NOT FOUND
+  • is_international             |    0.0% | Unique: 2    | Dominant Cat: 78.7%
+  • covid_exposure               |    0.0% | Unique: 2    | Dominant Cat: 86.2%
+  • healthy_volunteers           |    0.4% | Unique: 2    | Dominant Cat: 76.4%
+  • adult                        |    0.0% | Unique: 2    | Dominant Cat: 94.7%
+  • child                        |    0.0% | Unique: 2    | Dominant Cat: 86.4%
+  • older_adult                  |    0.0% | Unique: 2    | Dominant Cat: 74.3%
+
+[CATEGORICAL_NOMINAL]
+  > Strategy:  OneHotEncoder (handle_unknown='ignore') | None
+  > Rationale: Low cardinality (<50). One-Hot is interpretable for SHAP.
+--------------------------------------------------------------------------------
+  COLUMN NAME                    | MISSING  | STATS / DISTRIBUTION
+--------------------------------------------------------------------------------
+  • gender                       |    0.0% | Unique: 3    | Dominant Cat: 86.2%
+  • agency_class                 |    0.0% | Unique: 8    | Dominant Cat: 57.9%
+  • masking                      |    1.2% | Unique: 5    | Dominant Cat: 55.3%
+  • allocation                   |   24.6% | Unique: 2    | Dominant Cat: 81.4%
+  • intervention_model           |    1.8% | Unique: 5    | Dominant Cat: 53.4%
+  • primary_purpose              |    1.9% | Unique: 10   | Dominant Cat: 81.6%
+  • therapeutic_area             |    0.0% | Unique: 23   | Dominant Cat: 27.9%
+
+[CATEGORICAL_HIGH_CARD]
+  > Strategy:  TargetEncoder | None
+  > Rationale: High cardinality (>50). One-Hot would create sparse matrices. Target Encoding captures risk probability.
+--------------------------------------------------------------------------------
+  COLUMN NAME                    | MISSING  | STATS / DISTRIBUTION
+--------------------------------------------------------------------------------
+  • therapeutic_subgroup_name    |    0.0% | Unique: 140  | Dominant Cat: 24.0%
+  • best_pathology               |    0.0% | Unique: 1166 | Dominant Cat: 18.9%
+
+[TEXT_TAGS]
+  > Strategy:  TF-IDF Vectorizer (Top 50) | None
+  > Rationale: Bag-of-words approach. Identifies specific topics (e.g., 'Placebo', 'Oncology').
+--------------------------------------------------------------------------------
+  COLUMN NAME                    | MISSING  | STATS / DISTRIBUTION
+--------------------------------------------------------------------------------
+  • txt_tags                     |    0.0% | Avg Words: 70 | Empty Rows: 0
+
+[TEXT_COMPLEXITY]
+  > Strategy:  BERT Embeddings (Stream B) | None
+  > Rationale: Semantic complexity. BERT captures the difficulty of the protocol rules.
+--------------------------------------------------------------------------------
+  COLUMN NAME                    | MISSING  | STATS / DISTRIBUTION
+--------------------------------------------------------------------------------
+  • txt_criteria                 |    0.0% | Avg Words: 356 | Empty Rows: 19
+
+[EXCLUDED]
+  > Strategy:  DROP | None
+  > Rationale: Data Leakage (Future Info) or ID columns.
+--------------------------------------------------------------------------------
+  COLUMN NAME                    | MISSING  | STATS / DISTRIBUTION
+--------------------------------------------------------------------------------
+  • overall_status               |    0.0% | Unique: 4    | Dominant Cat: 80.5%
+  • min_p_value                  |   89.9% | Unique: 2503 | Dominant Cat: 17.3%
+  • why_stopped                  |   82.9% | Unique: 13123 | Dominant Cat: 1.2%
+  • nct_id                       |    0.0% | Unique: 105884 | Dominant Cat: 0.0%
