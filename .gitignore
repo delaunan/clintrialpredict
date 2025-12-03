@@ -9,7 +9,7 @@ venv/
 # jupyter
 .ipynb_checkpoints/
 # model artifacts
-models/
+models/*
 model_artifacts/
 *.pkl
 # data
