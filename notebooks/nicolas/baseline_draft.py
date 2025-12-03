@@ -28,7 +28,6 @@ AACT_LOAD_PARAMS = {
 
 print(">>> Setup Complete. Ready to process.")
 
-
 # -----------------------------------------------------------------------------
 # 2. THE FUNNEL: LOADING & FILTERING (Updated with Year Filter)
 # -----------------------------------------------------------------------------
@@ -72,45 +71,27 @@ print(f"   - Core Cohort Size (Phases 1-3, Years 2000-{current_year-1}): {len(df
 
 
 # -----------------------------------------------------------------------------
-# 2. THE FUNNEL: LOADING & FILTERING (Updated with Year Filter)
+# 3. MEDICAL HIERARCHY & SUBGROUPS
 # -----------------------------------------------------------------------------
-print(">>> Loading Studies & Applying Filters...")
+print(">>> Attaching Medical Hierarchy...")
 
-# A. Load Studies
-cols_studies = [
-    'nct_id', 'overall_status', 'study_type', 'phase',
-    'start_date', 'start_date_type',
-    'number_of_arms', 'official_title', 'why_stopped'
-]
-df = pd.read_csv(os.path.join(DATA_PATH, 'studies.txt'), usecols=cols_studies, **AACT_LOAD_PARAMS)
+# A. Load Smart Lookup (Best Term per Trial)
+df_smart = pd.read_csv(os.path.join(DATA_PATH, 'smart_pathology_lookup.csv'))
+df = df.merge(df_smart, on='nct_id', how='left')
 
-# B. Filter: Interventional Only
-df = df[df['study_type'] == 'INTERVENTIONAL'].copy()
+# B. Fill Missing
+df['therapeutic_area'] = df['therapeutic_area'].fillna('Other/Unclassified')
+df['best_pathology'] = df['best_pathology'].fillna('Unknown')
 
-# C. Filter: Drugs Only
-df_int = pd.read_csv(os.path.join(DATA_PATH, 'interventions.txt'), usecols=['nct_id', 'intervention_type'], **AACT_LOAD_PARAMS)
-drug_ids = df_int[df_int['intervention_type'].str.upper().isin(['DRUG', 'BIOLOGICAL'])]['nct_id'].unique()
-df = df[df['nct_id'].isin(drug_ids)]
+# C. Create Subgroup Code (Level 2 Hierarchy)
+df['therapeutic_subgroup'] = df['tree_number'].astype(str).apply(
+    lambda x: x[:7] if pd.notna(x) and len(x) >= 7 else 'Unknown'
+)
 
-# D. Filter: Closed Statuses Only
-allowed_statuses = ['COMPLETED', 'TERMINATED', 'WITHDRAWN', 'SUSPENDED']
-df = df[df['overall_status'].isin(allowed_statuses)]
-
-# E. Filter: Exclude Phase 0 and Phase 4 (Refined Scope)
-excluded_phases = ['EARLY_PHASE1', 'PHASE4', 'NA']
-df = df[~df['phase'].isin(excluded_phases)]
-
-# F. Create Target & Fix Dates
-df['target'] = df['overall_status'].apply(lambda x: 0 if x == 'COMPLETED' else 1)
-df['start_date'] = pd.to_datetime(df['start_date'], errors='coerce')
-df['start_year'] = df['start_date'].dt.year
-
-# --- NEW FILTER: VALID YEARS ONLY ---
-# Drop 1900 (Errors) and Future Dates (Invalid for training)
-current_year = pd.Timestamp.now().year
-df = df[df['start_year'].between(2000, current_year-1)]
-
-print(f"   - Core Cohort Size (Phases 1-3, Years 2000-{current_year-1}): {len(df)} trials")
+# D. Map Subgroup Code to Name
+df_lookup = pd.read_csv(os.path.join(DATA_PATH, 'mesh_lookup.csv'), sep='|')
+code_to_name = pd.Series(df_lookup.mesh_term.values, index=df_lookup.tree_number).to_dict()
+df['therapeutic_subgroup_name'] = df['therapeutic_subgroup'].map(code_to_name).fillna('Unknown Subgroup')
 
 
 # -----------------------------------------------------------------------------
@@ -193,6 +174,7 @@ trial_p = min_p.groupby('nct_id')['p_value_num'].min().reset_index(name='min_p_v
 
 df = df.merge(trial_p, on='nct_id', how='left')
 
+
 # -----------------------------------------------------------------------------
 # 6. OPERATIONAL PROXIES, SPONSORS & EXTERNAL FACTORS (Updated)
 # -----------------------------------------------------------------------------
@@ -237,7 +219,6 @@ df = df.merge(df_des, on='nct_id', how='left')
 
 print("   - Created 'is_international' and 'includes_us' flags.")
 print("   - Dropped leaky counts (facilities/countries).")
-
 
 
 # -----------------------------------------------------------------------------
@@ -296,216 +277,22 @@ print(f"    Columns: {len(df.columns)}")
 print(f"    Text Columns Present: 'txt_tags', 'txt_criteria'")
 
 
-import os
 
-# Define the absolute path to the data directory
-# Update this string if running on a different machine
-DATA_PATH = "/home/delaunan/code/delaunan/clintrialpredict/data"
-
-# Verify that the directory exists
-if os.path.exists(DATA_PATH):
-    print(f"Data Path configured: {DATA_PATH}")
-else:
-    print(f"Error: Path not found: {DATA_PATH}")
-
-import pandas as pd
-import numpy as np
-from sklearn.compose import ColumnTransformer
-from sklearn.pipeline import make_pipeline
-from sklearn.impute import SimpleImputer
-from sklearn.preprocessing import OneHotEncoder, TargetEncoder
-from sklearn.feature_extraction.text import TfidfVectorizer
-
-# 1. Construct File Path
-file_path = os.path.join(DATA_PATH, 'project_data.csv')
-
-# 2. Load Data
-try:
-    df = pd.read_csv(file_path, low_memory=False)
-    print(f"Data Loaded Successfully: {len(df)} rows.")
-except FileNotFoundError:
-    print(f"Error: File not found at {file_path}")
-
-# 3. Sort by Time
-# Essential for temporal splitting.
-if 'df' in locals():
-    df = df.sort_values(by='start_year').reset_index(drop=True)
-    print(f"Date Range: {df['start_year'].min()} to {df['start_year'].max()}")
-
-
-# 1. Define Split Point (80% Train / 20% Test)
-split_idx = int(len(df) * 0.8)
-
-# 2. Separate Features and Target
-X = df.drop(columns=['target', 'overall_status'])
-y = df['target']
-
-# 3. Perform Temporal Split
-X_train = X.iloc[:split_idx]
-X_test  = X.iloc[split_idx:]
-y_train = y.iloc[:split_idx]
-y_test  = y.iloc[split_idx:]
-
-# 4. Extract Years for Post-Hoc Analysis
-train_years = X_train['start_year'].values
-test_years  = X_test['start_year'].values
-
-# 5. Verification Report
-print(f"TRAIN Set: {train_years.min()} - {train_years.max()} (Rows: {len(X_train)})")
-print(f"TEST Set:  {test_years.min()} - {test_years.max()} (Rows: {len(X_test)})")
-
-# Check for COVID coverage in Training
-if train_years.max() >= 2019:
-    print("Status: Training set includes COVID-era data (2019+).")
-else:
-    print("Status: Training set ends before COVID era.")
-
-
-from sklearn.preprocessing import FunctionTransformer
-from sklearn.feature_extraction.text import TfidfVectorizer, ENGLISH_STOP_WORDS
-import re
-
-# --- CONFIGURATION ---
-#N_TEXT_FEATURES = 100
-
-# 1. Define Feature Groups
-cat_binary = ['is_international', 'covid_exposure', 'healthy_volunteers',
-              'adult', 'child', 'older_adult', 'includes_us']
-
-cat_nonminal = ['gender', 'agency_class', 'masking', 'intervention_model',
-               'primary_purpose', 'therapeutic_area', 'allocation']
-
-cat_high_card = ['therapeutic_subgroup_name', 'best_pathology']
-
-# --- TEXT FEATURE (DISABLED FOR BASELINE) ---
-# TEXT_TAGS = 'txt_tags'
-
-# 2. Define Stop Words (DISABLED)
-# clinical_stop_words = [
-#     'study', 'trial', 'clinical', 'phase', 'group', 'cohort', 'arm',
-#     'randomized', 'randomised', 'controlled', 'double', 'blind', 'open', 'label',
-#     'safety', 'efficacy', 'comparison', 'evaluation',
-#     'patient', 'subject', 'participant', 'volunteer'
-# ]
-# final_stop_words = list(ENGLISH_STOP_WORDS) + clinical_stop_words
-
-# 3. Define Text Cleaning Logic (DISABLED)
-# def clean_text_logic(series):
-#     s = series.fillna('').str.lower()
-#     s = s.str.replace(r'\d+', '', regex=True)
-#     s = s.str.replace(r'(\w{2,})ies\b', r'\1y', regex=True)
-#     s = s.str.replace(r'(\w{3,})s\b', r'\1', regex=True)
-#     return s
-
-# 4. Define Pipelines
-pipe_bin = make_pipeline(
-    SimpleImputer(strategy='most_frequent'),
-    OneHotEncoder(drop='if_binary', dtype=int, handle_unknown='ignore')
-)
-
-pipe_nom = make_pipeline(
-    SimpleImputer(strategy='constant', fill_value='UNKNOWN'),
-    OneHotEncoder(handle_unknown='ignore', sparse_output=False, dtype=int)
-)
-
-pipe_high = make_pipeline(
-    SimpleImputer(strategy='constant', fill_value='UNKNOWN'),
-    TargetEncoder(target_type='binary', smooth=10.0, random_state=42)
-)
-
-# Text Pipeline (DISABLED)
-# pipe_txt = make_pipeline(
-#     FunctionTransformer(clean_text_logic, validate=False, feature_names_out='one-to-one'),
-#     TfidfVectorizer(max_features=N_TEXT_FEATURES, stop_words=final_stop_words)
-# )
-
-# 5. Assemble ColumnTransformer
-encoder_step = ColumnTransformer(
-    transformers=[
-        ('binary', pipe_bin, cat_binary),
-        ('nominal', pipe_nom, cat_nonminal),
-        ('high_card', pipe_high, cat_high_card),
-        # ('text', pipe_txt, TEXT_TAGS)  <-- DISABLED HERE
-    ],
-    remainder='paththrough',
-    verbose_feature_names_out=False
-)
-
-
-print("Processing Categorical Features...")
-
-# 1. Fit on Train, Transform Train
-X_train_cat = encoder_step.fit_transform(X_train, y_train)
-
-# 2. Transform Test (No Fitting)
-X_test_cat = encoder_step.transform(X_test)
-
-# 3. Output Verification
-print(f"Encoded Train Shape: {X_train_cat.shape}")
-print(f"Encoded Test Shape:  {X_test_cat.shape}")
-
-# Verify Feature Names
-# This should now work because FunctionTransformer passes the names correctly
-new_features = encoder_step.get_feature_names_out()
-print(f"Total Features: {len(new_features)}")
-print(f"Sample Features: {new_features[:10]}")
-
-
-import numpy as np
-
-# 1. Settings
-n_samples = 20
-feature_names = encoder_step.get_feature_names_out()
-
-# 2. Pick Random Indices
-# We use a fixed seed (42) so you see the same rows every time you run this
-rng = np.random.RandomState(42)
-random_indices = rng.choice(X_train_cat.shape[0], size=n_samples, replace=False)
-
-# 3. Slice the Data
-# We grab the specific rows corresponding to the random indices
-sample_raw = X_train_cat[random_indices]
-
-# 4. Handle Sparse Matrix
-# TF-IDF often creates a "Sparse Matrix" to save memory.
-# We must convert it to a standard "Dense" array to put it in a DataFrame.
-try:
-    sample_raw = sample_raw.toarray()
-except AttributeError:
-    pass # It is already a standard array
-
-# 5. Create and Display DataFrame
-df_sample = pd.DataFrame(sample_raw, columns=feature_names)
-
-print(f"Displaying {n_samples} Random Rows from the Processed Training Set:")
-display(df_sample)
-
-# 6. Quick Stats Check
-print("\n--- Data Integrity Check ---")
-print(f"Min Value: {df_sample.min().min()}")
-print(f"Max Value: {df_sample.max().max()}")
-print("If Max > 1, it means Target Encoding is working (probabilities) or TF-IDF is working (scores).")
-print("If Max == 1, it might be only Binary/One-Hot features.")
-
-import pandas as pd
-import matplotlib.pyplot as plt
-
-data = pd.read_csv("/home/delaunan/code/delaunan/clintrialpredict/data/project_data.csv")
 numeric_df = data.select_dtypes(include=['number'])
 numeric_df.columns
+
+
 categorical_cols = data.columns.difference(numeric_df.columns)
 categorical_cols
 
 numeric_df.hist(figsize=(12, 10), bins=30)
 plt.tight_layout()
 plt.show()
+
+
 import seaborn as sns
 sns.boxplot(x=data["number_of_arms"])
 plt.show()
-
-cols_to_drop = ["target", "covid_exposure", "is_international", "min_p_value"]
-
-num_df = numeric_df.drop(columns=cols_to_drop)
 
 import numpy as np
 from sklearn.preprocessing import FunctionTransformer, StandardScaler, MinMaxScaler
@@ -519,26 +306,6 @@ from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import OneHotEncoder, TargetEncoder
 from sklearn.feature_extraction.text import TfidfVectorizer
-
-
-# 1. Define Split Point (80% Train / 20% Test)
-# 1. Define Split Point (80% Train / 20% Test)
-split_idx = int(len(data) * 0.8)
-
-# 2. Separate Features and Target
-X = data.drop(columns=['target', 'overall_status','nct_id'])
-y = data['target']
-
-# 3. Perform Temporal Split
-X_train = X.iloc[:split_idx]
-X_test  = X.iloc[split_idx:]
-y_train = y.iloc[:split_idx]
-y_test  = y.iloc[split_idx:]
-
-# 4. Extract Years for Post-Hoc Analysis
-train_years = X_train['start_year'].values
-test_years  = X_test['start_year'].values
-
 
 #These are the different numeric columns that need to pass through different branches of the pipeline
 log_trans_cols = ['competition_niche', 'competition_broad', 'num_primary_endpoints', 'number_of_arms']
@@ -591,7 +358,15 @@ scaler = ColumnTransformer(
         ("minmax", minmax_pipeline, min_max_cols),
         ("cat_binary", pipe_bin,cat_binary_cols),
         ("nominal", pipe_nom,cat_nominal_cols),
-        ("high_card", pipe_high,cat_high_card_cols)],remainder="drop")
+        ("high_card", pipe_high,cat_high_card_cols)],remainder="passthrough")
+
+from sklearn.linear_model import LogisticRegression
+from sklearn.pipeline import Pipeline
+
+log_reg_model = Pipeline(steps=[
+    ("preprocess", scaler),
+    ("model", LogisticRegression(class_weight='balanced', solver='liblinear', penalty='l2', C=0.01,max_iter=1000, random_state=42))])
+
 
 from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
@@ -654,55 +429,21 @@ ax[2].plot([0, 1], [y_test.mean(), y_test.mean()], "k--", label="Baseline") # Ad
 plt.tight_layout()
 plt.show()
 
-import matplotlib.pyplot as plt
-from sklearn.dummy import DummyClassifier
-from sklearn.metrics import roc_curve, roc_auc_score, confusion_matrix, ConfusionMatrixDisplay
 
-# -----------------------------------------------------------------------------
-# 1. TRAIN DUMMY CLASSIFIER
-# -----------------------------------------------------------------------------
-# Strategy 'most_frequent' always predicts Class 0 (Completed)
+from sklearn.dummy import DummyClassifier
+from sklearn.metrics import accuracy_score, classification_report
+
+# 1. Create the "Dumb" Model
+# strategy='most_frequent' means "Always predict the majority class (0)"
 dummy = DummyClassifier(strategy='most_frequent')
+
+# 2. Fit (It just looks at the counts of 0 vs 1)
 dummy.fit(X_train, y_train)
 
-# Get Predictions
+# 3. Predict
 y_pred_dummy = dummy.predict(X_test)
-y_prob_dummy = dummy.predict_proba(X_test)[:, 1] # Usually all zeros
 
-# Get MVP Predictions (from your existing log_reg_model)
-y_pred_mvp = log_reg_model.predict(X_test)
-y_prob_mvp = log_reg_model.predict_proba(X_test)[:, 1]
-
-# -----------------------------------------------------------------------------
-# 2. VISUAL COMPARISON
-# -----------------------------------------------------------------------------
-fig, ax = plt.subplots(1, 3, figsize=(20, 6))
-
-# --- Plot A: ROC Curves ---
-fpr_d, tpr_d, _ = roc_curve(y_test, y_prob_dummy)
-fpr_m, tpr_m, _ = roc_curve(y_test, y_prob_mvp)
-
-ax[0].plot(fpr_d, tpr_d, linestyle='--', label=f'Dummy (AUC = 0.50)')
-ax[0].plot(fpr_m, tpr_m, linewidth=2, color='orange', label=f'LogReg MVP (AUC = {roc_auc_score(y_test, y_prob_mvp):.2f})')
-ax[0].plot([0, 1], [0, 1], 'k--', alpha=0.3)
-ax[0].set_title("ROC Curve Comparison")
-ax[0].set_xlabel("False Positive Rate")
-ax[0].set_ylabel("True Positive Rate")
-ax[0].legend()
-
-# --- Plot B: Dummy Confusion Matrix ---
-ConfusionMatrixDisplay.from_predictions(
-    y_test, y_pred_dummy,
-    normalize='true', cmap='Greys', colorbar=False, ax=ax[1]
-)
-ax[1].set_title(f"Dummy Model\n(Accuracy: {dummy.score(X_test, y_test):.2f})")
-
-# --- Plot C: MVP Confusion Matrix ---
-ConfusionMatrixDisplay.from_predictions(
-    y_test, y_pred_mvp,
-    normalize='true', cmap='Blues', colorbar=False, ax=ax[2]
-)
-ax[2].set_title(f"LogReg MVP\n(Accuracy: {log_reg_model.score(X_test, y_test):.2f})")
-
-plt.tight_layout()
-plt.show()
+# 4. Evaluate
+print(f"Dumb Model Accuracy: {accuracy_score(y_test, y_pred_dummy):.4f}")
+print("\nClassification Report (Notice Class 1 is 0.00):")
+print(classification_report(y_test, y_pred_dummy, zero_division=0))
