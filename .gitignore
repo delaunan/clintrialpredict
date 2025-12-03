@@ -16,6 +16,7 @@ data/
 data/raw/
 data/processed/
 data/interim/
+data_project/
 notebooks/julius/
 # logs
 logs/
