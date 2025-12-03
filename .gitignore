@@ -16,6 +16,7 @@ data/
 data/raw/
 data/processed/
 data/interim/
+notebooks/julius/
 # logs
 logs/
 # cache
