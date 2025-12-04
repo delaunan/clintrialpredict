@@ -95,17 +95,20 @@ class ClinicalTextCleaner(BaseEstimator, TransformerMixin):
         return self
 
     def transform(self, X):
+        # Handle both DataFrame (from ColumnTransformer) and Series/Array
         if isinstance(X, pd.DataFrame):
             text_series = X.iloc[:, 0]
         else:
             text_series = pd.Series(X.flatten())
+
+        # Apply cleaning
         return text_series.apply(self._clean_text).values
 
     def _clean_text(self, text):
         if pd.isna(text) or text == '': return ""
         text = str(text).lower()
 
-        # Remove numbers entirely
+        # Remove numbers entirely (dosage numbers often confuse TF-IDF without context)
         tokens = text.split()
         clean_tokens = []
         for t in tokens:
@@ -123,12 +126,17 @@ class ClinicalTextCleaner(BaseEstimator, TransformerMixin):
         return np.array(input_features)
 
 def get_pipeline():
-    # Feature Groups
+
+    # -------------------------------------------------------------------------
+    # 1. DEFINE FEATURE GROUPS
+    # -------------------------------------------------------------------------
+
+    # Skewed numerical features -> Log Transform
     log_trans_cols = [
         'competition_niche', 'competition_broad',
         'num_primary_endpoints', 'number_of_arms',
         'criteria_len_log'
-        ]
+    ]
 
     # Normal numerical features -> Standard Scaler
     stand_scal_cols = ["start_year"]
@@ -136,29 +144,33 @@ def get_pipeline():
     # Bounded numerical features -> MinMax Scaler
     min_max_cols = ["phase_ordinal"]
 
-
     # Binary Categories -> OneHot (drop one)
     cat_binary_cols = [
         'is_international', 'covid_exposure', 'healthy_volunteers',
         'adult', 'child', 'older_adult', 'includes_us'
-        ]
+    ]
 
     # Nominal Categories (Low Cardinality) -> OneHot (keep all)
     cat_nominal_cols = [
         'gender', 'agency_class', 'masking', 'intervention_model',
-        'primary_purpose', 'allocation', 'therapeutic_area']
+        'primary_purpose', 'allocation', 'therapeutic_area',
+        'sponsor_tier'
+    ]
 
     # High Cardinality Categories -> Target Encoding
     cat_high_card_cols = [
-        'therapeutic_subgroup_name', 'best_pathology'
-        ]
+        'therapeutic_subgroup_name', 'best_pathology',
+        'sponsor_clean'
+    ]
 
+    # Text Features -> TF-IDF + SVD
     text_tags_col = ['txt_tags']
 
 
+    # -------------------------------------------------------------------------
+    # 2. DEFINE SUB-PIPELINES
+    # -------------------------------------------------------------------------
 
-
-    # Sub-Pipelines
     pipe_bin = Pipeline([
         ("imputer", SimpleImputer(strategy='most_frequent')),
         ("encoder", OneHotEncoder(drop='if_binary', dtype=int, handle_unknown='ignore'))
@@ -169,17 +181,17 @@ def get_pipeline():
         ("hot_encoder", OneHotEncoder(handle_unknown='ignore', sparse_output=False, dtype=int))
     ])
 
+    # Target Encoder for High Cardinality (Requires y during fit)
     pipe_high = Pipeline([
         ("imputer", SimpleImputer(strategy='constant', fill_value='UNKNOWN')),
         ("target", TargetEncoder(target_type='binary', smooth=10.0, random_state=42))
     ])
 
-
     log_std_pipeline = Pipeline([
         ("imputer", SimpleImputer(strategy="median")),
         ("log1p", FunctionTransformer(np.log1p, validate=False, feature_names_out="one-to-one")),
-        ("scaler", StandardScaler())])
-
+        ("scaler", StandardScaler())
+    ])
 
     std_pipeline = Pipeline([
         ("imputer", SimpleImputer(strategy="mean")),
@@ -189,7 +201,7 @@ def get_pipeline():
     minmax_pipeline = Pipeline([
         ("imputer", SimpleImputer(strategy="most_frequent")),
         ("scaler", MinMaxScaler())
-        ])
+    ])
 
     # --- TEXT PIPELINE ---
     cleaner = ClinicalTextCleaner()
@@ -208,9 +220,12 @@ def get_pipeline():
     ])
 
 
+    # --- EMBEDDING PIPELINE (BioBERT PCA) ---
 
 
-
+    # -------------------------------------------------------------------------
+    # 3. ASSEMBLE PREPROCESSOR
+    # -------------------------------------------------------------------------
     preprocessor = ColumnTransformer(
         transformers=[
             ("log_std", log_std_pipeline, log_trans_cols),
@@ -224,4 +239,5 @@ def get_pipeline():
         remainder="drop",
         verbose_feature_names_out=False
     )
+
     return preprocessor
