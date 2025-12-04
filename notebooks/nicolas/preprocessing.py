@@ -10,12 +10,9 @@ def get_pipeline():
     # -------------------------------------------------------------------------
 
     # Skewed numerical features -> Log Transform
-    # REMOVED: 'country_count' (Leakage Risk)
     log_trans_cols = [
         'competition_niche', 'competition_broad',
-        'num_primary_endpoints', 'number_of_arms',
-        'sponsor_experience_log',
-        'criteria_len_log'
+        'num_primary_endpoints', 'number_of_arms'
     ]
 
     # Normal numerical features -> Standard Scaler
@@ -33,14 +30,12 @@ def get_pipeline():
     # Nominal Categories (Low Cardinality) -> OneHot (keep all)
     cat_nominal_cols = [
         'gender', 'agency_class', 'masking', 'intervention_model',
-        'primary_purpose', 'allocation', 'therapeutic_area',
-        'sponsor_tier'
+        'primary_purpose', 'allocation', 'therapeutic_area' # Added back
     ]
 
     # High Cardinality Categories -> Target Encoding
     cat_high_card_cols = [
-        'therapeutic_subgroup_name', 'best_pathology',
-        'sponsor_clean'
+        'therapeutic_subgroup_name', 'best_pathology'
     ]
 
     # -------------------------------------------------------------------------
@@ -57,6 +52,7 @@ def get_pipeline():
         ("hot_encoder", OneHotEncoder(handle_unknown='ignore', sparse_output=False, dtype=int))
     ])
 
+    # Target Encoder for High Cardinality (Requires y during fit)
     pipe_high = Pipeline([
         ("imputer", SimpleImputer(strategy='constant', fill_value='UNKNOWN')),
         ("target", TargetEncoder(target_type='binary', smooth=10.0, random_state=42))
@@ -90,7 +86,7 @@ def get_pipeline():
             ("nominal", pipe_nom, cat_nominal_cols),
             ("high_card", pipe_high, cat_high_card_cols)
         ],
-        remainder="drop",
+        remainder="drop", # Drop text columns (processed separately) or IDs
         verbose_feature_names_out=False
     )
 
