@@ -166,7 +166,9 @@ def get_pipeline():
     # Text Features -> TF-IDF + SVD
     text_tags_col = ['txt_tags']
 
-
+    # --- NEW: 1. Define Embedding Columns ---
+    # Generates ['emb_0', 'emb_1', ... 'emb_99']
+    emb_cols = [f"emb_{i}" for i in range(100)]
     # -------------------------------------------------------------------------
     # 2. DEFINE SUB-PIPELINES
     # -------------------------------------------------------------------------
@@ -219,10 +221,11 @@ def get_pipeline():
         ("svd", TruncatedSVD(n_components=50, random_state=42))
     ])
 
-
-    # --- EMBEDDING PIPELINE (BioBERT PCA) ---
-
-
+    # --- NEW: 2. Embedding Pipeline (StandardScaler) ---
+    emb_pipeline = Pipeline([
+        ("imputer", SimpleImputer(strategy="constant", fill_value=0)), # Safety fill
+        ("scaler", StandardScaler())
+    ])
     # -------------------------------------------------------------------------
     # 3. ASSEMBLE PREPROCESSOR
     # -------------------------------------------------------------------------
@@ -234,7 +237,10 @@ def get_pipeline():
             ("cat_binary", pipe_bin, cat_binary_cols),
             ("nominal", pipe_nom, cat_nominal_cols),
             ("high_card", pipe_high, cat_high_card_cols),
-            ("txt_tags_svd", tags_pipeline, text_tags_col)
+            ("txt_tags_svd", tags_pipeline, text_tags_col),
+
+            # --- NEW: 3. Register Transformer ---
+            ("embeddings", emb_pipeline, emb_cols)
         ],
         remainder="drop",
         verbose_feature_names_out=False
