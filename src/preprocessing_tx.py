@@ -95,17 +95,20 @@ class ClinicalTextCleaner(BaseEstimator, TransformerMixin):
         return self
 
     def transform(self, X):
+        # Handle both DataFrame (from ColumnTransformer) and Series/Array
         if isinstance(X, pd.DataFrame):
             text_series = X.iloc[:, 0]
         else:
             text_series = pd.Series(X.flatten())
+
+        # Apply cleaning
         return text_series.apply(self._clean_text).values
 
     def _clean_text(self, text):
         if pd.isna(text) or text == '': return ""
         text = str(text).lower()
 
-        # Remove numbers entirely
+        # Remove numbers entirely (dosage numbers often confuse TF-IDF without context)
         tokens = text.split()
         clean_tokens = []
         for t in tokens:
@@ -123,22 +126,84 @@ class ClinicalTextCleaner(BaseEstimator, TransformerMixin):
         return np.array(input_features)
 
 def get_pipeline():
-    # Feature Groups
-    log_trans_cols = ['competition_niche', 'competition_broad', 'num_primary_endpoints', 'number_of_arms']
+
+    # -------------------------------------------------------------------------
+    # 1. DEFINE FEATURE GROUPS
+    # -------------------------------------------------------------------------
+
+    # Skewed numerical features -> Log Transform
+    log_trans_cols = [
+        'competition_niche', 'competition_broad',
+        'num_primary_endpoints', 'number_of_arms',
+        'criteria_len_log'
+    ]
+
+    # Normal numerical features -> Standard Scaler
     stand_scal_cols = ["start_year"]
+
+    # Bounded numerical features -> MinMax Scaler
     min_max_cols = ["phase_ordinal"]
-    cat_binary_cols = ['is_international', 'covid_exposure', 'healthy_volunteers', 'adult', 'child', 'older_adult', 'includes_us']
-    cat_nominal_cols = ['gender', 'agency_class', 'masking', 'intervention_model', 'primary_purpose', 'allocation', 'therapeutic_area']
-    cat_high_card_cols = ['therapeutic_subgroup_name', 'best_pathology']
+
+    # Binary Categories -> OneHot (drop one)
+    cat_binary_cols = [
+        'is_international', 'covid_exposure', 'healthy_volunteers',
+        'adult', 'child', 'older_adult', 'includes_us'
+    ]
+
+    # Nominal Categories (Low Cardinality) -> OneHot (keep all)
+    cat_nominal_cols = [
+        'gender', 'agency_class', 'masking', 'intervention_model',
+        'primary_purpose', 'allocation', 'therapeutic_area',
+        'sponsor_tier'
+    ]
+
+    # High Cardinality Categories -> Target Encoding
+    cat_high_card_cols = [
+        'therapeutic_subgroup_name', 'best_pathology',
+        'sponsor_clean'
+    ]
+
+    # Text Features -> TF-IDF + SVD
     text_tags_col = ['txt_tags']
 
-    # Sub-Pipelines
-    pipe_bin = Pipeline([("imputer", SimpleImputer(strategy='most_frequent')), ("encoder", OneHotEncoder(drop='if_binary', dtype=int, handle_unknown='ignore'))])
-    pipe_nom = Pipeline([("imputer", SimpleImputer(strategy='constant', fill_value='UNKNOWN')), ("hot_encoder", OneHotEncoder(handle_unknown='ignore', sparse_output=False, dtype=int))])
-    pipe_high = Pipeline([("imputer", SimpleImputer(strategy='constant', fill_value='UNKNOWN')), ("target", TargetEncoder(target_type='binary', smooth=10.0, random_state=42))])
-    log_std_pipeline = Pipeline([("imputer", SimpleImputer(strategy="median")), ("log1p", FunctionTransformer(np.log1p, validate=False, feature_names_out="one-to-one")), ("scaler", StandardScaler())])
-    std_pipeline = Pipeline([("imputer", SimpleImputer(strategy="mean")), ("scaler", StandardScaler())])
-    minmax_pipeline = Pipeline([("imputer", SimpleImputer(strategy="most_frequent")), ("scaler", MinMaxScaler())])
+    # --- NEW: 1. Define Embedding Columns ---
+    # Generates ['emb_0', 'emb_1', ... 'emb_99']
+    emb_cols = [f"emb_{i}" for i in range(100)]
+    # -------------------------------------------------------------------------
+    # 2. DEFINE SUB-PIPELINES
+    # -------------------------------------------------------------------------
+
+    pipe_bin = Pipeline([
+        ("imputer", SimpleImputer(strategy='most_frequent')),
+        ("encoder", OneHotEncoder(drop='if_binary', dtype=int, handle_unknown='ignore'))
+    ])
+
+    pipe_nom = Pipeline([
+        ("imputer", SimpleImputer(strategy='constant', fill_value='UNKNOWN')),
+        ("hot_encoder", OneHotEncoder(handle_unknown='ignore', sparse_output=False, dtype=int))
+    ])
+
+    # Target Encoder for High Cardinality (Requires y during fit)
+    pipe_high = Pipeline([
+        ("imputer", SimpleImputer(strategy='constant', fill_value='UNKNOWN')),
+        ("target", TargetEncoder(target_type='binary', smooth=10.0, random_state=42))
+    ])
+
+    log_std_pipeline = Pipeline([
+        ("imputer", SimpleImputer(strategy="median")),
+        ("log1p", FunctionTransformer(np.log1p, validate=False, feature_names_out="one-to-one")),
+        ("scaler", StandardScaler())
+    ])
+
+    std_pipeline = Pipeline([
+        ("imputer", SimpleImputer(strategy="mean")),
+        ("scaler", StandardScaler())
+    ])
+
+    minmax_pipeline = Pipeline([
+        ("imputer", SimpleImputer(strategy="most_frequent")),
+        ("scaler", MinMaxScaler())
+    ])
 
     # --- TEXT PIPELINE ---
     cleaner = ClinicalTextCleaner()
@@ -156,6 +221,14 @@ def get_pipeline():
         ("svd", TruncatedSVD(n_components=50, random_state=42))
     ])
 
+    # --- NEW: 2. Embedding Pipeline (StandardScaler) ---
+    emb_pipeline = Pipeline([
+        ("imputer", SimpleImputer(strategy="constant", fill_value=0)), # Safety fill
+        ("scaler", StandardScaler())
+    ])
+    # -------------------------------------------------------------------------
+    # 3. ASSEMBLE PREPROCESSOR
+    # -------------------------------------------------------------------------
     preprocessor = ColumnTransformer(
         transformers=[
             ("log_std", log_std_pipeline, log_trans_cols),
@@ -164,8 +237,13 @@ def get_pipeline():
             ("cat_binary", pipe_bin, cat_binary_cols),
             ("nominal", pipe_nom, cat_nominal_cols),
             ("high_card", pipe_high, cat_high_card_cols),
-            ("txt_tags_svd", tags_pipeline, text_tags_col)
+            ("txt_tags_svd", tags_pipeline, text_tags_col),
+
+            # --- NEW: 3. Register Transformer ---
+            ("embeddings", emb_pipeline, emb_cols)
         ],
-        remainder="drop", verbose_feature_names_out=False
+        remainder="drop",
+        verbose_feature_names_out=False
     )
+
     return preprocessor
