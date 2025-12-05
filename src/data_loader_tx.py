@@ -77,7 +77,7 @@ class ClinicalTrialLoader:
         df['start_year'] = df['start_date'].dt.year
 
         current_year = pd.Timestamp.now().year
-        df = df[df['start_year'].between(2000, 2015)]
+        df = df[df['start_year'].between(2000, 2016)]
 
         print(f"    Core Cohort: {len(df)} trials")
         return df.copy()
