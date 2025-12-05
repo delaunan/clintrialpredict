@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 import os
 import csv
-
+# this is a test
 class ClinicalTrialLoader:
     def __init__(self, data_path):
         self.data_path = data_path
