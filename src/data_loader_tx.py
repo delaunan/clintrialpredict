@@ -299,7 +299,7 @@ class ClinicalTrialLoader:
 
             mesh_path = os.path.join(self.data_path, 'mesh_lookup.csv')
             if os.path.exists(mesh_path):
-                df_lookup = pd.read_csv(mesh_path, sep='|')
+                df_lookup = pd.read_csv(mesh_path, sep=',')
                 code_to_name = pd.Series(df_lookup.mesh_term.values, index=df_lookup.tree_number).to_dict()
                 def get_subgroup(tree_num):
                     if pd.isna(tree_num): return 'Unknown'
