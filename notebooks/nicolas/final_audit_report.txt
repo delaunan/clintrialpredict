@@ -1,0 +1,122 @@
+
+============================================================
+ 1. HIGH LEVEL SUMMARY
+============================================================
+Total Rows: 59888
+Total Columns: 147
+Date Range: 2005.0 to 2018.0
+
+[Phase Distribution]
+phase
+PHASE2           25285
+PHASE3           17298
+PHASE1/PHASE2     5541
+PHASE2/PHASE3     2322
+
+============================================================
+ 2. TARGET VARIABLE (The Truth)
+============================================================
+0 (Completed):  48108 (80.3%)
+1 (Terminated): 11780 (19.7%)
+
+============================================================
+ 3. AGENT CATEGORY (Scientific Signal)
+============================================================
+agent_category
+SMALL_MOLECULE_OTHER         40043
+BIOLOGIC                      6641
+PLACEBO_CTRL                  3210
+MONOCLONAL_ANTIBODY           3199
+CHEMOTHERAPY                  1991
+KINASE_INHIBITOR_TYROSINE     1545
+TARGETED_KINASE_INHIBITOR     1117
+GENE_THERAPY                   418
+STATIN_CHOLESTEROL             413
+ENZYME_INHIBITOR               351
+CELL_THERAPY                   313
+IMMUNOTHERAPY                  196
+BIOLOGIC_FUSION                181
+PARP_INHIBITOR                  88
+PI3K_INHIBITOR                  66
+RNA_GENE_THERAPY                49
+VACCINE                         38
+BCL2_INHIBITOR                  22
+ANTIBODY_DRUG_CONJUGATE          7
+
+[Sanity Check - Sample Drugs per Category]
+(Using column 'name' for examples)
+ > SMALL_MOLECULE_OTHER: SNX-1012 (meclocycline sulfosalicylate), Degarelix, Velusetrag...
+ > BIOLOGIC: TRUE Test allergens Fragrance Mix and Thimerosol, Transfusion, Albutein 5%...
+ > PLACEBO_CTRL: Placebo, Placebo Saline Nasal Solution, Placebo Control...
+ > MONOCLONAL_ANTIBODY: Bevacizumab, Infliximab, ipilimumab (MDX-010, BMS-734016)...
+ > CHEMOTHERAPY: Cyclophosphamide, epirubicin, Carboplatin...
+ > KINASE_INHIBITOR_TYROSINE: Anlotinib, Dasatinib, saracatinib...
+ > TARGETED_KINASE_INHIBITOR: cediranib maleate, sorafenib (Nexavar®), thalidomide (Thado®), JX-594 followed by sorafenib...
+ > GENE_THERAPY: Pharmacogenetic, Genetic analysis, tumor genetic predisposition to develop sarcoma as...
+ > STATIN_CHOLESTEROL: Platelet rich fibrin +Atorvastatin, pravastatin, Atorvastatin...
+ > ENZYME_INHIBITOR: Roxadustat, vorinostat, Tazemetostat...
+ > CELL_THERAPY: Autologous CIK Transfusion plus Chemotherapy, NK cells, Autologous immunoglobulin...
+ > IMMUNOTHERAPY: Peginterferon alpha-2a and ribavirin, Interferon Alfa-2A, Interleukin-2...
+ > BIOLOGIC_FUSION: XERECEPT, Alefacept, Abatacept...
+ > PARP_INHIBITOR: rucaparib, Rucaparib, Niraparib...
+ > PI3K_INHIBITOR: Tenalisib, Copanlisib, Idelalisib...
+
+============================================================
+ 4. MEDICAL HIERARCHY (Disease Signal)
+============================================================
+Total Unique Subgroups: 1074
+
+Top 10 Subgroups:
+therapeutic_subgroup_name
+Unclassified Condition         7593
+Neoplasms by Site              2155
+Neurologic Manifestations      1897
+Autoimmune Diseases            1434
+Vascular Diseases              1304
+Hypersensitivity, Immediate    1184
+Carcinoma, Bronchogenic        1158
+Blood-Borne Infections         1082
+Diabetes Mellitus              1000
+Mental Disorders                958
+
+[Quality Check] 'Unknown/Unclassified' Count: 7593 (12.7%)
+
+============================================================
+ 5. SCORES & FLAGS (Operational Signal)
+============================================================
+
+--- design_rigor_score ---
+design_rigor_score
+0    13654
+1    20270
+2     4551
+3     9196
+4    11246
+5      971
+
+--- eligibility_strictness_score ---
+eligibility_strictness_score
+2    51706
+3     8164
+4       18
+
+--- sponsor_tier ---
+sponsor_tier
+TIER_1_GIANT    13060
+TIER_2_OTHER    46828
+
+--- has_dmc ---
+has_dmc
+0    34597
+1    25291
+
+--- is_fda_regulated_drug ---
+is_fda_regulated_drug
+0    51976
+1     7912
+
+============================================================
+ 6. EMBEDDINGS CHECK (Silent Failure Detector)
+============================================================
+Found 100 embedding columns.
+[PASS] Embeddings contain data (Sum of emb_0: -7041.29)
