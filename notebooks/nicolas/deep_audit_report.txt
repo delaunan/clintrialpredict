@@ -1,0 +1,69 @@
+============================================================
+DEEP DIVE AUDIT: AGE FIX & AGENT QUALITY
+============================================================
+
+>>> 1. AGE FLAGS (Did the fix work?)
+adult: {0: 59888}
+   [FAIL] adult is still all zeros!
+child: {0: 59888}
+   [FAIL] child is still all zeros!
+older_adult: {0: 59888}
+   [FAIL] older_adult is still all zeros!
+
+>>> 2. ELIGIBILITY STRICTNESS (Variance Check)
+eligibility_strictness_score
+2    51706
+3     8164
+4       18
+
+   [Risk Analysis]
+eligibility_strictness_score
+2   19.8% Failure
+3   19.0% Failure
+4   16.7% Failure
+
+>>> 3. SMALL_MOLECULE_OTHER FORENSICS
+Total Rows: 40043 (66.9% of total)
+Top 20 most frequent terms in 'name' for this category:
+name
+Metformin          171
+Dexamethasone      167
+Dexmedetomidine    125
+Lenalidomide       124
+Ketamine           111
+Everolimus         101
+Oxytocin           100
+Capecitabine        90
+Lidocaine           86
+Temozolomide        76
+Bupivacaine         73
+Tranexamic Acid     71
+Ropivacaine         70
+Propofol            69
+Misoprostol         69
+Pemetrexed          61
+Ibuprofen           60
+Gabapentin          58
+Pioglitazone        57
+Aspirin             55
+
+[Interpretation Guide]
+- If you see 'Placebo' here -> Regex needs 'placebo' check.
+- If you see 'Surgery' -> Filter 'Intervention Type' better.
+- If you see 'Metformin', 'Statins' -> GOOD (These are small molecules).
+
+>>> 4. SPONSOR DISTRIBUTION
+sponsor_tier
+TIER_2_OTHER    46828
+TIER_1_GIANT    13060
+
+   [Agency Class Breakdown]
+agency_class
+OTHER        29020
+INDUSTRY     27340
+NIH           1522
+OTHER_GOV      811
+NETWORK        698
+FED            389
+INDIV           99
+UNKNOWN          9
