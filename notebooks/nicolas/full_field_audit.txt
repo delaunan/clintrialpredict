@@ -1,0 +1,151 @@
+FULL DATASET AUDIT: 59888 Rows, 147 Columns
+================================================================================
+COLUMN NAME                         | TYPE       | MISSING %  | UNIQUE   | EXAMPLE / STATS
+--------------------------------------------------------------------------------
+nct_id                              | object     | 0.0      % | 59888    | Top: NCT00000299 
+start_date_type                     | object     | 61.8     % | 2        | Top: ACTUAL 
+start_date                          | object     | 0.0      % | 3711     | Top: 2008-01-31 
+study_type                          | object     | 0.0      % | 1        | Top: INTERVENTIONAL [CONSTANT]
+overall_status                      | object     | 0.0      % | 4        | Top: COMPLETED 
+phase                               | object     | 15.8     % | 4        | Top: PHASE2 
+number_of_arms                      | float64    | 5.4      % | 27       | Mean: 2.24 | Max: 30.0 
+why_stopped                         | object     | 83.3     % | 7650     | Top: Slow accrual 
+has_dmc                             | int64      | 0.0      % | 2        | Binary: {0: 34597, 1: 25291} 
+is_fda_regulated_drug               | int64      | 0.0      % | 2        | Binary: {0: 51976, 1: 7912} 
+start_year                          | float64    | 0.0      % | 14       | Mean: 2011.53 | Max: 2018.0 
+target                              | int64      | 0.0      % | 2        | Binary: {0: 48108, 1: 11780} 
+phase_ordinal                       | int64      | 0.0      % | 2        | Binary: {2: 40268, 3: 19620} 
+covid_exposure                      | int64      | 0.0      % | 1        | Binary: {0: 59888} [CONSTANT]
+includes_us                         | int64      | 0.0      % | 2        | Binary: {1: 31522, 0: 28366} 
+allocation                          | object     | 23.1     % | 2        | Top: RANDOMIZED 
+intervention_model                  | object     | 0.7      % | 5        | Top: PARALLEL 
+primary_purpose                     | object     | 1.3      % | 10       | Top: TREATMENT 
+masking                             | object     | 0.4      % | 5        | Top: NONE 
+num_primary_endpoints               | float64    | 0.0      % | 68       | Mean: 1.69 | Max: 98.0 
+lead_sponsor                        | object     | 0.0      % | 8516     | Top: GlaxoSmithKline 
+agency_class                        | object     | 0.0      % | 8        | Top: OTHER 
+sponsor_clean                       | object     | 0.0      % | 8358     | Top: Novartis 
+sponsor_tier                        | object     | 0.0      % | 2        | Top: TIER_2_OTHER 
+gender                              | object     | 0.0      % | 4        | Top: ALL 
+healthy_volunteers                  | object     | 0.0      % | 2        | Top: no 
+criteria_len_log                    | float64    | 0.0      % | 7831     | Mean: 7.25 | Max: 9.806921584559795 
+child                               | int64      | 0.0      % | 2        | Binary: {0: 49926, 1: 9962} 
+adult                               | int64      | 0.0      % | 2        | Binary: {1: 55669, 0: 4219} 
+older_adult                         | int64      | 0.0      % | 2        | Binary: {1: 43459, 0: 16429} 
+best_pathology                      | object     | 12.7     % | 1073     | Top: Neoplasms by Site 
+therapeutic_area                    | object     | 12.7     % | 23       | Top: Oncology 
+tree_number                         | object     | 12.9     % | 992      | Top: C04.588 
+therapeutic_subgroup_name           | object     | 0.0      % | 1074     | Top: Unclassified Condition 
+competition_broad                   | int64      | 0.0      % | 219      | Mean: 919.01 | Max: 2596 
+competition_niche                   | int64      | 0.0      % | 218      | Mean: 213.08 | Max: 1498 
+txt_tags                            | object     | 0.0      % | 59677    | Top: Sun Protection Factor (SPF) As 
+txt_criteria                        | object     | 0.0      % | 59361    | Top: Inclusion Criteria:~* All stan 
+name                                | object     | 0.0      % | 30438    | Top: Placebo 
+agent_category                      | object     | 0.0      % | 19       | Top: SMALL_MOLECULE_OTHER 
+score_masking                       | int64      | 0.0      % | 4        | Mean: 0.94 | Max: 3 
+score_allocation                    | int64      | 0.0      % | 2        | Binary: {1: 46049, 0: 13839} 
+score_model                         | int64      | 0.0      % | 2        | Binary: {0: 55666, 1: 4222} 
+design_rigor_score                  | int64      | 0.0      % | 6        | Mean: 1.78 | Max: 5 
+is_gender_restricted                | int64      | 0.0      % | 2        | Binary: {0: 51875, 1: 8013} 
+is_sick_only                        | int64      | 0.0      % | 2        | Binary: {1: 52073, 0: 7815} 
+eligibility_strictness_score        | int64      | 0.0      % | 5        | Mean: 2.11 | Max: 4 
+emb_0                               | float64    | 0.0      % | 49896    | Mean: -0.12 | Max: 3.7627919 
+emb_1                               | float64    | 0.0      % | 49891    | Mean: -0.03 | Max: 3.8369505 
+emb_2                               | float64    | 0.0      % | 49886    | Mean: -0.05 | Max: 3.8103635 
+emb_3                               | float64    | 0.0      % | 49893    | Mean: 0.04 | Max: 2.9624615 
+emb_4                               | float64    | 0.0      % | 49883    | Mean: 0.03 | Max: 2.5666857 
+emb_5                               | float64    | 0.0      % | 49895    | Mean: -0.03 | Max: 2.491156 
+emb_6                               | float64    | 0.0      % | 49883    | Mean: 0.01 | Max: 3.3357322 
+emb_7                               | float64    | 0.0      % | 49886    | Mean: -0.02 | Max: 2.7366614 
+emb_8                               | float64    | 0.0      % | 49898    | Mean: -0.03 | Max: 2.2205098 
+emb_9                               | float64    | 0.0      % | 49898    | Mean: 0.01 | Max: 2.3304932 
+emb_10                              | float64    | 0.0      % | 49893    | Mean: 0.01 | Max: 2.0537565 
+emb_11                              | float64    | 0.0      % | 49893    | Mean: 0.00 | Max: 1.9593232 
+emb_12                              | float64    | 0.0      % | 49891    | Mean: 0.02 | Max: 1.7800065 
+emb_13                              | float64    | 0.0      % | 49888    | Mean: 0.01 | Max: 1.8072346 
+emb_14                              | float64    | 0.0      % | 49892    | Mean: -0.01 | Max: 2.2492113 
+emb_15                              | float64    | 0.0      % | 49894    | Mean: -0.02 | Max: 2.5781178 
+emb_16                              | float64    | 0.0      % | 49897    | Mean: 0.02 | Max: 1.6224928 
+emb_17                              | float64    | 0.0      % | 49893    | Mean: 0.01 | Max: 1.7766763 
+emb_18                              | float64    | 0.0      % | 49893    | Mean: 0.02 | Max: 2.0930781 
+emb_19                              | float64    | 0.0      % | 49888    | Mean: 0.00 | Max: 1.7420957 
+emb_20                              | float64    | 0.0      % | 49893    | Mean: -0.02 | Max: 1.7221668 
+emb_21                              | float64    | 0.0      % | 49890    | Mean: 0.04 | Max: 1.6849808 
+emb_22                              | float64    | 0.0      % | 49889    | Mean: 0.01 | Max: 1.4936814 
+emb_23                              | float64    | 0.0      % | 49896    | Mean: -0.01 | Max: 1.7943114 
+emb_24                              | float64    | 0.0      % | 49896    | Mean: -0.01 | Max: 1.3677106 
+emb_25                              | float64    | 0.0      % | 49888    | Mean: 0.01 | Max: 1.3867787 
+emb_26                              | float64    | 0.0      % | 49884    | Mean: -0.01 | Max: 1.6272063 
+emb_27                              | float64    | 0.0      % | 49891    | Mean: 0.00 | Max: 1.9883206 
+emb_28                              | float64    | 0.0      % | 49894    | Mean: -0.01 | Max: 1.2456279 
+emb_29                              | float64    | 0.0      % | 49897    | Mean: -0.02 | Max: 1.5145755 
+emb_30                              | float64    | 0.0      % | 49890    | Mean: -0.00 | Max: 1.2132018 
+emb_31                              | float64    | 0.0      % | 49893    | Mean: 0.00 | Max: 1.391079 
+emb_32                              | float64    | 0.0      % | 49880    | Mean: -0.02 | Max: 1.4234222 
+emb_33                              | float64    | 0.0      % | 49892    | Mean: 0.00 | Max: 1.3963989 
+emb_34                              | float64    | 0.0      % | 49889    | Mean: 0.00 | Max: 1.5072639 
+emb_35                              | float64    | 0.0      % | 49892    | Mean: -0.00 | Max: 1.7049189 
+emb_36                              | float64    | 0.0      % | 49895    | Mean: 0.00 | Max: 1.2502354 
+emb_37                              | float64    | 0.0      % | 49889    | Mean: 0.01 | Max: 1.3835496 
+emb_38                              | float64    | 0.0      % | 49895    | Mean: 0.00 | Max: 1.4614555 
+emb_39                              | float64    | 0.0      % | 49888    | Mean: -0.01 | Max: 1.372006 
+emb_40                              | float64    | 0.0      % | 49893    | Mean: 0.01 | Max: 1.2454785 
+emb_41                              | float64    | 0.0      % | 49895    | Mean: 0.00 | Max: 1.0810157 
+emb_42                              | float64    | 0.0      % | 49894    | Mean: 0.00 | Max: 1.1196676 
+emb_43                              | float64    | 0.0      % | 49891    | Mean: -0.01 | Max: 1.1278594 
+emb_44                              | float64    | 0.0      % | 49890    | Mean: 0.01 | Max: 1.0533546 
+emb_45                              | float64    | 0.0      % | 49893    | Mean: -0.01 | Max: 1.0130066 
+emb_46                              | float64    | 0.0      % | 49897    | Mean: 0.00 | Max: 1.0717704 
+emb_47                              | float64    | 0.0      % | 49891    | Mean: 0.01 | Max: 0.98953456 
+emb_48                              | float64    | 0.0      % | 49888    | Mean: -0.00 | Max: 0.9869557 
+emb_49                              | float64    | 0.0      % | 49883    | Mean: 0.00 | Max: 1.0661447 
+emb_50                              | float64    | 0.0      % | 49893    | Mean: 0.00 | Max: 1.0723187 
+emb_51                              | float64    | 0.0      % | 49889    | Mean: -0.00 | Max: 0.9570452 
+emb_52                              | float64    | 0.0      % | 49893    | Mean: 0.01 | Max: 0.9494466 
+emb_53                              | float64    | 0.0      % | 49896    | Mean: -0.00 | Max: 1.1434233 
+emb_54                              | float64    | 0.0      % | 49884    | Mean: 0.01 | Max: 0.94288296 
+emb_55                              | float64    | 0.0      % | 49885    | Mean: -0.00 | Max: 0.9814248 
+emb_56                              | float64    | 0.0      % | 49896    | Mean: 0.00 | Max: 0.87561584 
+emb_57                              | float64    | 0.0      % | 49893    | Mean: -0.00 | Max: 1.0679001 
+emb_58                              | float64    | 0.0      % | 49873    | Mean: -0.01 | Max: 0.9055709 
+emb_59                              | float64    | 0.0      % | 49888    | Mean: 0.00 | Max: 1.2543422 
+emb_60                              | float64    | 0.0      % | 49892    | Mean: -0.00 | Max: 0.99993163 
+emb_61                              | float64    | 0.0      % | 49898    | Mean: 0.01 | Max: 1.0609428 
+emb_62                              | float64    | 0.0      % | 49895    | Mean: 0.01 | Max: 0.9577568 
+emb_63                              | float64    | 0.0      % | 49881    | Mean: -0.00 | Max: 1.0613133 
+emb_64                              | float64    | 0.0      % | 49898    | Mean: -0.00 | Max: 1.0932376 
+emb_65                              | float64    | 0.0      % | 49888    | Mean: -0.00 | Max: 1.0177224 
+emb_66                              | float64    | 0.0      % | 49895    | Mean: -0.00 | Max: 0.96456563 
+emb_67                              | float64    | 0.0      % | 49892    | Mean: -0.00 | Max: 0.79547197 
+emb_68                              | float64    | 0.0      % | 49900    | Mean: -0.00 | Max: 0.9648244 
+emb_69                              | float64    | 0.0      % | 49890    | Mean: 0.00 | Max: 0.7687104 
+emb_70                              | float64    | 0.0      % | 49891    | Mean: 0.00 | Max: 0.98941535 
+emb_71                              | float64    | 0.0      % | 49888    | Mean: 0.00 | Max: 0.7398483 
+emb_72                              | float64    | 0.0      % | 49887    | Mean: -0.00 | Max: 0.8377445 
+emb_73                              | float64    | 0.0      % | 49889    | Mean: 0.00 | Max: 0.7517116 
+emb_74                              | float64    | 0.0      % | 49891    | Mean: -0.00 | Max: 0.7625026 
+emb_75                              | float64    | 0.0      % | 49885    | Mean: -0.00 | Max: 0.77029955 
+emb_76                              | float64    | 0.0      % | 49889    | Mean: 0.00 | Max: 0.8267792 
+emb_77                              | float64    | 0.0      % | 49888    | Mean: 0.00 | Max: 1.016062 
+emb_78                              | float64    | 0.0      % | 49887    | Mean: 0.01 | Max: 1.0080237 
+emb_79                              | float64    | 0.0      % | 49894    | Mean: -0.00 | Max: 0.8768817 
+emb_80                              | float64    | 0.0      % | 49890    | Mean: -0.00 | Max: 0.80096173 
+emb_81                              | float64    | 0.0      % | 49896    | Mean: 0.00 | Max: 0.91664094 
+emb_82                              | float64    | 0.0      % | 49893    | Mean: -0.00 | Max: 0.74870485 
+emb_83                              | float64    | 0.0      % | 49890    | Mean: 0.00 | Max: 0.92838275 
+emb_84                              | float64    | 0.0      % | 49896    | Mean: -0.00 | Max: 0.80876637 
+emb_85                              | float64    | 0.0      % | 49894    | Mean: -0.00 | Max: 0.7792504 
+emb_86                              | float64    | 0.0      % | 49894    | Mean: 0.00 | Max: 0.8131043 
+emb_87                              | float64    | 0.0      % | 49896    | Mean: -0.00 | Max: 0.7743985 
+emb_88                              | float64    | 0.0      % | 49889    | Mean: 0.00 | Max: 0.88617826 
+emb_89                              | float64    | 0.0      % | 49892    | Mean: 0.00 | Max: 0.79160625 
+emb_90                              | float64    | 0.0      % | 49891    | Mean: 0.00 | Max: 0.7056315 
+emb_91                              | float64    | 0.0      % | 49892    | Mean: 0.00 | Max: 0.81508195 
+emb_92                              | float64    | 0.0      % | 49895    | Mean: 0.00 | Max: 0.85302424 
+emb_93                              | float64    | 0.0      % | 49892    | Mean: -0.00 | Max: 0.79560536 
+emb_94                              | float64    | 0.0      % | 49880    | Mean: -0.00 | Max: 0.6564274 
+emb_95                              | float64    | 0.0      % | 49893    | Mean: -0.00 | Max: 0.6780076 
+emb_96                              | float64    | 0.0      % | 49898    | Mean: 0.00 | Max: 0.6463276 
+emb_97                              | float64    | 0.0      % | 49893    | Mean: 0.00 | Max: 0.7404615 
+emb_98                              | float64    | 0.0      % | 49893    | Mean: -0.00 | Max: 0.7895449 
+emb_99                              | float64    | 0.0      % | 49885    | Mean: -0.00 | Max: 0.718221 

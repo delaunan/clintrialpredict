@@ -1,0 +1,101 @@
+============================================================
+FEATURE VALUE AUDIT: DO THEY PREDICT RISK?
+============================================================
+Target: 1 = Terminated (Failure), 0 = Completed
+Global Failure Rate: 19.7%
+
+>>> RISK ANALYSIS: agent_category
+                           count  failure_rate_pct
+agent_category                                    
+PI3K_INHIBITOR                66              43.9
+CELL_THERAPY                 313              31.0
+ENZYME_INHIBITOR             351              29.1
+TARGETED_KINASE_INHIBITOR   1117              27.7
+CHEMOTHERAPY                1991              27.2
+KINASE_INHIBITOR_TYROSINE   1545              25.1
+GENE_THERAPY                 418              24.2
+MONOCLONAL_ANTIBODY         3199              22.9
+IMMUNOTHERAPY                196              20.9
+BIOLOGIC_FUSION              181              19.9
+SMALL_MOLECULE_OTHER       40043              19.0
+STATIN_CHOLESTEROL           413              18.9
+BIOLOGIC                    6641              17.5
+PARP_INHIBITOR                88              15.9
+PLACEBO_CTRL                3210              15.7
+
+[VALUE SCORE] Risk Spread: 28.3% (Higher is better)
+
+>>> RISK ANALYSIS: sponsor_tier
+              count  failure_rate_pct
+sponsor_tier                         
+TIER_2_OTHER  46828              20.7
+TIER_1_GIANT  13060              16.1
+
+[VALUE SCORE] Risk Spread: 4.5% (Higher is better)
+
+>>> RISK ANALYSIS: design_rigor_score
+                    count  failure_rate_pct
+design_rigor_score                         
+0                   13654              25.0
+1                   20270              21.1
+3                    9196              16.1
+4                   11246              15.9
+2                    4551              15.2
+5                     971              14.4
+
+[VALUE SCORE] Risk Spread: 10.6% (Higher is better)
+
+>>> RISK ANALYSIS: phase
+               count  failure_rate_pct
+phase                                 
+PHASE1/PHASE2   5541              26.1
+PHASE2         25285              22.2
+PHASE2/PHASE3   2322              18.9
+PHASE3         17298              15.3
+
+[VALUE SCORE] Risk Spread: 10.8% (Higher is better)
+
+>>> RISK ANALYSIS: therapeutic_area
+                               count  failure_rate_pct
+therapeutic_area                                      
+Oncology                       16009              28.0
+Wounds                           218              27.5
+Digestive                       1389              24.3
+Hematology                       770              24.0
+Congenital/Genetic                81              22.2
+Cardiovascular                  4256              21.3
+Neurology                       6814              18.7
+Urology (Male)                  1622              18.4
+Ophthalmology (Eye)             1038              17.1
+Pathological Conditions          957              16.9
+Immunology                      3041              16.7
+Respiratory                     1272              16.7
+Other/Unclassified               508              15.6
+Psychiatry                      2933              15.2
+Metabolic                       3306              14.6
+Musculoskeletal                  593              14.5
+Endocrine                        336              14.0
+Infections (Bacterial/Fungal)   5796              12.0
+Dermatology                      940              11.3
+Stomatognathic                   330               5.5
+
+[VALUE SCORE] Risk Spread: 22.5% (Higher is better)
+
+>>> RISK ANALYSIS: eligibility_strictness_score
+                              count  failure_rate_pct
+eligibility_strictness_score                         
+2                             40526              21.1
+3                             10982              18.8
+4                              1451              15.6
+1                              6639              13.6
+0                               290               7.6
+
+[VALUE SCORE] Risk Spread: 13.6% (Higher is better)
+
+>>> RISK ANALYSIS: has_dmc
+         count  failure_rate_pct
+has_dmc                         
+1        25291              22.7
+0        34597              17.5
+
+[VALUE SCORE] Risk Spread: 5.2% (Higher is better)
