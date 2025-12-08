@@ -73,8 +73,8 @@ def preprocessor():
     # Pipeline E: Embeddings (CRITICAL MODIFICATION)
     pipe_emb = Pipeline([
         ('imputer', SimpleImputer(strategy='constant', fill_value=0)), # 1. Fix Holes
-        ('scaler', StandardScaler()),                                  # 2. Balance Numbers
-        ('pca', PCA(n_components=20, random_state=42))                 # 3. NEW: Reduce to 20 dimensions
+        ('scaler', StandardScaler())                                  # 2. Balance Numbers
+        #,('pca', PCA(n_components=20, random_state=42))                 # 3. NEW: Reduce to 20 dimensions
     ])
 
     # ==========================================================================
