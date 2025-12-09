@@ -8,7 +8,7 @@ import numpy as np
 # CONFIG
 # ==========================
 
-MODEL_PATH = "/Users/juliusvlassenroot/code/delaunan/clintrialpredict/models/ctp_model.joblib"
+MODEL_PATH = "/home/delaunan/code/delaunan/clintrialpredict/models/ctp_model.joblib"
 DATA_PATH = "data_predict.csv"
 HISTORICAL_PATH = "project_data.csv"
 
