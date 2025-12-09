@@ -3,6 +3,7 @@ import joblib
 import pandas as pd
 import numpy as np
 
+
 # ==========================
 # CONFIG
 # ==========================
@@ -23,6 +24,88 @@ from src.prep.preprocessing import preprocessor
 LOW_RISK_MAX = 0.25      # p_fail <= 25%  -> Low risk
 MEDIUM_RISK_MAX = 0.50   # 25–50%        -> Medium risk
 # p_fail > 50%           -> High risk
+# --------------------------------------------------
+# GLOBAL STYLES
+# --------------------------------------------------
+st.markdown(
+    """
+    <style>
+    /* Tighter page width */
+    .block-container {
+        max-width: 1000px;
+        padding-top: 2rem;
+        padding-bottom: 4rem;
+    }
+
+    /* Section titles */
+    .section-title {
+        font-size: 1.4rem;
+        font-weight: 600;
+        margin-bottom: 0.3rem;
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+    }
+
+    /* Card for the trial overview */
+    .trial-card {
+        border-radius: 0.8rem;
+        padding: 1.25rem 1.4rem;
+        border: 1px solid #e5e5e5;
+        background: #fafafa;
+        box-shadow: 0 2px 8px rgba(15, 23, 42, 0.05);
+        margin-bottom: 1rem;
+    }
+
+    .trial-title {
+        font-size: 1.05rem;
+        font-weight: 600;
+        line-height: 1.4;
+        margin-bottom: 0.75rem;
+    }
+
+    /* Pills / tags */
+    .pill-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.4rem;
+        margin-bottom: 0.4rem;
+    }
+
+    .pill {
+        font-size: 0.8rem;
+        padding: 0.2rem 0.6rem;
+        border-radius: 999px;
+        background: #eef2ff;
+        color: #1e293b;
+        border: 1px solid #e0e7ff;
+    }
+
+    .pill-phase {
+        background: #ecfdf3;
+        border-color: #bbf7d0;
+    }
+
+    .pill-ta {
+        background: #fefce8;
+        border-color: #fef3c7;
+    }
+
+    .meta-label {
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: #6b7280;
+        margin-bottom: 0.15rem;
+    }
+
+    .meta-value {
+        font-weight: 500;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 
 # ==========================
 # Loading Data and Model
@@ -88,6 +171,151 @@ trial_id = label_to_nct[selected_label]
 # Pull selected trial row
 selected_trial = X[X[ID_COL] == trial_id].iloc[[0]]
 row = selected_trial.iloc[0]
+# ==========================
+# HELPERS
+# ==========================
+
+def get_risk_tier(p_fail: float):
+    """Geef (tier, beschrijving) terug op basis van kans op falen."""
+    if p_fail <= LOW_RISK_MAX:
+        return (
+            "Low",
+            "Model sees few patterns associated with withdrawn/suspended trials."
+        )
+    elif p_fail <= MEDIUM_RISK_MAX:
+        return (
+            "Medium",
+            "Mixed signals; trial resembles both successful and failed studies."
+        )
+    else:
+        return (
+            "High",
+            "Trial shares strong characteristics with previously halted trials."
+        )
+
+def compute_benchmarks(
+    historical_df: pd.DataFrame,
+    current_row: pd.Series,
+    p_comp: float,
+) -> dict:
+    """Compare predicted completion probability to historical data."""
+
+    # Overall completion rate across all historical trials
+    overall_rate = historical_df[OUTCOME_COL].mean()
+
+    # Similar = same phase + same therapeutic area
+    mask_similar = (
+        (historical_df[PHASE_COL] == current_row[PHASE_COL]) &
+        (historical_df[TA_COL] == current_row[TA_COL])
+    )
+    similar_df = historical_df[mask_similar]
+
+    if not similar_df.empty:
+        similar_rate = similar_df[OUTCOME_COL].mean()
+        n_similar = len(similar_df)
+    else:
+        similar_rate = np.nan
+        n_similar = 0
+
+    return {
+        "overall_rate": overall_rate,
+        "similar_rate": similar_rate,
+        "n_similar": n_similar,
+    }
+
+def build_summary(row: pd.Series, p_comp: float, tier: str, bench: dict) -> str:
+    phase_val = str(row.get(PHASE_COL, "unknown phase"))
+    ta_val = str(row.get(TA_COL, "this therapeutic area"))
+
+    base = (
+        f"This Phase {phase_val} trial in {ta_val} has an estimated "
+        f"completion probability of {p_comp:.1%}"
+    )
+
+    if bench is not None and not np.isnan(bench.get("similar_rate", np.nan)):
+        diff = p_comp - bench["similar_rate"]
+        direction = "higher" if diff >= 0 else "lower"
+        base += (
+            f", which is {abs(diff):.1%} {direction} than the historical "
+            f"completion rate for {bench['n_similar']} similar trials"
+        )
+
+    if tier:
+        base += f" and is classified as {tier.lower()} risk."
+
+    return base
+
+# ==========================
+# Prediction and Scores
+# ==========================
+
+if st.button("Make prediction"):
+
+    # ---- Compute failure probability ----
+    if hasattr(model, "predict_proba"):
+        proba = model.predict_proba(selected_trial)[0]
+        idx_fail = list(model.classes_).index(1)
+        p_fail = float(proba[idx_fail])
+    else:
+        pred = int(model.predict(selected_trial)[0])
+        p_fail = 1.0 if pred == 1 else 0.0
+
+    # ---- Compute completion probability ----
+    p_comp = 1.0 - p_fail
+
+    # ---- OUTCOME SUMMARY ----
+    st.subheader("1. Outcome Summary")
+
+    st.markdown("#### Completion Probability Gauge")
+    st.write("Predicted probability that the trial will be **completed**:")
+    st.write(f"**{p_comp:.1%}**")
+
+    st.progress(int(p_comp * 100))
+
+    # ---- RISK LEVEL ----
+    st.markdown("#### Risk Level (Low / Medium / High)")
+
+    tier, desc = get_risk_tier(p_fail)
+
+    if tier == "Low":
+        box = st.success
+    elif tier == "Medium":
+        box = st.warning
+    else:
+        box = st.error
+
+    box(f"**{tier} risk** – {desc}")
+
+    # =========================
+    # BENCHMARKS & COMPARISON
+    # =========================
+    bench = compute_benchmarks(historical_df, row, p_comp)
+
+    st.markdown("#### How does this trial compare?")
+
+    c1, c2 = st.columns(2)
+
+    # Overall historical completion rate
+    c1.metric(
+        "Overall completion rate (historical)",
+        f"{bench['overall_rate']:.1%}"
+    )
+
+    # Similar trials: same phase & therapeutic area
+    if not np.isnan(bench["similar_rate"]):
+        label = f"Similar trials (Phase {row[PHASE_COL]}, {row[TA_COL]})"
+        c2.metric(
+            label,
+            f"{bench['similar_rate']:.1%}",
+            help=f"Based on n = {bench['n_similar']} historical trials."
+        )
+    else:
+        c2.info("No similar historical trials found for this phase/therapeutic area.")
+
+    # Short narrative summary
+    summary_text = build_summary(row, p_comp, tier, bench)
+    st.markdown("#### Summary")
+    st.markdown(summary_text)
 
 # -----------------------------------
 # TRIAL IDENTITY CARD
@@ -206,115 +434,3 @@ def build_summary(row: pd.Series, p_comp: float, tier: str, bench: dict) -> str:
         base += f" and is classified as {tier.lower()} risk."
 
     return base
-
-
-# ==========================
-# Prediction and Scores
-# ==========================
-
-if st.button("Make prediction"):
-
-    # ---- Compute failure probability ----
-    if hasattr(model, "predict_proba"):
-        proba = model.predict_proba(selected_trial)[0]
-        idx_fail = list(model.classes_).index(1)
-        p_fail = float(proba[idx_fail])
-    else:
-        pred = int(model.predict(selected_trial)[0])
-        p_fail = 1.0 if pred == 1 else 0.0
-
-    # ---- Compute completion probability ----
-    p_comp = 1.0 - p_fail
-
-    # ---- OUTCOME SUMMARY ----
-    st.subheader("1. Outcome Summary")
-
-    st.markdown("#### Completion Probability Gauge")
-    st.write("Predicted probability that the trial will be **completed**:")
-    st.write(f"**{p_comp:.1%}**")
-
-    st.progress(int(p_comp * 100))
-
-    # ---- RISK LEVEL ----
-    st.markdown("#### Risk Level (Low / Medium / High)")
-
-    tier, desc = get_risk_tier(p_fail)
-
-    if tier == "Low":
-        box = st.success
-    elif tier == "Medium":
-        box = st.warning
-    else:
-        box = st.error
-
-    box(f"**{tier} risk** – {desc}")
-
-    # =========================
-    # BENCHMARKS & COMPARISON
-    # =========================
-    bench = compute_benchmarks(historical_df, row, p_comp)
-
-    st.markdown("#### How does this trial compare?")
-
-    c1, c2 = st.columns(2)
-
-    # Overall historical completion rate
-    c1.metric(
-        "Overall completion rate (historical)",
-        f"{bench['overall_rate']:.1%}"
-    )
-
-    # Similar trials: same phase & therapeutic area
-    if not np.isnan(bench["similar_rate"]):
-        label = f"Similar trials (Phase {row[PHASE_COL]}, {row[TA_COL]})"
-        c2.metric(
-            label,
-            f"{bench['similar_rate']:.1%}",
-            help=f"Based on n = {bench['n_similar']} historical trials."
-        )
-    else:
-        c2.info("No similar historical trials found for this phase/therapeutic area.")
-
-    # Short narrative summary
-    summary_text = build_summary(row, p_comp, tier, bench)
-    st.markdown("#### Summary")
-    st.markdown(summary_text)
-
-
-
-
-# def completion_rate(df: pd.DataFrame, mask: pd.Series):
-#     """
-#     Bereken completion rate in een subset.
-#     We gaan ervan uit dat FAIL_COL 1 = fail, 0 = geen fail is.
-#     completion_rate = 1 - gemiddelde(failure).
-#     """
-#     subset = df[mask]
-#     if subset.empty:
-#         return None
-
-#     fail_rate = subset[FAIL_COL].mean()
-#     return 1.0 - fail_rate
-
-
-# # ==========================
-# # 2. BENCHMARKS
-# # ==========================
-
-# st.header("2. Benchmarks")
-
-# phase = selected_trial["phase"].iloc[0]
-# ta = selected_trial["therapeutic_area"].iloc[0]
-
-# phase_rate = completion_rate(X, X["phase"] == phase)
-# ta_rate = completion_rate(X, X["therapeutic_area"] == ta)
-
-# col1, col2 = st.columns(2)
-
-# with col1:
-#     st.markdown("**Completion rate – same phase**")
-#     st.write(f"{phase_rate:.1%}" if phase_rate is not None else "N/A")
-
-# with col2:
-#     st.markdown("**Completion rate – same therapeutic area**")
-#     st.write(f"{ta_rate:.1%}" if ta_rate is not None else "N/A")
