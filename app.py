@@ -3,20 +3,63 @@ import joblib
 import pandas as pd
 import numpy as np
 
-
 # ==========================
 # CONFIG
 # ==========================
 
-MODEL_PATH = "/home/delaunan/code/delaunan/clintrialpredict/models/ctp_model.joblib"
-DATA_PATH = "data_predict.csv"
-HISTORICAL_PATH = "project_data.csv"
+from pathlib import Path
+import sys
+
+st.set_page_config(
+    page_title="Clinical Trial Completion Predictor",
+    page_icon="🧪",
+    layout="wide",
+)
+# ============================================================
+# 1. Locate the Project Root
+# ============================================================
+# app.py sits in the top-level project folder
+PROJECT_ROOT = Path(__file__).resolve().parent
+
+
+# ============================================================
+# 2. Add "src" to Python Path
+# ============================================================
+SRC_PATH = PROJECT_ROOT / "src"
+if str(SRC_PATH) not in sys.path:
+    sys.path.append(str(SRC_PATH))
+
+
+# ============================================================
+# 3. Define All Important Paths (portable!)
+# ============================================================
+MODEL_PATH = PROJECT_ROOT / "models" / "ctp_model.joblib"
+DATA_PATH = PROJECT_ROOT / "data" / "data_predict.csv"
+HISTORICAL_PATH = PROJECT_ROOT / "data" / "project_data.csv"
+
+
+# ============================================================
+# 4. Example usage (optional)
+# ============================================================
+def main():
+    print(f"Project Root:    {PROJECT_ROOT}")
+    print(f"Model Path:      {MODEL_PATH}")
+    print(f"Predict Data:    {DATA_PATH}")
+    print(f"Historical Data: {HISTORICAL_PATH}")
+
+    # Example import from src (works because we added src to sys.path)
+    # from inference import run_prediction
+    # run_prediction(MODEL_PATH, DATA_PATH)
+
+
+if __name__ == "__main__":
+    main()
 
 PHASE_COL = "phase"
 TA_COL = "therapeutic_area"
 OUTCOME_COL = "completed"
 
-ID_COL = "nct_id"       # ID van de trial in je CSV
+ID_COL = "nct_id"
 
 from src.prep.preprocessing import preprocessor
 
@@ -27,85 +70,69 @@ MEDIUM_RISK_MAX = 0.50   # 25–50%        -> Medium risk
 # --------------------------------------------------
 # GLOBAL STYLES
 # --------------------------------------------------
+# ---------- Global style tweaks ----------
 st.markdown(
     """
     <style>
-    /* Tighter page width */
-    .block-container {
-        max-width: 1000px;
-        padding-top: 2rem;
-        padding-bottom: 4rem;
-    }
+        /* Center the main block and limit width */
+        .main > div {
+            max-width: 900px;
+            margin: 0 auto;
+        }
 
-    /* Section titles */
-    .section-title {
-        font-size: 1.4rem;
-        font-weight: 600;
-        margin-bottom: 0.3rem;
-        display: flex;
-        align-items: center;
-        gap: 0.4rem;
-    }
+        .stButton > button {
+    background: #3a3a3a;
+    color: white;
+    padding: 0.55rem 1.2rem;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    border: none;
+    font-weight: 500;
+}
+.stButton > button:hover {
+    background: #2f2f2f;
+}
 
-    /* Card for the trial overview */
-    .trial-card {
-        border-radius: 0.8rem;
-        padding: 1.25rem 1.4rem;
-        border: 1px solid #e5e5e5;
-        background: #fafafa;
-        box-shadow: 0 2px 8px rgba(15, 23, 42, 0.05);
-        margin-bottom: 1rem;
-    }
 
-    .trial-title {
-        font-size: 1.05rem;
-        font-weight: 600;
-        line-height: 1.4;
-        margin-bottom: 0.75rem;
-    }
+        .stButton > button:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 12px 24px rgba(15, 23, 42, 0.2);
+        }
 
-    /* Pills / tags */
-    .pill-row {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 0.4rem;
-        margin-bottom: 0.4rem;
-    }
+        /* Card look for sections */
+        .card {
+            padding: 1.5rem 1.75rem;
+            border-radius: 1rem;
+            background: #FFFFFF;
+            box-shadow: 0 8px 20px rgba(15, 23, 42, 0.06);
+            border: 1px solid #E5E7EB;
+        }
 
-    .pill {
-        font-size: 0.8rem;
-        padding: 0.2rem 0.6rem;
-        border-radius: 999px;
-        background: #eef2ff;
-        color: #1e293b;
-        border: 1px solid #e0e7ff;
-    }
-
-    .pill-phase {
-        background: #ecfdf3;
-        border-color: #bbf7d0;
-    }
-
-    .pill-ta {
-        background: #fefce8;
-        border-color: #fef3c7;
-    }
-
-    .meta-label {
-        font-size: 0.75rem;
-        text-transform: uppercase;
-        letter-spacing: 0.04em;
-        color: #6b7280;
-        margin-bottom: 0.15rem;
-    }
-
-    .meta-value {
-        font-weight: 500;
-    }
+        h1 {
+            font-size: 2.6rem !important;
+            font-weight: 800 !important;
+            letter-spacing: -0.03em;
+        }
     </style>
     """,
     unsafe_allow_html=True,
 )
+
+# ---- Shrink Streamlit Expanders to Half Width ----
+st.markdown("""
+<style>
+
+    /* Target the actual Streamlit expander container */
+    div.streamlit-expander {
+        max-width: 50% !important;     /* Make it 50% width */
+        margin-left: 0 !important;     /* Align left */
+        margin-right: auto !important; /* Prevent centering */
+    }
+
+</style>
+""", unsafe_allow_html=True)
+
+
 
 # ==========================
 # Loading Data and Model
@@ -124,8 +151,8 @@ def load_historical_data(path: str = HISTORICAL_PATH) -> pd.DataFrame:
 historical_df = load_historical_data()
 
 # Titels
-st.title("Clinical Trial Completion Predictor")
-st.write("Select a trial and get a prediction.")
+st.markdown("### 🧪 Clinical Trial Completion Predictor")
+st.write("Select a clinical trial to generate a prediction on its completion.")
 
 # Load the model
 model = joblib.load(MODEL_PATH)
@@ -133,22 +160,12 @@ model = joblib.load(MODEL_PATH)
 # Load dataset with all ongoing trials
 X = pd.read_csv(DATA_PATH)
 
-# Kolommen die je als overzicht wilt tonen
-display_cols = ["nct_id", "phase", "txt_tags", "txt_criteria", "therapeutic_area"]
-
-# Featurekolommen voor het model
-# (ID en target eruit; voeg hier evt. meer kolommen toe die je NIET als feature wilt)
-#feature_cols = [c for c in trials_df.columns if c not in [ID_COL, FAIL_COL]]
-
-import streamlit as st
-
 ID_COL = "nct_id"  # adjust if needed
 
 # -----------------------------------
 # TRIAL SELECTION DROPDOWN
 # -----------------------------------
 
-st.subheader("Choose Clinical Trial")
 
 # Build nice readable label: "NCTID — Brief Title"
 X["short_label"] = (
@@ -330,107 +347,41 @@ st.markdown(f"""
 - **Therapeutic Area:** {row['therapeutic_area']}
 """)
 
-with st.expander("Protocol Design", expanded=False):
-    st.write(f"**Primary Purpose:** {row['primary_purpose']}")
-    st.write(f"**Intervention Model:** {row['intervention_model']}")
-    st.write(f"**Allocation:** {row['allocation']}")
-    st.write(f"**Masking:** {row['masking']}")
-    st.write(f"**Number of Arms:** {row['number_of_arms']}")
-    st.write(f"**# Primary Endpoints:** {row['num_primary_endpoints']}")
-    st.write(f"**Data Monitoring Committee (DMC):** {row['has_dmc']}")
+# 👇 create two columns, use only the left one
+col1, col2 = st.columns([1, 1])
 
-with st.expander("Eligibility & Population", expanded=False):
-    st.write(f"**Eligibility Strictness Score:** {row['eligibility_strictness_score']}")
-    st.write(f"**Criteria Length (log):** {row['criteria_len_log']}")
-    st.write(f"**Gender Restriction:** {row['gender']} (restricted: {row['is_gender_restricted']})")
-    st.write(f"**Healthy Volunteers:** {row['healthy_volunteers']}")
-    st.write(
-        "**Population Flags:** "
-        f"Child={row['child']}, Adult={row['adult']}, Older Adult={row['older_adult']}"
-    )
+with col1:
+    with st.expander("Protocol Design", expanded=False):
+        st.write(f"**Primary Purpose:** {row['primary_purpose']}")
+        st.write(f"**Intervention Model:** {row['intervention_model']}")
+        st.write(f"**Allocation:** {row['allocation']}")
+        st.write(f"**Masking:** {row['masking']}")
+        st.write(f"**Number of Arms:** {row['number_of_arms']}")
+        st.write(f"**# Primary Endpoints:** {row['num_primary_endpoints']}")
+        st.write(f"**Data Monitoring Committee (DMC):** {row['has_dmc']}")
 
-    with st.expander("Full Criteria Text", expanded=False):
-        st.write(row["txt_criteria"])
-
-with st.expander("Sponsor & Operational Factors", expanded=False):
-    st.write(f"**Lead Sponsor:** {row['lead_sponsor']}")
-    st.write(f"**Sponsor Tier:** {row['sponsor_tier']}")
-    st.write(f"**Sponsor Class:** {row['agency_class']}")
-    st.write(f"**Includes U.S. Sites:** {row['includes_us']}")
-    st.write(f"**Study Start Year:** {row['start_year']}")
-    st.write(f"**COVID Exposure:** {row['covid_exposure']}")
-
-
-# ==========================
-# HELPERS
-# ==========================
-
-def get_risk_tier(p_fail: float):
-    """Geef (tier, beschrijving) terug op basis van kans op falen."""
-    if p_fail <= LOW_RISK_MAX:
-        return (
-            "Low",
-            "Model sees few patterns associated with withdrawn/suspended trials."
-        )
-    elif p_fail <= MEDIUM_RISK_MAX:
-        return (
-            "Medium",
-            "Mixed signals; trial resembles both successful and failed studies."
-        )
-    else:
-        return (
-            "High",
-            "Trial shares strong characteristics with previously halted trials."
+    with st.expander("Eligibility & Population", expanded=False):
+        st.write(f"**Eligibility Strictness Score:** {row['eligibility_strictness_score']}")
+        st.write(f"**Criteria Length (log):** {row['criteria_len_log']}")
+        st.write(f"**Gender Restriction:** {row['gender']} (restricted: {row['is_gender_restricted']})")
+        st.write(f"**Healthy Volunteers:** {row['healthy_volunteers']}")
+        st.write(
+            "**Population Flags:** "
+            f"Child={row['child']}, Adult={row['adult']}, Older Adult={row['older_adult']}"
         )
 
-def compute_benchmarks(
-    historical_df: pd.DataFrame,
-    current_row: pd.Series,
-    p_comp: float,
-) -> dict:
-    """Compare predicted completion probability to historical data."""
+        with st.expander("Full Criteria Text", expanded=False):
+            st.write(row["txt_criteria"])
 
-    # Overall completion rate across all historical trials
-    overall_rate = historical_df[OUTCOME_COL].mean()
+    with st.expander("Sponsor & Operational Factors", expanded=False):
+        st.write(f"**Lead Sponsor:** {row['lead_sponsor']}")
+        st.write(f"**Sponsor Tier:** {row['sponsor_tier']}")
+        st.write(f"**Sponsor Class:** {row['agency_class']}")
+        st.write(f"**Includes U.S. Sites:** {row['includes_us']}")
+        st.write(f"**Study Start Year:** {row['start_year']}")
+        st.write(f"**COVID Exposure:** {row['covid_exposure']}")
 
-    # Similar = same phase + same therapeutic area
-    mask_similar = (
-        (historical_df[PHASE_COL] == current_row[PHASE_COL]) &
-        (historical_df[TA_COL] == current_row[TA_COL])
-    )
-    similar_df = historical_df[mask_similar]
-
-    if not similar_df.empty:
-        similar_rate = similar_df[OUTCOME_COL].mean()
-        n_similar = len(similar_df)
-    else:
-        similar_rate = np.nan
-        n_similar = 0
-
-    return {
-        "overall_rate": overall_rate,
-        "similar_rate": similar_rate,
-        "n_similar": n_similar,
-    }
-
-def build_summary(row: pd.Series, p_comp: float, tier: str, bench: dict) -> str:
-    phase_val = str(row.get(PHASE_COL, "unknown phase"))
-    ta_val = str(row.get(TA_COL, "this therapeutic area"))
-
-    base = (
-        f"This Phase {phase_val} trial in {ta_val} has an estimated "
-        f"completion probability of {p_comp:.1%}"
-    )
-
-    if bench is not None and not np.isnan(bench.get("similar_rate", np.nan)):
-        diff = p_comp - bench["similar_rate"]
-        direction = "higher" if diff >= 0 else "lower"
-        base += (
-            f", which is {abs(diff):.1%} {direction} than the historical "
-            f"completion rate for {bench['n_similar']} similar trials"
-        )
-
-    if tier:
-        base += f" and is classified as {tier.lower()} risk."
-
-    return base
+import numpy as np
+import pandas as pd
+import streamlit as st
+import altair as alt
