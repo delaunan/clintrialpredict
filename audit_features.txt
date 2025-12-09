@@ -1,0 +1,290 @@
+
+================================================================================
+ 1. DATASET HEALTH CHECK
+================================================================================
+Dimensions: 88374 Rows x 67 Columns
+
+TARGET DISTRIBUTION:
+   0 (Completed):  74566 (84.4%)
+   1 (Terminated): 13808 (15.6%)
+   Global Failure Baseline: 15.6%
+   Imbalance Ratio: 1:5.40 (Use scale_pos_weight=5.40)
+
+================================================================================
+ 2. CATEGORICAL PREDICTIVE SIGNAL
+================================================================================
+Metric: Risk Spread (Max Failure % - Min Failure %)
+Interpretation: Multiplier > 1.0 = Higher Risk than Baseline.
+--------------------------------------------------------------------------------
+
+>>> agent_category (Spread: 29.1%) -> ■ VERY STRONG
+CATEGORY                       | COUNT  | FAIL % | MULTIPLIER
+-----------------------------------------------------------------
+PI3K_INHIBITOR                 | 136    | 39.7   | 2.54  ▲ HIGH
+BCL2_INHIBITOR                 | 56     | 30.4   | 1.94  ▲ HIGH
+GENE_THERAPY                   | 377    | 27.3   | 1.75  ▲ HIGH
+CELL_THERAPY                   | 582    | 26.6   | 1.7   ▲ HIGH
+CHEMOTHERAPY                   | 2411   | 23.2   | 1.48  ▲ HIGH
+TARGETED_KINASE_INHIBITOR      | 1762   | 22.9   | 1.46  ▲ HIGH
+ENZYME_INHIBITOR               | 613    | 22.2   | 1.42  ▲ HIGH
+MONOCLONAL_ANTIBODY            | 4729   | 20.9   | 1.34  ▲ HIGH
+KINASE_INHIBITOR_TYROSINE      | 2559   | 20.2   | 1.3   ▲ HIGH
+IMMUNOTHERAPY                  | 231    | 17.7   | 1.14    AVG 
+PARP_INHIBITOR                 | 234    | 17.1   | 1.09    AVG 
+BIOLOGIC_FUSION                | 207    | 16.9   | 1.08    AVG 
+BIOLOGIC                       | 10463  | 15.1   | 0.97    AVG 
+SMALL_MOLECULE_OTHER           | 58499  | 14.5   | 0.93    AVG 
+RNA_GENE_THERAPY               | 166    | 13.9   | 0.89    AVG 
+VACCINE                        | 61     | 13.1   | 0.84    AVG 
+PLACEBO_CTRL                   | 4772   | 12.4   | 0.79  ▼ LOW 
+STATIN_CHOLESTEROL             | 508    | 10.6   | 0.68  ▼ LOW 
+
+>>> sponsor_tier (Spread: 3.3%) ->   POOR
+CATEGORY                       | COUNT  | FAIL % | MULTIPLIER
+-----------------------------------------------------------------
+TIER_2_OTHER                   | 64895  | 16.5   | 1.06    AVG 
+TIER_1_GIANT                   | 23479  | 13.2   | 0.84    AVG 
+
+>>> phase (Spread: 12.2%) -> □ STRONG
+CATEGORY                       | COUNT  | FAIL % | MULTIPLIER
+-----------------------------------------------------------------
+PHASE1/PHASE2                  | 6754   | 23.5   | 1.51  ▲ HIGH
+PHASE2                         | 29839  | 19.5   | 1.25  ▲ HIGH
+PHASE2/PHASE3                  | 2882   | 16.1   | 1.03    AVG 
+PHASE3                         | 20337  | 13.2   | 0.84    AVG 
+PHASE1                         | 28562  | 11.4   | 0.73  ▼ LOW 
+
+>>> agency_class (Spread: 11.7%) -> □ STRONG
+CATEGORY                       | COUNT  | FAIL % | MULTIPLIER
+-----------------------------------------------------------------
+INDIV                          | 106    | 20.8   | 1.33  ▲ HIGH
+OTHER                          | 30726  | 19.4   | 1.24  ▲ HIGH
+NIH                            | 2552   | 17.8   | 1.14    AVG 
+NETWORK                        | 826    | 14.8   | 0.95    AVG 
+INDUSTRY                       | 52966  | 13.5   | 0.86    AVG 
+FED                            | 341    | 12.3   | 0.79  ▼ LOW 
+OTHER_GOV                      | 850    | 9.1    | 0.58  ▼ LOW 
+
+>>> therapeutic_area (Spread: 22.7%) -> ■ VERY STRONG
+CATEGORY                       | COUNT  | FAIL % | MULTIPLIER
+-----------------------------------------------------------------
+Oncology                       | 23256  | 25.8   | 1.65  ▲ HIGH
+Wounds                         | 204    | 23.5   | 1.51  ▲ HIGH
+Hematology                     | 1116   | 21.8   | 1.39  ▲ HIGH
+Digestive                      | 1897   | 19.1   | 1.22  ▲ HIGH
+Congenital/Genetic             | 107    | 17.8   | 1.14    AVG 
+Cardiovascular                 | 4770   | 16.1   | 1.03    AVG 
+Neurology                      | 8188   | 14.8   | 0.95    AVG 
+Pathological Conditions        | 1019   | 13.3   | 0.85    AVG 
+Immunology                     | 4210   | 13.0   | 0.83    AVG 
+Urology (Male)                 | 1921   | 12.8   | 0.82    AVG 
+Other/Unclassified             | 647    | 12.2   | 0.78  ▼ LOW 
+Respiratory                    | 1745   | 12.2   | 0.78  ▼ LOW 
+Endocrine                      | 371    | 11.9   | 0.76  ▼ LOW 
+Ophthalmology (Eye)            | 1300   | 11.8   | 0.76  ▼ LOW 
+Musculoskeletal                | 664    | 11.1   | 0.71  ▼ LOW 
+Psychiatry                     | 3586   | 11.0   | 0.7   ▼ LOW 
+Infections (Bacterial/Fungal)  | 9564   | 10.4   | 0.66  ▼ LOW 
+Metabolic                      | 4643   | 9.7    | 0.62  ▼ LOW 
+Dermatology                    | 1308   | 8.7    | 0.56  ▼ LOW 
+Stomatognathic                 | 327    | 3.1    | 0.2   ▼ LOW 
+
+>>> has_dmc (Spread: 7.5%) ->   AVERAGE
+CATEGORY                       | COUNT  | FAIL % | MULTIPLIER
+-----------------------------------------------------------------
+1                              | 33248  | 20.3   | 1.3   ▲ HIGH
+0                              | 55126  | 12.8   | 0.82    AVG 
+
+>>> is_fda_regulated_drug (Spread: 8.5%) ->   AVERAGE
+CATEGORY                       | COUNT  | FAIL % | MULTIPLIER
+-----------------------------------------------------------------
+1                              | 21263  | 22.1   | 1.42  ▲ HIGH
+0                              | 67111  | 13.6   | 0.87    AVG 
+
+================================================================================
+ 3. NUMERICAL PREDICTIVE SIGNAL
+================================================================================
+Metric: % Difference between Completed and Terminated trials
+--------------------------------------------------------------------------------
+FEATURE                        | AVG(0)   | AVG(1)   | DIFF %   | POWER
+--------------------------------------------------------------------------------
+design_rigor_score             | 1.80     | 1.41     | 21.7  %  | ■ VERY STRONG (LOWER in Failures)
+eligibility_strictness_score   | 2.11     | 2.11     | 0.0   %  |   POOR (HIGHER in Failures)
+competition_broad              | 931.44   | 1347.37  | 44.7  %  | ■ VERY STRONG (HIGHER in Failures)
+competition_niche              | 474.71   | 326.67   | 31.2  %  | ■ VERY STRONG (LOWER in Failures)
+num_primary_endpoints          | 2.25     | 1.94     | 14.0  %  | □ STRONG (LOWER in Failures)
+number_of_arms                 | 2.50     | 2.24     | 10.5  %  | □ STRONG (LOWER in Failures)
+criteria_len_log               | 7.44     | 7.64     | 2.7   %  |   POOR (HIGHER in Failures)
+
+================================================================================
+ 4. PREPROCESSING STRATEGY
+================================================================================
+COLUMN                         | SKEW   | UNIQUE   | RECOMMENDATION
+--------------------------------------------------------------------------------
+study_type                     | -      | 1        | OneHotEncoder
+overall_status                 | -      | 3        | OneHotEncoder
+phase                          | -      | 5        | OneHotEncoder
+number_of_arms                 | 3.96   | 35       | Log1p + StandardScaler
+has_dmc                        | -      | 2        | OneHot (Categorical)
+is_fda_regulated_drug          | -      | 2        | OneHot (Categorical)
+start_year                     | 0.08   | 19       | StandardScaler
+covid_exposure                 | -      | 2        | OneHot (Categorical)
+includes_us                    | -      | 2        | OneHot (Categorical)
+allocation                     | -      | 2        | OneHotEncoder
+intervention_model             | -      | 5        | OneHotEncoder
+primary_purpose                | -      | 10       | OneHotEncoder
+masking                        | -      | 5        | OneHotEncoder
+num_primary_endpoints          | 11.34  | 84       | Log1p + StandardScaler
+agency_class                   | -      | 8        | OneHotEncoder
+sponsor_tier                   | -      | 2        | OneHotEncoder
+gender                         | -      | 4        | OneHotEncoder
+healthy_volunteers             | -      | 2        | OneHotEncoder
+criteria_len_log               | -0.43  | 9502     | StandardScaler
+child                          | -      | 2        | OneHot (Categorical)
+adult                          | -      | 2        | OneHot (Categorical)
+older_adult                    | -      | 2        | OneHot (Categorical)
+best_pathology                 | -      | 1125     | TargetEncoder
+therapeutic_area               | -      | 23       | OneHotEncoder
+tree_number                    | -      | 1014     | TargetEncoder
+therapeutic_subgroup_name      | -      | 1126     | TargetEncoder
+competition_broad              | 0.92   | 278      | StandardScaler
+competition_niche              | 1.60   | 250      | Log1p + StandardScaler
+name                           | -      | 45387    | TargetEncoder
+agent_category                 | -      | 19       | OneHotEncoder
+score_masking                  | -      | 4        | OneHot (Categorical)
+score_allocation               | -      | 2        | OneHot (Categorical)
+score_model                    | -      | 2        | OneHot (Categorical)
+design_rigor_score             | -      | 6        | OneHot (Categorical)
+is_gender_restricted           | -      | 2        | OneHot (Categorical)
+is_sick_only                   | -      | 2        | OneHot (Categorical)
+eligibility_strictness_score   | -      | 5        | OneHot (Categorical)
+min_p_value                    | 1.70   | 2490     | Log1p + StandardScaler
+scientific_success             | -      | 2        | OneHot (Categorical)
+
+================================================================================
+ 5. CORRELATION LEADERBOARD (NUMERIC & BOOLEAN)
+================================================================================
+Features mathematically most linked to Failure (Target=1)
+--------------------------------------------------------------------------------
+FEATURE                             | CORR     | POWER
+-----------------------------------------------------------------
+min_p_value                         | 0.195    | ■ VERY STRONG
+is_sick_only                        | 0.167    | ■ VERY STRONG
+competition_broad                   | 0.142    | □ STRONG
+older_adult                         | 0.136    | □ STRONG
+includes_us                         | 0.129    | □ STRONG
+is_fda_regulated_drug               | 0.101    | □ STRONG
+has_dmc                             | 0.100    | □ STRONG
+design_rigor_score                  | -0.095   | □ STRONG
+score_model                         | -0.094   | □ STRONG
+scientific_success                  | -0.086   | □ STRONG
+criteria_len_log                    | 0.080    | □ STRONG
+score_allocation                    | -0.078   | □ STRONG
+competition_niche                   | -0.072   | □ STRONG
+score_masking                       | -0.065   | □ STRONG
+covid_exposure                      | 0.051    | □ STRONG
+number_of_arms                      | -0.051   | □ STRONG
+start_year                          | 0.046    |   AVERAGE
+is_gender_restricted                | -0.034   |   AVERAGE
+num_primary_endpoints               | -0.031   |   AVERAGE
+adult                               | 0.022    |   AVERAGE
+
+================================================================================
+ 5B. CATEGORICAL LEADERBOARD (RISK SPREAD)
+================================================================================
+Ranking text features by their ability to separate Risk.
+--------------------------------------------------------------------------------
+FEATURE                             | SPREAD   | POWER
+-----------------------------------------------------------------
+agent_category                      | 29.1    % | ■ VERY STRONG
+therapeutic_area                    | 22.7    % | ■ VERY STRONG
+phase                               | 12.2    % | □ STRONG
+agency_class                        | 11.7    % | □ STRONG
+is_fda_regulated_drug               | 8.5     % |   AVERAGE
+has_dmc                             | 7.5     % |   AVERAGE
+sponsor_tier                        | 3.3     % |   POOR
+
+================================================================================
+ 6. CORRELATION LOSERBOARD (LOW SIGNAL)
+================================================================================
+Features with near-zero correlation (< 0.01). Candidates for removal.
+--------------------------------------------------------------------------------
+eligibility_strictness_score        | 0.0006  
+child                               | -0.0140 
+adult                               | 0.0223  
+num_primary_endpoints               | -0.0305 
+is_gender_restricted                | -0.0339 
+start_year                          | 0.0456  
+number_of_arms                      | -0.0510 
+covid_exposure                      | 0.0511  
+score_masking                       | -0.0653 
+competition_niche                   | -0.0717 
+
+================================================================================
+ 7. FEATURE COLLINEARITY (REDUNDANCY CHECK)
+================================================================================
+Pairs with Correlation > 0.7 (Risk of Overfitting)
+--------------------------------------------------------------------------------
+FEATURE A                      <--> FEATURE B                      | CORR
+--------------------------------------------------------------------------------
+design_rigor_score             <--> score_masking                  | 0.93
+scientific_success             <--> min_p_value                    | 0.74
+
+================================================================================
+ 8. BUSINESS LOGIC: RED FLAG DETECTOR
+================================================================================
+Simulating 'Due Diligence' rules to see how many trials get flagged.
+--------------------------------------------------------------------------------
+Total Trials: 88374
+• Flagged for High Risk Agent:     3129 (3.5%)
+• Flagged for Low Design Rigor:    49940 (56.5%)
+• Flagged for Academic Sponsor:    30726 (34.8%)
+• Flagged for Crowded Market:      7677 (8.7%)
+
+[THE DEATH ZONE COMBINATION]
+Criteria: Academic Sponsor + Low Rigor + High Risk Agent
+Trials in Death Zone: 1866
+Failure Rate in Death Zone: 26.9% (Baseline: 15.6%)
+-> VERDICT: This combination is a massive Red Flag.
+
+================================================================================
+ 9. FEATURE DEFINITIONS & LOGIC
+================================================================================
+Formal documentation of calculated features.
+--------------------------------------------------------------------------------
+
+[SCIENTIFIC / PROTOCOL]
+ • design_rigor_score:
+   Sum of ordinal scores for Masking (0-3), Allocation (0-1), and Model (0-1). Higher score indicates a more robust, bias-resistant protocol.
+ • agent_category:
+   Classification of the intervention molecule (e.g., Biologic, Small Molecule, Gene Therapy) based on regex analysis of drug names and AACT intervention types.
+ • scientific_success:
+   Binary flag (1/0). Derived from 'min_p_value'. True if the trial reported at least one Primary Outcome with p <= 0.05. (Analysis only).
+ • min_p_value:
+   The minimum P-value reported across all Primary Outcomes for the trial. Represents the strongest statistical signal observed.
+
+[OPERATIONAL / RECRUITMENT]
+ • competition_broad:
+   Count of other trials starting in the same Therapeutic Area within the same year and the previous year. Proxy for market saturation.
+ • competition_niche:
+   Count of other trials starting in the same specific Therapeutic Subgroup (e.g., 'Breast Neoplasms') within the same timeframe.
+ • eligibility_strictness_score:
+   Sum of binary restrictions: Gender (Not All), Healthy Volunteers (No), Children (Excluded), Elderly (Excluded). Higher score implies harder recruitment.
+ • criteria_len_log:
+   Natural log of the character count of the eligibility criteria text. Proxy for protocol complexity and administrative burden.
+
+[REGULATORY / SPONSOR]
+ • includes_us:
+   Binary flag. True if the trial lists at least one facility in the United States. Proxy for FDA regulatory oversight.
+ • is_fda_regulated_drug:
+   Binary flag from AACT. Indicates if the trial is explicitly flagged as subject to FDA drug regulations.
+ • sponsor_tier:
+   Categorical (Tier 1 vs Tier 2). Tier 1 includes top 20 global pharma companies by revenue. Proxy for financial stability and operational resources.
+ • agency_class:
+   Categorical (Industry, NIH, Other). Distinguishes between commercial (Industry) and academic/non-profit (Other) sponsorship.
+
+[INTRINSIC RISK]
+ • has_dmc:
+   Binary flag. True if the trial has a Data Monitoring Committee. Proxy for trial safety risk or complexity (DMCs are required for high-risk interventions).
+ • is_sick_only:
+   Binary flag. True if 'Healthy Volunteers' is 'No'. Indicates the trial targets a patient population with a specific condition.
