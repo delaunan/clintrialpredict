@@ -78,13 +78,13 @@ class ClinicalTrialLoader:
 
         # 5. Filter: Phase (DROP PHASE 0 - Focus on Valley of Death)
         # We keep Phase 2, Phase 2/3, and Phase 3.
-        excluded_phases = ['EARLY_PHASE1', 'PHASE1', 'PHASE4', 'NA']
+        excluded_phases = ['EARLY_PHASE1', 'PHASE4', 'NA']
         df = df[~df['phase'].isin(excluded_phases)]
         df = df.dropna(subset=['phase'])
 
         # 6. Filter: COVID Sanitizer (Remove Pandemic Failures)
         if 'why_stopped' in df.columns:
-            covid_keywords = ['covid', 'pandemic', 'coronavirus', 'sars-cov-2', 'logistical reasons']
+            covid_keywords = ['covid', 'pandemic', 'coronavirus', 'sars-cov-2','travel restrictions', 'quarantine', 'lockdown', 'sars-cov']
             # Convert to string, lower case, check for keywords
             mask_covid = df['why_stopped'].fillna('').astype(str).str.lower().apply(
                 lambda x: any(k in x for k in covid_keywords)
@@ -93,16 +93,16 @@ class ClinicalTrialLoader:
                 print(f"    [Sanitizer] Dropping {mask_covid.sum()} trials terminated due to COVID/Logistics.")
                 df = df[~mask_covid]
 
-        # 7. Filter: Date Range (2000-2019)
+        # 7. Filter: Date Range (2005-2018 for training)
         # Avoids Right-Censoring (trials still running) and COVID era bias
         df['start_date'] = pd.to_datetime(df['start_date'], errors='coerce')
         df['start_year'] = df['start_date'].dt.year
-        df = df[df['start_year'].between(2005, 2018)]
+        df = df[df['start_year'].between(2005, 2023)]
 
         # 8. Create Target
         df['target'] = df['overall_status'].apply(lambda x: 0 if x == 'COMPLETED' else 1)
 
-        print(f"    Core Cohort: {len(df)} trials (Phase 2/3, 2000-2019)")
+        print(f"    Core Cohort: {len(df)} trials (Phase 1/2/3, 2000-2018 training window and 2005-2023 for production).")
         return df.copy()
 
     # --- SECOND MAIN FUNCTION CALLED ---
@@ -116,7 +116,7 @@ class ClinicalTrialLoader:
         # df['phase_ordinal'] = df['phase'].map(phase_map).fillna(2).astype(int)
 
         # 2. Operational Flags
-        df['covid_exposure'] = df['start_year'].between(2019, 2021).astype(int)
+        df['covid_exposure'] = df['start_year'].between(2019, 2022).astype(int)
 
         # 3. Geography (SAFE: Only is_us, removed country counts to prevent leakage)
         df_countries = self._safe_load('countries.txt', cols=['nct_id', 'name'])
