@@ -1,25 +1,16 @@
 import pandas as pd
 import joblib
-from pathlib import Path
 
 # ------------------------------------------------------------------
 # Model loading
 # ------------------------------------------------------------------
-
-BASE_DIR = Path(__file__).resolve().parent.parent
-MODEL_PATH = BASE_DIR / "models" / "ctp_model.joblib"
-
-if not MODEL_PATH.exists():
-    raise FileNotFoundError(f"Model file not found at {MODEL_PATH}")
-
+MODEL_PATH = "models/ctp_model.joblib"
 model = joblib.load(MODEL_PATH)
 
 # ------------------------------------------------------------------
-# Feature schema (MUST match training exactly)
+# Features expected by the trained pipeline (ORDER MATTERS)
 # ------------------------------------------------------------------
-
-MODEL_FEATURES = [
-    'nct_id', 'start_date', 'study_type', 'overall_status', 'phase',
+MODEL_FEATURES = ['nct_id', 'start_date', 'study_type', 'overall_status', 'phase',
     'number_of_arms', 'why_stopped', 'has_dmc', 'is_fda_regulated_drug',
     'start_year', 'target', 'covid_exposure', 'includes_us', 'allocation',
     'intervention_model', 'primary_purpose', 'masking',
@@ -41,34 +32,39 @@ MODEL_FEATURES = [
 # ------------------------------------------------------------------
 # Prediction function
 # ------------------------------------------------------------------
-
 def predict(features: dict):
     """
-    Make a prediction from a dictionary of named features.
+    Predict for a single clinical trial input.
 
     Parameters
     ----------
     features : dict
-        Keys must match MODEL_FEATURES
+        Keys must exactly match MODEL_FEATURES
 
     Returns
     -------
     list
-        Model predictions
+        Model prediction
     """
 
-    # Check for missing features
+    # ---- Validate keys strictly ----
     missing = set(MODEL_FEATURES) - set(features.keys())
+    extra = set(features.keys()) - set(MODEL_FEATURES)
+
     if missing:
         raise ValueError(f"Missing features: {sorted(missing)}")
+    if extra:
+        raise ValueError(f"Unexpected features: {sorted(extra)}")
 
-    # Build DataFrame in correct column order
-    X = pd.DataFrame(
-        [[features[feat] for feat in MODEL_FEATURES]],
-        columns=MODEL_FEATURES
-    )
+    # ---- Build DataFrame in correct order ----
+    X = pd.DataFrame([features], columns=MODEL_FEATURES)
 
-    # Run model prediction (pipeline-safe)
+    # ---- CRITICAL FIX: force numeric columns to float ----
+    # This avoids sklearn imputer / scaler dtype crashes
+    for col in X.columns:
+        if X[col].dtype != object:
+            X[col] = X[col].astype(float)
+
+    # ---- Predict ----
     preds = model.predict(X)
-
     return preds.tolist()
