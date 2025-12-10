@@ -650,6 +650,7 @@ st.markdown(f"""
 - **NCT ID:** {row['nct_id']}
 - **Phase:** {row['phase']}
 - **Therapeutic Area:** {row['therapeutic_area']}
+- **Reason for stopping:** {row['why_stopped']}
 """)
 
 col1, col2 = st.columns([1, 1])
