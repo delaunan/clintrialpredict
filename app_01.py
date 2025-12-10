@@ -123,7 +123,11 @@ def load_model():
 
 @st.cache_resource
 def load_explainer():
-    return joblib.load(EXPLAINER_PATH)
+    explainer = joblib.load(EXPLAINER_PATH)
+    # Patch for SHAP version mismatch: some versions expect `approximate`
+    if not hasattr(explainer, "approximate"):
+        explainer.approximate = False   # default behaviour: no approximation
+    return explainer
 
 @st.cache_resource
 def load_taxonomy():
