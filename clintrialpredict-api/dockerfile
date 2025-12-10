@@ -16,10 +16,12 @@ COPY requirements.txt .
 RUN pip install --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
-# Copy application
+# Copy application code
 COPY app ./app
-COPY models ./models
+COPY apimodel ./apimodel
 
-EXPOSE 8000
+# Expose the port uvicorn listens on (8080 for Cloud Run)
+EXPOSE 8080
 
-CMD ["uvicorn", "app.api:app", "--host", "0.0.0.0", "--port", "8000"]
+# Run Uvicorn on 0.0.0.0:8080
+CMD ["uvicorn", "app.api:app", "--host", "0.0.0.0", "--port", "8080"]
