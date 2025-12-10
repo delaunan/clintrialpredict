@@ -1,0 +1,100 @@
+// Technical Architecture
+digraph Clinical_Trial_Pipeline {
+	bgcolor=white rankdir=LR splines=ortho
+	graph [nodesep=0.5 pad=0.5 ranksep=0.6]
+	node [fontname=Arial fontsize=11 shape=plain]
+	edge [arrowsize=1.0 color="#0047AB" penwidth=2.0]
+	Step1 [label=<
+<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="8" BGCOLOR="white" COLOR="#0047AB" FIXEDSIZE="FALSE">
+  <TR><TD BGCOLOR="#0047AB" HEIGHT="30"><FONT COLOR="white" POINT-SIZE="12"><B>1. DATA INGESTION</B></FONT></TD></TR>
+  <TR><TD ALIGN="LEFT">
+    <B>Source:</B> AACT Database<BR/>
+    <B>Raw:</B> 500,000+ Trials<BR/>
+    <B>Filter:</B> Phase 1, 2, 3 (Drugs)<BR/>
+    <B>Target:</B> Terminated vs. Completed<BR/>
+    <FONT COLOR="#008080"><B>N = 88,374 Samples</B></FONT>
+  </TD></TR>
+</TABLE>>]
+	Step2 [label=<
+<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="8" BGCOLOR="white" COLOR="#0047AB" FIXEDSIZE="FALSE">
+  <TR><TD BGCOLOR="#0047AB" HEIGHT="30"><FONT COLOR="white" POINT-SIZE="12"><B>2. FEATURE ENGINEERING</B></FONT></TD></TR>
+  <TR><TD ALIGN="LEFT">
+    <B>Structured Logic:</B><BR/>
+    • Regex Drug Classifier<BR/>
+    • Design Rigor Score
+  </TD></TR>
+  <TR><TD ALIGN="LEFT">
+    <B>NLP Pipeline (BioBERT):</B><BR/>
+    • Tokenization &amp; Embeddings<BR/>
+    • TF-IDF + PCA Reduction
+  </TD></TR>
+</TABLE>>]
+	Step3 [label=<
+<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="6" BGCOLOR="#F4F9FF" COLOR="#0047AB">
+  <TR><TD COLSPAN="4" BGCOLOR="#008080" HEIGHT="30"><FONT COLOR="white" POINT-SIZE="12"><B>3. THE FEATURE MATRIX (60 DENSE FEATURES)</B></FONT></TD></TR>
+  <TR>
+    <TD ALIGN="LEFT" VALIGN="TOP" WIDTH="110">
+      <B>A. DESIGN</B><BR/>
+      <FONT POINT-SIZE="10">
+      • Rigor Score<BR/>
+      • Masking<BR/>
+      • Allocation<BR/>
+      • Endpoints
+      </FONT>
+    </TD>
+    <TD ALIGN="LEFT" VALIGN="TOP" WIDTH="110">
+      <B>B. PATIENT</B><BR/>
+      <FONT POINT-SIZE="10">
+      • Eligibility<BR/>
+      • Age / Gender<BR/>
+      • Disease Status<BR/>
+      • Strictness
+      </FONT>
+    </TD>
+    <TD ALIGN="LEFT" VALIGN="TOP" WIDTH="110">
+      <B>C. LANDSCAPE</B><BR/>
+      <FONT POINT-SIZE="10">
+      • Agent Category<BR/>
+      • Competition<BR/>
+      • Pathology<BR/>
+      • Sub-group
+      </FONT>
+    </TD>
+    <TD ALIGN="LEFT" VALIGN="TOP" WIDTH="110">
+      <B>D. SPONSOR</B><BR/>
+      <FONT POINT-SIZE="10">
+      • Sponsor Tier<BR/>
+      • Agency Class<BR/>
+      • US Sites<BR/>
+      • Track Record
+      </FONT>
+    </TD>
+  </TR>
+</TABLE>>]
+	Step4 [label=<
+<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="8" BGCOLOR="white" COLOR="#0047AB" FIXEDSIZE="FALSE">
+  <TR><TD BGCOLOR="#0047AB" HEIGHT="30"><FONT COLOR="white" POINT-SIZE="12"><B>4. MODEL ENGINE</B></FONT></TD></TR>
+  <TR><TD ALIGN="LEFT">
+    <B>Algorithm:</B> XGBoost Classifier<BR/>
+    <B>Baseline:</B> vs. Logistic Reg.<BR/>
+    <B>Optimization:</B><BR/>
+    • Scale_Pos_Weight (1:5.4)<BR/>
+    • L2 Regularization<BR/>
+    • AUC-PR Metric
+  </TD></TR>
+</TABLE>>]
+	Step5 [label=<
+<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="8" BGCOLOR="white" COLOR="#0047AB" FIXEDSIZE="FALSE">
+  <TR><TD BGCOLOR="#0047AB" HEIGHT="30"><FONT COLOR="white" POINT-SIZE="12"><B>5. INTERPRETATION</B></FONT></TD></TR>
+  <TR><TD ALIGN="LEFT">
+    <B>Method:</B> SHAP (TreeExplainer)<BR/>
+    <B>Global:</B> Feature Ranking<BR/>
+    <B>Local:</B> Risk Drivers<BR/>
+    <B>UI:</B> Streamlit App
+  </TD></TR>
+</TABLE>>]
+	Step1 -> Step2
+	Step2 -> Step3
+	Step3 -> Step4
+	Step4 -> Step5
+}
