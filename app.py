@@ -61,7 +61,6 @@ OUTCOME_COL = "completed"
 
 ID_COL = "nct_id"
 
-from src.prep.preprocessing import preprocessor
 
 # Risk thresholds (op basis van p_fail)
 LOW_RISK_MAX = 0.25      # p_fail <= 25%  -> Low risk
