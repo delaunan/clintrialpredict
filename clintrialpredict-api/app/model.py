@@ -1,10 +1,12 @@
 import pandas as pd
 import joblib
+import os
 
 # ------------------------------------------------------------------
 # Model loading
 # ------------------------------------------------------------------
-MODEL_PATH = "models/ctp_model.joblib"
+#MODEL_PATH = "models/ctp_model.joblib"
+MODEL_PATH = os.path.join(os.path.dirname(__file__), "..", "apimodel", "ctp_model.joblib")
 model = joblib.load(MODEL_PATH)
 
 # ------------------------------------------------------------------
