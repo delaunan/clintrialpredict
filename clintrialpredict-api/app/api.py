@@ -1,5 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from app.model import predict, MODEL_FEATURES
+import os
+import uvicorn
 
 app = FastAPI(title="Clinical Trial Prediction API")
 
@@ -48,3 +50,11 @@ def predict_endpoint(payload: dict):
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+# ------------------------------------------------------------------
+# Cloud Run / local entrypoint
+# ------------------------------------------------------------------
+if __name__ == "__main__":
+    # Cloud Run provides PORT as environment variable
+    port = int(os.environ.get("PORT", 8080))
+    uvicorn.run("app.api:app", host="0.0.0.0", port=port)
