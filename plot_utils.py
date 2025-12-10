@@ -29,7 +29,7 @@ def get_business_hypothesis(subcategory, impact_val):
 
     hypotheses = {
         # --- PATIENT & CRITERIA ---
-        'Criteria Complexity (AI)': (
+        'Criteria Complexity': (
             "Complex/atypical inclusion criteria may limit enrollment.",
             "Standardized criteria likely facilitate easier recruitment."
         ),
