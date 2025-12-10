@@ -45,8 +45,8 @@ OUTCOME_COL = "completed"
 ID_COL = "nct_id"
 
 # Risk thresholds (based on p_fail)
-LOW_RISK_MAX = 0.25      # p_fail <= 25%  -> Low risk
-MEDIUM_RISK_MAX = 0.50   # 25–50%        -> Medium risk
+LOW_RISK_MAX = 0.33      # p_fail <= 25%  -> Low risk
+MEDIUM_RISK_MAX = 0.66   # 25–50%        -> Medium risk
 # p_fail > 50%           -> High risk
 
 # --------------------------------------------------
@@ -558,23 +558,45 @@ def plot_treemap(df_impacts, df_pillars):
 # UI: TITLE & TRIAL SELECTION
 # ==========================
 
-st.markdown("# 🧪 Clinical Trial Completion Predictor")
+st.markdown("# 🧪 ClinTrialPredict")
 st.write(
     "Select a clinical trial to generate a completion prediction, compare it "
-    "to historical benchmarks, and review SHAP-based drivers."
+    "to historical benchmarks, and review underlying drivers."
 )
 
 st.markdown("### Trial selection")
 
 with st.container():
-    st.markdown("<div class='card'>", unsafe_allow_html=True)
-
+    # Build display labels: "NCTID — brief title"
     X["short_label"] = X[ID_COL].astype(str) + " — " + X["brief_title"].astype(str)
+    all_labels = X["short_label"].tolist()
     label_to_nct = dict(zip(X["short_label"], X[ID_COL]))
 
+    # --- Single search bar ---
+    search_term = st.text_input(
+        "Search trial (NCT ID or words in title)",
+        placeholder="Type NCT ID or a keyword, e.g. 'melanoma' or 'PHASE2'",
+        key="trial_search",
+    )
+
+    # Filter labels based on search text
+    if search_term:
+        filtered_labels = [
+            lbl for lbl in all_labels
+            if search_term.lower() in lbl.lower()
+        ]
+    else:
+        filtered_labels = all_labels
+
+    if not filtered_labels:
+        st.warning("No trials match your search. Showing all trials instead.")
+        filtered_labels = all_labels
+
+    # --- Single dropdown using filtered list ---
     selected_label = st.selectbox(
         "Trial (NCT ID — brief title)",
-        X["short_label"].tolist()
+        filtered_labels,
+        key="trial_select",
     )
 
     trial_id = label_to_nct[selected_label]
@@ -583,9 +605,6 @@ with st.container():
 
     run_prediction = st.button("Make prediction")
 
-    st.markdown("</div>", unsafe_allow_html=True)
-
-st.markdown("---")
 
 # ==========================
 # PREDICTION DASHBOARD
@@ -619,7 +638,7 @@ if run_prediction:
     tier, desc = get_risk_tier(p_fail)
     bench = compute_benchmarks(historical_df, row, p_comp)
 
-    st.markdown("## 1. Prediction dashboard")
+    st.markdown("## Prediction dashboard")
     with st.container():
         st.markdown("<div class='card'>", unsafe_allow_html=True)
 
@@ -660,35 +679,35 @@ if run_prediction:
             else:
                 st.info("SHAP-based visual explanations are not available for this run.")
 
-        # --- BENCHMARKS + NARRATIVE under the dashboard ---
-        st.markdown("#### Benchmark vs. history")
-        b1, b2 = st.columns(2)
-        b1.metric(
-            "Portfolio (all historical)",
-            f"{bench['overall_rate']:.1%}"
-        )
-        if not np.isnan(bench["similar_rate"]):
-            label = f"Similar trials (Phase {row[PHASE_COL]}, {row[TA_COL]})"
-            b2.metric(
-                label,
-                f"{bench['similar_rate']:.1%}",
-                help=f"Based on n = {bench['n_similar']} trials."
-            )
-        else:
-            b2.info("No similar historical trials found.")
+#         # --- BENCHMARKS + NARRATIVE under the dashboard ---
+#         #st.markdown("#### Benchmark vs. history")
+#         #b1, b2 = st.columns(2)
+#         b1.metric(
+#             "Portfolio (all historical)",
+#             f"{bench['overall_rate']:.1%}"
+#         )
+#         if not np.isnan(bench["similar_rate"]):
+#             label = f"Similar trials (Phase {row[PHASE_COL]}, {row[TA_COL]})"
+#             b2.metric(
+#                 label,
+#                 f"{bench['similar_rate']:.1%}",
+#                 help=f"Based on n = {bench['n_similar']} trials."
+#             )
+#         else:
+#             b2.info("No similar historical trials found.")
 
-        summary_text = build_summary(row, p_comp, tier, bench)
-        st.markdown("#### Narrative interpretation")
-        st.markdown(summary_text)
+#         summary_text = build_summary(row, p_comp, tier, bench)
+#         st.markdown("#### Narrative interpretation")
+#         st.markdown(summary_text)
 
-        st.markdown("</div>", unsafe_allow_html=True)
+#         st.markdown("</div>", unsafe_allow_html=True)
 
-st.markdown("---")
+# st.markdown("---")
 
 # -----------------------------------
 # 2. TRIAL IDENTITY CARD
 # -----------------------------------
-st.markdown("## 2. Selected trial overview")
+st.markdown("## Trial overview")
 # --- Header block with identity info ---
 st.markdown(f"""
 **{row['official_title']}**
@@ -696,6 +715,7 @@ st.markdown(f"""
 - **NCT ID:** {row['nct_id']}
 - **Phase:** {row['phase']}
 - **Therapeutic area:** {row['therapeutic_area']}
+- **Pathology:** {row.get('pathology', 'n/a')}
 - **Reason for stopping:** {row.get('why_stopped', 'n/a')}
 """)
 
@@ -706,11 +726,9 @@ left_col, right_col = st.columns(2)
 # ------------------------
 with left_col:
     with st.expander("Patient & criteria", expanded=False):
-        st.write(f"**Eligibility strictness score:** {row['eligibility_strictness_score']}")
 
         st.write("")  # spacer
         st.write(f"**Gender:** {row['gender']}")
-        st.write(f"**Gender restriction:** {(row['is_gender_restricted'])}")
 
         st.write("")
         st.write(
@@ -739,7 +757,7 @@ with right_col:
 
         st.write("")
         st.write(f"**Agent / intervention type:** {row['agent_category']}")
-        st.write(f"**FDA-regulated drug:** {(row['is_fda_regulated_drug'])}")
+        #st.write(f"**FDA-regulated drug:** {(row['is_fda_regulated_drug'])}")
 
         st.write("")
         st.write(f"**Market competition (broad):** {row['competition_broad']}")
@@ -767,7 +785,7 @@ with left_col:
         st.write(f"**Data Monitoring Committee (DMC):** {(row['has_dmc'])}")
 
         st.write("")
-        st.write(f"**Design rigor score:** {row['design_rigor_score']}")
+
 
 # ------------------------
 # SPONSOR & OPERATIONAL FACTORS
@@ -775,11 +793,8 @@ with left_col:
 with right_col:
     with st.expander("Sponsor & operational factors", expanded=False):
         st.write(f"**Lead sponsor:** {row['lead_sponsor']}")
-        st.write(f"**Sponsor tier:** {row['sponsor_tier']}")
         st.write(f"**Sponsor class:** {row['agency_class']}")
-        st.write(f"**Sponsor (cleaned):** {row['sponsor_clean']}")
-
         st.write("")
         st.write(f"**Includes U.S. sites:** {(row['includes_us'])}")
-        st.write(f"**Study start year:** {row['start_year']}")
+        # st.write(f"**Study start year:** {row['start_year']}")
         st.write(f"**COVID exposure period:** {row['covid_exposure']}")
