@@ -1,38 +1,50 @@
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
-from typing import Dict, Any
-
 from app.model import predict, MODEL_FEATURES
 
 app = FastAPI(title="Clinical Trial Prediction API")
 
-
-class PredictRequest(BaseModel):
-    features: Dict[str, Any]
-
-
+# ------------------------------------------------------------------
+# Root / health check
+# ------------------------------------------------------------------
 @app.get("/")
 def root():
-    return {"status": "ok", "message": "Clinical Trial Prediction API running"}
+    return {
+        "status": "ok",
+        "model_features": len(MODEL_FEATURES)
+    }
 
-
+# ------------------------------------------------------------------
+# Expose expected features (VERY IMPORTANT)
+# ------------------------------------------------------------------
 @app.get("/features")
-def get_features():
-    """
-    Returns the list of feature names expected by the model
-    """
-    return {"features": MODEL_FEATURES}
+def features():
+    return {
+        "n_features": len(MODEL_FEATURES),
+        "features": MODEL_FEATURES
+    }
 
-
+# ------------------------------------------------------------------
+# Prediction endpoint
+# ------------------------------------------------------------------
 @app.post("/predict")
-def predict_endpoint(request: PredictRequest):
+def predict_endpoint(payload: dict):
     """
-    Make a prediction from named features
+    Expected payload format:
+    {
+      "features": {
+        "feature_name": value,
+        ...
+      }
+    }
     """
     try:
-        prediction = predict(request.features)
+        if "features" not in payload:
+            raise ValueError("Payload must contain a 'features' object")
+
+        prediction = predict(payload["features"])
         return {"prediction": prediction}
+
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Internal error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
