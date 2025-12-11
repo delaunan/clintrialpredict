@@ -1,3 +1,5 @@
+
+
 import sys
 from pathlib import Path
 
@@ -98,6 +100,7 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
+
 
 # ==========================
 # LOADING DATA / MODELS
@@ -515,6 +518,7 @@ def plot_treemap(df_impacts, df_pillars):
         (0.55, "#81C784"), (1.00, "#006400")
     ]
 
+    # Exact dezelfde hiërarchie als eerst
     fig = px.treemap(
         df_sub,
         path=[px.Constant("<b>ALL DRIVERS</b>"), 'Pillar_Label', 'Subcategory'],
@@ -537,10 +541,13 @@ def plot_treemap(df_impacts, df_pillars):
             "Impact: <b>%{customdata[0]:+.2%}</b><br><br>"
             "<i>Analysis:</i><br>%{customdata[1]}<extra></extra>"
         ),
-        marker=dict(line=dict(width=1, color='white'),
-                    pad=dict(t=60, l=10, r=10, b=10)),
-        pathbar=dict(visible=True, thickness=25,
-                     textfont=dict(size=14, family="Arial")),
+        marker=dict(
+            line=dict(width=1, color='white'),
+            pad=dict(t=60, l=10, r=10, b=10)
+        ),
+        # ENIGE WIJZIGING t.o.v. jouw oorspronkelijke code:
+        # breadcrumb / titelbalk bovenin uitzetten
+        pathbar=dict(visible=False),
         textfont=dict(size=14, family="Arial")
     )
 
@@ -554,15 +561,17 @@ def plot_treemap(df_impacts, df_pillars):
     )
     return fig
 
+
+
 # ==========================
 # UI: TITLE & TRIAL SELECTION
 # ==========================
 
 st.markdown("# 🧪 ClinTrialPredict")
-st.write(
-    "Select a clinical trial to generate a completion prediction, compare it "
-    "to historical benchmarks, and review underlying drivers."
-)
+# st.write(
+#     "Select a clinical trial to generate a completion prediction, compare it "
+#     "to historical benchmarks, and review underlying drivers."
+# )
 
 st.markdown("### Trial selection")
 
@@ -572,30 +581,10 @@ with st.container():
     all_labels = X["short_label"].tolist()
     label_to_nct = dict(zip(X["short_label"], X[ID_COL]))
 
-    # --- Single search bar ---
-    search_term = st.text_input(
-        "Search trial (NCT ID or words in title)",
-        placeholder="Type NCT ID or a keyword, e.g. 'melanoma' or 'PHASE2'",
-        key="trial_search",
-    )
-
-    # Filter labels based on search text
-    if search_term:
-        filtered_labels = [
-            lbl for lbl in all_labels
-            if search_term.lower() in lbl.lower()
-        ]
-    else:
-        filtered_labels = all_labels
-
-    if not filtered_labels:
-        st.warning("No trials match your search. Showing all trials instead.")
-        filtered_labels = all_labels
-
-    # --- Single dropdown using filtered list ---
+    # --- Single searchable dropdown ---
     selected_label = st.selectbox(
         "Trial (NCT ID — brief title)",
-        filtered_labels,
+        all_labels,          # users can type to filter this list
         key="trial_select",
     )
 
@@ -638,9 +627,23 @@ if run_prediction:
     tier, desc = get_risk_tier(p_fail)
     bench = compute_benchmarks(historical_df, row, p_comp)
 
-    st.markdown("## Prediction dashboard")
+        # Tight title + line
+    st.markdown(
+        """
+        <h2 style="margin-bottom: 0.15rem;">
+            Prediction dashboard
+        </h2>
+        <hr style="
+            margin-top: 0.15rem;
+            margin-bottom: 1rem;
+            border: none;
+            border-top: 1px solid #e0e0e0;
+        ">
+        """,
+        unsafe_allow_html=True,
+    )
+
     with st.container():
-        st.markdown("<div class='card'>", unsafe_allow_html=True)
 
         # --- two columns: left stacked (gauge + risk + pillar), right full treemap ---
         left_col, right_col = st.columns([1.0, 1.2])
@@ -668,7 +671,7 @@ if run_prediction:
         # RIGHT SIDE: driver map only, spanning full column
         with right_col:
             if df_pillars is not None and df_impacts is not None:
-                st.markdown("#### Driver map")
+                st.markdown("#### Drivers map")
                 st.write(
                     "High-level view of how feature groups influence the predicted "
                     "completion probability. Green areas increase the probability; "
@@ -715,8 +718,7 @@ st.markdown(f"""
 - **NCT ID:** {row['nct_id']}
 - **Phase:** {row['phase']}
 - **Therapeutic area:** {row['therapeutic_area']}
-- **Pathology:** {row.get('pathology', 'n/a')}
-- **Reason for stopping:** {row.get('why_stopped', 'n/a')}
+- **Pathology:** {row['best_pathology']}
 """)
 
 left_col, right_col = st.columns(2)
@@ -785,6 +787,10 @@ with left_col:
         st.write(f"**Data Monitoring Committee (DMC):** {(row['has_dmc'])}")
 
         st.write("")
+
+    st.markdown("<div style='height: 2rem;'></div>", unsafe_allow_html=True)
+    with st.expander("-"):
+        st.write(f"**Reason for termination:** {row['why_stopped']}")
 
 
 # ------------------------
