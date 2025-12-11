@@ -568,239 +568,203 @@ def plot_treemap(df_impacts, df_pillars):
 # ==========================
 
 st.markdown("# 🧪 ClinTrialPredict")
-# st.write(
-#     "Select a clinical trial to generate a completion prediction, compare it "
-#     "to historical benchmarks, and review underlying drivers."
-# )
-
 st.markdown("### Trial selection")
 
-with st.container():
-    # Build display labels: "NCTID — brief title"
-    X["short_label"] = X[ID_COL].astype(str) + " — " + X["brief_title"].astype(str)
-    all_labels = X["short_label"].tolist()
-    label_to_nct = dict(zip(X["short_label"], X[ID_COL]))
+# Build display labels: "NCTID — brief title"
+X["short_label"] = X[ID_COL].astype(str) + " — " + X["brief_title"].astype(str)
+all_labels = X["short_label"].tolist()
+label_to_nct = dict(zip(X["short_label"], X[ID_COL]))
 
-    # --- Single searchable dropdown ---
-    selected_label = st.selectbox(
-        "Trial (NCT ID — brief title)",
-        all_labels,          # users can type to filter this list
-        key="trial_select",
-    )
+# --- Single searchable dropdown, initially empty ---
+selected_label = st.selectbox(
+    "Trial (NCT ID — brief title)",
+    all_labels,                # users can type to filter this list
+    index=None,                # <-- NO default selection
+    placeholder="Select a trial…",
+    key="trial_select",
+)
 
+# Only show everything else AFTER a trial is selected
+if selected_label is not None:
     trial_id = label_to_nct[selected_label]
     selected_trial = X[X[ID_COL] == trial_id].iloc[[0]]
     row = selected_trial.iloc[0]
 
+    # -----------------------------------
+    # 2. TRIAL IDENTITY CARD
+    # -----------------------------------
+    st.markdown("## Trial overview")
+    st.markdown(f"""
+    **{row['official_title']}**
+
+    - **NCT ID:** {row['nct_id']}
+    - **Phase:** {row['phase']}
+    - **Therapeutic area:** {row['therapeutic_area']}
+    - **Pathology:** {row['best_pathology']}
+    """)
+
+    left_col, right_col = st.columns(2)
+
+    # ------------------------
+    # PATIENT & CRITERIA
+    # ------------------------
+    with left_col:
+        with st.expander("Patient & criteria", expanded=False):
+
+            st.write("")  # spacer
+            st.write(f"**Gender:** {row['gender']}")
+
+            st.write("")
+            st.write(
+                "**Population flags:** "
+                f"Child={(row['child'])}, "
+                f"Adult={(row['adult'])}, "
+                f"Older adult={(row['older_adult'])}"
+            )
+
+            st.write("")
+            st.write(f"**Healthy volunteers allowed:** {(row['healthy_volunteers'])}")
+            st.write(f"**Only sick patients:** {(row['is_sick_only'])}")
+
+            # Optional nested expander for full criteria text
+            with st.expander("Full eligibility criteria text", expanded=False):
+                st.write(row.get("txt_criteria", "Not available."))
+
+    # ------------------------
+    # THERAPEUTIC LANDSCAPE
+    # ------------------------
+    with right_col:
+        with st.expander("Therapeutic landscape", expanded=False):
+            st.write(f"**Therapeutic area:** {row['therapeutic_area']}")
+            st.write(f"**Therapeutic subgroup:** {row['therapeutic_subgroup_name']}")
+            st.write(f"**Pathology:** {row['best_pathology']}")
+
+            st.write("")
+            st.write(f"**Agent / intervention type:** {row['agent_category']}")
+
+            st.write("")
+            st.write(f"**Market competition (broad):** {row['competition_broad']}")
+            st.write(f"**Market competition (niche):** {row['competition_niche']}")
+
+    # ------------------------
+    # PROTOCOL DESIGN
+    # ------------------------
+    with left_col:
+        with st.expander("Protocol design", expanded=False):
+            st.write(f"**Phase:** {row['phase']}")
+            st.write(f"**Study type:** {row['study_type']}")
+
+            st.write("")
+            st.write(f"**Primary purpose:** {row['primary_purpose']}")
+            st.write(f"**Intervention model:** {row['intervention_model']}")
+
+            st.write("")
+            st.write(f"**Allocation:** {row['allocation']}")
+            st.write(f"**Masking:** {row['masking']}")
+
+            st.write("")
+            st.write(f"**Number of arms:** {row['number_of_arms']}")
+            st.write(f"**# primary endpoints:** {row['num_primary_endpoints']}")
+            st.write(f"**Data Monitoring Committee (DMC):** {(row['has_dmc'])}")
+
+            st.write("")
+
+        st.markdown("<div style='height: 2rem;'></div>", unsafe_allow_html=True)
+
+    # ------------------------
+    # SPONSOR & OPERATIONAL FACTORS
+    # ------------------------
+    with right_col:
+        with st.expander("Sponsor & operational factors", expanded=False):
+            st.write(f"**Lead sponsor:** {row['lead_sponsor']}")
+            st.write(f"**Sponsor class:** {row['agency_class']}")
+            st.write("")
+            st.write(f"**Includes U.S. sites:** {(row['includes_us'])}")
+            st.write(f"**COVID exposure period:** {row['covid_exposure']}")
+        with st.expander("-"):
+            st.write(f"**Reason for termination:** {row['why_stopped']}")
+
+    # Prediction button only appears when a trial is chosen
     run_prediction = st.button("Make prediction")
 
-
-# ==========================
-# PREDICTION DASHBOARD
-# ==========================
-
-if run_prediction:
-    df_pillars, df_impacts, prob_success_final, error_msg = calculate_risk_drivers(
-        model=model,
-        explainer=explainer,
-        taxonomy=taxonomy,
-        row_data=selected_trial
-    )
-
-    if error_msg is not None or df_pillars is None:
-        st.error(f"SHAP explanation failed: {error_msg}")
-        # Fallback to plain model probability
-        if hasattr(model, "predict_proba"):
-            proba = model.predict_proba(selected_trial)[0]
-            idx_fail = list(model.classes_).index(1)
-            p_fail = float(proba[idx_fail])
-        else:
-            pred = int(model.predict(selected_trial)[0])
-            p_fail = 1.0 if pred == 1 else 0.0
-        p_comp = 1.0 - p_fail
-        df_pillars = df_impacts = None
-    else:
-        # Use SHAP-derived probability as main success probability
-        p_comp = float(prob_success_final)
-        p_fail = 1.0 - p_comp
-
-    tier, desc = get_risk_tier(p_fail)
-    bench = compute_benchmarks(historical_df, row, p_comp)
-
-        # Tight title + line
-    st.markdown(
-        """
-        <h2 style="margin-bottom: 0.15rem;">
-            Prediction dashboard
-        </h2>
-        <hr style="
-            margin-top: 0.15rem;
-            margin-bottom: 1rem;
-            border: none;
-            border-top: 1px solid #e0e0e0;
-        ">
-        """,
-        unsafe_allow_html=True,
-    )
-
-    with st.container():
-
-        # --- two columns: left stacked (gauge + risk + pillar), right full treemap ---
-        left_col, right_col = st.columns([1.0, 1.2])
-
-        # LEFT SIDE: gauge + risk + pillar bar
-        with left_col:
-            st.markdown("#### Completion & risk")
-            gauge_fig_left = plot_success_gauge(p_comp)
-            st.plotly_chart(gauge_fig_left, use_container_width=True)
-
-
-            if tier == "Low":
-                box = st.success
-            elif tier == "Medium":
-                box = st.warning
-            else:
-                box = st.error
-            box(f"**{tier} risk** – {desc}")
-
-            if df_pillars is not None:
-                st.markdown("#### Pillar impact overview")
-                bar_fig = plot_impact_bar(df_pillars)
-                st.plotly_chart(bar_fig, use_container_width=True)
-
-        # RIGHT SIDE: driver map only, spanning full column
-        with right_col:
-            if df_pillars is not None and df_impacts is not None:
-                st.markdown("#### Drivers map")
-                st.write(
-                    "High-level view of how feature groups influence the predicted "
-                    "completion probability. Green areas increase the probability; "
-                    "red areas decrease it."
-                )
-                treemap_fig = plot_treemap(df_impacts, df_pillars)
-                st.plotly_chart(treemap_fig, use_container_width=True)
-            else:
-                st.info("SHAP-based visual explanations are not available for this run.")
-
-#         # --- BENCHMARKS + NARRATIVE under the dashboard ---
-#         #st.markdown("#### Benchmark vs. history")
-#         #b1, b2 = st.columns(2)
-#         b1.metric(
-#             "Portfolio (all historical)",
-#             f"{bench['overall_rate']:.1%}"
-#         )
-#         if not np.isnan(bench["similar_rate"]):
-#             label = f"Similar trials (Phase {row[PHASE_COL]}, {row[TA_COL]})"
-#             b2.metric(
-#                 label,
-#                 f"{bench['similar_rate']:.1%}",
-#                 help=f"Based on n = {bench['n_similar']} trials."
-#             )
-#         else:
-#             b2.info("No similar historical trials found.")
-
-#         summary_text = build_summary(row, p_comp, tier, bench)
-#         st.markdown("#### Narrative interpretation")
-#         st.markdown(summary_text)
-
-#         st.markdown("</div>", unsafe_allow_html=True)
-
-# st.markdown("---")
-
-# -----------------------------------
-# 2. TRIAL IDENTITY CARD
-# -----------------------------------
-st.markdown("## Trial overview")
-# --- Header block with identity info ---
-st.markdown(f"""
-**{row['official_title']}**
-
-- **NCT ID:** {row['nct_id']}
-- **Phase:** {row['phase']}
-- **Therapeutic area:** {row['therapeutic_area']}
-- **Pathology:** {row['best_pathology']}
-""")
-
-left_col, right_col = st.columns(2)
-
-# ------------------------
-# PATIENT & CRITERIA
-# ------------------------
-with left_col:
-    with st.expander("Patient & criteria", expanded=False):
-
-        st.write("")  # spacer
-        st.write(f"**Gender:** {row['gender']}")
-
-        st.write("")
-        st.write(
-            "**Population flags:** "
-            f"Child={(row['child'])}, "
-            f"Adult={(row['adult'])}, "
-            f"Older adult={(row['older_adult'])}"
+    # ==========================
+    # PREDICTION DASHBOARD
+    # ==========================
+    if run_prediction:
+        df_pillars, df_impacts, prob_success_final, error_msg = calculate_risk_drivers(
+            model=model,
+            explainer=explainer,
+            taxonomy=taxonomy,
+            row_data=selected_trial
         )
 
-        st.write("")
-        st.write(f"**Healthy volunteers allowed:** {(row['healthy_volunteers'])}")
-        st.write(f"**Only sick patients:** {(row['is_sick_only'])}")
+        if error_msg is not None or df_pillars is None:
+            st.error(f"SHAP explanation failed: {error_msg}")
+            # Fallback to plain model probability
+            if hasattr(model, "predict_proba"):
+                proba = model.predict_proba(selected_trial)[0]
+                idx_fail = list(model.classes_).index(1)
+                p_fail = float(proba[idx_fail])
+            else:
+                pred = int(model.predict(selected_trial)[0])
+                p_fail = 1.0 if pred == 1 else 0.0
+            p_comp = 1.0 - p_fail
+            df_pillars = df_impacts = None
+        else:
+            # Use SHAP-derived probability as main success probability
+            p_comp = float(prob_success_final)
+            p_fail = 1.0 - p_comp
 
-        # Optional nested expander for full criteria text
-        with st.expander("Full eligibility criteria text", expanded=False):
-            st.write(row.get("txt_criteria", "Not available."))
+        tier, desc = get_risk_tier(p_fail)
+        bench = compute_benchmarks(historical_df, row, p_comp)
 
-# ------------------------
-# THERAPEUTIC LANDSCAPE
-# ------------------------
-with right_col:
-    with st.expander("Therapeutic landscape", expanded=False):
-        st.write(f"**Therapeutic area:** {row['therapeutic_area']}")
-        st.write(f"**Therapeutic subgroup:** {row['therapeutic_subgroup_name']}")
-        st.write(f"**Pathology:** {row['best_pathology']}")
+        st.markdown(
+            """
+            <h2 style="margin-bottom: 0.15rem;">
+                Prediction dashboard
+            </h2>
+            <hr style="
+                margin-top: 0.15rem;
+                margin-bottom: 1rem;
+                border: none;
+                border-top: 1px solid #e0e0e0;
+            ">
+            """,
+            unsafe_allow_html=True,
+        )
 
-        st.write("")
-        st.write(f"**Agent / intervention type:** {row['agent_category']}")
-        #st.write(f"**FDA-regulated drug:** {(row['is_fda_regulated_drug'])}")
+        with st.container():
+            left_col, right_col = st.columns([1.0, 1.2])
 
-        st.write("")
-        st.write(f"**Market competition (broad):** {row['competition_broad']}")
-        st.write(f"**Market competition (niche):** {row['competition_niche']}")
+            # LEFT SIDE: gauge + risk + pillar bar
+            with left_col:
+                st.markdown("#### Completion & risk")
+                gauge_fig_left = plot_success_gauge(p_comp)
+                st.plotly_chart(gauge_fig_left, use_container_width=True)
 
-# ------------------------
-# PROTOCOL DESIGN
-# ------------------------
-with left_col:
-    with st.expander("Protocol design", expanded=False):
-        st.write(f"**Phase:** {row['phase']}")
-        st.write(f"**Study type:** {row['study_type']}")
+                if tier == "Low":
+                    box = st.success
+                elif tier == "Medium":
+                    box = st.warning
+                else:
+                    box = st.error
+                box(f"**{tier} risk** – {desc}")
 
-        st.write("")
-        st.write(f"**Primary purpose:** {row['primary_purpose']}")
-        st.write(f"**Intervention model:** {row['intervention_model']}")
+                if df_pillars is not None:
+                    st.markdown("#### Pillar impact overview")
+                    bar_fig = plot_impact_bar(df_pillars)
+                    st.plotly_chart(bar_fig, use_container_width=True)
 
-        st.write("")
-        st.write(f"**Allocation:** {row['allocation']}")
-        st.write(f"**Masking:** {row['masking']}")
-
-        st.write("")
-        st.write(f"**Number of arms:** {row['number_of_arms']}")
-        st.write(f"**# primary endpoints:** {row['num_primary_endpoints']}")
-        st.write(f"**Data Monitoring Committee (DMC):** {(row['has_dmc'])}")
-
-        st.write("")
-
-    st.markdown("<div style='height: 2rem;'></div>", unsafe_allow_html=True)
-    with st.expander("-"):
-        st.write(f"**Reason for termination:** {row['why_stopped']}")
-
-
-# ------------------------
-# SPONSOR & OPERATIONAL FACTORS
-# ------------------------
-with right_col:
-    with st.expander("Sponsor & operational factors", expanded=False):
-        st.write(f"**Lead sponsor:** {row['lead_sponsor']}")
-        st.write(f"**Sponsor class:** {row['agency_class']}")
-        st.write("")
-        st.write(f"**Includes U.S. sites:** {(row['includes_us'])}")
-        # st.write(f"**Study start year:** {row['start_year']}")
-        st.write(f"**COVID exposure period:** {row['covid_exposure']}")
+            # RIGHT SIDE: driver map
+            with right_col:
+                if df_pillars is not None and df_impacts is not None:
+                    st.markdown("#### Drivers map")
+                    st.write(
+                        "High-level view of how feature groups influence the predicted "
+                        "completion probability. Green areas increase the probability; "
+                        "red areas decrease it."
+                    )
+                    treemap_fig = plot_treemap(df_impacts, df_pillars)
+                    st.plotly_chart(treemap_fig, use_container_width=True)
+                else:
+                    st.info("SHAP-based visual explanations are not available for this run.")
