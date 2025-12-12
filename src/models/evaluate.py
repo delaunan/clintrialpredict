@@ -72,7 +72,8 @@ def evaluate_model(model, X_test, y_test, model_name="Model"):
     labels = [f"{count}\n({perc:.0%})" for count, perc in zip(cm.flatten(), cm_norm.flatten())]
     labels = np.asarray(labels).reshape(2, 2)
 
-    sns.heatmap(cm, annot=labels, fmt='', cmap='Blues', ax=axes[0], cbar=False,
+    sns.heatmap(cm_norm, annot=labels, fmt='', cmap='Blues', ax=axes[0], cbar=False,
+                vmin=0.0, vmax=1.0,
                 annot_kws={"size": 16, "weight": "bold"})
 
     axes[0].set_title("CONFUSION MATRIX\n(Recall View: % of Actuals)", fontsize=16, fontweight='bold', pad=15)
@@ -86,19 +87,30 @@ def evaluate_model(model, X_test, y_test, model_name="Model"):
     axes[0].text(0.5, 1.15, "False Negatives\n(Missed Failure)", ha='center', va='center', color='black', fontsize=11)
     axes[0].text(1.5, 1.15, "True Positives\n(Risk Avoided)", ha='center', va='center', color='white', fontsize=11)
 
-    # --- PLOT B: ROC CURVE ---
-    RocCurveDisplay.from_predictions(y_test, y_prob, ax=axes[1], name=model_name, color='#1f77b4', linewidth=3)
-    axes[1].set_title(f"ROC CURVE\nAUC = {roc_auc:.4f}", fontsize=16, fontweight='bold', pad=15)
+# --- PLOT B: ROC CURVE ---
+    # 1. Create the plot object
+    roc_display = RocCurveDisplay.from_predictions(y_test, y_prob, ax=axes[1],
+                                                   name="XGBoost Optimized",
+                                                   color='#1f77b4', linewidth=3)
+
+    # 2. MODIFIED HERE: Force the legend label to 3 decimal places (.3f)
+    #    This replaces the auto-generated label with your specific format.
+    roc_display.line_.set_label(f"XGBoost Optimized (AUC = {roc_auc:.3f})")
+
+    # 3. MODIFIED HERE: Changed title format from .4f to .3f
+    axes[1].set_title(f"ROC CURVE\nAUC = {roc_auc:.3f}", fontsize=16, fontweight='bold', pad=15)
+
     axes[1].plot([0, 1], [0, 1], 'k--', alpha=0.5, label="Random (0.50)")
     axes[1].legend(loc='lower right', fontsize=12)
     axes[1].grid(True, alpha=0.3)
     axes[1].set_xlabel("False Positive Rate", fontsize=14)
     axes[1].set_ylabel("True Positive Rate", fontsize=14)
+    
 
     # --- PLOT C: PRECISION-RECALL CURVE ---
     PrecisionRecallDisplay.from_predictions(y_test, y_prob, ax=axes[2], name=model_name, color='#ff7f0e', linewidth=3)
     axes[2].set_title(f"PRECISION-RECALL\nAP = {pr_auc:.4f}", fontsize=16, fontweight='bold', pad=15)
-    axes[2].plot([0, 1], [baseline_pr, baseline_pr], 'k--', label=f'Baseline ({baseline_pr:.2f})', linewidth=2)
+    axes[2].plot([0, 1], [baseline_pr, baseline_pr], 'k--', label=f'Optimized ({baseline_pr:.2f})', linewidth=2)
     axes[2].legend(loc='upper right', fontsize=12)
     axes[2].grid(True, alpha=0.3)
     axes[2].set_xlabel("Recall", fontsize=14)
