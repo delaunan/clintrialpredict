@@ -1,0 +1,31 @@
+# 1. Ignore the Frontend (Crucial!)
+# Your API doesn't need the Streamlit app or the 'data_predict.csv' file.
+frontend/
+
+# 2. Ignore Data & Notebooks
+# The API only needs the 'models/' folder. It does not need raw CSVs or notebooks.
+raw_data/
+data/
+notebooks/
+
+# 3. Ignore Git History
+# This folder is often huge. Ignoring it speeds up the upload.
+.git/
+.gitignore
+
+# 4. Ignore Python Junk
+# These are local cache files that Linux (Docker) cannot use.
+__pycache__
+**/*.pyc
+**/*.pyo
+**/*.pyd
+.venv
+env/
+venv/
+
+# 5. Ignore Configuration & Documentation
+.env
+.DS_Store
+README.md
+Makefile
+tests/
