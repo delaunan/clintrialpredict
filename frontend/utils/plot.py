@@ -57,7 +57,9 @@ def plot_success_gauge(prob_success):
             "threshold": {"line": {"color": "#333333", "width": 3}, "thickness": 1.0, "value": score_val},
         },
     ))
-    fig.update_layout(margin=dict(l=15, r=15, t=10, b=10), paper_bgcolor="white", font={"family": "Arial"}, height=220)
+    fig.update_layout(margin=dict(l=15, r=15, t=10, b=10), paper_bgcolor="white", font={"family": "Arial"},
+                      height=220,
+                      hovermode=False  # <--- Disables hover interactions)
     return fig
 
 def plot_impact_bar(df_pillars):
@@ -74,18 +76,19 @@ def plot_impact_bar(df_pillars):
     )
     fig.update_traces(
         # --- DISABLE HOVER ---
-        hoverinfo="none",      # This turns off the hover box
+        hoverinfo="skip",      # This turns off the hover box
         hovertemplate=None,    # This ensures no template overrides it
         # ---------------------
-        texttemplate="%{x:+.1%}", textposition="outside", textfont_color="black", textfont_size=16, cliponaxis=False)
+        texttemplate="%{x:+.1%}", textposition="outside", textfont_color="black", textfont_size=14, cliponaxis=False)
     fig.update_layout(
         title_text="", xaxis_title="", yaxis_title="", showlegend=False, coloraxis_showscale=False,
         margin=dict(l=180, r=60, t=10, b=10), plot_bgcolor="white", paper_bgcolor="white",
-        font=dict(size=16, color="black"), height=220,
+        font=dict(size=14, color="black"), height=220, hovermode=False # <--- Double safety
     )
+
     fig.add_vline(x=0, line_width=1.0, line_color="#333333", opacity=1)
-    fig.update_xaxes(showticklabels=False, showgrid=False, zeroline=False)
-    fig.update_yaxes(tickfont=dict(size=16, color="black"), ticksuffix="         ", automargin=True)
+    fig.update_xaxes(showticklabels=False, showgrid=False, zeroline=False, fixedrange=True)
+    fig.update_yaxes(tickfont=dict(size=16, color="black"), ticksuffix="        ", automargin=True)
     return fig
 
 
@@ -165,7 +168,7 @@ def plot_treemap(df_impacts, df_pillars):
 
     fig.update_traces(
         # --- HIDE TOOLTIPS ---
-        hoverinfo="none",
+        hoverinfo="skip",
         hovertemplate=None,
         # ---------------------
 
@@ -180,7 +183,9 @@ def plot_treemap(df_impacts, df_pillars):
 
     fig.update_layout(
         margin=dict(t=0, l=10, r=10, b=10),
-        coloraxis_showscale=False, paper_bgcolor='white', plot_bgcolor='white', height=520
+        coloraxis_showscale=False, paper_bgcolor='white', plot_bgcolor='white',
+        height=520,
+        hovermode=False # <--- Disables hover interactions
     )
 
     return fig
