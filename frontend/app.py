@@ -6,7 +6,6 @@ import streamlit as st
 import requests
 
 # IMPORT PLOTTING UTILS
-# (This assumes utils/plot.py exists in the frontend folder)
 from utils.plot import plot_success_gauge, plot_impact_bar, plot_treemap
 
 # ==========================
@@ -87,7 +86,7 @@ def get_risk_tier(p_fail: float):
 # UI: MAIN APPLICATION
 # ==========================
 st.markdown("# 🧪 ClinTrialPredict")
-st.markdown("### Trial selection")
+#st.markdown("### Trial selection")
 
 if X.empty:
     st.stop()
@@ -107,7 +106,7 @@ if selected_label is not None:
     row = selected_trial.iloc[0]
 
     # --- TRIAL IDENTITY CARD ---
-    st.markdown("## Trial overview")
+    st.markdown("#### Trial overview")
     st.markdown(f"""
     **{row['official_title']}**
     - **NCT ID:** {row['nct_id']}
@@ -177,28 +176,36 @@ if selected_label is not None:
                     #bench = compute_benchmarks(historical_df, row, p_comp)
 
                     # Draw Dashboard
-                    st.markdown("## Prediction dashboard")
+                    st.markdown("#### Prediction dashboard")
                     st.markdown("---")
+
+                    config = {'displayModeBar': False}  # <--- NEW
 
                     col1, col2 = st.columns([1.0, 1.2])
 
                     with col1:
-                        st.markdown("#### Completion & risk")
-                        st.plotly_chart(plot_success_gauge(p_comp), use_container_width=True)
+                        st.markdown("##### Completion & risk")
+                        st.plotly_chart(plot_success_gauge(p_comp),
+                                        use_container_width=True,
+                                        config=config  # <--- ADD THIS ARGUMENT)
 
                         if tier == "Low": st.success(f"**{tier} risk** – {desc}")
                         elif tier == "Medium": st.warning(f"**{tier} risk** – {desc}")
                         else: st.error(f"**{tier} risk** – {desc}")
 
                         if df_pillars is not None:
-                            st.markdown("#### Pillar impact overview")
-                            st.plotly_chart(plot_impact_bar(df_pillars), use_container_width=True)
+                            st.markdown("##### Pillar impact overview")
+                            st.plotly_chart(plot_impact_bar(df_pillars),
+                                            use_container_width=True,
+                                            config=config  # <--- ADD THIS ARGUMENT)
 
                     with col2:
                         if df_impacts is not None:
-                            st.markdown("#### Drivers map")
-                            st.write("High-level view of feature influence.")
-                            st.plotly_chart(plot_treemap(df_impacts, df_pillars), use_container_width=True)
+                            st.markdown("##### Drivers map")
+                            #st.write("High-level view of feature influence.")
+                            st.plotly_chart(plot_treemap(df_impacts, df_pillars),
+                                            use_container_width=True,
+                                            config=config  # <--- ADD THIS ARGUMENT)
                         else:
                             st.info("Visual explanations not available.")
 
