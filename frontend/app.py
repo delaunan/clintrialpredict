@@ -187,7 +187,8 @@ if selected_label is not None:
                         st.markdown("##### Completion & risk")
                         st.plotly_chart(plot_success_gauge(p_comp),
                                         use_container_width=True,
-                                        config=config  # <--- ADD THIS ARGUMENT)
+                                        config=config  # <--- ADD THIS ARGUMENT
+                                        )
 
                         if tier == "Low": st.success(f"**{tier} risk** – {desc}")
                         elif tier == "Medium": st.warning(f"**{tier} risk** – {desc}")
@@ -197,7 +198,8 @@ if selected_label is not None:
                             st.markdown("##### Pillar impact overview")
                             st.plotly_chart(plot_impact_bar(df_pillars),
                                             use_container_width=True,
-                                            config=config  # <--- ADD THIS ARGUMENT)
+                                            config=config  # <--- ADD THIS ARGUMENT
+                                            )
 
                     with col2:
                         if df_impacts is not None:
@@ -205,7 +207,8 @@ if selected_label is not None:
                             #st.write("High-level view of feature influence.")
                             st.plotly_chart(plot_treemap(df_impacts, df_pillars),
                                             use_container_width=True,
-                                            config=config  # <--- ADD THIS ARGUMENT)
+                                            config=config  # <--- ADD THIS ARGUMENT
+                                            )
                         else:
                             st.info("Visual explanations not available.")
 
