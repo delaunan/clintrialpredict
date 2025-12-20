@@ -59,7 +59,8 @@ def plot_success_gauge(prob_success):
     ))
     fig.update_layout(margin=dict(l=15, r=15, t=10, b=10), paper_bgcolor="white", font={"family": "Arial"},
                       height=220,
-                      hovermode=False  # <--- Disables hover interactions)
+                      hovermode=False  # <--- Disables hover interactions
+                      )
     return fig
 
 def plot_impact_bar(df_pillars):
