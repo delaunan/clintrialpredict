@@ -1,41 +1,40 @@
 import pandas as pd
-import numpy as np
 
-def temporal_train_test_split(df, target_col='target', train_ratio=0.8, drop_cols=None):
+def temporal_train_test_split(df, train_end_year=2019, val_end_year=2022):
     """
-    Sorts by date, splits 80/20, separates X/y, and removes leakage.
+    Splits the dataframe into Train, Validation, and Test sets based on year.
+    Keeps all columns in X to allow for metadata analysis and late-stage filtering.
     """
-    # 1. Define Strict Leakage & Metadata columns to ALWAYS drop from X
-    forbidden = [
-        'overall_status',       # Text version of target (Leakage)
-        'why_stopped', 'scientific_success', 'min_p_value',
-        'start_date', 'start_year', 'nct_id', 'lead_sponsor', 'name',
-        'txt_criteria', 'txt_tags', 'study_type'
-    ]
 
-    if drop_cols:
-        forbidden.extend(drop_cols)
+    # Ensure start_year is numeric for filtering
+    df['start_year'] = pd.to_numeric(df['start_year'])
 
-    # 2. Sort by Date
-    if 'start_date' in df.columns:
-        df = df.sort_values('start_date').reset_index(drop=True)
-    elif 'start_year' in df.columns:
-        df = df.sort_values('start_year').reset_index(drop=True)
+    # 1. Define the temporal masks
+    train_mask = df['start_year'] <= train_end_year
+    val_mask = (df['start_year'] > train_end_year) & (df['start_year'] <= val_end_year)
+    test_mask = df['start_year'] > val_end_year
 
-    # 3. Split Dataframes
-    split_idx = int(len(df) * train_ratio)
-    train = df.iloc[:split_idx].copy()
-    test = df.iloc[split_idx:].copy()
+    # 2. Partition the dataframes
+    train_df = df[train_mask].copy()
+    val_df = df[val_mask].copy()
+    test_df = df[test_mask].copy()
 
-    # 4. Separate X and y
-    # We use the 'target_col' for y, and drop it (plus forbidden) from X
+    # 3. Separate Target (y) from Features (X)
+    # We ONLY drop 'target' from X. Everything else stays.
+    X_train = train_df.drop(columns=['target'])
+    y_train = train_df['target']
 
-    # Train
-    y_train = train[target_col]
-    X_train = train.drop(columns=forbidden + [target_col], errors='ignore')
+    X_val = val_df.drop(columns=['target'])
+    y_val = val_df['target']
 
-    # Test
-    y_test = test[target_col]
-    X_test = test.drop(columns=forbidden + [target_col], errors='ignore')
+    X_test = test_df.drop(columns=['target'])
+    y_test = test_df['target']
 
-    return X_train, X_test, y_train, y_test
+    # Logging for verification
+    print(f"Temporal Split Summary:")
+    print(f"  - Train: {X_train.shape[0]} samples (Years <= {train_end_year})")
+    print(f"  - Val:   {X_val.shape[0]} samples (Years {train_end_year+1}-{val_end_year})")
+    print(f"  - Test:  {X_test.shape[0]} samples (Years > {val_end_year})")
+    print(f"  - Features retained in X: {list(X_train.columns)}")
+
+    return X_train, X_val, X_test, y_train, y_val, y_test

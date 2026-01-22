@@ -1,158 +1,140 @@
 import joblib
 import pandas as pd
 import numpy as np
+import json
+# import shap  # Parked for v01
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+import os
 
 app = FastAPI()
 
 # --- CONFIGURATION ---
-
-# Add CORS (Cross-Origin Resource Sharing) middleware.
-# This is a security feature that allows your Streamlit frontend (running on a different server)
-# to successfully send requests to this API. Without this, the browser would block the connection.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],    # Allows requests from ANY website (essential for Streamlit Cloud)
+    allow_origins=["*"],
     allow_credentials=True,
-    allow_methods=["*"],    # Allows all HTTP methods (GET, POST, etc.)
-    allow_headers=["*"],    # Allows all HTTP headers
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
-# --- LOAD MODELS AT STARTUP ---
-# Load the heavy machine learning artifacts into memory ONCE when the server launches.
-# We store them in 'app.state' so they are globally accessible and ready for instant use.
-# This prevents the app from having to reload the files from disk for every single request (which would be slow).
+# --- LOAD ARTIFACTS ---
+MODEL_PATH = "models/model_prod_01.joblib"
+SHAP_PATH = "models/shap_values_01.joblib"
+THRESHOLDS_PATH = "models/thresholds_01.json"
+TAXONOMY_PATH = "models/taxonomy_01.json"
 
-app.state.model = joblib.load("models/ctp_model.joblib")               # The trained model for prediction
-app.state.explainer = joblib.load("models/shap_explainer.joblib")      # The SHAP explainer for interpretability
-app.state.taxonomy = joblib.load("models/feature_taxonomy.joblib")     # Feature taxonomy mapping
-
-# Patch for SHAP version mismatch if needed
-# This fixes a known compatibility issue where older saved SHAP explainers crash
-# because they expect an 'approximate' attribute that might be missing in newer versions.
-# We manually add it here to prevent the API from crashing during prediction.
-
-if not hasattr(app.state.explainer, "approximate"):
-    app.state.explainer.approximate = False
-
-# --- HELPER FUNCTIONS (Moved from app.py) ---
-def sigmoid(x):
-    # Converts "Log-Odds" (raw numbers from the model) into a Probability (0 to 1).
-    # Essential for interpreting SHAP values as actual percentages of risk.
-    # Added np.clip to prevent overflow errors with extreme values
-    return 1 / (1 + np.exp(-np.clip(x, -700, 700)))
-
-def map_feature_to_business_pillar(feature_name, taxonomy_dict):
-
-    # Translates technical feature names (e.g., "pca_col_3") into business categories.
-    # It first checks our official dictionary (taxonomy).
-    # If not found, it guesses based on keywords like "sponsor" or "pca".
-    # This is used to group the bars in the "Pillar Impact" chart.
-
-    if feature_name in taxonomy_dict['pillar_map']:
-        return taxonomy_dict['pillar_map'][feature_name], taxonomy_dict['subcat_map'][feature_name]
-
-    name = str(feature_name).lower()
-    if 'emb_' in name or 'pca' in name:
-        return 'Patient & Criteria', 'Criteria Complexity'
-    if 'sponsor' in name:
-        return 'Sponsor & Operations', 'Sponsor Capability'
-    return 'Other', 'Unclassified'
-
-
+@app.on_event("startup")
+def load_artifacts():
+    print("Loading production artifacts...")
+    app.state.model = joblib.load(MODEL_PATH)
+    app.state.shap_dict = joblib.load(SHAP_PATH)
+    
+    with open(THRESHOLDS_PATH, 'r') as f:
+        app.state.thresholds = json.load(f)
+        
+    with open(TAXONOMY_PATH, 'r') as f:
+        app.state.taxonomy = json.load(f)
+    
+    # 1. Prepare Feature Metadata
+    prep = app.state.model.named_steps['prep']
+    app.state.feature_names = prep.get_feature_names_out()
+    
+    # 2. Initialize Real-Time SHAP Explainer (PARKED FOR v01)
+    # print("Initializing TreeExplainer for real-time simulation...")
+    # clf = app.state.model.named_steps['clf']
+    # app.state.explainer = shap.TreeExplainer(clf)
+    
+    # 3. Map features to Taxonomy
+    app.state.feature_to_pillar = {}
+    for pillar, subcats in app.state.taxonomy.items():
+        for subcat, info in subcats.items():
+            for feat_prefix in info['features']:
+                if feat_prefix == "CALIBRATION_OFFSET":
+                    continue
+                for i, full_name in enumerate(app.state.feature_names):
+                    if full_name.startswith(feat_prefix):
+                        app.state.feature_to_pillar[i] = {
+                            "pillar": pillar,
+                            "subcategory": subcat
+                        }
+    print(f"Mapped {len(app.state.feature_to_pillar)} features to taxonomy.")
 
 @app.get("/")
 def root():
-    return {"status": "API is online"}
-
-
+    return {"status": "Clinical Trial Predictor API v01 Online (Audit Only)"}
 
 @app.post("/predict")
 async def predict(request: Request):
-    """
-    Receives a full dictionary of trial data (JSON),
-    runs the model + SHAP, and returns the results.
-    """
     try:
-        # 1. Parse Input Data (Dynamic Schema)
-        input_data = await request.json() # Received as a dictionary
-        X_new = pd.DataFrame([input_data]) # Convert to DataFrame (1 row)
-
-        model = app.state.model
-        explainer = app.state.explainer
-        taxonomy = app.state.taxonomy
-
-        # 2. Run Prediction
-        # (Fallback if predict_proba is not available)
-        if hasattr(model, "predict_proba"):
-            proba = model.predict_proba(X_new)[0]
-            # Assuming class 1 = Fail, class 0 = Success (Adjust based on your model!)
-            # Check your original logic: failed=1 -> did NOT complete
-            idx_fail = list(model.classes_).index(1)
-            p_fail = float(proba[idx_fail])
+        data = await request.json()
+        nct_id = data.get("nct_id")
+        ta = data.get("therapeutic_area", "Unclassified")
+        
+        # 1. Calibration Constants
+        ta_threshold_logits = app.state.thresholds.get("ta_threshold_logits", {})
+        threshold_logit = ta_threshold_logits.get(ta, app.state.thresholds.get("global_threshold_logit", 0.0511))
+        gain_factor = app.state.thresholds.get("gain_factor", 25.0)
+        intercept = app.state.thresholds.get("base_value", 0.0)
+        
+        # 2. AUDIT-ONLY Logic (Simulation parked for v01)
+        if nct_id in app.state.shap_dict:
+            # AUDIT: Instant lookup from pre-calculated matrix
+            shap_vals = app.state.shap_dict[nct_id]
+            pred_logit = np.sum(shap_vals) + intercept
+            mode = "audit"
         else:
-            pred = int(model.predict(X_new)[0])
-            p_fail = 1.0 if pred == 1 else 0.0
+            return {
+                "error": f"Trial ID {nct_id} not found in the production registry.",
+                "status": "simulation_parked",
+                "message": "Real-time simulation is disabled in the current production release (v01)."
+            }
+        
+        # 3. Success Scoring (0-100)
+        raw_score = 50 + (threshold_logit - pred_logit) * gain_factor
+        final_score = float(np.clip(raw_score, 1, 99))
+        
+        # 4. Aggregation by Taxonomy
+        pillar_impacts = {p: 0.0 for p in app.state.taxonomy.keys()}
+        sub_sums = {} # (pillar, subcat) -> impact
+        
+        for i, val in enumerate(shap_vals):
+            mapping = app.state.feature_to_pillar.get(i)
+            if mapping:
+                p, s = mapping['pillar'], mapping['subcategory']
+                score_impact = -float(val) * gain_factor # Logit-to-Score unit conversion
+                
+                pillar_impacts[p] += score_impact
+                sub_sums[(p, s)] = sub_sums.get((p, s), 0.0) + score_impact
 
-        p_success = 1.0 - p_fail
-
-        # 3. Run SHAP Explanation
-        # Transform data using the pipeline's preprocessor
-        preprocessor = model.named_steps['preprocessor']
-        X_encoded = preprocessor.transform(X_new)
-
-        feature_names = taxonomy['feature_names']
-        X_encoded_df = pd.DataFrame(X_encoded, columns=feature_names)
-
-        # Calculate SHAP
-        shap_values = explainer(X_encoded_df)
-        base_log_odds = float(shap_values.base_values[0]) # Ensure float for safety
-
-        # --- RE-CALCULATION OF PROBABILITY ---
-        # We calculate the TRUE total using ALL features first to ensure accuracy
-        all_shap_values = shap_values.values[0]
-        true_total_log_odds = np.sum(all_shap_values)
-
-        final_log_odds = base_log_odds + true_total_log_odds
-        prob_fail_shap = sigmoid(final_log_odds)
-        prob_success_shap = 1.0 - prob_fail_shap
-
-        # Calculate scaling factor for % contribution
-        # Uses the true total gap so percentages align with the final probability
-        total_gap = prob_success_shap - (1 - sigmoid(base_log_odds))
-        scale_factor = total_gap / true_total_log_odds if abs(true_total_log_odds) > 1e-9 else 0
-
-        # Process Impacts
-        impacts = []
-        for i, col in enumerate(feature_names):
-            val = all_shap_values[i]
-            if abs(val) < 1e-9: continue
-
-            pillar, subcat = map_feature_to_business_pillar(col, taxonomy)
-            #if pillar == 'Other': continue
-
-            impacts.append({
-                'Pillar': pillar,
-                'Subcategory': subcat,
-                'Feature': col,
-                'Raw_Log_Odds': float(val), # Convert to float for JSON serialization
-                'Impact_Pct': float(val * scale_factor) # <--- Wrap in float()
+        # 5. Inject Calibration Offset into Pillar 1 (Therapeutic Context)
+        calibration_offset_pts = (threshold_logit - intercept) * gain_factor
+        p1 = "1. Therapeutic Context"
+        s1 = "Indication Risk Profile"
+        
+        pillar_impacts[p1] += calibration_offset_pts
+        sub_sums[(p1, s1)] = sub_sums.get((p1, s1), 0.0) + calibration_offset_pts
+        
+        # 6. Format Final Response
+        subcat_impacts = []
+        for (p, s), imp in sub_sums.items():
+            meta = app.state.taxonomy.get(p, {}).get(s, {})
+            subcat_impacts.append({
+                "Pillar": p,
+                "Subcategory": s,
+                "Impact": round(imp, 2),
+                "Narrative": meta.get('pos_impact' if imp >= 0 else 'neg_impact', "")
             })
-
+            
         return {
-            "prediction_success": float(prob_success_shap), # <--- Wrap in float()
-            "impacts": impacts,
-            "status": "success"
+            "score": round(final_score, 1),
+            "threshold": 50.0,
+            "pillar_impacts": [{"Pillar": p, "Impact": round(v, 2)} for p, v in pillar_impacts.items()],
+            "subcat_impacts": subcat_impacts,
+            "mode": mode,
+            "calibration_offset": round(calibration_offset_pts, 2)
         }
 
     except Exception as e:
-        # Check if p_success exists (in case error happened very early)
-        safe_prediction = float(p_success) if 'p_success' in locals() else 0.0
-
-        return {
-            "prediction_success": safe_prediction, # Fallback to simple prediction
-            "impacts": [],
-            "status": "partial_error",
-            "error_msg": str(e)
-        }
+        import traceback
+        return {"error": str(e), "trace": traceback.format_exc()}

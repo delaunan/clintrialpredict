@@ -5,6 +5,7 @@ import csv
 import re
 
 class ClinicalTrialLoader:
+
     def __init__(self, data_path):
         self.data_path = data_path
         self.df_drugs = pd.DataFrame()
@@ -37,13 +38,13 @@ class ClinicalTrialLoader:
                 print(f"   [x] CRITICAL: Could not load {filename}. Error: {e2}")
                 return pd.DataFrame()
 
-    # --- FIRST MAIN FUNCTION CALLED ---
+        # --- FIRST MAIN FUNCTION CALLED ---
 
     def load_and_clean(self):
 
         print(">>> 1. Loading Studies & Applying Filters...")
 
-        # 1. Load Core Columns (Added safety columns: has_dmc, is_fda_regulated_drug)
+        # 0. Load Core Columns (Added safety columns: has_dmc, is_fda_regulated_drug)
         cols_studies = ['nct_id', 'overall_status', 'study_type', 'phase',
                         'start_date', 'number_of_arms',
                         'official_title', 'why_stopped',
@@ -53,6 +54,17 @@ class ClinicalTrialLoader:
 
         if df.empty:
             raise ValueError("Critical Error: 'studies.txt' failed to load.")
+
+        # 1. INDUSTRY FILTER (Based on Audit: 'INDUSTRY' is uppercase)
+        df_sponsors = self._safe_load('sponsors.txt', cols=['nct_id', 'lead_or_collaborator', 'agency_class'])
+        if not df_sponsors.empty:
+            industry_ids = df_sponsors[
+                (df_sponsors['lead_or_collaborator'].str.upper() == 'LEAD') &
+                (df_sponsors['agency_class'].str.upper() == 'INDUSTRY')
+            ]['nct_id'].unique()
+            df = df[df['nct_id'].isin(industry_ids)]
+            print(f"    [Filter] Kept {len(df)} Industry-led trials.")
+
 
         # 2. Filter: Interventional Only
         if 'study_type' in df.columns:
@@ -73,18 +85,19 @@ class ClinicalTrialLoader:
             self.df_drugs = pd.DataFrame(columns=['nct_id', 'name', 'intervention_type'])
 
         # 4. Filter: Status (Completed vs Failed)
-        allowed_statuses = ['COMPLETED', 'TERMINATED', 'SUSPENDED']
+        allowed_statuses = ['COMPLETED', 'TERMINATED', 'WITHDRAWN']
         df = df[df['overall_status'].isin(allowed_statuses)]
 
         # 5. Filter: Phase (DROP PHASE 0 - Focus on Valley of Death)
         # We keep Phase 2, Phase 2/3, and Phase 3.
-        excluded_phases = ['EARLY_PHASE1', 'PHASE1', 'PHASE4', 'NA']
-        df = df[~df['phase'].isin(excluded_phases)]
+        excluded_phases = ['EARLY_PHASE1', 'PHASE1','PHASE4', 'NA']
+        df = df[~df['phase'].str.upper().isin(excluded_phases)]
         df = df.dropna(subset=['phase'])
+        df = df[df['phase'].str.strip() != '']
 
         # 6. Filter: COVID Sanitizer (Remove Pandemic Failures)
         if 'why_stopped' in df.columns:
-            covid_keywords = ['covid', 'pandemic', 'coronavirus', 'sars-cov-2', 'logistical reasons']
+            covid_keywords = ['covid', 'pandemic', 'coronavirus', 'sars-cov-2','travel restrictions', 'quarantine', 'lockdown', 'sars-cov']
             # Convert to string, lower case, check for keywords
             mask_covid = df['why_stopped'].fillna('').astype(str).str.lower().apply(
                 lambda x: any(k in x for k in covid_keywords)
@@ -93,16 +106,16 @@ class ClinicalTrialLoader:
                 print(f"    [Sanitizer] Dropping {mask_covid.sum()} trials terminated due to COVID/Logistics.")
                 df = df[~mask_covid]
 
-        # 7. Filter: Date Range (2000-2019)
+        # 7. Filter: Date Range (2005-2025 for training)
         # Avoids Right-Censoring (trials still running) and COVID era bias
         df['start_date'] = pd.to_datetime(df['start_date'], errors='coerce')
         df['start_year'] = df['start_date'].dt.year
-        df = df[df['start_year'].between(2005, 2018)]
+        df = df[df['start_year'].between(2005, 2025)]
 
         # 8. Create Target
-        df['target'] = df['overall_status'].apply(lambda x: 0 if x == 'COMPLETED' else 1)
+        df['target'] = df['overall_status'].apply(lambda x: 0 if x.upper() == 'COMPLETED' else 1)
 
-        print(f"    Core Cohort: {len(df)} trials (Phase 2/3, 2000-2019)")
+        print(f"    Core Cohort: {len(df)} trials (Phase 1/2/3, 2005-2025 training window and 2005-2025 for production).")
         return df.copy()
 
     # --- SECOND MAIN FUNCTION CALLED ---
@@ -111,12 +124,8 @@ class ClinicalTrialLoader:
         df = df.copy()
         print(">>> 2. Engineering Features...")
 
-        # 1. Phase Ordinal (Updated for Phase 2/3 focus)
-        # phase_map = {'PHASE1/PHASE2': 2,'PHASE2': 2, 'PHASE2/PHASE3': 3, 'PHASE3': 3}     # <--- Map to Phase 2
-        # df['phase_ordinal'] = df['phase'].map(phase_map).fillna(2).astype(int)
-
-        # 2. Operational Flags
-        df['covid_exposure'] = df['start_year'].between(2019, 2021).astype(int)
+        # 1. Phase Grouping (New Step)
+        df = self._engineer_phase_groups(df)
 
         # 3. Geography (SAFE: Only is_us, removed country counts to prevent leakage)
         df_countries = self._safe_load('countries.txt', cols=['nct_id', 'name'])
@@ -138,13 +147,15 @@ class ClinicalTrialLoader:
 
         # 7. Medical Hierarchy & Competition
         df = self._attach_medical_hierarchy(df)
-        df = self._calculate_competition(df)
 
         # 8. Text Features (Needed for keywords/title)
         df = self._prepare_text(df)
 
         # 9. Agent Type (The Bulletproof Classifier)
         df = self._engineer_agent_type(df)
+
+        #Now that we have agent_category AND therapeutic_subgroup_name, we can calculate competition
+        df = self._calculate_competition(df)
 
         # 10. Smart Patterns (Rigor & Strictness)
         df = self._engineer_smart_patterns(df)
@@ -153,14 +164,17 @@ class ClinicalTrialLoader:
         df = self._engineer_safe_features(df)
 
         # 12. Attach Embeddings (BioBERT)
-        df = self._attach_embeddings(df)
+        #df = self._attach_embeddings(df)
 
         # 13. Attach P-Values (Analysis Only)
         df = self._attach_p_values(df)
 
         # Cleanup
+        # Handle Primary Endpoints (Renaming and Casting)
         if 'number_of_primary_outcomes_to_measure' in df.columns:
             df.rename(columns={'number_of_primary_outcomes_to_measure': 'num_primary_endpoints'}, inplace=True)
+
+        # Ensure numeric type and fill missing with 1 (Every trial has at least one primary endpoint)
         df['num_primary_endpoints'] = pd.to_numeric(df.get('num_primary_endpoints', 1), errors='coerce').fillna(1)
 
         return df
@@ -193,7 +207,8 @@ class ClinicalTrialLoader:
 
         # B. Eligibility Strictness (Narrowness)
         df['is_gender_restricted'] = df['gender'].apply(lambda x: 0 if str(x).lower() == 'all' else 1)
-        df['is_sick_only'] = df['healthy_volunteers'].apply(lambda x: 1 if str(x).lower() == 'no' else 0)
+        # If healthy_volunteers is 0 (No), then it is a 'Sick Only' trial (1)
+        df['is_sick_only'] = df['healthy_volunteers'].apply(lambda x: 1 if x == 0 else 0)
 
         for col in ['child', 'adult', 'older_adult']:
             if col in df.columns:
@@ -211,209 +226,205 @@ class ClinicalTrialLoader:
         return df
 
     def _engineer_agent_type(self, df):
-        print("    -> Engineering Agent Type (Bulletproof Classifier)...")
+            print("    -> Engineering Agent Type (Prioritizing Active Molecules)...")
 
-        # 1. Load Raw Data
-        if self.df_drugs.empty:
-            df['agent_category'] = 'UNKNOWN'
+            if self.df_drugs.empty:
+                df['agent_category'] = 'UNKNOWN'
+                return df
+
+            # 1. Prepare Intervention Data
+            df_int = self.df_drugs.copy()
+            df_int['name_clean'] = df_int['name'].str.lower().fillna('')
+
+
+            # Priority 1: High-Tech / Targeted
+            # Priority 2: Established / Generic
+            # Priority 3: Placebo / Control
+
+            # 2. Define Priority (Lower number = Higher Priority)
+            priority_map = {
+                'RNA_GENE_THERAPY': 1, 'CELL_THERAPY': 1, 'ANTIBODY_DRUG_CONJUGATE': 1,
+                'BISPECIFIC_ANTIBODY': 1, 'MONOCLONAL_ANTIBODY': 1, 'GLP1_PEPTIDE': 1,
+                'PI3K_INHIBITOR': 1, 'BTK_INHIBITOR': 1, 'JAK_INHIBITOR': 1,
+                'PARP_INHIBITOR': 1, 'BCL2_INHIBITOR': 1, 'SGLT2_INHIBITOR': 1,
+                'KINASE_INHIBITOR_TYROSINE': 1, 'TARGETED_KINASE_INHIBITOR': 1,
+                'CHEMOTHERAPY': 2, 'HORMONAL_THERAPY': 2, 'STATIN_CHOLESTEROL': 2,
+                'ENZYME_INHIBITOR': 2, 'BIOLOGIC_OTHER': 2, 'SMALL_MOLECULE_OTHER': 2,
+                'PLACEBO_CTRL': 3  # <--- Absolute lowest priority
+            }
+
+            # 3. Define Patterns
+            patterns = {
+            # --- LEVEL 1: HIGH-TECH / ADVANCED THERAPIES ---
+            'CELL_THERAPY': r'\b(car-t|chimeric antigen|autologous|allogeneic|t-cell|nk cell|stem cell|mesenchymal|t-lymphocytes|islet cell)\b|.*cel$',
+            'RNA_GENE_THERAPY': r'\b(crispr|cas9|mrna|sirna|antisense|oligonucleotide|plasmid|vector|aav|rnai|gene transfer|gene therapy)\b',
+
+            # --- LEVEL 2: COMPLEX BIOLOGICS ---
+            'ANTIBODY_DRUG_CONJUGATE': r'\b(adc|conjugate)\b.*mab|mab.*\b(adc|conjugate)\b',
+            'BISPECIFIC_ANTIBODY': r'\b(bispecific|dual-targeting|bi-specific|engager)\b',
+            'MONOCLONAL_ANTIBODY': r'.*mab\b',
+            'GLP1_PEPTIDE': r'.*(tide|glutide)\b', # Massive metabolic signal (Semaglutide, etc.)
+
+            # --- LEVEL 3: TARGETED SMALL MOLECULES (SPECIFIC) ---
+            'PI3K_INHIBITOR': r'.*lisib\b',
+            'BTK_INHIBITOR': r'.*brutinib\b',
+            'JAK_INHIBITOR': r'.*citinib\b',
+            'PARP_INHIBITOR': r'.*parib\b',
+            'BCL2_INHIBITOR': r'.*clax\b',
+            'SGLT2_INHIBITOR': r'.*gliflozin\b', # Major cardio-renal signal
+            'KINASE_INHIBITOR_TYROSINE': r'.*tinib\b',
+            'TARGETED_KINASE_INHIBITOR': r'.*ib\b',
+
+            # --- LEVEL 4: ESTABLISHED CLASSES ---
+            'CHEMOTHERAPY': r'.*(platin|taxel|rubicin|fluorouracil|gemcitabine|cyclophosphamide|methotrexate|etoposide|vincristine|vinblastine|irinotecan|oxaliplatin|ifosfamide|pemetrexed)\b',
+            'HORMONAL_THERAPY': r'\b(tamoxifen|anastrozole|letrozole|exemestane|fulvestrant|bicalutamide|enzalutamide|abiraterone)\b',
+            'STATIN_CHOLESTEROL': r'.*vastatin\b',
+            'ENZYME_INHIBITOR': r'.*stat\b',
+
+            # --- LEVEL 5: GENERIC & PLACEBO ---
+            'SMALL_MOLECULE_GENERIC': r'.*(ine|ide|one|ole|ate|ant|ent|ril|lol|tan|vir|micin|mycin|acin|xaban|stat|pril|sartan|prazole|nib|mab|cept|tide)\b',
+            'PLACEBO_CTRL': r'\b(placebo|sham|control|comparator)\b'
+            }
+
+
+            def classify(row):
+                name = row['name_clean']
+                itype = str(row.get('intervention_type', '')).upper()
+
+                # Check high-tech and established classes first
+                for cat, pattern in patterns.items():
+                    if cat == 'PLACEBO_CTRL': continue # Skip placebo for now
+                    if re.search(pattern, name): return cat
+
+                # Check Placebo only if no drug class matched
+                if re.search(patterns['PLACEBO_CTRL'], name): return 'PLACEBO_CTRL'
+
+                # Final Fallbacks
+                return 'BIOLOGIC_OTHER' if itype == 'BIOLOGICAL' else 'SMALL_MOLECULE_OTHER'
+
+            # 4. Apply classification and map priority
+            df_int['agent_category'] = df_int.apply(classify, axis=1)
+            df_int['priority'] = df_int['agent_category'].map(priority_map).fillna(2)
+
+            # 5. SORT BY PRIORITY (1 wins over 3)
+            # We sort by nct_id and then priority (ascending).
+            # This puts Priority 1 at the top for each trial.
+            best_agent = df_int.sort_values(['nct_id', 'priority']).drop_duplicates('nct_id')
+
+            df = df.merge(best_agent[['nct_id', 'agent_category']], on='nct_id', how='left')
+            df['agent_category'] = df['agent_category'].fillna('SMALL_MOLECULE_OTHER')
+
             return df
 
-        # Priority Map (1 = Highest Tech)
-        type_priority = {
-            'GENETIC': 1,
-            'BIOLOGICAL': 2,
-            'DRUG': 3,
-            'DIETARY SUPPLEMENT': 4,
-            'OTHER': 5
-        }
-
-        df_int = self.df_drugs.copy()
-        df_int['type_upper'] = df_int['intervention_type'].str.upper()
-        df_int['priority'] = df_int['type_upper'].map(lambda x: type_priority.get(x, 5))
-
-        # Sort: High Tech First. If a trial has Drug + Placebo, we keep Drug.
-        df_int = df_int.sort_values('priority')
-        best_types = df_int.drop_duplicates('nct_id')[['nct_id', 'type_upper', 'name']]
-
-        df = df.merge(best_types, on='nct_id', how='left')
-
-        # 2. The Regex Classifier
-        def classify_molecule(row):
-            itype = str(row['type_upper'])
-            name = str(row['name']).lower()
-
-            # Safety Check: Placebo
-            if 'placebo' in name: return 'PLACEBO_CTRL'
-
-            # --- LEVEL 1: ADVANCED THERAPIES (GENE / CELL / RNA) ---
-            if itype == 'GENETIC': return 'GENE_THERAPY'
-
-            # Cell Therapies (CAR-T, NK cells)
-            if any(x in name for x in ['car-t', 'chimeric antigen', 'autologous', 'allogeneic', 't-cell', 'nk cell']):
-                return 'CELL_THERAPY'
-            if name.endswith('cel'): return 'CELL_THERAPY' # e.g., Tisagenlecleucel
-
-            # RNA / DNA / Gene Editing
-            if any(x in name for x in ['crispr', 'cas9', 'mrna', 'sirna', 'antisense', 'oligonucleotide', 'plasmid', 'vector', 'aav']):
-                return 'RNA_GENE_THERAPY'
-
-            # --- LEVEL 2: BIOLOGICS (LARGE MOLECULES) ---
-            if itype == 'BIOLOGICAL': return 'BIOLOGIC'
-
-            # Antibodies
-            if 'mab' in name:
-                if 'adc' in name or 'conjugate' in name: return 'ANTIBODY_DRUG_CONJUGATE'
-                return 'MONOCLONAL_ANTIBODY'
-
-            # Fusion Proteins & Receptors
-            if name.endswith('cept'): return 'BIOLOGIC_FUSION'
-
-            # Vaccines
-            if 'vaccine' in name: return 'VACCINE'
-            if any(x in name for x in ['interferon', 'interleukin', 'cytokine']): return 'IMMUNOTHERAPY'
-
-            # --- LEVEL 3: TARGETED SMALL MOLECULES ---
-            # Kinase Inhibitors
-            if name.endswith('ib') or 'ib ' in name:
-                if 'tinib' in name: return 'KINASE_INHIBITOR_TYROSINE'
-                if 'parib' in name: return 'PARP_INHIBITOR'
-                if 'lisib' in name: return 'PI3K_INHIBITOR'
-                return 'TARGETED_KINASE_INHIBITOR'
-
-            # Enzyme Inhibitors & Statins (FIXED)
-            if 'vastatin' in name: return 'STATIN_CHOLESTEROL' # Specific catch for Atorvastatin etc.
-            if name.endswith('stat') or 'stat ' in name: return 'ENZYME_INHIBITOR'
-            if name.endswith('degib'): return 'HEDGEHOG_INHIBITOR'
-            if name.endswith('clax'): return 'BCL2_INHIBITOR'
-
-            # --- LEVEL 4: CHEMOTHERAPY ---
-            chemo_stems = ['platin', 'taxel', 'rubicin', 'fluorouracil', 'gemcitabine',
-                           'cyclophosphamide', 'methotrexate', 'etoposide', 'vincristine', 'vinblastine']
-            if any(x in name for x in chemo_stems):
-                return 'CHEMOTHERAPY'
-
-            # --- LEVEL 5: GENERAL ---
-            return 'SMALL_MOLECULE_OTHER'
-
-        df['agent_category'] = df.apply(classify_molecule, axis=1)
-
-        # Cleanup
-        df.drop(columns=['type_upper', 'priority', 'name_y'], inplace=True, errors='ignore')
-        if 'name_x' in df.columns: df.rename(columns={'name_x': 'official_title'}, inplace=True)
-
-        return df
-
     def _engineer_safe_features(self, df):
-        print("    -> Engineering Safe Protocol Features...")
 
-        # REMOVED: Loading responsible_parties.txt
+        print("    -> Engineering Gated Protocol Features (FDA & DMC)...")
 
-        # Fill Safety Flags
-        # We use the same logic as _engineer_smart_patterns to ensure consistency.
-        # This handles 't', 'f', 'True', 'False', 'Yes', 'No', 1, 0.
-        for col in ['has_dmc', 'is_fda_regulated_drug']:
-            if col in df.columns:
-                df[col] = df[col].astype(str).apply(
-                    lambda x: 1 if x.lower() in ['true', 't', '1', 'yes'] else 0
-                )
-            else:
-                df[col] = 0
+        # 1. Handle 'has_dmc' (Standard Cleaning)
+        if 'has_dmc' in df.columns:
+            df['has_dmc'] = df['has_dmc'].astype(str).apply(
+                lambda x: 1 if x.lower() in ['true', 't', '1', 'yes'] else 0
+            )
+        else:
+            df['has_dmc'] = 0
+
+        # 2. Handle 'is_fda_regulated_drug' (Cleaning + Gating)
+        if 'is_fda_regulated_drug' in df.columns:
+            # Step A: Clean the raw signal into 1s and 0s
+            raw_signal = df['is_fda_regulated_drug'].astype(str).apply(
+                lambda x: 1 if x.lower() in ['true', 't', '1', 'yes'] else 0
+            )
+
+            # Step B: Apply the Gate
+            # Only keep the '1' if the trial started in 2017 or later.
+            # This removes the historical noise identified in the audit.
+            df['is_fda_regulated_drug'] = (
+                (raw_signal == 1) & (df['start_year'] >= 2017)
+            ).astype(int)
+        else:
+            df['is_fda_regulated_drug'] = 0
+
         return df
 
     def _attach_medical_hierarchy(self, df):
-        print("    -> Attaching Medical Hierarchy (Bridge: nct_id -> mesh_term -> area)...")
+        print("    -> Attaching Medical Hierarchy (Preserving Tree Structure)...")
 
         # 1. Load the "Bridge" (nct_id -> mesh_term)
-        # We use browse_conditions.txt because it connects trials to terms
         cols_bridge = ['nct_id', 'mesh_term']
         df_bridge = self._safe_load('browse_conditions.txt', cols=cols_bridge)
-
         if df_bridge.empty:
-            # Fallback to conditions.txt if browse_conditions is missing
-            cols_cond = ['nct_id', 'name']
-            df_bridge = self._safe_load('conditions.txt', cols=cols_cond)
+            df_bridge = self._safe_load('conditions.txt', cols=['nct_id', 'name'])
             if not df_bridge.empty:
                 df_bridge.rename(columns={'name': 'mesh_term'}, inplace=True)
 
         # 2. Load the "Dictionary" (mesh_term -> therapeutic_area)
-        # This is your custom file
         mesh_path = os.path.join(self.data_path, 'mesh_lookup.csv')
         df_dictionary = pd.DataFrame()
-
         if os.path.exists(mesh_path):
             try:
-                # Audit showed this file is Pipe (|) separated
                 df_dictionary = pd.read_csv(mesh_path, sep='|', on_bad_lines='skip')
-
-                # Keep only relevant columns to save memory
+                # Keep the name 'therapeutic_area' - DO NOT RENAME TO lookup_area
                 if 'mesh_term' in df_dictionary.columns and 'therapeutic_area' in df_dictionary.columns:
                     df_dictionary = df_dictionary[['mesh_term', 'therapeutic_area']].drop_duplicates()
-                    # Rename to avoid collision with existing columns
-                    df_dictionary.rename(columns={'therapeutic_area': 'lookup_area'}, inplace=True)
-                else:
-                    df_dictionary = pd.DataFrame() # Invalid columns
             except Exception as e:
-                print(f"       [!] Error reading mesh_lookup.csv: {e}")
+                print(f"   [!] Warning: Could not load mesh_lookup.csv. Error: {e}")
 
-        # 3. Perform the Double Merge
+        # 3. Perform Merges & Aggregation
         if not df_bridge.empty:
-            # A. Merge Bridge + Dictionary (on mesh_term)
             if not df_dictionary.empty:
                 df_full_mesh = df_bridge.merge(df_dictionary, on='mesh_term', how='left')
             else:
-                df_full_mesh = df_bridge
-                df_full_mesh['lookup_area'] = np.nan
+                df_full_mesh = df_bridge.copy()
 
-            # B. Group by NCT_ID (Take first valid area found)
-            # We want the 'lookup_area' if it exists, otherwise just the 'mesh_term'
+            # --- CRITICAL SAFETY: Ensure the column exists for the .agg() call ---
+            if 'therapeutic_area' not in df_full_mesh.columns:
+                df_full_mesh['therapeutic_area'] = np.nan
+
+            # Group by nct_id to handle trials with multiple conditions
             df_grouped = df_full_mesh.groupby('nct_id').agg({
                 'mesh_term': 'first',
-                'lookup_area': 'first'
+                'therapeutic_area': 'first' # This now matches the column name in df_full_mesh
             }).reset_index()
-
-            # C. Merge back to Main DF
             df = df.merge(df_grouped, on='nct_id', how='left')
         else:
-            df['mesh_term'] = np.nan
-            df['lookup_area'] = np.nan
+            df['mesh_term'], df['therapeutic_area'] = np.nan, np.nan
 
-        # 4. Also Load Smart Lookup (Your Curated File)
-        smart_path = os.path.join(self.data_path, 'smart_pathology_lookup.csv')
-        if os.path.exists(smart_path):
-            try:
-                df_smart = pd.read_csv(smart_path)
-                if 'nct_id' in df_smart.columns:
-                    df = df.merge(df_smart, on='nct_id', how='left')
-            except:
-                pass
+        # 4. Expanded Regex Fallback Dictionary
+        fallbacks = {
+            'Oncology': r'\b(cancer|tumor|carcinoma|lymphoma|leukemia|melanoma|neoplasm|oncology|solid|malignant|adenocarcinoma|sarcoma|myeloma|glioma|metastatic|advanced|recurrent|squamous|her2|kras)\b',
+            'Cardiovascular': r'\b(heart|cardiac|vascular|stent|hypertension|myocardial|atrial|coronary|stroke|embolism|arrhythmia|cholesterol|angina|infarction|hfpef|hfrer|tachycardia|atherosclerosis)\b',
+            'Metabolic': r'\b(diabetes|insulin|obesity|hyperlipidemia|metabolic|glucose|nash|steatohepatitis|dyslipidemia|t2dm|hypoglycemia|weight loss|fatty liver|endocrine|hypercholesterolemia)\b',
+            'Neurology': r'\b(alzheimer|parkinson|brain|neurology|epilepsy|sclerosis|migraine|cns|neurodegenerative|dementia|als|huntington|seizure|neuropathic|pain|fibromyalgia)\b',
+            'Infections': r'\b(infection|virus|hiv|bacterial|fungal|antibiotic|covid|hepatitis|influenza|pneumonia|sepsis|tuberculosis|vaccine|antiviral|hiv-1|sars-cov-2)\b',
+            'Immunology': r'\b(arthritis|lupus|autoimmune|inflammation|crohn|psoriasis|rheumatoid|ulcerative colitis|dermatitis|eczema|asthma|atopic|sjogren|ankylosing)\b',
+            'Gastrointestinal': r'\b(gastric|gi|bowel|stomach|liver|hepatic|cirrhosis|gerd|colitis|ibs|digestive|peptic|esophagitis)\b',
+            'Renal/Urology': r'\b(kidney|renal|nephropathy|urology|bladder|ckd|dialysis|urinary|prostatitis|erectile)\b',
+            'Psychiatry': r'\b(depression|anxiety|schizophrenia|bipolar|psychiatric|adhd|autism|ptsd|major depressive|mental|insomnia)\b',
+            'Dermatology': r'\b(skin|dermatology|acne|urticaria|rosacea|alopecia|vitiligo|pruritus)\b'
+        }
 
-        # Ensure columns exist
-        if 'best_pathology' not in df.columns: df['best_pathology'] = np.nan
-        if 'therapeutic_area' not in df.columns: df['therapeutic_area'] = np.nan
+        def get_hierarchy(row):
+            # --- STEP A: Determine Parent (therapeutic_area) ---
+            parent = str(row.get('therapeutic_area', ''))
+            if parent == 'nan' or parent == '' or parent == 'Other/Unclassified':
+                title = str(row.get('official_title', '')).lower()
+                parent = 'Unclassified'
+                for area, pattern in fallbacks.items():
+                    if re.search(pattern, title):
+                        parent = area
+                        break
 
-        # 5. Final Fallback Logic
-        def get_final_category(row):
-            # Priority 1: Smart Lookup (Curated)
-            if pd.notna(row.get('best_pathology')) and str(row.get('best_pathology')) != 'Unknown':
-                return row['best_pathology']
+            # --- STEP B: Determine Child (therapeutic_subgroup_name) ---
+            child = row.get('mesh_term')
+            if pd.isna(child) or str(child).lower() == 'nan':
+                child = parent
 
-            # Priority 2: Mesh Lookup (From your custom file)
-            if pd.notna(row.get('lookup_area')) and str(row.get('lookup_area')) != 'Other/Unclassified':
-                return row['lookup_area']
+            return pd.Series([parent, child])
 
-            # Priority 3: Raw Mesh Term (Better than nothing)
-            if pd.notna(row.get('mesh_term')):
-                return row['mesh_term']
+        # Apply and create the two columns
+        df[['therapeutic_area', 'therapeutic_subgroup_name']] = df.apply(get_hierarchy, axis=1)
 
-            # Priority 4: Old Therapeutic Area
-            if pd.notna(row.get('therapeutic_area')) and str(row.get('therapeutic_area')) != 'Other':
-                return row['therapeutic_area']
-
-            return 'Unclassified Condition'
-
-        df['therapeutic_subgroup_name'] = df.apply(get_final_category, axis=1)
-
-        # Cleanup
+        # Cleanup intermediate columns
         df.drop(columns=['mesh_term', 'lookup_area'], inplace=True, errors='ignore')
 
         return df
@@ -503,13 +514,14 @@ class ClinicalTrialLoader:
         # 2. Criteria Length
         df['criteria_len_log'] = np.log1p(df['criteria'].astype(str).str.len().fillna(0))
 
-        # 3. Healthy Volunteers (Clean Yes/No)
+        # 3. Healthy Volunteers (Standardize to 1/0)
+        # 1 = Accepts Healthy Volunteers, 0 = Does not
         df['healthy_volunteers'] = df['healthy_volunteers'].astype(str).str.lower().apply(
-            lambda x: 'no' if x in ['f', 'false', '0', 'no', 'nan'] else 'yes'
+            lambda x: 0 if x in ['f', 'false', '0', 'no', 'nan', 'none'] else 1
         )
 
-        # 4. Gender
-        df['gender'] = df['gender'].fillna('UNKNOWN')
+        # 4. Gender (Keep as string, it is categorical with 3+ values: ALL, MALE, FEMALE)
+        df['gender'] = df['gender'].fillna('UNKNOWN').str.upper()
 
         # 5. AGE CALCULATION (THE FIX) -----------------------------------------
         # We parse "18 Years", "6 Months" -> Years (float) to fix the 0s bug
@@ -553,85 +565,124 @@ class ClinicalTrialLoader:
         return df
 
     def _calculate_competition(self, df):
+        print("    -> Engineering Smart Competition (Disease & Molecule density)...")
         try:
-            req_cols = ['start_year', 'therapeutic_area', 'phase']
-            if not all(col in df.columns for col in req_cols):
-                df['competition_broad'] = 0
-                df['competition_niche'] = 0
-                return df
+            # 1. Ensure required columns exist
+            req_cols = ['start_year', 'therapeutic_area', 'therapeutic_subgroup_name', 'agent_category']
+            for col in req_cols:
+                if col not in df.columns:
+                    df[col] = 'UNKNOWN'
 
-            # Broad Competition
-            grid = df.groupby(['start_year', 'therapeutic_area']).size().reset_index(name='count')
-            lookup = dict(zip(zip(grid['start_year'], grid['therapeutic_area']), grid['count']))
+            # 2. Helper function to calculate rolling 2-year density
+            def get_rolling_density(dataframe, group_col):
+                # Group by year and the target column
+                counts = dataframe.groupby(['start_year', group_col]).size().reset_index(name='yr_count')
+                # Create a lookup dictionary: {(year, category): count}
+                lookup = dict(zip(zip(counts['start_year'], counts[group_col]), counts['yr_count']))
 
-            def get_comp(row):
-                y, area = row['start_year'], row['therapeutic_area']
-                return lookup.get((y, area), 0) + lookup.get((y-1, area), 0)
+                def calc(row):
+                    val = row[group_col]
 
-            df['competition_broad'] = df.apply(get_comp, axis=1)
+                    # --- THE GATE: PREVENT FAKE HIGH SCORES ---
+                    # A. Check for generic/fallback strings
+                    generics = ['UNKNOWN',
+                                'Unclassified',
+                                'SMALL_MOLECULE_OTHER',
+                                'BIOLOGIC_OTHER',
+                                'PLACEBO_CTRL'
+                                ]
+                    if val in generics:
+                        return 0
 
-            # Niche Competition
-            if 'therapeutic_subgroup_name' in df.columns:
-                grid_niche = df.groupby(['start_year', 'therapeutic_subgroup_name']).size().reset_index(name='count')
-                lookup_niche = dict(zip(zip(grid_niche['start_year'], grid_niche['therapeutic_subgroup_name']), grid_niche['count']))
+                    # B. Check for Identity Match (The Parent-Child Dilution)
+                    # If the niche is just the broad area, it is not a specific niche.
+                    if group_col == 'therapeutic_subgroup_name' and val == row['therapeutic_area']:
+                        return 0
 
-                def get_niche(row):
-                    y, sub = row['start_year'], row['therapeutic_subgroup_name']
-                    return lookup_niche.get((y, sub), 0) + lookup_niche.get((y-1, sub), 0)
+                    y = row['start_year']
+                    # Sum current year + previous year to capture market "heat"
+                    return lookup.get((y, val), 0) + lookup.get((y-1, val), 0)
 
-                df['competition_niche'] = df.apply(get_niche, axis=1)
-            else:
-                df['competition_niche'] = 0
-        except:
+                return dataframe.apply(calc, axis=1)
+
+            # 3. Calculate the three levels of competition
+            df['competition_broad'] = get_rolling_density(df, 'therapeutic_area')
+            df['competition_niche'] = get_rolling_density(df, 'therapeutic_subgroup_name')
+            df['competition_agent'] = get_rolling_density(df, 'agent_category')
+
+        except Exception as e:
+            print(f"       [!] Competition calculation failed: {e}")
             df['competition_broad'] = 0
             df['competition_niche'] = 0
+            df['competition_agent'] = 0
+
         return df
 
     def _prepare_text(self, df):
-        print("    -> Preparing Text Features...")
-        df_keys = self._safe_load('keywords.txt', cols=['nct_id', 'name'])
-        if not df_keys.empty:
-            keys_grouped = df_keys.groupby('nct_id')['name'].apply(lambda x: " ".join(x.dropna().astype(str))).reset_index(name='txt_keywords')
-            df = df.merge(keys_grouped, on='nct_id', how='left')
-        else:
-            df['txt_keywords'] = ""
 
-        if not self.df_drugs.empty:
-            int_names = self.df_drugs.groupby('nct_id')['name'].apply(lambda x: " ".join(x.dropna().astype(str))).reset_index(name='txt_int_names')
-            df = df.merge(int_names, on='nct_id', how='left')
-        else:
-            df['txt_int_names'] = ""
+        print("    -> Engineering NLP Text Pillars (Scientific & Operational)...")
 
-        text_cols = ['official_title', 'txt_keywords', 'txt_int_names', 'criteria']
-        for c in text_cols:
-            if c in df.columns: df[c] = df[c].fillna("")
+        # 1. Load Intermediate Data
+        df_summaries = self._safe_load('brief_summaries.txt', cols=['nct_id', 'description'])
+        df_outcomes = self._safe_load('design_outcomes.txt', cols=['nct_id', 'measure', 'outcome_type'])
+        #df_keys = self._safe_load('keywords.txt', cols=['nct_id', 'name'])
 
-        df['txt_tags'] = (df['official_title'] + " " + df['txt_keywords'] + " " + df['txt_int_names'])
-        if 'criteria' in df.columns:
-            df['txt_criteria'] = df['criteria']
-            df.drop(columns=['official_title', 'txt_keywords', 'txt_int_names', 'criteria'], inplace=True, errors='ignore')
+        # 2. Merge Summary
+        if not df_summaries.empty:
+            df = df.merge(df_summaries.rename(columns={'description': 'temp_summary'}), on='nct_id', how='left')
+
+        # 3. Merge Endpoints
+        if not df_outcomes.empty:
+            primaries = df_outcomes[df_outcomes['outcome_type'].str.lower().str.contains('primary', na=False)].copy()
+            endpoints = primaries.groupby('nct_id')['measure'].apply(
+                lambda x: " [SEP] ".join(x.dropna().astype(str))
+            ).reset_index(name='txt_primary_endpoints')
+            df = df.merge(endpoints, on='nct_id', how='left')
+
+
+         # 4. CRITICAL: NaN-Proofing (Title and Summary have 100% coverage, but we stay defensive)
+        df['official_title'] = df['official_title'].fillna("No title provided").astype(str)
+        df['temp_summary'] = df.get('temp_summary', pd.Series([""]*len(df))).fillna("No summary provided").astype(str)
+        df['txt_primary_endpoints'] = df.get('txt_primary_endpoints', pd.Series([""]*len(df))).fillna("No endpoints provided").astype(str)
+        df['criteria'] = df['criteria'].fillna("No criteria provided").astype(str)
+
+
+        # 5. Final NLP txt Construction
+
+        # NLP field A: Scientific Intent (Title + Summary)
+        # We use a simple join because we know both fields are now non-null strings
+        df['txt_scientific_essence'] = (
+            df['official_title'].str.strip() +
+            " [SEP] " +
+            df['temp_summary'].str.strip()
+        )
+
+
+        # NLP field B: Operational Rigor (Criteria)
+        df['txt_criteria'] = df['criteria']
+
+
+        # 6. Final Cleanup
+        # We drop the raw columns and the temporary summary
+        cols_to_drop = ['official_title', 'temp_summary', 'criteria', 'why_stopped']
+        df.drop(columns=[c for c in cols_to_drop if c in df.columns], inplace=True, errors='ignore')
 
         return df
 
-    def _attach_embeddings(self, df):
-        print("    -> Attaching Vectorized Text Embeddings...")
-        emb_path = os.path.join(self.data_path, 'embeddings_with_nctid.csv')
-        if not os.path.exists(emb_path):
-            print("    [!] Warning: embeddings_with_nctid.csv not found.")
-            return df
+    def _engineer_phase_groups(self, df):
+        print("    -> Grouping Phases into Efficacy Tiers...")
+        # Ensure phase strings are standardized for mapping
+        df['phase'] = df['phase'].astype(str).str.upper().str.strip()
 
-        try:
-            df_emb = pd.read_csv(emb_path)
-            emb_cols = [c for c in df_emb.columns if c != 'nct_id']
-            if not emb_cols: return df
+        phase_map = {
+            'PHASE1/PHASE2': 'Early_Efficacy',
+            'PHASE2': 'Early_Efficacy',
+            'PHASE2/PHASE3': 'Confirmatory',
+            'PHASE3': 'Confirmatory'
+        }
 
-            df = df.merge(df_emb, on='nct_id', how='left')
-            df[emb_cols] = df[emb_cols].fillna(0.0)
-            print(f"       Attached {len(emb_cols)} dimensions.")
-            return df
-        except Exception as e:
-            print(f"    [!] Error attaching embeddings: {e}")
-            return df
+        df['phase_group'] = df['phase'].map(phase_map).fillna('Confirmatory')
+        return df
 
     def _attach_p_values(self, df):
         print("    -> Attaching P-Values (Scientific Success Logic)...")

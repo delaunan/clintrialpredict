@@ -105,7 +105,7 @@ def evaluate_model(model, X_test, y_test, model_name="Model"):
     axes[1].grid(True, alpha=0.3)
     axes[1].set_xlabel("False Positive Rate", fontsize=14)
     axes[1].set_ylabel("True Positive Rate", fontsize=14)
-    
+
 
     # --- PLOT C: PRECISION-RECALL CURVE ---
     PrecisionRecallDisplay.from_predictions(y_test, y_prob, ax=axes[2], name=model_name, color='#ff7f0e', linewidth=3)
@@ -196,106 +196,66 @@ def plot_learning_curve(model, X_train, y_train, cv=5):
     plt.tight_layout()
     plt.show()
 
-def evaluate_business_slices(model, df_test):
+def evaluate_business_slices(df_results):
     """
-    Analyzes model performance across key business segments (Sponsor, Phase)
-    and performs a Vintage Analysis (Stability over time).
+    Analyzes model performance across key business segments.
+    Expects df_results to already contain 'y_prob' and 'target'.
     """
     print(f"\n{'='*80}")
     print(f" 💼 BUSINESS INTELLIGENCE & VINTAGE ANALYSIS")
     print(f"{'='*80}")
 
-    # Prepare Data
-    X_test = df_test.drop(columns=['target'])
-    y_test = df_test['target']
-
-    # Get Predictions
-    y_prob = model.predict_proba(X_test)[:, 1]
-    df_results = df_test.copy()
-    df_results['y_prob'] = y_prob
-
-    # --- PART 1: SEGMENT ANALYSIS (Sponsor & Phase) ---
-    segments = ['agency_class', 'phase', 'sponsor_tier']
+    # --- PART 1: SEGMENT ANALYSIS ---
+    # We use columns that provide business context
+    segments = ['agency_class', 'phase', 'sponsor_tier', 'therapeutic_area']
     metrics_list = []
 
     for col in segments:
-        if col not in df_results.columns: continue
+        if col not in df_results.columns:
+            continue
 
         for group in df_results[col].unique():
-            mask = df_results[col] == group
-            subset = df_results[mask]
+            subset = df_results[df_results[col] == group]
 
-            if len(subset) < 50: continue # Skip tiny slices
+            if len(subset) < 30: # Minimum threshold for statistical significance
+                continue
 
-            # Calculate Metrics
             try:
                 auc = roc_auc_score(subset['target'], subset['y_prob'])
                 pr = average_precision_score(subset['target'], subset['y_prob'])
                 fail_rate = subset['target'].mean()
-            except:
-                auc, pr = 0.5, 0 # Handle edge cases (e.g. 0 failures in slice)
 
-            metrics_list.append({
-                'Dimension': col.upper(),
-                'Segment': group,
-                'Count': len(subset),
-                'Fail_Rate': fail_rate,
-                'ROC_AUC': auc,
-                'PR_AUC': pr
-            })
+                metrics_list.append({
+                    'Dimension': col.upper(),
+                    'Segment': group,
+                    'Count': len(subset),
+                    'Fail_Rate': fail_rate,
+                    'ROC_AUC': auc,
+                    'PR_AUC': pr
+                })
+            except ValueError:
+                # Occurs if a slice has only one class (all success or all failure)
+                continue
 
-    # Create DataFrame
     res_df = pd.DataFrame(metrics_list).sort_values(['Dimension', 'ROC_AUC'], ascending=False)
 
-    # Display Table
     print("\n[1] PERFORMANCE BY SEGMENT")
-    print(res_df[['Dimension', 'Segment', 'Count', 'Fail_Rate', 'ROC_AUC', 'PR_AUC']].to_string(index=False, formatters={
+    print(res_df.to_string(index=False, formatters={
         'Fail_Rate': '{:.1%}'.format,
         'ROC_AUC': '{:.3f}'.format,
         'PR_AUC': '{:.3f}'.format
     }))
 
-    # --- PART 2: VINTAGE ANALYSIS (Year over Year) ---
-    print(f"\n[2] VINTAGE ANALYSIS (Stability Check)")
-    years = sorted(df_results['start_year'].unique())
-    vintage_scores = []
+    # --- PART 2: VINTAGE ANALYSIS ---
+    if 'start_year' in df_results.columns:
+        print(f"\n[2] VINTAGE ANALYSIS (Stability Check)")
+        vintage_stats = df_results.groupby('start_year').agg(
+            Count=('target', 'count'),
+            Fail_Rate=('target', 'mean'),
+            ROC_AUC=('y_prob', lambda x: roc_auc_score(df_results.loc[x.index, 'target'], x))
+        ).reset_index()
 
-    for year in years:
-        mask = df_results['start_year'] == year
-        subset = df_results[mask]
-        if len(subset) < 20: continue
-
-        try:
-            auc = roc_auc_score(subset['target'], subset['y_prob'])
-            vintage_scores.append({'Year': int(year), 'ROC_AUC': auc, 'Count': len(subset)})
-        except:
-            pass
-
-    vintage_df = pd.DataFrame(vintage_scores)
-
-    # --- PART 3: VISUALIZATION ---
-    fig, axes = plt.subplots(1, 2, figsize=(20, 6))
-
-    # Plot A: Segment Performance (Bar Chart)
-    # We filter for key segments to keep chart clean
-    plot_df = res_df[res_df['Dimension'].isin(['AGENCY_CLASS', 'PHASE'])]
-    sns.barplot(data=plot_df, x='ROC_AUC', y='Segment', hue='Dimension', ax=axes[0], palette='viridis')
-    axes[0].axvline(0.70, color='red', linestyle='--', label='Industry Standard (0.70)')
-    axes[0].set_title("Model Reliability by Segment\n(Is it biased?)", fontsize=14, fontweight='bold')
-    axes[0].set_xlim(0.4, 1.0)
-    axes[0].legend(loc='lower right')
-
-    # Plot B: Vintage Analysis (Line Chart)
-    sns.lineplot(data=vintage_df, x='Year', y='ROC_AUC', marker='o', linewidth=3, color='#1f77b4', ax=axes[1])
-    axes[1].set_title("Vintage Analysis: Robustness Over Time\n(Does performance degrade?)", fontsize=14, fontweight='bold')
-    axes[1].set_ylim(0.5, 1.0)
-    axes[1].grid(True, alpha=0.3)
-    axes[1].set_xticks(vintage_df['Year'])
-
-    # Add labels to points
-    for index, row in vintage_df.iterrows():
-        axes[1].text(row['Year'], row['ROC_AUC'] + 0.01, f"{row['ROC_AUC']:.2f}",
-                     ha='center', color='black', fontweight='bold')
-
-    plt.tight_layout()
-    plt.show()
+        print(vintage_stats.to_string(index=False, formatters={
+            'Fail_Rate': '{:.1%}'.format,
+            'ROC_AUC': '{:.3f}'.format
+        }))

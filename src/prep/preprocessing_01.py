@@ -1,0 +1,108 @@
+import numpy as np
+import pandas as pd
+from sklearn.pipeline import Pipeline
+from sklearn.compose import ColumnTransformer
+from sklearn.impute import SimpleImputer
+from sklearn.preprocessing import OneHotEncoder, StandardScaler, FunctionTransformer, TargetEncoder
+#from sklearn.decomposition import PCA  # <--- NEW IMPORT
+
+def preprocessor():
+    """
+    Returns a static ColumnTransformer.
+    Does NOT depend on input data X.
+    Expects specific columns to exist in the dataframe.
+    """
+
+    # ==========================================================================
+    # A. DEFINE STRICT COLUMN LISTS
+    # ==========================================================================
+
+    NUM_LOG_COLS = [
+        'competition_broad',
+        'competition_niche',
+        'competition_agent',
+        'num_primary_endpoints',
+        'number_of_arms'
+    ]
+
+    NUM_STD_COLS = [
+        'design_rigor_score',
+        'eligibility_strictness_score',
+        'criteria_len_log'
+    ]
+
+    CAT_ONEHOT_COLS = [
+        'therapeutic_area',
+        'agent_category',
+        'phase_group',
+        'phase',
+        'sponsor_tier',
+        'has_dmc', 'is_fda_regulated_drug', 'includes_us', 'gender',
+        'masking', 'allocation', 'intervention_model',
+        'primary_purpose', 'is_sick_only', 'is_gender_restricted',
+        'child', 'adult', 'older_adult'
+        #,'healthy_volunteers'  # <---
+    ]
+
+    CAT_TARGET_COLS = [
+        'therapeutic_subgroup_name'
+    ]
+
+
+    # We use prefixes to capture all of them dynamically (490 columns total)
+    PCA_COLS = [f"crit_pca_{i}" for i in range(160)] + \
+               [f"sci_pca_{i}" for i in range(160)] + \
+               [f"endp_pca_{i}" for i in range(170)]
+
+    # ==========================================================================
+    # B. DEFINE SUB-PIPELINES
+    # ==========================================================================
+
+    # Pipeline A: Log + Scale
+    pipe_log = Pipeline([
+        ('imputer', SimpleImputer(strategy='median')),
+        ('log1p', FunctionTransformer(np.log1p, validate=False, feature_names_out="one-to-one")),
+        ('scaler', StandardScaler())
+    ])
+
+    # Pipeline B: Standard Scale
+    pipe_std = Pipeline([
+        ('imputer', SimpleImputer(strategy='mean')),
+        ('scaler', StandardScaler())
+    ])
+
+    # Pipeline C: One Hot Encoding
+    pipe_onehot = Pipeline([
+        ('imputer', SimpleImputer(strategy='constant', fill_value='UNKNOWN')),
+        ('encoder', OneHotEncoder(handle_unknown='ignore', sparse_output=False, dtype=np.int32))
+    ])
+
+    # Pipeline D: Target Encoding (CRITICAL MODIFICATION)
+    pipe_target = Pipeline([
+        ('imputer', SimpleImputer(strategy='constant', fill_value='UNKNOWN')),
+        ('encoder', TargetEncoder(target_type='binary', smooth=10000.0, random_state=42)) # <--- SMOOTHING INCREASED
+    ])
+
+    # Pipeline E: PCA
+    pipe_pca = Pipeline([
+        ('imputer', SimpleImputer(strategy='mean')),
+        ('scaler', StandardScaler())
+    ])
+
+    # ==========================================================================
+    # C. ASSEMBLE FINAL TRANSFORMER
+    # ==========================================================================
+
+    preprocessor = ColumnTransformer(
+        transformers=[
+            ('num_log',    pipe_log,    NUM_LOG_COLS),
+            ('num_std',    pipe_std,    NUM_STD_COLS),
+            ('cat_onehot', pipe_onehot, CAT_ONEHOT_COLS),
+            ('cat_target', pipe_target, CAT_TARGET_COLS),
+            ('nlp_pca', pipe_pca, PCA_COLS)
+        ],
+        remainder='drop',
+        verbose_feature_names_out=False
+    )
+
+    return preprocessor
