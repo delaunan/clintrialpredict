@@ -18,6 +18,9 @@ data/processed/
 data/interim/
 data_project/
 notebooks/julius/
+# Allow frontend search registry
+!frontend/data/
+!frontend/data/*.csv
 # logs
 logs/
 # cache
