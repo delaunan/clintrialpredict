@@ -18,10 +18,11 @@ st.set_page_config(
 )
 
 # ==========================
-# 1. SETUP & PATHS
+# 1. SETUP & PATHS (ROBUST VERSION)
 # ==========================
-PROJECT_ROOT = Path(__file__).resolve().parent
-DATA_PATH = PROJECT_ROOT / "data" / "search_registry.csv"
+# Get the directory where app.py is located
+CURRENT_DIR = Path(__file__).resolve().parent
+DATA_PATH = CURRENT_DIR / "data" / "search_registry.csv"
 
 # *** API URL ***
 API_URL = "https://clintrialpredict-835962039082.europe-west1.run.app/predict"
@@ -56,6 +57,9 @@ st.markdown(
 
 @st.cache_data
 def load_predict_data() -> pd.DataFrame:
+    # Diagnostic print (shows up in Streamlit logs)
+    print(f"DEBUG: Attempting to load search registry from: {DATA_PATH}")
+    
     if not DATA_PATH.exists():
         st.error(f"Search registry not found at {DATA_PATH}")
         return pd.DataFrame()
