@@ -3,14 +3,12 @@ import pandas as pd
 import numpy as np
 import textwrap
 
-# ==============================================================================
-# 0. UNIFIED STYLE CONFIGURATION (VIBRANT PALETTE - v01 PROD)
-# ==============================================================================
+# ==========================
+# 0. STYLE CONFIG (PASTEL PRO)
+# ==========================
 STYLE_CONFIG = {
     "font_family": "Arial",
-    "font_size_header": 16,
-    "font_size_body": 14,
-    "font_color": "#1f2a38", # Dark Navy/Black
+    "font_color": "#1f2a38",
     "colors": {
         "red_deep":   (168, 50, 50),
         "red_soft":   (240, 163, 163),
@@ -18,7 +16,11 @@ STYLE_CONFIG = {
         "blue_soft":  (154, 203, 232),
         "blue_deep":  (28, 86, 153),
         "therapeutic_grey": "#CFD8DC",
-        "separator_white": "white"
+        # Pastel Zones
+        "pastel_red": "#fde8e8",
+        "pastel_orange": "#fff7ed",
+        "pastel_blue": "#eff6ff",
+        "pastel_green": "#f0fdf4"
     }
 }
 
@@ -31,23 +33,16 @@ def interpolate_color(c1, c2, ratio):
     b = int(c1[2] + (c2[2] - c1[2]) * ratio)
     return (r, g, b)
 
-def mix_white(rgb, factor=0.7):
-    r, g, b = rgb
-    new_r = int(r + (255 - r) * factor)
-    new_g = int(g + (255 - g) * factor)
-    new_b = int(b + (255 - b) * factor)
-    return (new_r, new_g, new_b)
-
 def fmt_header(text, value, txt_color="black"):
     return (
-        f"<span style='font-size:14px; font-weight:bold; color:{txt_color}'>"
+        f"<span style='font-size:13px; font-weight:bold; color:{txt_color}'>"
         f"{text} ({value:+.1f} pts)"
         f"</span>"
     )
 
-# ==============================================================================
+# ==========================
 # 1. GAUGE CHART
-# ==============================================================================
+# ==========================
 def plot_success_gauge(score_val):
     steps = []
     n_slices = 100
@@ -73,8 +68,7 @@ def plot_success_gauge(score_val):
         value=score_val,
         number={
             "valueformat": ".1f",
-            "font": {"size": 52, "color": STYLE_CONFIG["font_color"],
-                     "family": STYLE_CONFIG["font_family"], "weight": "bold"}
+            "font": {"size": 52, "color": STYLE_CONFIG["font_color"], "family": "Arial", "weight": "bold"}
         },
         domain={"x": [0, 1], "y": [0, 1]},
         gauge={
@@ -83,47 +77,36 @@ def plot_success_gauge(score_val):
                 "tickmode": "array",
                 "tickvals": [0, 25, 50, 75, 100],
                 "ticktext": ["0", "25", "50", "75", "100"],
-                "ticklen": 0, "tickwidth": 0, "tickcolor": "white",
-                "tickfont": {"size": STYLE_CONFIG["font_size_body"],
-                             "color": "#555555",
-                             "family": STYLE_CONFIG["font_family"], "weight": "bold"},
+                "ticklen": 0, "tickcolor": "white",
+                "tickfont": {"size": 12, "color": "#555555", "weight": "bold"},
             },
             "bar": {"color": "rgba(0,0,0,0)"},
             "bgcolor": "white",
             "borderwidth": 0,
             "steps": steps,
-            "threshold": {
-                "line": {"color": STYLE_CONFIG["font_color"], "width": 5},
-                "thickness": 0.75,
-                "value": score_val
-            },
+            "threshold": {"line": {"color": "#1f2a38", "width": 4}, "thickness": 0.75, "value": score_val},
         },
     ))
     fig.update_layout(
-        margin=dict(l=35, r=35, t=40, b=10),
+        margin=dict(l=30, r=30, t=40, b=10),
         paper_bgcolor="white",
-        font={"family": STYLE_CONFIG["font_family"], "color": "#333333"},
         height=220,
         hovermode=False
     )
     return fig
 
-# ==============================================================================
+# ==========================
 # 2. IMPACT BAR CHART
-# ==============================================================================
+# ==========================
 def plot_impact_bar(df_pillars):
-    """
-    df_pillars expects columns: ['Pillar', 'Impact']
-    """
     df_plot = df_pillars.copy()
     df_plot['Pillar_Clean'] = df_plot['Pillar'].apply(lambda x: x.split('. ', 1)[1] if '. ' in x else x)
     df_plot = df_plot.sort_values(by='Impact', ascending=True)
 
     fig = go.Figure()
-
     BAR_WIDTH = 0.6
-    GLOBAL_MAX_SCALE = 15.0
-    SLICE_STEP = 0.2
+    GLOBAL_MAX_SCALE = 10.0 # Adjusted for better visual ramp
+    SLICE_STEP = 0.25
     c = STYLE_CONFIG["colors"]
     center_grey = c["grey_warm"]
 
@@ -139,76 +122,52 @@ def plot_impact_bar(df_pillars):
         n_steps = int(np.ceil(abs_val / SLICE_STEP))
         for step in range(n_steps):
             current_abs_pos = step * SLICE_STEP
+            w = abs_val - current_abs_pos if current_abs_pos + SLICE_STEP > abs_val else SLICE_STEP
             
-            if current_abs_pos + SLICE_STEP > abs_val:
-                w = abs_val - current_abs_pos
-                is_tip = True
-            else:
-                w = SLICE_STEP
-                is_tip = False
-
             if val < 0: w = -w
             slice_widths.append(w)
-            
-            if is_tip:
-                slice_texts.append(f"{val:+.1f}")
-            else:
-                slice_texts.append(None)
+            slice_texts.append(f"{val:+.1f}" if step == n_steps - 1 else None)
 
             color_pos = current_abs_pos + (abs(w) / 2)
-            
             if "Therapeutic" in pillar_name:
                 slice_colors.append(STYLE_CONFIG["colors"]["therapeutic_grey"])
                 continue
 
-            ratio = min(color_pos / GLOBAL_MAX_SCALE, 1.0)
-            ratio = ratio ** 0.5
-
+            ratio = min(color_pos / GLOBAL_MAX_SCALE, 1.0) ** 0.5
             if val >= 0:
-                if ratio < 0.5:
-                    final_rgb = interpolate_color(center_grey, c["blue_soft"], ratio * 2)
-                else:
-                    final_rgb = interpolate_color(c["blue_soft"], c["blue_deep"], (ratio - 0.5) * 2)
+                final_rgb = interpolate_color(center_grey, c["blue_soft"], ratio * 2) if ratio < 0.5 else interpolate_color(c["blue_soft"], c["blue_deep"], (ratio - 0.5) * 2)
             else:
-                if ratio < 0.5:
-                    final_rgb = interpolate_color(center_grey, c["red_soft"], ratio * 2)
-                else:
-                    final_rgb = interpolate_color(c["red_soft"], c["red_deep"], (ratio - 0.5) * 2)
-
+                final_rgb = interpolate_color(center_grey, c["red_soft"], ratio * 2) if ratio < 0.5 else interpolate_color(c["red_soft"], c["red_deep"], (ratio - 0.5) * 2)
             slice_colors.append(get_rgb_str(final_rgb))
 
         fig.add_trace(go.Bar(
-            y=[row_data['Pillar_Clean']],
+            y=[row_data['Pillar_Clean']] * len(slice_widths),
             x=slice_widths,
             orientation='h',
             width=BAR_WIDTH,
             marker=dict(color=slice_colors, line=dict(width=0)),
             text=slice_texts,
             textposition='outside',
-            textfont=dict(size=STYLE_CONFIG["font_size_body"], color="black", family=STYLE_CONFIG["font_family"]),
+            textfont=dict(size=12, color="#1f2a38"),
             hoverinfo='skip',
             showlegend=False
         ))
 
-    limit = max(df_plot['Impact'].abs().max() * 1.2, 8.0)
+    limit = max(df_plot['Impact'].abs().max() * 1.4, 6.0)
     fig.add_vline(x=0, line_width=1, line_color="#333333")
     fig.update_layout(
         barmode='relative',
         xaxis=dict(showticklabels=False, showgrid=False, zeroline=False, range=[-limit, limit]),
-        yaxis=dict(showticklabels=True, tickfont=dict(size=STYLE_CONFIG["font_size_body"], color="black", family=STYLE_CONFIG["font_family"]), automargin=True),
-        margin=dict(l=10, r=10, t=20, b=10),
+        yaxis=dict(showticklabels=True, tickfont=dict(size=12, color="#1f2a38"), automargin=True),
+        margin=dict(l=10, r=10, t=10, b=10),
         plot_bgcolor="white", paper_bgcolor="white", height=240, showlegend=False
     )
     return fig
 
-# ==============================================================================
+# ==========================
 # 3. TREEMAP
-# ==============================================================================
+# ==========================
 def plot_treemap(subcat_impacts, pillar_impacts):
-    """
-    subcat_impacts: list of {Pillar, Subcategory, Impact, Narrative}
-    pillar_impacts: list of {Pillar, Impact}
-    """
     nodes = {}
     node_sums = {"ALL_DRIVERS": sum(p['Impact'] for p in pillar_impacts)}
     c = STYLE_CONFIG["colors"]
@@ -216,17 +175,12 @@ def plot_treemap(subcat_impacts, pillar_impacts):
 
     for item in subcat_impacts:
         pillar_raw = item['Pillar']
-        subtopic = item['Subcategory']
-        impact = item['Impact']
-        narrative = item['Narrative']
-        
+        subtopic, impact, narrative = item['Subcategory'], item['Impact'], item['Narrative']
         pillar_clean = pillar_raw.split('. ', 1)[1] if '. ' in pillar_raw else pillar_raw
         is_therapeutic = "Therapeutic" in pillar_raw
         parent_id = f"PILLAR_{pillar_clean}"
         
-        ratio = min(abs(impact) / 10.0, 1.0)
-        ratio = max(0.2, ratio)
-
+        ratio = max(0.2, min(abs(impact) / 8.0, 1.0))
         if is_therapeutic:
             r, g, b = (207, 216, 220)
             txt_color = "black"
@@ -237,58 +191,30 @@ def plot_treemap(subcat_impacts, pillar_impacts):
             r, g, b = interpolate_color(c["red_soft"], c["red_deep"], ratio)
             txt_color = "white"
 
-        bg_hex = get_rgb_str((r,g,b))
-        wrapped_narrative = '<br>'.join(textwrap.wrap(narrative, width=30))
+        wrapped_narrative = '<br>'.join(textwrap.wrap(narrative, width=35))
         label_html = (
-            f"<span style='font-size:15px; font-weight:bold; color:{txt_color}'>{subtopic}</span>"
-            f"<br><span style='font-size:14px; color:{txt_color}'>{impact:+.1f} pts</span>"
-            f"<br><br><span style='font-size:13px; font-style:normal; color:{txt_color}'>{wrapped_narrative}</span>"
+            f"<span style='font-size:14px; font-weight:bold; color:{txt_color}'>{subtopic}</span>"
+            f"<br><span style='font-size:12px; color:{txt_color}'>{impact:+.1f} pts</span>"
+            f"<br><br><span style='font-size:11px; color:{txt_color}'>{wrapped_narrative}</span>"
         )
+        leaf_data.append({"id": f"{parent_id}_{subtopic}", "parent": parent_id, "label": label_html, "color": get_rgb_str((r,g,b)), "value": max(abs(impact), 0.1)})
 
-        leaf_id = f"{parent_id}_{subtopic}"
-        leaf_data.append({
-            "id": leaf_id, 
-            "parent": parent_id, 
-            "label": label_html, 
-            "color": bg_hex, 
-            "value": max(abs(impact), 0.1)
-        })
-
-    # Add Pillar Nodes
     for p_item in pillar_impacts:
-        p_name = p_item['Pillar']
-        p_imp = p_item['Impact']
+        p_name, p_imp = p_item['Pillar'], p_item['Impact']
         p_clean = p_name.split('. ', 1)[1] if '. ' in p_name else p_name
-        p_id = f"PILLAR_{p_clean}"
-        
-        is_therapeutic = "Therapeutic" in p_name
-        
-        nodes[p_id] = {
-            "parent": "ALL_DRIVERS",
-            "label": fmt_header(p_clean.upper(), p_imp, txt_color="black"),
-            "color": "#ECEFF1" if is_therapeutic else "#F5F5F5",
-            "value": 0
-        }
+        nodes[f"PILLAR_{p_clean}"] = {"parent": "ALL_DRIVERS", "label": fmt_header(p_clean.upper(), p_imp, txt_color="black"), "color": "#ECEFF1" if "Therapeutic" in p_name else "#F5F5F5", "value": 0}
 
-    nodes["ALL_DRIVERS"] = {
-        "parent": "", 
-        "label": fmt_header("ALL DRIVERS", node_sums["ALL_DRIVERS"], txt_color="black"), 
-        "color": "#FFFFFF", 
-        "value": 0
-    }
-
+    nodes["ALL_DRIVERS"] = {"parent": "", "label": fmt_header("ALL DRIVERS", node_sums["ALL_DRIVERS"], txt_color="black"), "color": "#FFFFFF", "value": 0}
     for item in leaf_data:
         nodes[item['id']] = {"parent": item['parent'], "label": item['label'], "color": item['color'], "value": item['value']}
 
-    ids = list(nodes.keys())
     fig = go.Figure(go.Treemap(
-        ids=ids,
-        labels=[nodes[k]['label'] for k in ids],
-        parents=[nodes[k]['parent'] for k in ids],
-        values=[nodes[k]['value'] for k in ids],
-        marker=dict(colors=[nodes[k]['color'] for k in ids], line=dict(width=1, color='white')),
-        textinfo="label", textposition="top left", tiling=dict(packing="squarify"), hoverinfo="skip",
-        pathbar=dict(visible=True, thickness=30, textfont=dict(family="Arial", size=11))
+        ids=list(nodes.keys()),
+        labels=[nodes[k]['label'] for k in nodes.keys()],
+        parents=[nodes[k]['parent'] for k in nodes.keys()],
+        values=[nodes[k]['value'] for k in nodes.keys()],
+        marker=dict(colors=[nodes[k]['color'] for k in nodes.keys()], line=dict(width=1, color='white')),
+        textinfo="label", textposition="top left", tiling=dict(packing="squarify"), hoverinfo="skip"
     ))
-    fig.update_layout(margin=dict(t=34, l=15, r=15, b=15), height=550, font=dict(family="Arial"), paper_bgcolor='white', hovermode=False)
+    fig.update_layout(margin=dict(t=30, l=10, r=10, b=10), height=520, font=dict(family="Arial"), paper_bgcolor='white', hovermode=False)
     return fig

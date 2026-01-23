@@ -18,12 +18,8 @@ data/processed/
 data/interim/
 data_project/
 notebooks/julius/
+*.csv
+
 # Allow frontend search registry
 !frontend/data/
 !frontend/data/*.csv
-# logs
-logs/
-# cache
-__pycache__/
-*.pyc
-*.csv
