@@ -23,3 +23,6 @@ notebooks/julius/
 # Allow frontend search registry
 !frontend/data/
 !frontend/data/*.csv
+
+# Local test artifacts (not for production)
+models/shap_values_prod_test.joblib
