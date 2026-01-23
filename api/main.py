@@ -6,6 +6,7 @@ import json
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 import os
+from pathlib import Path
 
 app = FastAPI()
 
@@ -18,11 +19,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- LOAD ARTIFACTS ---
-MODEL_PATH = "models/model_prod_01.joblib"
-SHAP_PATH = "models/shap_values_01.joblib"
-THRESHOLDS_PATH = "models/thresholds_01.json"
-TAXONOMY_PATH = "models/taxonomy_01.json"
+# --- LOAD ARTIFACTS (Environment Agnostic) ---
+BASE_DIR = Path(__file__).resolve().parent.parent
+MODEL_PATH = BASE_DIR / "models" / "model_prod_01.joblib"
+SHAP_PATH = BASE_DIR / "models" / "shap_values_01.joblib"
+THRESHOLDS_PATH = BASE_DIR / "models" / "thresholds_01.json"
+TAXONOMY_PATH = BASE_DIR / "models" / "taxonomy_01.json"
 
 @app.on_event("startup")
 def load_artifacts():

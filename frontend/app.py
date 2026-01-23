@@ -1,5 +1,11 @@
+import os
 import sys
 from pathlib import Path
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
+
 import numpy as np
 import pandas as pd
 import streamlit as st
@@ -23,8 +29,9 @@ st.set_page_config(
 CURRENT_DIR = Path(__file__).resolve().parent
 DATA_PATH = CURRENT_DIR / "data" / "search_registry.csv"
 
-# *** API URL ***
-API_URL = "https://clintrialpredict-835962039082.europe-west1.run.app/predict"
+# *** SMART API URL ***
+# Defaults to local if API_URL env var is not set (e.g. on GCloud)
+API_URL = os.getenv("API_URL", "http://localhost:8000/predict")
 
 ID_COL = "nct_id"
 

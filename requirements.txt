@@ -7,3 +7,4 @@ numpy==2.2.6
 scikit-learn==1.7.2
 xgboost==3.0.5
 shap==0.49.1
+python-dotenv

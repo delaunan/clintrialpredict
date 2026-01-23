@@ -1,0 +1,142 @@
+{
+    "1. Therapeutic Context": {
+        "Indication Risk Profile": {
+            "features": [
+                "cat_onehot__therapeutic_area_",
+                "cat_target__therapeutic_subgroup_name",
+                "CALIBRATION_OFFSET"
+            ],
+            "feature_labels": [
+                "Net Disease Risk"
+            ],
+            "logic": "The combined risk profile of the therapeutic area and specific indication, adjusted for sector difficulty.",
+            "pos_impact": "Therapeutic area and indication show a rather favorable risk profile based on historical evidence.",
+            "neg_impact": "Therapeutic area and indication may correspond to elevated challenge levels given past records."
+        },
+        "Development Phase": {
+            "features": [
+                "cat_onehot__phase_PHASE",
+                "cat_onehot__phase_group_"
+            ],
+            "feature_labels": [
+                "Trial Phase",
+                "Phase Tier"
+            ],
+            "logic": "The statistical probability of success (POS) based on development stage.",
+            "pos_impact": "The current study stage is statistically associated with higher completion rates.",
+            "neg_impact": "The current study stage is associated with higher attrition risks."
+        }
+    },
+    "2. Scientific Design": {
+        "Scientific Rationale": {
+            "features": [
+                "pca_sci"
+            ],
+            "feature_labels": [
+                "Scientific Text Analysis"
+            ],
+            "logic": "Text analysis of the Title and Brief Summary for novelty and clarity.",
+            "pos_impact": "Text analysis suggests the scientific rationale is clear, focused, and aligns with successful precedents.",
+            "neg_impact": "Text analysis suggests the scientific description may be ambiguous, with lesser focus or highly novel, which tends to carry higher uncertainty."
+        },
+        "Endpoint Strategy": {
+            "features": [
+                "pca_endp"
+            ],
+            "feature_labels": [
+                "Endpoint Text Analysis"
+            ],
+            "logic": "Text analysis of the Primary Endpoints for measurability.",
+            "pos_impact": "Primary endpoints appear well-defined and measurable, consistent with previous successful trials.",
+            "neg_impact": "Endpoints can be improved as they may appear complex or subjective, which tends to introduce measurement variability."
+        },
+        "Trial Complexity": {
+            "features": [
+                "num_log__number_of_arms",
+                "cat_onehot__primary_purpose_"
+            ],
+            "feature_labels": [
+                "Arm Count",
+                "Primary Purpose"
+            ],
+            "logic": "Structural design of the study arms.",
+            "pos_impact": "The structural design (number of arms and primary purpose) suggests a comprehensive comparative strategy.",
+            "neg_impact": "The structural design (number of arms and primary purpose) suggests either a simplified exploratory focus or a level of complexity that may increase operational burden,"
+        }
+    },
+    "3. Execution Framework": {
+        "Quality & Bias Control": {
+            "features": [
+                "bin_flags__has_dmc",
+                "num_std__design_rigor_score",
+                "cat_onehot__masking_"
+            ],
+            "feature_labels": [
+                "Data Monitoring Comm.",
+                "Rigor Score",
+                "Blinding"
+            ],
+            "logic": "Operational mechanisms implemented to minimize bias and ensure safety oversight.",
+            "pos_impact": "Operational controls (e.g., DMC, masking) are in place to safeguard data integrity and reduce bias.",
+            "neg_impact": "The protocol suggests limited bias mitigation or oversight mechanisms, increasing operational vulnerability."
+        },
+        "Time Horizon": {
+            "features": [
+                "num_log__duration_months"
+            ],
+            "feature_labels": [
+                "Estimated Duration"
+            ],
+            "logic": "The operational exposure time of the study.",
+            "pos_impact": "Shorter duration tends to minimize exposure to long-term operational risks.",
+            "neg_impact": "Extended timeline tends to increase the risk of participant dropout and resource exhaustion."
+        },
+        "Sponsor Profile": {
+            "features": [
+                "cat_onehot__sponsor_tier_"
+            ],
+            "feature_labels": [
+                "Sponsor Tier"
+            ],
+            "logic": "The track record and financial depth of the sponsor.",
+            "pos_impact": "Sponsor profile suggests established resources, experience or operational resilience.",
+            "neg_impact": "Sponsor profile may be sensitive to funding constraints or prone to frequent strategic portfolio shifts."
+        }
+    },
+    "4. Patient Profile": {
+        "Inclusion Criteria": {
+            "features": [
+                "pca_crit",
+                "num_std__criteria_len_log",
+                "num_std__eligibility_strictness_score"
+            ],
+            "feature_labels": [
+                "Criteria Text Analysis",
+                "Criteria Length",
+                "Strictness Score"
+            ],
+            "logic": "Text analysis of the eligibility rules.",
+            "pos_impact": "Eligibility criteria appear concise and balanced, facilitating smoother enrollment.",
+            "neg_impact": "Lengthy or highly restrictive criteria tend to create enrollment bottlenecks."
+        },
+        "Patient Acuity": {
+            "features": [
+                "bin_flags__is_sick_only",
+                "bin_flags__is_severe",
+                "bin_flags__is_acute",
+                "bin_flags__is_refractory",
+                "bin_flags__is_critical_setting"
+            ],
+            "feature_labels": [
+                "Healthy vs Patient",
+                "Severe Disease",
+                "Acute Setting",
+                "Refractory Status",
+                "Critical Setting Flag"
+            ],
+            "logic": "The health status of the target population.",
+            "pos_impact": "Target population appears stable, potentially reducing unexpected medical complications.",
+            "neg_impact": "Populations with high disease severity, acuity, or refractory status tend to be associated with elevated operational risks."
+        }
+    }
+}

@@ -1,0 +1,20 @@
+{
+  "general": {
+    "previewFeatures": true,
+    "checkpointing": {
+      "enabled": true
+    }
+  },
+  "agent": {
+    "autoRun": true
+  },
+  "tools": {
+    "confirmLevel": "low",
+    "safetyCheck": "on_write"
+  },
+  "model": {
+    "name": "gemini-3-flash-preview",
+    "temperature": 0.2,
+    "systemInstruction": "You are a Clinical Trial Prediction Agent. You are in YOLO mode: execute read-only tools and analysis chains automatically. Only pause for confirmation before writing to files or executing destructive commands. Favor Gemini 3 Flash for all reasoning tasks."
+  }
+}
