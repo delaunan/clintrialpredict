@@ -1,0 +1,9 @@
+#### <REF:PROD_EXPORT>
+> #### **9. Production Artifact Persistence & Optimized UI Sync**
+
+This module finalizes the model artifacts for deployment and creates the **Surgical-Lean Search Registry**.
+*   **Model Store**: Saves `model_prod_01.joblib` (Pickle), `thresholds_01.json`, and `taxonomy_01.json`.
+*   **Discovery Engine (`search_registry.csv`)**: 
+    *   **97% Compression**: Strips 2,300+ embedding columns to reduce file size from 170MB to ~55MB.
+    *   **Rich Search Identity**: Synthesizes drug, sponsor, acronym, and year into one searchable label.
+    *   **Demo-Mode Integrity**: Pre-calculates the `is_correct` flag to allow instant showcase of model-validated historical results.

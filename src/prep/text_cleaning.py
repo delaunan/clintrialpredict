@@ -81,6 +81,10 @@ def day_zero_reconstructor(
         rf"(?i)\bclinicaltrials\.gov\b.*?{boundary}",
         rf"(?i)\bnct\d{{8}}\b.*?{boundary}",
         rf"(?i)\bamendment\b.*?\b(?:protocol|version|dated|date|effective)\b.*?{boundary}",
+        # [v17.5 REFINED SHIELD] Outcome & Termination Leakage
+        # Targets specific result-oriented phrases while preserving general science.
+        rf"(?i)\b(?:failed to|did not|was not)\s+(?:meet|met|improve|improved|reach|reached|show|shown|achieved|achieve|slow|slowed|significant|significantly)\b.*?{boundary}",
+        rf"(?i)\b(?:study|trial|enrollment|recruitment)\s+(?:was|has\s+been)\s+(?:stopped|terminated|discontinued|closed|halted)\b.*?{boundary}",
     ]
     for pat in admin_patterns:
         removed_admin_spans += len(list(re.finditer(pat, text)))
@@ -142,7 +146,7 @@ if __name__ == "__main__":
                     df[col] = df[col].apply(lambda x: day_zero_reconstructor(x, label))
 
 
-        output_path = "data/project_data_nlp_light.csv"
+        output_path = "data/data_clinpred_emb_transform.csv"
         keep_cols = ["nct_id", "target", "txt_scientific_essence", "txt_criteria", "txt_primary_endpoints"]
         df[keep_cols].to_csv(output_path, index=False)
         print(f"[SUCCESS] File saved: {output_path}")

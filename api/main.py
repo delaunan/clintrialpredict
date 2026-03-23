@@ -36,31 +36,60 @@ def load_artifacts():
         app.state.thresholds = json.load(f)
         
     with open(TAXONOMY_PATH, 'r') as f:
-        app.state.taxonomy = json.load(f)
+        taxonomy_payload = json.load(f)
+        app.state.registry = taxonomy_payload.get("FEATURE_REGISTRY", {})
+        app.state.ui_schema = taxonomy_payload.get("UI_SCHEMA", {})
     
-    # 1. Prepare Feature Metadata
+    # 1. Prepare Feature Metadata from Pipeline
     prep = app.state.model.named_steps['prep']
     app.state.feature_names = prep.get_feature_names_out()
     
-    # 2. Initialize Real-Time SHAP Explainer (PARKED FOR v01)
-    # print("Initializing TreeExplainer for real-time simulation...")
-    # clf = app.state.model.named_steps['clf']
-    # app.state.explainer = shap.TreeExplainer(clf)
+    # 2. Reconstruct Taxonomy Mapping (Logic-Locked to Registry)
+    # This maps feature indices (i) to {pillar, subcategory, narrative_info}
+    app.state.feature_to_taxonomy = {}
+    app.state.pillars = set()
+    app.state.subcategories = {} # pillar -> set of subcategories
     
-    # 3. Map features to Taxonomy
-    app.state.feature_to_pillar = {}
-    for pillar, subcats in app.state.taxonomy.items():
-        for subcat, info in subcats.items():
-            for feat_prefix in info['features']:
-                if feat_prefix == "CALIBRATION_OFFSET":
-                    continue
-                for i, full_name in enumerate(app.state.feature_names):
-                    if full_name.startswith(feat_prefix):
-                        app.state.feature_to_pillar[i] = {
-                            "pillar": pillar,
-                            "subcategory": subcat
-                        }
-    print(f"Mapped {len(app.state.feature_to_pillar)} features to taxonomy.")
+    # Also identify where the calibration offset should be applied
+    app.state.calibration_target = {"pillar": "Therapeutic Context", "subcategory": "Indication Risk Profile"}
+
+    for feat_name, meta in app.state.registry.items():
+        pillar = meta.get("pillar")
+        subgroup = meta.get("subgroup")
+        if not pillar or not subgroup:
+            continue
+            
+        app.state.pillars.add(pillar)
+        if pillar not in app.state.subcategories:
+            app.state.subcategories[pillar] = set()
+        app.state.subcategories[pillar].add(subgroup)
+
+        # Determine prefix based on encoding (replicating notebook logic)
+        prefix = ""
+        enc = meta.get("encoding")
+        if enc == "ordinal": prefix = "ordinal__"
+        elif enc == "target": prefix = "target__"
+        elif enc == "numeric":
+            if "arms" in feat_name: prefix = "num_arms__"
+            elif "duration" in feat_name: prefix = "num_duration__"
+            
+        prefixed_feat = f"{prefix}{feat_name}"
+        
+        # Check if this is the calibration anchor
+        if feat_name == "therapeutic_area_ml":
+            app.state.calibration_target = {"pillar": pillar, "subcategory": subgroup}
+
+        # Map to actual indices in model output
+        for i, full_name in enumerate(app.state.feature_names):
+            if full_name == prefixed_feat or full_name.startswith(f"{prefixed_feat}_"):
+                app.state.feature_to_taxonomy[i] = {
+                    "pillar": pillar,
+                    "subcategory": subgroup,
+                    "pos_impact": meta.get("pos_impact", ""),
+                    "neg_impact": meta.get("neg_impact", "")
+                }
+
+    print(f"Mapped {len(app.state.feature_to_taxonomy)} features to taxonomy.")
 
 @app.get("/")
 def root():
@@ -73,15 +102,14 @@ async def predict(request: Request):
         nct_id = data.get("nct_id")
         ta = data.get("therapeutic_area", "Unclassified")
         
-        # 1. Calibration Constants
+        # 1. Calibration Constants (Synced with Notebook)
         ta_threshold_logits = app.state.thresholds.get("ta_threshold_logits", {})
-        threshold_logit = ta_threshold_logits.get(ta, app.state.thresholds.get("global_threshold_logit", 0.0511))
+        threshold_logit = ta_threshold_logits.get(ta, app.state.thresholds.get("global_threshold_logit", 0.0))
         gain_factor = app.state.thresholds.get("gain_factor", 25.0)
         intercept = app.state.thresholds.get("base_value", 0.0)
         
-        # 2. AUDIT-ONLY Logic (Simulation parked for v01)
+        # 2. AUDIT-ONLY Logic
         if nct_id in app.state.shap_dict:
-            # AUDIT: Instant lookup from pre-calculated matrix
             shap_vals = app.state.shap_dict[nct_id]
             pred_logit = np.sum(shap_vals) + intercept
             mode = "audit"
@@ -93,15 +121,16 @@ async def predict(request: Request):
             }
         
         # 3. Success Scoring (0-100)
+        # score = 50 + (threshold_logit - pred_logit) * gain_factor
         raw_score = 50 + (threshold_logit - pred_logit) * gain_factor
         final_score = float(np.clip(raw_score, 1, 99))
         
         # 4. Aggregation by Taxonomy
-        pillar_impacts = {p: 0.0 for p in app.state.taxonomy.keys()}
-        sub_sums = {} # (pillar, subcat) -> impact
+        pillar_impacts = {p: 0.0 for p in app.state.pillars}
+        sub_sums = {} # (pillar, subcategory) -> impact
         
         for i, val in enumerate(shap_vals):
-            mapping = app.state.feature_to_pillar.get(i)
+            mapping = app.state.feature_to_taxonomy.get(i)
             if mapping:
                 p, s = mapping['pillar'], mapping['subcategory']
                 score_impact = -float(val) * gain_factor # Logit-to-Score unit conversion
@@ -109,23 +138,30 @@ async def predict(request: Request):
                 pillar_impacts[p] += score_impact
                 sub_sums[(p, s)] = sub_sums.get((p, s), 0.0) + score_impact
 
-        # 5. Inject Calibration Offset into Pillar 1 (Therapeutic Context)
+        # 5. Inject Calibration Offset into Target Pillar/Subcategory
         calibration_offset_pts = (threshold_logit - intercept) * gain_factor
-        p1 = "1. Therapeutic Context"
-        s1 = "Indication Risk Profile"
+        cp = app.state.calibration_target["pillar"]
+        cs = app.state.calibration_target["subcategory"]
         
-        pillar_impacts[p1] += calibration_offset_pts
-        sub_sums[(p1, s1)] = sub_sums.get((p1, s1), 0.0) + calibration_offset_pts
+        pillar_impacts[cp] = pillar_impacts.get(cp, 0.0) + calibration_offset_pts
+        sub_sums[(cp, cs)] = sub_sums.get((cp, cs), 0.0) + calibration_offset_pts
         
         # 6. Format Final Response
         subcat_impacts = []
         for (p, s), imp in sub_sums.items():
-            meta = app.state.taxonomy.get(p, {}).get(s, {})
+            # Find metadata from registry via first feature found for this subcat
+            # (Narrative is usually consistent across subcat features)
+            narrative = ""
+            for mapping in app.state.feature_to_taxonomy.values():
+                if mapping['pillar'] == p and mapping['subcategory'] == s:
+                    narrative = mapping['pos_impact' if imp >= 0 else 'neg_impact']
+                    break
+                    
             subcat_impacts.append({
                 "Pillar": p,
                 "Subcategory": s,
                 "Impact": round(imp, 2),
-                "Narrative": meta.get('pos_impact' if imp >= 0 else 'neg_impact', "")
+                "Narrative": narrative
             })
             
         return {

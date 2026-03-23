@@ -1,142 +1,1878 @@
 {
-    "1. Therapeutic Context": {
-        "Indication Risk Profile": {
-            "features": [
-                "cat_onehot__therapeutic_area_",
-                "cat_target__therapeutic_subgroup_name",
-                "CALIBRATION_OFFSET"
-            ],
-            "feature_labels": [
-                "Net Disease Risk"
-            ],
-            "logic": "The combined risk profile of the therapeutic area and specific indication, adjusted for sector difficulty.",
-            "pos_impact": "Therapeutic area and indication show a rather favorable risk profile based on historical evidence.",
-            "neg_impact": "Therapeutic area and indication may correspond to elevated challenge levels given past records."
+    "FEATURE_REGISTRY": {
+        "therapeutic_area_ml": {
+            "encoding": "ordinal",
+            "mapping": {
+                "DENTAL": [
+                    0,
+                    "Dental"
+                ],
+                "DERMATOLOGY": [
+                    1,
+                    "Dermatology"
+                ],
+                "METABOLIC": [
+                    2,
+                    "Metabolic"
+                ],
+                "UNCLASSIFIED": [
+                    3,
+                    "Other / Unclassified"
+                ],
+                "UNKNOWN": [
+                    3,
+                    "Other / Unclassified"
+                ],
+                "RESPIRATORY": [
+                    4,
+                    "Respiratory"
+                ],
+                "INFECTIONS": [
+                    5,
+                    "Infections"
+                ],
+                "OPHTHALMOLOGY": [
+                    6,
+                    "Ophthalmology"
+                ],
+                "PSYCHIATRY": [
+                    7,
+                    "Psychiatry"
+                ],
+                "REPRODUCTIVE": [
+                    8,
+                    "Reproductive"
+                ],
+                "MUSCULOSKELETAL": [
+                    9,
+                    "Musculoskeletal"
+                ],
+                "EAR/NOSE/THROAT": [
+                    10,
+                    "Ear/Nose/Throat"
+                ],
+                "GASTROINTESTINAL": [
+                    11,
+                    "Gastrointestinal"
+                ],
+                "RENAL/UROLOGY": [
+                    12,
+                    "Renal/Urology"
+                ],
+                "CARDIOVASCULAR": [
+                    13,
+                    "Cardiovascular"
+                ],
+                "NEUROLOGY": [
+                    14,
+                    "Neurology"
+                ],
+                "GENETIC": [
+                    15,
+                    "Genetic"
+                ],
+                "IMMUNOLOGY": [
+                    16,
+                    "Immunology"
+                ],
+                "HEMATOLOGY": [
+                    17,
+                    "Hematology"
+                ],
+                "ONCOLOGY": [
+                    18,
+                    "Oncology"
+                ]
+            }
         },
-        "Development Phase": {
-            "features": [
-                "cat_onehot__phase_PHASE",
-                "cat_onehot__phase_group_"
-            ],
-            "feature_labels": [
-                "Trial Phase",
-                "Phase Tier"
-            ],
-            "logic": "The statistical probability of success (POS) based on development stage.",
-            "pos_impact": "The current study stage is statistically associated with higher completion rates.",
-            "neg_impact": "The current study stage is associated with higher attrition risks."
+        "gbd_cause_id_3_ml": {
+            "encoding": "target"
+        },
+        "is_rare_disease_ml": {
+            "encoding": "ordinal",
+            "mapping": {
+                "0": [
+                    0,
+                    "Unlikely"
+                ],
+                "1": [
+                    1,
+                    "Yes"
+                ],
+                "0": [
+                    0,
+                    "Unlikely"
+                ],
+                "1": [
+                    1,
+                    "Yes"
+                ],
+                "F": [
+                    0,
+                    "Unlikely"
+                ],
+                "T": [
+                    1,
+                    "Yes"
+                ],
+                "FALSE": [
+                    0,
+                    "Unlikely"
+                ],
+                "TRUE": [
+                    1,
+                    "Yes"
+                ],
+                "NO": [
+                    0,
+                    "Unlikely"
+                ],
+                "YES": [
+                    1,
+                    "Yes"
+                ],
+                "UNKNOWN": [
+                    0,
+                    "Unlikely"
+                ]
+            }
+        },
+        "phase_ml": {
+            "encoding": "ordinal",
+            "mapping": {
+                "PHASE1/PHASE2": [
+                    1,
+                    "Phase 1/2"
+                ],
+                "PHASE2": [
+                    2,
+                    "Phase 2"
+                ],
+                "PHASE2/PHASE3": [
+                    3,
+                    "Phase 2/3"
+                ],
+                "PHASE3": [
+                    4,
+                    "Phase 3"
+                ],
+                "UNKNOWN": [
+                    2,
+                    "Not Specified"
+                ]
+            }
+        },
+        "strategic_ambition_ml": {
+            "encoding": "ordinal",
+            "mapping": {
+                "SIGNAL_SEARCH": [
+                    1,
+                    "Efficacy / Signal Detection"
+                ],
+                "PIVOTAL_INTENT": [
+                    2,
+                    "Confirmatory / Registration"
+                ],
+                "SAFETY_DOSING": [
+                    3,
+                    "Early Phase / Dose Finding"
+                ],
+                "UNKNOWN": [
+                    2,
+                    "Unknown Intent"
+                ]
+            }
+        },
+        "target_precedent_ml": {
+            "encoding": "ordinal",
+            "mapping": {
+                "UNKNOWN": [
+                    0,
+                    "Not Specified"
+                ],
+                "NO_PRECEDENT": [
+                    0,
+                    "Novel Target (No Prior Approvals)"
+                ],
+                "PRECEDENT_IN_OTHER": [
+                    1,
+                    "Established in Other"
+                ],
+                "PRECEDENT_IN_INDICATION": [
+                    2,
+                    "Established in Indication"
+                ]
+            }
+        },
+        "target_pathway_class_ml": {
+            "encoding": "ordinal",
+            "mapping": {
+                "METABOLIC_REPROGRAMMING": [
+                    0,
+                    "Metabolic Reprogramming"
+                ],
+                "ION_CHANNEL": [
+                    1,
+                    "Ion Channel"
+                ],
+                "GPCR_TARGET": [
+                    2,
+                    "GPCR Target"
+                ],
+                "ENZYME_MODULATOR": [
+                    3,
+                    "Enzyme Modulator"
+                ],
+                "OTHER_PATHWAY": [
+                    4,
+                    "Other Pathway / Unknown"
+                ],
+                "UNKNOWN": [
+                    4,
+                    "Other Pathway / Unknown"
+                ],
+                "NUCLEAR_RECEPTOR": [
+                    5,
+                    "Nuclear Receptor"
+                ],
+                "INTERLEUKIN_CYTOKINE": [
+                    6,
+                    "Interleukin Cytokine"
+                ],
+                "KINASE_INHIBITOR": [
+                    7,
+                    "Kinase Inhibitor"
+                ],
+                "DNA_REPAIR": [
+                    8,
+                    "DNA Repair"
+                ],
+                "IMMUNO_ONCOLOGY": [
+                    9,
+                    "Immuno Oncology"
+                ],
+                "PROTEIN_DEGRADER": [
+                    10,
+                    "Protein Degrader"
+                ],
+                "EPIGENETIC_REGULATOR": [
+                    11,
+                    "Epigenetic Regulator"
+                ]
+            }
+        },
+        "therapeutic_modality_ml": {
+            "encoding": "ordinal",
+            "mapping": {
+                "VACCINE": [
+                    0,
+                    "Vaccine"
+                ],
+                "PEPTIDE_HORMONES": [
+                    1,
+                    "Peptide Hormones"
+                ],
+                "OTHER_MODALITY": [
+                    2,
+                    "Other Modality"
+                ],
+                "UNKNOWN": [
+                    2,
+                    "Other Modality"
+                ],
+                "SMALL_MOLECULE": [
+                    3,
+                    "Small Molecule"
+                ],
+                "BIOLOGIC_MAB": [
+                    4,
+                    "Biologic Mab"
+                ],
+                "BIOLOGIC_OTHER": [
+                    5,
+                    "Biologic Other"
+                ],
+                "CELL_GENE_THERAPY": [
+                    6,
+                    "Cell Gene Therapy"
+                ],
+                "RNA_THERAPY": [
+                    7,
+                    "Rna Therapy"
+                ],
+                "BIOLOGIC_ADC": [
+                    8,
+                    "Biologic Adc"
+                ],
+                "RADIOPHARMACEUTICAL": [
+                    9,
+                    "Radiopharmaceutical"
+                ]
+            }
+        },
+        "innovation_tier_ml": {
+            "encoding": "ordinal",
+            "mapping": {
+                "ESTABLISHED_COPY": [
+                    0,
+                    "Established / Copy"
+                ],
+                "NEXT_GEN_OPTIMIZED": [
+                    1,
+                    "Next-Gen / Optimized"
+                ],
+                "FIRST_IN_CLASS": [
+                    2,
+                    "First-in-Class (Novel)"
+                ],
+                "UNKNOWN": [
+                    0,
+                    "Not Specified"
+                ]
+            }
+        },
+        "intervention_model_ml": {
+            "encoding": "ordinal",
+            "mapping": {
+                "SINGLE_GROUP": [
+                    0,
+                    "Single Group"
+                ],
+                "SEQUENTIAL": [
+                    1,
+                    "Sequential"
+                ],
+                "CROSSOVER": [
+                    2,
+                    "Crossover"
+                ],
+                "FACTORIAL": [
+                    3,
+                    "Factorial"
+                ],
+                "PARALLEL": [
+                    4,
+                    "Parallel"
+                ],
+                "UNKNOWN": [
+                    0,
+                    "Not Specified"
+                ]
+            }
+        },
+        "primary_purpose_ml": {
+            "encoding": "ordinal",
+            "mapping": {
+                "PREVENTION": [
+                    0,
+                    "Prevention"
+                ],
+                "UNKNOWN": [
+                    1,
+                    "Other Purpose / Unknown"
+                ],
+                "OTHER": [
+                    1,
+                    "Other Purpose / Unknown"
+                ],
+                "DIAGNOSTIC": [
+                    1,
+                    "Other Purpose / Unknown"
+                ],
+                "BASIC_SCIENCE": [
+                    1,
+                    "Other Purpose / Unknown"
+                ],
+                "SCREENING": [
+                    1,
+                    "Other Purpose / Unknown"
+                ],
+                "HEALTH_SERVICES_RESEARCH": [
+                    1,
+                    "Other Purpose / Unknown"
+                ],
+                "DEVICE_FEASIBILITY": [
+                    1,
+                    "Other Purpose / Unknown"
+                ],
+                "TREATMENT": [
+                    2,
+                    "Treatment"
+                ],
+                "SUPPORTIVE_CARE": [
+                    3,
+                    "Supportive Care"
+                ]
+            }
+        },
+        "adaptive_design_ml": {
+            "encoding": "ordinal",
+            "mapping": {
+                "STATIC": [
+                    0,
+                    "Static Design"
+                ],
+                "ADAPTIVE": [
+                    1,
+                    "Adaptive Design"
+                ],
+                "UNKNOWN": [
+                    0,
+                    "Not Specified"
+                ]
+            }
+        },
+        "endpoint_rigor_ml": {
+            "encoding": "ordinal",
+            "mapping": {
+                "UNKNOWN": [
+                    0,
+                    "Not Specified / Unknown"
+                ],
+                "SUBJECTIVE_PRO": [
+                    1,
+                    "Subjective / Patient Reported"
+                ],
+                "SURROGATE": [
+                    2,
+                    "Surrogate / Biomarker"
+                ],
+                "HARD_CLINICAL": [
+                    3,
+                    "Hard Clinical (Survival/Death)"
+                ]
+            }
+        },
+        "endpoint_structure_ml": {
+            "encoding": "ordinal",
+            "mapping": {
+                "MULTI_COMPOSITE": [
+                    1,
+                    "Multi/Composite"
+                ],
+                "SINGLE_GOAL": [
+                    0,
+                    "Single Goal"
+                ],
+                "UNKNOWN": [
+                    0,
+                    "Not Specified"
+                ]
+            }
+        },
+        "biomarker_stratification_ml": {
+            "encoding": "ordinal",
+            "mapping": {
+                "0": [
+                    0,
+                    "No"
+                ],
+                "1": [
+                    1,
+                    "Yes"
+                ],
+                "0": [
+                    0,
+                    "No"
+                ],
+                "1": [
+                    1,
+                    "Yes"
+                ],
+                "F": [
+                    0,
+                    "No"
+                ],
+                "T": [
+                    1,
+                    "Yes"
+                ],
+                "FALSE": [
+                    0,
+                    "No"
+                ],
+                "TRUE": [
+                    1,
+                    "Yes"
+                ],
+                "NO": [
+                    0,
+                    "No"
+                ],
+                "YES": [
+                    1,
+                    "Yes"
+                ],
+                "UNKNOWN": [
+                    0,
+                    "No"
+                ]
+            }
+        },
+        "sponsor_tier_ml": {
+            "encoding": "ordinal",
+            "mapping": {
+                "BIOTECH": [
+                    3,
+                    "Biotech and Emerging Pharma"
+                ],
+                "TIER 1": [
+                    1,
+                    "Top-Tier Pharma"
+                ],
+                "MID_CAP": [
+                    2,
+                    "Mid-Cap Pharma"
+                ],
+                "UNKNOWN": [
+                    3,
+                    "Unknown Sponsor Tier"
+                ]
+            }
+        },
+        "masking_ml": {
+            "encoding": "ordinal",
+            "mapping": {
+                "UNKNOWN": [
+                    0,
+                    "Open Label or Not Specified"
+                ],
+                "NONE": [
+                    0,
+                    "Open Label or Not Specified"
+                ],
+                "NONE (OPEN LABEL)": [
+                    0,
+                    "Open Label or Not Specified"
+                ],
+                "SINGLE": [
+                    1,
+                    "Single Blind"
+                ],
+                "DOUBLE": [
+                    2,
+                    "Double Blind"
+                ],
+                "TRIPLE": [
+                    3,
+                    "Triple Blind"
+                ],
+                "QUADRUPLE": [
+                    4,
+                    "Quadruple Blind"
+                ]
+            }
+        },
+        "allocation_ml": {
+            "encoding": "ordinal",
+            "mapping": {
+                "RANDOMIZED": [
+                    1,
+                    "Randomized"
+                ],
+                "NON-RANDOMIZED": [
+                    0,
+                    "Non-Randomized"
+                ],
+                "NON_RANDOMIZED": [
+                    0,
+                    "Non-Randomized"
+                ],
+                "NA": [
+                    0,
+                    "Not Specified / Not Applicable"
+                ],
+                "N/A": [
+                    0,
+                    "Not Specified / Not Applicable"
+                ],
+                "UNKNOWN": [
+                    0,
+                    "Not Specified / Not Applicable"
+                ]
+            }
+        },
+        "has_dmc_ml": {
+            "encoding": "ordinal",
+            "mapping": {
+                "0": [
+                    0,
+                    "No"
+                ],
+                "1": [
+                    1,
+                    "Yes"
+                ],
+                "0": [
+                    0,
+                    "No"
+                ],
+                "1": [
+                    1,
+                    "Yes"
+                ],
+                "F": [
+                    0,
+                    "No"
+                ],
+                "T": [
+                    1,
+                    "Yes"
+                ],
+                "FALSE": [
+                    0,
+                    "No"
+                ],
+                "TRUE": [
+                    1,
+                    "Yes"
+                ],
+                "NO": [
+                    0,
+                    "No"
+                ],
+                "YES": [
+                    1,
+                    "Yes"
+                ],
+                "UNKNOWN": [
+                    0,
+                    "No"
+                ]
+            }
+        },
+        "has_placebo_ml": {
+            "encoding": "ordinal",
+            "mapping": {
+                "0": [
+                    0,
+                    "No"
+                ],
+                "1": [
+                    1,
+                    "Yes"
+                ],
+                "0": [
+                    0,
+                    "No"
+                ],
+                "1": [
+                    1,
+                    "Yes"
+                ],
+                "F": [
+                    0,
+                    "No"
+                ],
+                "T": [
+                    1,
+                    "Yes"
+                ],
+                "FALSE": [
+                    0,
+                    "No"
+                ],
+                "TRUE": [
+                    1,
+                    "Yes"
+                ],
+                "NO": [
+                    0,
+                    "No"
+                ],
+                "YES": [
+                    1,
+                    "Yes"
+                ],
+                "UNKNOWN": [
+                    0,
+                    "No"
+                ]
+            }
+        },
+        "comparator_benchmark_ml": {
+            "encoding": "ordinal",
+            "mapping": {
+                "UNKNOWN": [
+                    0,
+                    "No Control Group or Not Specified"
+                ],
+                "NO_CONTROL_GROUP": [
+                    0,
+                    "No Control Group or Not Specified"
+                ],
+                "PLACEBO": [
+                    1,
+                    "Placebo Control"
+                ],
+                "ACTIVE_LEGACY_STANDARD": [
+                    2,
+                    "Active (Legacy Standard)"
+                ],
+                "ACTIVE_MODERN_STANDARD": [
+                    3,
+                    "Active (Modern Standard)"
+                ]
+            }
+        },
+        "primary_duration_months_ml": {
+            "encoding": "numeric"
+        },
+        "number_of_arms_ml": {
+            "encoding": "numeric"
+        },
+        "administration_complexity_ml": {
+            "encoding": "ordinal",
+            "mapping": {
+                "SIMPLE_ORAL": [
+                    1,
+                    "Simple Oral (Pill/Tablet)"
+                ],
+                "ROUTINE_INFUSION": [
+                    2,
+                    "Routine (Injection/IV)"
+                ],
+                "INTENSIVE_MANAGEMENT": [
+                    3,
+                    "Intensive (Hospitalized)"
+                ],
+                "UNKNOWN": [
+                    2,
+                    "Not Specified"
+                ]
+            }
+        },
+        "patient_severity_ml": {
+            "encoding": "ordinal",
+            "mapping": {
+                "UNKNOWN": [
+                    0,
+                    "Uncertain Severity"
+                ],
+                "UNCERTAIN_SEVERITY": [
+                    0,
+                    "Uncertain Severity"
+                ],
+                "CHRONIC_STABLE": [
+                    1,
+                    "Chronic Stable"
+                ],
+                "CHRONIC_PROGRESSIVE": [
+                    2,
+                    "Chronic Progressive"
+                ],
+                "ACUTE_CRITICAL": [
+                    3,
+                    "Acute / Critical"
+                ],
+                "ADVANCED_METASTATIC": [
+                    4,
+                    "Advanced / Metastatic"
+                ]
+            }
+        },
+        "line_of_therapy_ml": {
+            "encoding": "ordinal",
+            "mapping": {
+                "PREVENTATIVE": [
+                    1,
+                    "Preventative / Prophylaxis"
+                ],
+                "FIRST_LINE": [
+                    2,
+                    "First-Line"
+                ],
+                "ADJUVANT_NEOADJUVANT": [
+                    3,
+                    "Adjuvant / Neoadjuvant"
+                ],
+                "LATER_LINE": [
+                    4,
+                    "Later-Line (2nd+)"
+                ],
+                "REFRACTORY_RELAPSED": [
+                    5,
+                    "Refractory / Relapsed"
+                ],
+                "LINE_NA": [
+                    0,
+                    "Not Applicable or Not Specified"
+                ],
+                "UNKNOWN": [
+                    0,
+                    "Not Applicable or Not Specified"
+                ]
+            }
+        },
+        "gender_ml": {
+            "encoding": "ordinal",
+            "mapping": {
+                "ALL": [
+                    0,
+                    "All (Male & Female)"
+                ],
+                "FEMALE": [
+                    1,
+                    "Female Only"
+                ],
+                "MALE": [
+                    2,
+                    "Male Only"
+                ],
+                "UNKNOWN": [
+                    0,
+                    "Not Specified"
+                ]
+            }
+        },
+        "healthy_volunteers_ml": {
+            "encoding": "ordinal",
+            "mapping": {
+                "0": [
+                    0,
+                    "Patients Only"
+                ],
+                "1": [
+                    1,
+                    "Healthy Volunteers Accepted"
+                ],
+                "0": [
+                    0,
+                    "Patients Only"
+                ],
+                "1": [
+                    1,
+                    "Healthy Volunteers Accepted"
+                ],
+                "UNKNOWN": [
+                    0,
+                    "Patients Only"
+                ]
+            }
+        },
+        "adult_ml": {
+            "encoding": "ordinal",
+            "mapping": {
+                "1": [
+                    1,
+                    "Included"
+                ],
+                "0": [
+                    0,
+                    "Excluded"
+                ],
+                "1": [
+                    1,
+                    "Included"
+                ],
+                "0": [
+                    0,
+                    "Excluded"
+                ],
+                "UNKNOWN": [
+                    1,
+                    "Not Specified"
+                ]
+            }
+        },
+        "child_ml": {
+            "encoding": "ordinal",
+            "mapping": {
+                "1": [
+                    1,
+                    "Included"
+                ],
+                "0": [
+                    0,
+                    "Excluded"
+                ],
+                "1": [
+                    1,
+                    "Included"
+                ],
+                "0": [
+                    0,
+                    "Excluded"
+                ],
+                "UNKNOWN": [
+                    0,
+                    "Not Specified"
+                ]
+            }
+        },
+        "older_adult_ml": {
+            "encoding": "ordinal",
+            "mapping": {
+                "1": [
+                    1,
+                    "Included"
+                ],
+                "0": [
+                    0,
+                    "Excluded"
+                ],
+                "1": [
+                    1,
+                    "Included"
+                ],
+                "0": [
+                    0,
+                    "Excluded"
+                ],
+                "UNKNOWN": [
+                    1,
+                    "Not Specified"
+                ]
+            }
+        },
+        "gbd_hierarchy_level_ml": {
+            "encoding": null,
+            "mapping": {
+                "0": [
+                    0,
+                    "Unknown Depth"
+                ],
+                "1": [
+                    1,
+                    "Level 1 (Unclassified Condition)"
+                ],
+                "2": [
+                    2,
+                    "Level 2 (Condition High-Level Category)"
+                ],
+                "3": [
+                    3,
+                    "Level 3 (Condition Group)"
+                ],
+                "4": [
+                    4,
+                    "Level 4 (Specific Condition)"
+                ],
+                "0": [
+                    0,
+                    "Unknown Depth"
+                ],
+                "1": [
+                    1,
+                    "Level 1 (Unclassified Condition)"
+                ],
+                "2": [
+                    2,
+                    "Level 2 (Condition High-Level Category)"
+                ],
+                "3": [
+                    3,
+                    "Level 3 (Condition Group)"
+                ],
+                "4": [
+                    4,
+                    "Level 4 (Specific Condition)"
+                ],
+                "UNKNOWN": [
+                    0,
+                    "Unknown Depth"
+                ]
+            }
+        },
+        "is_duration_unknown_ml": {
+            "encoding": null,
+            "mapping": {
+                "0": [
+                    0,
+                    "Known"
+                ],
+                "1": [
+                    1,
+                    "Duration Missing"
+                ],
+                "0": [
+                    0,
+                    "Known"
+                ],
+                "1": [
+                    1,
+                    "Duration Missing"
+                ],
+                "F": [
+                    0,
+                    "Known"
+                ],
+                "T": [
+                    1,
+                    "Duration Missing"
+                ],
+                "NO": [
+                    0,
+                    "Known"
+                ],
+                "YES": [
+                    1,
+                    "Duration Missing"
+                ],
+                "UNKNOWN": [
+                    1,
+                    "Duration Missing"
+                ]
+            }
+        },
+        "target": {
+            "encoding": null,
+            "mapping": {
+                "0.0": [
+                    0,
+                    "Success"
+                ],
+                "1.0": [
+                    1,
+                    "Failure"
+                ],
+                "0.0": [
+                    0,
+                    "Success"
+                ],
+                "1.0": [
+                    1,
+                    "Failure"
+                ],
+                "UNKNOWN": [
+                    NaN,
+                    "Not Specified"
+                ]
+            }
         }
     },
-    "2. Scientific Design": {
-        "Scientific Rationale": {
-            "features": [
-                "pca_sci"
-            ],
-            "feature_labels": [
-                "Scientific Text Analysis"
-            ],
-            "logic": "Text analysis of the Title and Brief Summary for novelty and clarity.",
-            "pos_impact": "Text analysis suggests the scientific rationale is clear, focused, and aligns with successful precedents.",
-            "neg_impact": "Text analysis suggests the scientific description may be ambiguous, with lesser focus or highly novel, which tends to carry higher uncertainty."
+    "UI_SCHEMA": {
+        "therapeutic_area_ml": {
+            "label": "Therapeutic Area",
+            "pillar": "Therapeutic Context",
+            "subgroup": "Therapeutic Area Profile",
+            "priority": 0,
+            "options": [
+                [
+                    "CARDIOVASCULAR",
+                    "Cardiovascular"
+                ],
+                [
+                    "DENTAL",
+                    "Dental"
+                ],
+                [
+                    "DERMATOLOGY",
+                    "Dermatology"
+                ],
+                [
+                    "EAR/NOSE/THROAT",
+                    "Ear/Nose/Throat"
+                ],
+                [
+                    "GASTROINTESTINAL",
+                    "Gastrointestinal"
+                ],
+                [
+                    "GENETIC",
+                    "Genetic"
+                ],
+                [
+                    "HEMATOLOGY",
+                    "Hematology"
+                ],
+                [
+                    "IMMUNOLOGY",
+                    "Immunology"
+                ],
+                [
+                    "INFECTIONS",
+                    "Infections"
+                ],
+                [
+                    "METABOLIC",
+                    "Metabolic"
+                ],
+                [
+                    "MUSCULOSKELETAL",
+                    "Musculoskeletal"
+                ],
+                [
+                    "NEUROLOGY",
+                    "Neurology"
+                ],
+                [
+                    "ONCOLOGY",
+                    "Oncology"
+                ],
+                [
+                    "OPHTHALMOLOGY",
+                    "Ophthalmology"
+                ],
+                [
+                    "PSYCHIATRY",
+                    "Psychiatry"
+                ],
+                [
+                    "RENAL/UROLOGY",
+                    "Renal/Urology"
+                ],
+                [
+                    "REPRODUCTIVE",
+                    "Reproductive"
+                ],
+                [
+                    "RESPIRATORY",
+                    "Respiratory"
+                ],
+                [
+                    "UNCLASSIFIED",
+                    "Other / Unclassified"
+                ]
+            ]
         },
-        "Endpoint Strategy": {
-            "features": [
-                "pca_endp"
-            ],
-            "feature_labels": [
-                "Endpoint Text Analysis"
-            ],
-            "logic": "Text analysis of the Primary Endpoints for measurability.",
-            "pos_impact": "Primary endpoints appear well-defined and measurable, consistent with previous successful trials.",
-            "neg_impact": "Endpoints can be improved as they may appear complex or subjective, which tends to introduce measurement variability."
+        "gbd_cause_id_3_ml": {
+            "label": "Indication",
+            "pillar": "Therapeutic Context",
+            "subgroup": "Therapeutic Area Profile",
+            "priority": 1
         },
-        "Trial Complexity": {
-            "features": [
-                "num_log__number_of_arms",
-                "cat_onehot__primary_purpose_"
-            ],
-            "feature_labels": [
-                "Arm Count",
-                "Primary Purpose"
-            ],
-            "logic": "Structural design of the study arms.",
-            "pos_impact": "The structural design (number of arms and primary purpose) suggests a comprehensive comparative strategy.",
-            "neg_impact": "The structural design (number of arms and primary purpose) suggests either a simplified exploratory focus or a level of complexity that may increase operational burden,"
-        }
-    },
-    "3. Execution Framework": {
-        "Quality & Bias Control": {
-            "features": [
-                "bin_flags__has_dmc",
-                "num_std__design_rigor_score",
-                "cat_onehot__masking_"
-            ],
-            "feature_labels": [
-                "Data Monitoring Comm.",
-                "Rigor Score",
-                "Blinding"
-            ],
-            "logic": "Operational mechanisms implemented to minimize bias and ensure safety oversight.",
-            "pos_impact": "Operational controls (e.g., DMC, masking) are in place to safeguard data integrity and reduce bias.",
-            "neg_impact": "The protocol suggests limited bias mitigation or oversight mechanisms, increasing operational vulnerability."
+        "is_rare_disease_ml": {
+            "label": "Rare Condition",
+            "pillar": "Therapeutic Context",
+            "subgroup": "Therapeutic Area Profile",
+            "priority": 2,
+            "options": [
+                [
+                    "1",
+                    "Yes"
+                ],
+                [
+                    "0",
+                    "Unlikely"
+                ]
+            ]
         },
-        "Time Horizon": {
-            "features": [
-                "num_log__duration_months"
-            ],
-            "feature_labels": [
-                "Estimated Duration"
-            ],
-            "logic": "The operational exposure time of the study.",
-            "pos_impact": "Shorter duration tends to minimize exposure to long-term operational risks.",
-            "neg_impact": "Extended timeline tends to increase the risk of participant dropout and resource exhaustion."
+        "phase_ml": {
+            "label": "Clinical Phase",
+            "pillar": "Therapeutic Context",
+            "subgroup": "Development Phase and Goal",
+            "priority": 3,
+            "options": [
+                [
+                    "PHASE1/PHASE2",
+                    "Phase 1/2"
+                ],
+                [
+                    "PHASE2",
+                    "Phase 2"
+                ],
+                [
+                    "PHASE2/PHASE3",
+                    "Phase 2/3"
+                ],
+                [
+                    "PHASE3",
+                    "Phase 3"
+                ]
+            ]
         },
-        "Sponsor Profile": {
-            "features": [
-                "cat_onehot__sponsor_tier_"
-            ],
-            "feature_labels": [
-                "Sponsor Tier"
-            ],
-            "logic": "The track record and financial depth of the sponsor.",
-            "pos_impact": "Sponsor profile suggests established resources, experience or operational resilience.",
-            "neg_impact": "Sponsor profile may be sensitive to funding constraints or prone to frequent strategic portfolio shifts."
-        }
-    },
-    "4. Patient Profile": {
-        "Inclusion Criteria": {
-            "features": [
-                "pca_crit",
-                "num_std__criteria_len_log",
-                "num_std__eligibility_strictness_score"
-            ],
-            "feature_labels": [
-                "Criteria Text Analysis",
-                "Criteria Length",
-                "Strictness Score"
-            ],
-            "logic": "Text analysis of the eligibility rules.",
-            "pos_impact": "Eligibility criteria appear concise and balanced, facilitating smoother enrollment.",
-            "neg_impact": "Lengthy or highly restrictive criteria tend to create enrollment bottlenecks."
+        "strategic_ambition_ml": {
+            "label": "Regulatory Intent",
+            "pillar": "Therapeutic Context",
+            "subgroup": "Development Phase and Goal",
+            "priority": 4,
+            "options": [
+                [
+                    "SAFETY_DOSING",
+                    "Early Phase / Dose Finding"
+                ],
+                [
+                    "SIGNAL_SEARCH",
+                    "Efficacy / Signal Detection"
+                ],
+                [
+                    "PIVOTAL_INTENT",
+                    "Confirmatory / Registration"
+                ],
+                [
+                    "UNKNOWN",
+                    "Unknown Intent"
+                ]
+            ]
         },
-        "Patient Acuity": {
-            "features": [
-                "bin_flags__is_sick_only",
-                "bin_flags__is_severe",
-                "bin_flags__is_acute",
-                "bin_flags__is_refractory",
-                "bin_flags__is_critical_setting"
-            ],
-            "feature_labels": [
-                "Healthy vs Patient",
-                "Severe Disease",
-                "Acute Setting",
-                "Refractory Status",
-                "Critical Setting Flag"
-            ],
-            "logic": "The health status of the target population.",
-            "pos_impact": "Target population appears stable, potentially reducing unexpected medical complications.",
-            "neg_impact": "Populations with high disease severity, acuity, or refractory status tend to be associated with elevated operational risks."
+        "target_precedent_ml": {
+            "label": "Target Precedent",
+            "pillar": "Scientific Attempt",
+            "subgroup": "Biological Profile",
+            "priority": 5,
+            "options": [
+                [
+                    "UNKNOWN",
+                    "Not Specified"
+                ],
+                [
+                    "NO_PRECEDENT",
+                    "Novel Target (No Prior Approvals)"
+                ],
+                [
+                    "PRECEDENT_IN_OTHER",
+                    "Established in Other"
+                ],
+                [
+                    "PRECEDENT_IN_INDICATION",
+                    "Established in Indication"
+                ]
+            ]
+        },
+        "target_pathway_class_ml": {
+            "label": "Pathway Profile",
+            "pillar": "Scientific Attempt",
+            "subgroup": "Biological Profile",
+            "priority": 6,
+            "options": [
+                [
+                    "METABOLIC_REPROGRAMMING",
+                    "Metabolic Reprogramming"
+                ],
+                [
+                    "ION_CHANNEL",
+                    "Ion Channel"
+                ],
+                [
+                    "GPCR_TARGET",
+                    "GPCR Target"
+                ],
+                [
+                    "ENZYME_MODULATOR",
+                    "Enzyme Modulator"
+                ],
+                [
+                    "NUCLEAR_RECEPTOR",
+                    "Nuclear Receptor"
+                ],
+                [
+                    "INTERLEUKIN_CYTOKINE",
+                    "Interleukin Cytokine"
+                ],
+                [
+                    "KINASE_INHIBITOR",
+                    "Kinase Inhibitor"
+                ],
+                [
+                    "DNA_REPAIR",
+                    "DNA Repair"
+                ],
+                [
+                    "IMMUNO_ONCOLOGY",
+                    "Immuno Oncology"
+                ],
+                [
+                    "PROTEIN_DEGRADER",
+                    "Protein Degrader"
+                ],
+                [
+                    "EPIGENETIC_REGULATOR",
+                    "Epigenetic Regulator"
+                ],
+                [
+                    "OTHER_PATHWAY",
+                    "Other Pathway / Unknown"
+                ]
+            ]
+        },
+        "therapeutic_modality_ml": {
+            "label": "Therapeutic Modality",
+            "pillar": "Scientific Attempt",
+            "subgroup": "Biological Profile",
+            "priority": 7,
+            "options": [
+                [
+                    "SMALL_MOLECULE",
+                    "Small Molecule"
+                ],
+                [
+                    "BIOLOGIC_MAB",
+                    "Biologic Mab"
+                ],
+                [
+                    "BIOLOGIC_ADC",
+                    "Biologic Adc"
+                ],
+                [
+                    "BIOLOGIC_OTHER",
+                    "Biologic Other"
+                ],
+                [
+                    "CELL_GENE_THERAPY",
+                    "Cell Gene Therapy"
+                ],
+                [
+                    "RNA_THERAPY",
+                    "Rna Therapy"
+                ],
+                [
+                    "VACCINE",
+                    "Vaccine"
+                ],
+                [
+                    "RADIOPHARMACEUTICAL",
+                    "Radiopharmaceutical"
+                ],
+                [
+                    "PEPTIDE_HORMONES",
+                    "Peptide Hormones"
+                ],
+                [
+                    "OTHER_MODALITY",
+                    "Other Modality"
+                ]
+            ]
+        },
+        "innovation_tier_ml": {
+            "label": "Innovation Rank",
+            "pillar": "Scientific Attempt",
+            "subgroup": "Biological Profile",
+            "priority": 8,
+            "options": [
+                [
+                    "ESTABLISHED_COPY",
+                    "Established / Copy"
+                ],
+                [
+                    "NEXT_GEN_OPTIMIZED",
+                    "Next-Gen / Optimized"
+                ],
+                [
+                    "FIRST_IN_CLASS",
+                    "First-in-Class (Novel)"
+                ],
+                [
+                    "UNKNOWN",
+                    "Not Specified"
+                ]
+            ]
+        },
+        "intervention_model_ml": {
+            "label": "Intervention Model",
+            "pillar": "Scientific Attempt",
+            "subgroup": "Protocol Architecture",
+            "priority": 9,
+            "options": [
+                [
+                    "SINGLE_GROUP",
+                    "Single Group"
+                ],
+                [
+                    "SEQUENTIAL",
+                    "Sequential"
+                ],
+                [
+                    "CROSSOVER",
+                    "Crossover"
+                ],
+                [
+                    "FACTORIAL",
+                    "Factorial"
+                ],
+                [
+                    "PARALLEL",
+                    "Parallel"
+                ],
+                [
+                    "UNKNOWN",
+                    "Not Specified"
+                ]
+            ]
+        },
+        "primary_purpose_ml": {
+            "label": "Primary Purpose",
+            "pillar": "Scientific Attempt",
+            "subgroup": "Protocol Architecture",
+            "priority": 10,
+            "options": [
+                [
+                    "PREVENTION",
+                    "Prevention"
+                ],
+                [
+                    "TREATMENT",
+                    "Treatment"
+                ],
+                [
+                    "SUPPORTIVE_CARE",
+                    "Supportive Care"
+                ],
+                [
+                    "UNKNOWN",
+                    "Other Purpose / Unknown"
+                ]
+            ]
+        },
+        "adaptive_design_ml": {
+            "label": "Design Flexibility",
+            "pillar": "Scientific Attempt",
+            "subgroup": "Protocol Architecture",
+            "priority": 11,
+            "options": [
+                [
+                    "STATIC",
+                    "Static Design"
+                ],
+                [
+                    "ADAPTIVE",
+                    "Adaptive Design"
+                ],
+                [
+                    "UNKNOWN",
+                    "Not Specified"
+                ]
+            ]
+        },
+        "endpoint_rigor_ml": {
+            "label": "Primary Endpoint Type",
+            "pillar": "Scientific Attempt",
+            "subgroup": "Protocol Architecture",
+            "priority": 12,
+            "options": [
+                [
+                    "HARD_CLINICAL",
+                    "Hard Clinical (Survival/Death)"
+                ],
+                [
+                    "SUBJECTIVE_PRO",
+                    "Subjective / Patient Reported"
+                ],
+                [
+                    "SURROGATE",
+                    "Surrogate / Biomarker"
+                ],
+                [
+                    "UNKNOWN",
+                    "Not Specified / Unknown"
+                ]
+            ]
+        },
+        "endpoint_structure_ml": {
+            "label": "Primary Endpoints",
+            "pillar": "Scientific Attempt",
+            "subgroup": "Protocol Architecture",
+            "priority": 13,
+            "options": [
+                [
+                    "MULTI_COMPOSITE",
+                    "Multi/Composite"
+                ],
+                [
+                    "SINGLE_GOAL",
+                    "Single Goal"
+                ],
+                [
+                    "UNKNOWN",
+                    "Not Specified"
+                ]
+            ]
+        },
+        "biomarker_stratification_ml": {
+            "label": "Biomarker Patient Selection",
+            "pillar": "Scientific Attempt",
+            "subgroup": "Protocol Architecture",
+            "priority": 14,
+            "options": [
+                [
+                    "0",
+                    "No"
+                ],
+                [
+                    "1",
+                    "Yes"
+                ]
+            ]
+        },
+        "sponsor_tier_ml": {
+            "label": "Sponsor Type",
+            "pillar": "Execution Framework",
+            "subgroup": "Sponsor Type",
+            "priority": 15,
+            "options": [
+                [
+                    "TIER 1",
+                    "Top-Tier Pharma"
+                ],
+                [
+                    "MID_CAP",
+                    "Mid-Cap Pharma"
+                ],
+                [
+                    "BIOTECH",
+                    "Biotech and Emerging Pharma"
+                ],
+                [
+                    "UNKNOWN",
+                    "Unknown Sponsor Tier"
+                ]
+            ]
+        },
+        "masking_ml": {
+            "label": "Bias Control",
+            "pillar": "Execution Framework",
+            "subgroup": "Methodological Setup",
+            "priority": 16,
+            "options": [
+                [
+                    "UNKNOWN",
+                    "Open Label or Not Specified"
+                ],
+                [
+                    "SINGLE",
+                    "Single Blind"
+                ],
+                [
+                    "DOUBLE",
+                    "Double Blind"
+                ],
+                [
+                    "TRIPLE",
+                    "Triple Blind"
+                ],
+                [
+                    "QUADRUPLE",
+                    "Quadruple Blind"
+                ]
+            ]
+        },
+        "allocation_ml": {
+            "label": "Allocation Method",
+            "pillar": "Execution Framework",
+            "subgroup": "Methodological Setup",
+            "priority": 17,
+            "options": [
+                [
+                    "RANDOMIZED",
+                    "Randomized"
+                ],
+                [
+                    "NON-RANDOMIZED",
+                    "Non-Randomized"
+                ],
+                [
+                    "UNKNOWN",
+                    "Not Specified / Not Applicable"
+                ]
+            ]
+        },
+        "has_dmc_ml": {
+            "label": "Data Monitoring Committee",
+            "pillar": "Execution Framework",
+            "subgroup": "Methodological Setup",
+            "priority": 18,
+            "options": [
+                [
+                    "0",
+                    "No"
+                ],
+                [
+                    "1",
+                    "Yes"
+                ]
+            ]
+        },
+        "has_placebo_ml": {
+            "label": "Includes Placebo Control",
+            "pillar": "Execution Framework",
+            "subgroup": "Methodological Setup",
+            "priority": 19,
+            "options": [
+                [
+                    "0",
+                    "No"
+                ],
+                [
+                    "1",
+                    "Yes"
+                ]
+            ]
+        },
+        "comparator_benchmark_ml": {
+            "label": "Benchmark Comparator",
+            "pillar": "Execution Framework",
+            "subgroup": "Methodological Setup",
+            "priority": 20,
+            "options": [
+                [
+                    "NO_CONTROL_GROUP",
+                    "No Control Group or Not Specified"
+                ],
+                [
+                    "PLACEBO",
+                    "Placebo Control"
+                ],
+                [
+                    "ACTIVE_LEGACY_STANDARD",
+                    "Active (Legacy Standard)"
+                ],
+                [
+                    "ACTIVE_MODERN_STANDARD",
+                    "Active (Modern Standard)"
+                ]
+            ]
+        },
+        "primary_duration_months_ml": {
+            "label": "Maximum Primary Endpoint Duration",
+            "pillar": "Execution Framework",
+            "subgroup": "Trial Complexity Footprint",
+            "priority": 21
+        },
+        "number_of_arms_ml": {
+            "label": "Number of Arms",
+            "pillar": "Execution Framework",
+            "subgroup": "Trial Complexity Footprint",
+            "priority": 22
+        },
+        "administration_complexity_ml": {
+            "label": "Delivery Profile",
+            "pillar": "Execution Framework",
+            "subgroup": "Trial Complexity Footprint",
+            "priority": 23,
+            "options": [
+                [
+                    "SIMPLE_ORAL",
+                    "Simple Oral (Pill/Tablet)"
+                ],
+                [
+                    "ROUTINE_INFUSION",
+                    "Routine (Injection/IV)"
+                ],
+                [
+                    "INTENSIVE_MANAGEMENT",
+                    "Intensive (Hospitalized)"
+                ],
+                [
+                    "UNKNOWN",
+                    "Not Specified"
+                ]
+            ]
+        },
+        "patient_severity_ml": {
+            "label": "Patient Severity",
+            "pillar": "Patient Profile",
+            "subgroup": "Clinical Severity",
+            "priority": 24,
+            "options": [
+                [
+                    "UNKNOWN",
+                    "Uncertain Severity"
+                ],
+                [
+                    "CHRONIC_STABLE",
+                    "Chronic Stable"
+                ],
+                [
+                    "CHRONIC_PROGRESSIVE",
+                    "Chronic Progressive"
+                ],
+                [
+                    "ACUTE_CRITICAL",
+                    "Acute / Critical"
+                ],
+                [
+                    "ADVANCED_METASTATIC",
+                    "Advanced / Metastatic"
+                ]
+            ]
+        },
+        "line_of_therapy_ml": {
+            "label": "Line of Therapy",
+            "pillar": "Patient Profile",
+            "subgroup": "Clinical Severity",
+            "priority": 25,
+            "options": [
+                [
+                    "PREVENTATIVE",
+                    "Preventative / Prophylaxis"
+                ],
+                [
+                    "FIRST_LINE",
+                    "First-Line"
+                ],
+                [
+                    "ADJUVANT_NEOADJUVANT",
+                    "Adjuvant / Neoadjuvant"
+                ],
+                [
+                    "LATER_LINE",
+                    "Later-Line (2nd+)"
+                ],
+                [
+                    "REFRACTORY_RELAPSED",
+                    "Refractory / Relapsed"
+                ],
+                [
+                    "UNKNOWN",
+                    "Not Applicable or Not Specified"
+                ]
+            ]
+        },
+        "gender_ml": {
+            "label": "Patient Gender",
+            "pillar": "Patient Profile",
+            "subgroup": "Population Scope",
+            "priority": 26,
+            "options": [
+                [
+                    "ALL",
+                    "All (Male & Female)"
+                ],
+                [
+                    "FEMALE",
+                    "Female Only"
+                ],
+                [
+                    "MALE",
+                    "Male Only"
+                ],
+                [
+                    "UNKNOWN",
+                    "Not Specified"
+                ]
+            ]
+        },
+        "healthy_volunteers_ml": {
+            "label": "Population Setting",
+            "pillar": "Patient Profile",
+            "subgroup": "Population Scope",
+            "priority": 27,
+            "options": [
+                [
+                    "0",
+                    "Patients Only"
+                ],
+                [
+                    "1",
+                    "Healthy Volunteers Accepted"
+                ]
+            ]
+        },
+        "adult_ml": {
+            "label": "Adult Profile",
+            "pillar": "Patient Profile",
+            "subgroup": "Population Scope",
+            "priority": 28,
+            "options": [
+                [
+                    "1",
+                    "Included"
+                ],
+                [
+                    "0",
+                    "Excluded"
+                ],
+                [
+                    "UNKNOWN",
+                    "Not Specified"
+                ]
+            ]
+        },
+        "child_ml": {
+            "label": "Pediatric Profile",
+            "pillar": "Patient Profile",
+            "subgroup": "Population Scope",
+            "priority": 29,
+            "options": [
+                [
+                    "1",
+                    "Included"
+                ],
+                [
+                    "0",
+                    "Excluded"
+                ],
+                [
+                    "UNKNOWN",
+                    "Not Specified"
+                ]
+            ]
+        },
+        "older_adult_ml": {
+            "label": "Geriatric Profile",
+            "pillar": "Patient Profile",
+            "subgroup": "Population Scope",
+            "priority": 30,
+            "options": [
+                [
+                    "1",
+                    "Included"
+                ],
+                [
+                    "0",
+                    "Excluded"
+                ],
+                [
+                    "UNKNOWN",
+                    "Not Specified"
+                ]
+            ]
+        },
+        "gbd_hierarchy_level_ml": {
+            "label": "Mapping Depth",
+            "pillar": "Metadata",
+            "subgroup": "System",
+            "priority": 31,
+            "options": [
+                [
+                    "1",
+                    "Level 1 (Unclassified Condition)"
+                ],
+                [
+                    "2",
+                    "Level 2 (Condition High-Level Category)"
+                ],
+                [
+                    "3",
+                    "Level 3 (Condition Group)"
+                ],
+                [
+                    "4",
+                    "Level 4 (Specific Condition)"
+                ],
+                [
+                    "0",
+                    "Unknown Depth"
+                ]
+            ]
+        },
+        "is_duration_unknown_ml": {
+            "label": "Duration Known",
+            "pillar": "Metadata",
+            "subgroup": "System",
+            "priority": 32,
+            "options": [
+                [
+                    "1",
+                    "Duration Missing"
+                ],
+                [
+                    "0",
+                    "Known"
+                ]
+            ]
+        },
+        "target": {
+            "label": "Outcome",
+            "pillar": "Metadata",
+            "subgroup": "System",
+            "priority": 33,
+            "options": [
+                [
+                    "1.0",
+                    "Failure"
+                ],
+                [
+                    "0.0",
+                    "Success"
+                ]
+            ]
+        },
+        "ui_acronym": {
+            "label": "Study Acronym",
+            "pillar": "Metadata",
+            "subgroup": "Identity",
+            "priority": 34
         }
     }
 }

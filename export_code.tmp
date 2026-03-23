@@ -1,0 +1,59 @@
+import pandas as pd
+import json
+
+# <REF:PROD_EXPORT_CODE_V3>
+# 1. Prepare Taxonomy Snapshot for API (Single Source of Truth for Feature Mapping)
+taxonomy_payload = {
+    "FEATURE_REGISTRY": {k: v for k, v in FEATURE_REGISTRY.items()},
+    "UI_SCHEMA": UI_SCHEMA
+}
+with open(MODELS_PATH / "taxonomy_01.json", "w") as f:
+    json.dump(taxonomy_payload, f, indent=4)
+
+# 2. ENHANCED SEARCH IDENTITY (Synthesis of Key Discovery Fields)
+def create_search_label(row):
+    acro = str(row['acronym']).strip() if pd.notna(row['acronym']) else ""
+    drug = str(row['alpha_drug_name']).strip() if pd.notna(row['alpha_drug_name']) else "Unknown Drug"
+    sponsor = str(row['lead_sponsor_canonical']).strip() if pd.notna(row['lead_sponsor_canonical']) else "Unknown Sponsor"
+    ta = str(row['therapeutic_area']).strip() if pd.notna(row['therapeutic_area']) else "Unclassified"
+    year = str(int(row['start_year'])) if pd.notna(row['start_year']) else "YYYY"
+    
+    prefix = f"[{acro}] " if acro and acro.lower() != 'nan' else ""
+    return f"{prefix}{drug} ({sponsor}) | {ta} ({year})"
+
+df_full['ui_search_label'] = df_full.apply(create_search_label, axis=1)
+
+# 3. DEMO ACCURACY LOGIC (Backtesting Verification)
+def check_accuracy(row):
+    if pd.isna(row.get('target')): return None
+    target = row['target']
+    score = row.get('Clinical_Score', 0)
+    # Predicted Success (>=50) matches Actual Success (0.0) or vice versa for failure
+    if (score >= 50.0 and target == 0.0) or (score < 50.0 and target == 1.0):
+        return True
+    return False
+
+df_full['is_correct'] = df_full.apply(check_accuracy, axis=1)
+
+# 4. SURGICAL LEAN PRUNING (Removing Embedding Bloat & Redundant Prose)
+# This reduces registry size from ~170MB to ~55MB (below GitHub's 100MB limit)
+cols_to_keep = [
+    "nct_id", "ui_search_label", "alpha_drug_name", "lead_sponsor_canonical", 
+    "therapeutic_area", "gbd_indication_name", "start_year", "phase", 
+    "Clinical_Score", "overall_status", "trial_segment", "target", "is_correct",
+    "enrollment", "number_of_arms", "primary_purpose", "lead_sponsor", 
+    "sponsor_tier", "has_dmc", "number_of_facilities",
+    "ui_brief_title", "ui_summary", "ui_criteria"
+]
+existing_cols = [c for c in cols_to_keep if c in df_full.columns]
+df_lean = df_full[existing_cols].copy()
+
+# 5. Save Final Search Registry for Frontend
+REGISTRY_PATH = FRONTEND_DATA_PATH / "search_registry.csv"
+df_lean.to_csv(REGISTRY_PATH, index=True)
+
+print("✅ All artifacts persisted. Production Engine Ready.")
+print(f"   - Model:      {MODELS_PATH / 'model_prod_01.joblib'}")
+print(f"   - Taxonomy:   {MODELS_PATH / 'taxonomy_01.json'}")
+print(f"   - Registry:   {REGISTRY_PATH} ({REGISTRY_PATH.stat().st_size / (1024*1024):.2f} MB)")
+# </REF:/PROD_EXPORT_CODE_V3>

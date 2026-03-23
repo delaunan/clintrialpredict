@@ -1,0 +1,370 @@
+{
+    "metadata": {
+        "total_trials": 46238,
+        "drug_like_trials": 37368,
+        "unresolved_drug_targets_count": 851,
+        "unresolved_drug_targets_pct": 2.277349603939199
+    },
+    "statistical_distribution": {
+        "therapeutic_modality": {
+            "SMALL_MOLECULE": 22718,
+            "BIOLOGIC_MAB": 5858,
+            "OTHER_MODALITY": 5739,
+            "BIOLOGIC_OTHER": 4157,
+            "VACCINE": 2788,
+            "PEPTIDE_HORMONES": 1742,
+            "CELL_GENE_THERAPY": 1724,
+            "BIOLOGIC_ADC": 651,
+            "RNA_THERAPY": 518,
+            "RADIOPHARMACEUTICAL": 343
+        },
+        "target_pathway_class": {
+            "OTHER_PATHWAY": 11727,
+            "ENZYME_MODULATOR": 7272,
+            "GPCR_TARGET": 6147,
+            "INTERLEUKIN_CYTOKINE": 4429,
+            "IMMUNO_ONCOLOGY": 4035,
+            "KINASE_INHIBITOR": 3624,
+            "METABOLIC_REPROGRAMMING": 2696,
+            "ION_CHANNEL": 2358,
+            "NUCLEAR_RECEPTOR": 1797,
+            "DNA_REPAIR": 1372,
+            "EPIGENETIC_REGULATOR": 589,
+            "PROTEIN_DEGRADER": 192
+        },
+        "target_precedent": {
+            "PRECEDENT_IN_INDICATION": 21440,
+            "NO_PRECEDENT": 17596,
+            "PRECEDENT_IN_OTHER": 7202
+        }
+    },
+    "top_20_targets": [
+        [
+            "Unknown",
+            4637
+        ],
+        [
+            "PD-1",
+            1616
+        ],
+        [
+            "VEGF",
+            875
+        ],
+        [
+            "EGFR",
+            821
+        ],
+        [
+            "Tubulin",
+            778
+        ],
+        [
+            "PD-L1",
+            674
+        ],
+        [
+            "GLP-1R",
+            606
+        ],
+        [
+            "HER2",
+            590
+        ],
+        [
+            "VEGFR",
+            569
+        ],
+        [
+            "CD20",
+            513
+        ],
+        [
+            "D2",
+            477
+        ],
+        [
+            "Influenza Virus Antigens",
+            461
+        ],
+        [
+            "DNA",
+            459
+        ],
+        [
+            "5-HT2A",
+            441
+        ],
+        [
+            "ADRB2",
+            438
+        ],
+        [
+            "NR3C1",
+            406
+        ],
+        [
+            "TNF",
+            391
+        ],
+        [
+            "COX-2",
+            369
+        ],
+        [
+            "JAK1",
+            345
+        ],
+        [
+            "CTLA-4",
+            334
+        ]
+    ],
+    "critical_defects": {
+        "enum_violations": {},
+        "logical_violations_count": 1,
+        "logical_violations_breakdown": {
+            "BIOMARKER_FILTER_VIOLATION": 1
+        },
+        "logical_violations_examples": [
+            {
+                "nct_id": "NCT03334617",
+                "molecular_targets": "STAT3 | ATR | Mtor | PARP | CD73 | HER2 | VEGFR",
+                "logic_errors": [
+                    "BIOMARKER_FILTER_VIOLATION: Stratification true but description missing/Unknown"
+                ]
+            }
+        ],
+        "leaky_symbols_count": 82,
+        "leaky_symbols_examples": [
+            {
+                "nct_id": "NCT02979639",
+                "molecular_targets": "Varicella Zoster Virus Glycoprotein E"
+            },
+            {
+                "nct_id": "NCT00125346",
+                "molecular_targets": "Bacterial Protein Synthesis"
+            },
+            {
+                "nct_id": "NCT00758225",
+                "molecular_targets": "Coenzyme Q10"
+            },
+            {
+                "nct_id": "NCT04176939",
+                "molecular_targets": "Glycoprotein E"
+            },
+            {
+                "nct_id": "NCT00129168",
+                "molecular_targets": "P-Glycoprotein | Topoisomerase Ii"
+            },
+            {
+                "nct_id": "NCT00560703",
+                "molecular_targets": "Bacterial Protein Synthesis"
+            },
+            {
+                "nct_id": "NCT01227863",
+                "molecular_targets": "Glucocorticoid Receptor | Bacterial Protein Synthesis | Bacterial Cell Membrane"
+            },
+            {
+                "nct_id": "NCT06432166",
+                "molecular_targets": "Dicarbonyl Protein Adducts"
+            },
+            {
+                "nct_id": "NCT02095626",
+                "molecular_targets": "Protein C"
+            },
+            {
+                "nct_id": "NCT02927067",
+                "molecular_targets": "Cmv Ul97 Protein Kinase"
+            }
+        ],
+        "pipe_violations_count": 0
+    },
+    "logic_warnings": {
+        "alignment_warnings_count": 548,
+        "alignment_warnings_examples": [
+            {
+                "nct_id": "NCT04521621",
+                "alignment_warnings": [
+                    "ALIGNMENT_MISMATCH: Logic implies MAB, Enum is BIOLOGIC_OTHER"
+                ]
+            },
+            {
+                "nct_id": "NCT06437509",
+                "alignment_warnings": [
+                    "ALIGNMENT_MISMATCH: Logic implies MAB, Enum is BIOLOGIC_ADC"
+                ]
+            },
+            {
+                "nct_id": "NCT05106335",
+                "alignment_warnings": [
+                    "ALIGNMENT_MISMATCH: Logic implies Small Molecule, Enum is BIOLOGIC_MAB"
+                ]
+            },
+            {
+                "nct_id": "NCT03737643",
+                "alignment_warnings": [
+                    "ALIGNMENT_MISMATCH: Logic implies Small Molecule, Enum is BIOLOGIC_MAB"
+                ]
+            },
+            {
+                "nct_id": "NCT00947882",
+                "alignment_warnings": [
+                    "ALIGNMENT_MISMATCH: Logic implies Small Molecule, Enum is PEPTIDE_HORMONES"
+                ]
+            },
+            {
+                "nct_id": "NCT04479241",
+                "alignment_warnings": [
+                    "ALIGNMENT_MISMATCH: Logic implies MAB, Enum is BIOLOGIC_OTHER"
+                ]
+            },
+            {
+                "nct_id": "NCT02907307",
+                "alignment_warnings": [
+                    "ALIGNMENT_MISMATCH: Logic implies Small Molecule, Enum is OTHER_MODALITY"
+                ]
+            },
+            {
+                "nct_id": "NCT04052204",
+                "alignment_warnings": [
+                    "ALIGNMENT_MISMATCH: Logic implies Small Molecule, Enum is BIOLOGIC_MAB"
+                ]
+            },
+            {
+                "nct_id": "NCT01146535",
+                "alignment_warnings": [
+                    "ALIGNMENT_MISMATCH: Logic implies Small Molecule, Enum is BIOLOGIC_OTHER"
+                ]
+            },
+            {
+                "nct_id": "NCT01922102",
+                "alignment_warnings": [
+                    "ALIGNMENT_MISMATCH: Logic implies MAB, Enum is BIOLOGIC_OTHER"
+                ]
+            }
+        ]
+    },
+    "high_entropy_spot_check": [
+        {
+            "nct_id": "NCT00460512",
+            "alpha_drug_name": "Paliperidone ER",
+            "molecular_targets": "D2 | 5-HT2A",
+            "pharmacology_logic": "(0) ALPHA_DRUG: Paliperidone ER. (1) IDENTITY: Paliperidone ER is the alpha investigational agent. (2) MOA (PROTEIN REFERENCE): Paliperidone is a dopamine D2 and serotonin 5-HT2A receptor antagonist. (3) HISTORIAN CHECK: By 2007; multiple antipsychotics targeting D2 and 5-HT2A receptors were approved for schizophrenia. Target has PRECEDENT_IN_INDICATION. (4) PRECISION: No molecular biomarker stratification. (5) JUSTIFICATION: It is a small molecule (SMALL_MOLECULE) targeting the GPCR_TARGET pathway."
+        },
+        {
+            "nct_id": "NCT01940887",
+            "alpha_drug_name": "Fovista",
+            "molecular_targets": "PDGF-B | VEGF",
+            "pharmacology_logic": "(1) ALPHA_DRUG: Fovista. (2) IDENTITY: Fovista is the alpha investigational agent; bevacizumab and aflibercept are background therapy. (3) MOA (PROTEIN REFERENCE): Fovista is a pegylated aptamer that binds to Platelet-Derived Growth Factor-B (PDGF-B). Bevacizumab and aflibercept target Vascular Endothelial Growth Factor A (VEGF-A). (4) HISTORIAN CHECK: By 2014; bevacizumab and aflibercept (VEGF inhibitors) were approved for age-related macular degeneration. Target has PRECEDENT_IN_INDICATION. (5) PRECISION: No molecular biomarker stratification. (6) JUSTIFICATION: Fovista is a BIOLOGIC_OTHER targeting the OTHER_PATHWAY."
+        },
+        {
+            "nct_id": "NCT00944970",
+            "alpha_drug_name": "Binodenoson",
+            "molecular_targets": "A2A Adenosine Receptor",
+            "pharmacology_logic": "(1) ALPHA_DRUG: Binodenoson. (2) IDENTITY: Binodenoson is the alpha investigational agent; adenosine is the comparator. (3) MOA (PROTEIN REFERENCE): Binodenoson is an A2A adenosine receptor agonist. (4) HISTORIAN CHECK: Adenosine was approved before 2005. Target has PRECEDENT_IN_INDICATION. (5) JUSTIFICATION: It is a small molecule (SMALL_MOLECULE) targeting the GPCR_TARGET pathway."
+        },
+        {
+            "nct_id": "NCT01883505",
+            "alpha_drug_name": "Levodopa and carbidopa",
+            "molecular_targets": "Dopamine Receptor",
+            "pharmacology_logic": "(1) IDENTITY: Levodopa and carbidopa is the alpha agent. (2) MOA (PROTEIN REFERENCE): Levodopa is a precursor to dopamine; and carbidopa inhibits DOPA decarboxylase. (3) HISTORIAN CHECK: By 2014; Levodopa and carbidopa were already approved for Parkinson's Disease. Target has PRECEDENT_IN_INDICATION. (4) PRECISION: No molecular biomarker stratification. (5) JUSTIFICATION: Levodopa and carbidopa are small molecules (SMALL_MOLECULE) in the GPCR_TARGET pathway (dopamine receptor activation). (6) FINAL VERIFICATION: I found an approval in Parkinson's; so I am selecting PRECEDENT_IN_INDICATION."
+        },
+        {
+            "nct_id": "NCT01527916",
+            "alpha_drug_name": "ABT-126",
+            "molecular_targets": "TNF | IL-17A",
+            "pharmacology_logic": "(0) ALPHA_DRUG: ABT-126. (1) IDENTITY: ABT-126 is the alpha investigational agent; donepezil is an active comparator. (2) MOA (PROTEIN REFERENCE): The mechanism of action of ABT-126 is not explicitly stated in the provided text. Based on my internal knowledge; ABT-126 is a TNF-alpha and IL-17A dual variable domain immunoglobulin (DVD-Ig). TNF-alpha is Tumor Necrosis Factor alpha. IL-17A is Interleukin 17A. (3) HISTORIAN CHECK: As of 2012; TNF-alpha inhibitors were approved for rheumatoid arthritis and other autoimmune conditions; but not for Alzheimer's disease. IL-17 inhibitors were not yet approved in 2012. Target has PRECEDENT_IN_OTHER. (4) PRECISION: No molecular biomarker stratification. (5) JUSTIFICATION: It is a biologic (BIOLOGIC_OTHER) targeting the INTERLEUKIN_CYTOKINE pathway."
+        },
+        {
+            "nct_id": "NCT01116206",
+            "alpha_drug_name": "Prucalopride",
+            "molecular_targets": "5-HT4",
+            "pharmacology_logic": "(1) IDENTITY: Prucalopride is the alpha agent. (2) MOA (PROTEIN REFERENCE): Prucalopride is a selective 5-HT4 receptor agonist. (3) HISTORIAN CHECK: As of 2010; no 5-HT4 receptor agonists were approved for digestive diseases. Target has NO_PRECEDENT. (4) PRECISION: No molecular biomarker stratification. (5) JUSTIFICATION: It is a small molecule (SMALL_MOLECULE) targeting the GPCR_TARGET pathway."
+        },
+        {
+            "nct_id": "NCT04073680",
+            "alpha_drug_name": "Serabelisib",
+            "molecular_targets": "Pi3K Alpha | SGLT2",
+            "pharmacology_logic": "(0) ALPHA_DRUG: Serabelisib. (1) IDENTITY: Serabelisib is the alpha investigational agent; Canagliflozin is background therapy. (2) MOA (PROTEIN REFERENCE): Serabelisib inhibits PI3K alpha isoform. Canagliflozin inhibits SGLT2. (3) HISTORIAN CHECK: As of 2020; no PI3K alpha isoform inhibitors were approved. Target has NO_PRECEDENT. (4) PRECISION: Biomarker stratification is true; patients must have PIK3CA or KRAS mutations. (5) JUSTIFICATION: Serabelisib is a small molecule (SMALL_MOLECULE) targeting the KINASE_INHIBITOR pathway."
+        },
+        {
+            "nct_id": "NCT00626639",
+            "alpha_drug_name": "Palifermin",
+            "molecular_targets": "Keratinocyte Growth Factor",
+            "pharmacology_logic": "(1) ALPHA_DRUG: Palifermin. (2) MOA (PROTEIN REFERENCE): Palifermin is a recombinant human keratinocyte growth factor (rHuKGF). (3) HISTORIAN CHECK: As of 2005; no keratinocyte growth factor was approved for mucositis. Target has NO_PRECEDENT. (4) PRECISION: No molecular biomarker stratification. (5) JUSTIFICATION: It is a recombinant protein (BIOLOGIC_OTHER) targeting the INTERLEUKIN_CYTOKINE pathway."
+        },
+        {
+            "nct_id": "NCT00125918",
+            "alpha_drug_name": "tadalafil",
+            "molecular_targets": "PDE5",
+            "pharmacology_logic": "(1) IDENTITY: Tadalafil is the alpha investigational agent; placebo is the comparator. (2) MOA (PROTEIN REFERENCE): Tadalafil is a phosphodiesterase type 5 (PDE5) inhibitor. (3) HISTORIAN CHECK: By 2005; Sildenafil (another PDE5 inhibitor) was approved for erectile dysfunction; but not yet for pulmonary arterial hypertension. Target has PRECEDENT_IN_OTHER. (4) PRECISION: No molecular biomarker stratification. (5) JUSTIFICATION: Tadalafil is a small molecule (SMALL_MOLECULE) targeting the ENZYME_MODULATOR pathway."
+        },
+        {
+            "nct_id": "NCT02912845",
+            "alpha_drug_name": "KamRAB - HRIG",
+            "molecular_targets": "Rabies Virus",
+            "pharmacology_logic": "(1) IDENTITY: KamRAB is the alpha investigational agent. (2) MOA (PROTEIN REFERENCE): KamRAB is a human rabies immunoglobulin (HRIG) that provides passive immunity by neutralizing the rabies virus. (3) HISTORIAN CHECK: As of 2016; rabies immunoglobulin products were already approved. Target has PRECEDENT_IN_INDICATION. (4) PRECISION: No molecular biomarker stratification. (5) JUSTIFICATION: It is a biologic (BIOLOGIC_OTHER) that provides passive immunity; categorized as OTHER_PATHWAY."
+        },
+        {
+            "nct_id": "NCT05068388",
+            "alpha_drug_name": "Z-Endoxifen",
+            "molecular_targets": "Estrogen Receptor",
+            "pharmacology_logic": "(1) ALPHA_DRUG: Z-Endoxifen. (2) IDENTITY: Z-Endoxifen is the alpha agent; placebo is the comparator. (3) MOA (PROTEIN REFERENCE): Z-Endoxifen is an active metabolite of tamoxifen and acts as a selective estrogen receptor (ER) modulator (SERM). (4) HISTORIAN CHECK: As of 2021; Tamoxifen was approved for breast cancer and other estrogen-related conditions. Target has PRECEDENT_IN_OTHER. (5) PRECISION: No molecular biomarker stratification. (6) FINAL VERIFICATION: I found an approval in breast cancer; so I am selecting PRECEDENT_IN_OTHER."
+        },
+        {
+            "nct_id": "NCT05667142",
+            "alpha_drug_name": "XEN1101",
+            "molecular_targets": "KV7",
+            "pharmacology_logic": "(1) IDENTITY: XEN1101 (Azetukalner) is the alpha investigational agent. (2) MOA (PROTEIN REFERENCE): The mechanism of action of XEN1101 is as a Kv7 potassium channel opener. (3) HISTORIAN CHECK: As of 2023; ezogabine (a Kv7 channel opener) was approved for epilepsy. Target has PRECEDENT_IN_INDICATION. (4) PRECISION: No molecular biomarker stratification. (5) JUSTIFICATION: It is a small molecule (SMALL_MOLECULE) targeting the ION_CHANNEL pathway. (6) FINAL VERIFICATION: I found an approval in epilepsy; so I am selecting PRECEDENT_IN_INDICATION."
+        },
+        {
+            "nct_id": "NCT04309734",
+            "alpha_drug_name": "AT-777",
+            "molecular_targets": "NS5A | NS5B",
+            "pharmacology_logic": "(1) IDENTITY: AT-777 is the alpha agent; being tested in combination with AT-527. (2) MOA (PROTEIN REFERENCE): AT-777 inhibits HCV nonstructural protein 5A (NS5A); and AT-527 inhibits HCV nonstructural protein 5B (NS5B) polymerase. (3) HISTORIAN CHECK: As of 2021; multiple drugs targeting HCV NS5A and NS5B were approved for chronic hepatitis C. Target has PRECEDENT_IN_INDICATION. (4) PRECISION: No molecular biomarker stratification. (5) JUSTIFICATION: It is a small molecule (SMALL_MOLECULE) targeting the ENZYME_MODULATOR pathway."
+        },
+        {
+            "nct_id": "NCT01040286",
+            "alpha_drug_name": "Flurbiprofen",
+            "molecular_targets": "COX1 | COX2",
+            "pharmacology_logic": "(1) IDENTITY: Flurbiprofen is the alpha agent. (2) MOA (PROTEIN REFERENCE): Flurbiprofen is a non-selective COX (Cyclooxygenase) inhibitor. (3) HISTORIAN CHECK: By 2009; multiple COX inhibitors were approved for pain and inflammation. Target has PRECEDENT_IN_OTHER. (4) PRECISION: No molecular biomarker stratification. (5) JUSTIFICATION: It is a small molecule (SMALL_MOLECULE) targeting the ENZYME_MODULATOR pathway."
+        },
+        {
+            "nct_id": "NCT04480424",
+            "alpha_drug_name": "GAMUNEX-C",
+            "molecular_targets": "Various Antigens",
+            "pharmacology_logic": "(0) ALPHA_DRUG: GAMUNEX-C. (1) IDENTITY: GAMUNEX-C (IVIG) is the alpha investigational agent; Standard Medical Treatment is background therapy. (2) MOA (PROTEIN REFERENCE): GAMUNEX-C contains polyclonal IgG antibodies that target various antigens; modulating the immune response. (3) HISTORIAN CHECK: As of 2020; IVIG was approved for various immunological conditions; but not specifically for COVID-19. Target has PRECEDENT_IN_OTHER. (4) PRECISION: No molecular biomarker stratification. (5) JUSTIFICATION: It is a biologic (BIOLOGIC_OTHER) in the INTERLEUKIN_CYTOKINE pathway. (6) FINAL VERIFICATION: I found an approval in other indications; so I am selecting PRECEDENT_IN_OTHER."
+        },
+        {
+            "nct_id": "NCT01167244",
+            "alpha_drug_name": "BMS-690514",
+            "molecular_targets": "EGFR",
+            "pharmacology_logic": "(1) ALPHA_DRUG: BMS-690514. (2) MOA (PROTEIN REFERENCE): BMS-690514 is an EGFR inhibitor. (3) HISTORIAN CHECK: By 2010; EGFR inhibitors (gefitinib; erlotinib) were approved for NSCLC. Target has PRECEDENT_IN_INDICATION. (4) PRECISION: Biomarker stratification is true; patients must be EGFR mutation positive or have had a prior response to gefitinib or erlotinib. (5) JUSTIFICATION: It is a small molecule (SMALL_MOLECULE) targeting the KINASE_INHIBITOR pathway."
+        },
+        {
+            "nct_id": "NCT02179671",
+            "alpha_drug_name": "Gefitinib | AZD9291 | Selumetinib | Tremelimumab",
+            "molecular_targets": "EGFR | MEK | CTLA-4",
+            "pharmacology_logic": "(0) ALPHA_DRUG: Gefitinib; AZD9291; Selumetinib; and Tremelimumab. (1) IDENTITY: Gefitinib; AZD9291; Selumetinib; and Tremelimumab are the alpha investigational agents; MEDI4736 (Durvalumab) is a secondary agent. (2) MOA (PROTEIN REFERENCE): Gefitinib targets EGFR; AZD9291 (Osimertinib) targets EGFR; Selumetinib targets MEK; Tremelimumab targets CTLA-4; MEDI4736 (Durvalumab) targets PD-L1. (3) HISTORIAN CHECK: By 2014; Gefitinib was approved for NSCLC. (4) PRECISION: No specific biomarker stratification beyond NSCLC histology. (5) JUSTIFICATION: Gefitinib; AZD9291; and Selumetinib are small molecules (SMALL_MOLECULE) targeting the KINASE_INHIBITOR pathway. Tremelimumab is a monoclonal antibody (BIOLOGIC_MAB) targeting the IMMUNO_ONCOLOGY pathway."
+        },
+        {
+            "nct_id": "NCT01135069",
+            "alpha_drug_name": "Tretinoin microsphere 0.1%",
+            "molecular_targets": "RAR",
+            "pharmacology_logic": "(1) IDENTITY: Tretinoin microsphere 0.1% is the alpha agent. (2) MOA (PROTEIN REFERENCE): Tretinoin is a retinoid that binds to retinoic acid receptors (RARs). (3) HISTORIAN CHECK: By 2009; topical tretinoin was already approved for acne vulgaris. Target has PRECEDENT_IN_INDICATION. (4) PRECISION: No molecular biomarker stratification. (5) JUSTIFICATION: It is a small molecule (SMALL_MOLECULE) targeting the NUCLEAR_RECEPTOR pathway."
+        },
+        {
+            "nct_id": "NCT04691661",
+            "alpha_drug_name": "Radotinib",
+            "molecular_targets": "BCR-ABL",
+            "pharmacology_logic": "(0) ALPHA_DRUG: Radotinib. (1) IDENTITY: Radotinib is the alpha investigational agent; placebo is the comparator. (2) MOA (PROTEIN REFERENCE): Radotinib is a tyrosine kinase inhibitor; specifically targeting BCR-ABL. (3) HISTORIAN CHECK: By 2021; no drugs targeting BCR-ABL were approved for Parkinson's Disease. Target has NO_PRECEDENT. (4) PRECISION: No molecular biomarker stratification. (5) JUSTIFICATION: It is a small molecule (SMALL_MOLECULE) targeting the KINASE_INHIBITOR pathway."
+        },
+        {
+            "nct_id": "NCT04379050",
+            "alpha_drug_name": "ABBV-951",
+            "molecular_targets": "Dopamine Receptors",
+            "pharmacology_logic": "(0) ALPHA_DRUG: ABBV-951 (Foscarbidopa; Foslevodopa). (1) IDENTITY: ABBV-951 is the alpha investigational agent. (2) MOA (PROTEIN REFERENCE): ABBV-951 contains foslevodopa; a prodrug of levodopa; which is converted to dopamine in the brain; and foscarbidopa; a prodrug of carbidopa; which inhibits peripheral DOPA decarboxylase. (3) HISTORIAN CHECK: By 2020; levodopa/carbidopa combinations were already approved for Parkinson's disease. Target has PRECEDENT_IN_INDICATION. (4) PRECISION: No molecular biomarker stratification. (5) JUSTIFICATION: It is a small molecule (SMALL_MOLECULE) targeting the GPCR_TARGET pathway (dopamine receptors)."
+        }
+    ]
+}
