@@ -26,3 +26,6 @@ notebooks/julius/
 
 # Local test artifacts (not for production)
 models/shap_values_prod_test.joblib
+.env
+__pycache__/
+*.pyc
