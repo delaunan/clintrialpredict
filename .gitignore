@@ -1,7 +1,9 @@
 # virtual envs
 .venv/
+.env
 env/
 venv/
+
 # python version
 .python-version
 # OS
@@ -26,6 +28,6 @@ notebooks/julius/
 
 # Local test artifacts (not for production)
 models/shap_values_prod_test.joblib
-.env
+
 __pycache__/
 *.pyc
