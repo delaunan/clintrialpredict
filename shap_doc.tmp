@@ -1,6 +1,0 @@
-#### <REF:EXPLAIN_ENGINE>
-> #### **10. Global Explainability Engine: SHAP TreeExplainer**
-
-Decomposes model predictions into constituent feature contributions for all ~30,000 trials.
-*   **SHAP Store (`shap_values_01.joblib`)**: Pre-calculates the mathematical "Why" for every trial, enabling the Streamlit UI to show instant pillar impacts without waiting for real-time model inference.
-*   **Traceability**: Each SHAP vector maps trial-specific features to the four clinical pillars (Therapeutic Context, Scientific Design, Execution Framework, Patient Profile).

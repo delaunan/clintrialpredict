@@ -37,8 +37,17 @@ def load_artifacts():
         
     with open(TAXONOMY_PATH, 'r') as f:
         taxonomy_payload = json.load(f)
-        app.state.registry = taxonomy_payload.get("FEATURE_REGISTRY", {})
-        app.state.ui_schema = taxonomy_payload.get("UI_SCHEMA", {})
+        # Handle split (v1.0), integrated (v2.0), and named-integrated (v2.1) formats
+        if "FEATURE_REGISTRY" in taxonomy_payload:
+            app.state.registry = taxonomy_payload.get("FEATURE_REGISTRY", {})
+            app.state.ui_schema = taxonomy_payload.get("UI_SCHEMA", {})
+        elif "FIELDS" in taxonomy_payload:
+            app.state.registry = taxonomy_payload["FIELDS"]
+            app.state.ui_schema = taxonomy_payload["FIELDS"]
+        else:
+            # Fallback for flat format
+            app.state.registry = taxonomy_payload
+            app.state.ui_schema = taxonomy_payload
     
     # 1. Prepare Feature Metadata from Pipeline
     prep = app.state.model.named_steps['prep']
@@ -143,8 +152,14 @@ async def predict(request: Request):
         cp = app.state.calibration_target["pillar"]
         cs = app.state.calibration_target["subcategory"]
         
+        print(f"DEBUG: nct_id={nct_id}, ta={ta}")
+        print(f"DEBUG: calibration_offset_pts={calibration_offset_pts}")
+        print(f"DEBUG: target_pillar={cp}, target_subcategory={cs}")
+        
         pillar_impacts[cp] = pillar_impacts.get(cp, 0.0) + calibration_offset_pts
         sub_sums[(cp, cs)] = sub_sums.get((cp, cs), 0.0) + calibration_offset_pts
+        
+        print(f"DEBUG: pillar_impacts after offset={pillar_impacts}")
         
         # 6. Format Final Response
         subcat_impacts = []
@@ -167,8 +182,11 @@ async def predict(request: Request):
         return {
             "score": round(final_score, 1),
             "threshold": 50.0,
-            "pillar_impacts": [{"Pillar": p, "Impact": round(v, 2)} for p, v in pillar_impacts.items()],
-            "subcat_impacts": subcat_impacts,
+            "pillar_impacts": [
+                {"Pillar": p, "Impact": round(v, 2)} 
+                for p, v in pillar_impacts.items() if p != "Metadata"
+            ],
+            "subcat_impacts": [item for item in subcat_impacts if item['Pillar'] != "Metadata"],
             "mode": mode,
             "calibration_offset": round(calibration_offset_pts, 2)
         }

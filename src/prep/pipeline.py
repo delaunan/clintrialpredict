@@ -398,8 +398,8 @@ PIPELINE_REGISTRY = {
             "ui": {
                 "label": "Sponsor Type",
                 "pillar": "Execution Framework",
-                "subgroup": "Sponsor Type",
-                "priority": 15,
+                "subgroup": "Trial Complexity Footprint",
+                "priority": 20,
                 "options": [
                     ["TIER 1", "Top-Tier Pharma"],
                     ["MID_CAP", "Mid-Cap Pharma"],
@@ -799,7 +799,7 @@ PIPELINE_REGISTRY = {
                 "1.0": [1, "Failure"],
                 0.0: [0, "Success"],
                 1.0: [1, "Failure"],
-                "UNKNOWN": [np.nan, "Not Specified"]
+                "UNKNOWN": [None, "Not Specified"]
             }
         },
         "ui_acronym": {
@@ -832,6 +832,43 @@ def _build_feature_registry():
     return feature_registry, ui_schema
 
 FEATURE_REGISTRY, UI_SCHEMA = _build_feature_registry()
+
+def export_pipeline_taxonomy(file_path):
+    """
+    Exports an integrated Feature Registry & UI Schema to a JSON file.
+    This serves as the single source of truth for the API and UI.
+    The dictionary is wrapped in a top-level "FIELDS" key.
+    """
+    import json
+    import re
+    fields_payload = {}
+    all_features = set(FEATURE_REGISTRY.keys()) | set(UI_SCHEMA.keys())
+    for feat in all_features:
+        merged = {
+            **FEATURE_REGISTRY.get(feat, {}),
+            **UI_SCHEMA.get(feat, {})
+        }
+        # Avoid 'null' (None) as requested and skip empty mappings
+        fields_payload[feat] = {k: v for k, v in merged.items() if v is not None}
+        
+    # Sort for user-friendly reading (by priority then alphabetically)
+    fields_payload = dict(sorted(fields_payload.items(), key=lambda x: (x[1].get("priority", 99), x[0])))
+
+    # Wrap in "FIELDS" key
+    taxonomy_payload = {"FIELDS": fields_payload}
+
+    # Condense the JSON: Start with small indent
+    raw_json = json.dumps(taxonomy_payload, indent=2)
+    
+    # Regex Magic: Collapse arrays of primitives that were split across multiple lines
+    # This specifically targets [val1, val2] and [val] patterns
+    condensed = re.sub(r'\[\s+([^\[\]\{\}]*?)\s+\]', 
+                       lambda m: "[" + re.sub(r'\s+', ' ', m.group(1)).strip() + "]", 
+                       raw_json)
+    
+    with open(file_path, "w") as f:
+        f.write(condensed)
+    print(f"✅ Condensed Taxonomy exported to {file_path}")
 
 # ==============================================================================
 # 3. CUSTOM ML TRANSFORMERS

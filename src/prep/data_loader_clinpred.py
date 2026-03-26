@@ -7,7 +7,8 @@ import re
 from pathlib import Path
 from dotenv import load_dotenv
 
-from src.prep.text_cleaning import day_zero_reconstructor
+#emb: Prepares text for embeddings
+# from src.prep.text_cleaning import day_zero_reconstructor
 from src.prep.text_cleaning_ui import ui_clean_text
 # --- DYNAMIC PIPELINE IMPORT ---
 from src.prep.pipeline import FEATURE_REGISTRY, UI_SCHEMA
@@ -15,9 +16,10 @@ from src.prep.pipeline import FEATURE_REGISTRY, UI_SCHEMA
 # Load global variables
 load_dotenv()
 
-class EnrichmentCoverageError(Exception):
-    """Custom exception for missing LLM or NLP enrichment data."""
-    pass
+#emb: Custom exception for missing LLM or NLP enrichment data (not currently used)
+# class EnrichmentCoverageError(Exception):
+#     """Custom exception for missing LLM or NLP enrichment data."""
+#     pass
 
 class ClinicalTrialLoader:
 
@@ -191,8 +193,10 @@ class ClinicalTrialLoader:
         df = self._engineer_placebo(df)
         df = self._add_ui_text_fields(df)
         df = self._apply_master_mapping(df)
-        df = self._engineer_nlp_pillars(df)
-        df = self._attach_embeddings(df)
+        #emb: Prepares text for embeddings
+        # df = self._engineer_nlp_pillars(df)
+        #emb: Merges embedding repository
+        # df = self._attach_embeddings(df)
         df = self._attach_p_values(df)
 
         print("    -> Finalizing Data Types...")
@@ -318,34 +322,36 @@ class ClinicalTrialLoader:
 
         return df.drop(columns=["ui_summary_raw", "ui_criteria_raw"], errors="ignore")
 
-    def _engineer_nlp_pillars(self, df):
-        """Restores concatenation of Title + Brief Summary for BioBERT."""
-        # Note: We re-load descriptions to ensure BioBERT gets RAW text signal
-        df_summaries = self._safe_load("brief_summaries.txt", cols=["nct_id", "description"])
-        if not df_summaries.empty:
-            df = df.merge(df_summaries.rename(columns={"description": "nlp_summary"}), on="nct_id", how="left")
-        else:
-            df["nlp_summary"] = ""
+    #emb: Restores concatenation of Title + Brief Summary for BioBERT.
+    # def _engineer_nlp_pillars(self, df):
+    #     """Restores concatenation of Title + Brief Summary for BioBERT."""
+    #     # Note: We re-load descriptions to ensure BioBERT gets RAW text signal
+    #     df_summaries = self._safe_load("brief_summaries.txt", cols=["nct_id", "description"])
+    #     if not df_summaries.empty:
+    #         df = df.merge(df_summaries.rename(columns={"description": "nlp_summary"}), on="nct_id", how="left")
+    #     else:
+    #         df["nlp_summary"] = ""
+    #
+    #     df['official_title'] = df['official_title'].fillna("").astype(str)
+    #     df['nlp_summary'] = df['nlp_summary'].fillna("").astype(str)
+    #
+    #     df['txt_scientific_essence'] = (df['official_title'].str.strip() + " [SEP] " + df['nlp_summary'].str.strip())
+    #     df['txt_criteria'] = df['ui_criteria'] # Criteria already loaded and sanitized
+    #
+    #     df_outcomes = self._safe_load('design_outcomes.txt', cols=['nct_id', 'measure', 'outcome_type'])
+    #     if not df_outcomes.empty:
+    #         primaries = df_outcomes[df_outcomes['outcome_type'].str.lower().str.contains('primary', na=False)]
+    #         endpoints = primaries.groupby('nct_id')['measure'].apply(lambda x: " [SEP] ".join(x.dropna().astype(str))).reset_index(name='txt_primary_endpoints')
+    #         df = df.merge(endpoints, on='nct_id', how='left')
+    #
+    #     df['txt_primary_endpoints'] = df.get('txt_primary_endpoints', pd.Series([""]*len(df))).fillna("")
+    #     return df.drop(columns=['nlp_summary'], errors='ignore')
 
-        df['official_title'] = df['official_title'].fillna("").astype(str)
-        df['nlp_summary'] = df['nlp_summary'].fillna("").astype(str)
-
-        df['txt_scientific_essence'] = (df['official_title'].str.strip() + " [SEP] " + df['nlp_summary'].str.strip())
-        df['txt_criteria'] = df['ui_criteria'] # Criteria already loaded and sanitized
-
-        df_outcomes = self._safe_load('design_outcomes.txt', cols=['nct_id', 'measure', 'outcome_type'])
-        if not df_outcomes.empty:
-            primaries = df_outcomes[df_outcomes['outcome_type'].str.lower().str.contains('primary', na=False)]
-            endpoints = primaries.groupby('nct_id')['measure'].apply(lambda x: " [SEP] ".join(x.dropna().astype(str))).reset_index(name='txt_primary_endpoints')
-            df = df.merge(endpoints, on='nct_id', how='left')
-
-        df['txt_primary_endpoints'] = df.get('txt_primary_endpoints', pd.Series([""]*len(df))).fillna("")
-        return df.drop(columns=['nlp_summary'], errors='ignore')
-
-    def _attach_embeddings(self, df):
-        path_repo = self.processed_path / 'embeddings.parquet'
-        if path_repo.exists(): df = df.merge(pd.read_parquet(path_repo), on='nct_id', how='left')
-        return df
+    #emb: Merges embedding repository
+    # def _attach_embeddings(self, df):
+    #     path_repo = self.processed_path / 'embeddings.parquet'
+    #     if path_repo.exists(): df = df.merge(pd.read_parquet(path_repo), on='nct_id', how='left')
+    #     return df
 
     def _attach_p_values(self, df):
         """Restores complete metadata extraction for p-values."""
@@ -440,22 +446,23 @@ class ClinicalTrialLoader:
             return df.merge(aux.drop_duplicates('nct_id'), on='nct_id', how='left')
         except: return df
 
-    def check_and_export_nlp(self, df):
-        """Checks embedding coverage and exports delta for Colab if needed."""
-        print(">>>  Checking NLP Embedding Coverage...")
-        emb_cols = [c for c in df.columns if c.startswith('crit_')]
-        n_missing = df[emb_cols[0]].isna().sum() if emb_cols else len(df)
-        if n_missing == 0: self.save(df); return
-
-        mask_missing = df[emb_cols[0]].isna() if emb_cols else pd.Series([True]*len(df), index=df.index)
-        df_delta = df[mask_missing][['nct_id', 'target', 'txt_scientific_essence', 'txt_criteria']].copy()
-
-        for col in ['txt_scientific_essence', 'txt_criteria']:
-            if col in df_delta.columns:
-                df_delta[col] = df_delta[col].astype(str).apply(lambda x: day_zero_reconstructor(x, col.replace('txt_', '')))
-
-        df_delta.to_csv(self.data_path / 'data_clinpred_emb_transform.csv', index=False)
-        raise EnrichmentCoverageError(f"Missing embeddings for {n_missing} trials.")
+    #emb: Checks embedding coverage and exports delta for Colab if needed.
+    # def check_and_export_nlp(self, df):
+    #     """Checks embedding coverage and exports delta for Colab if needed."""
+    #     print(">>>  Checking NLP Embedding Coverage...")
+    #     emb_cols = [c for c in df.columns if c.startswith('crit_')]
+    #     n_missing = df[emb_cols[0]].isna().sum() if emb_cols else len(df)
+    #     if n_missing == 0: self.save(df); return
+    #
+    #     mask_missing = df[emb_cols[0]].isna() if emb_cols else pd.Series([True]*len(df), index=df.index)
+    #     df_delta = df[mask_missing][['nct_id', 'target', 'txt_scientific_essence', 'txt_criteria']].copy()
+    #
+    #     for col in ['txt_scientific_essence', 'txt_criteria']:
+    #         if col in df_delta.columns:
+    #             df_delta[col] = df_delta[col].astype(str).apply(lambda x: day_zero_reconstructor(x, col.replace('txt_', '')))
+    #
+    #     df_delta.to_csv(self.data_path / 'data_clinpred_emb_transform.csv', index=False)
+    #     raise EnrichmentCoverageError(f"Missing embeddings for {n_missing} trials.")
 
     def save(self, df, filename='data_clinpred.csv'):
         out_path = self.data_path / filename

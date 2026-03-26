@@ -1,0 +1,73 @@
+import pandas as pd
+import json
+import joblib
+from pathlib import Path
+
+# <REF:PROD_EXPORT_CODE_V3>
+# 1. EXPORT TAXONOMY AS SOURCE OF TRUTH (Syncs API and UI)
+from src.prep.pipeline import export_pipeline_taxonomy
+taxonomy_path = MODELS_PATH / "taxonomy_01.json"
+export_pipeline_taxonomy(taxonomy_path)
+
+# 2. DYNAMICALLY IDENTIFY UI FIELDS FROM TAXONOMY
+with open(taxonomy_path, 'r') as f:
+    tax_data = json.load(f)
+    tax_fields = tax_data.get("FIELDS", tax_data)
+    ui_required_fields = list(tax_fields.keys())
+
+# 3. ENHANCED SEARCH IDENTITY (Synthesis of Key Discovery Fields)
+def create_search_label(row):
+    acro = str(row['acronym']).strip() if pd.notna(row['acronym']) else ""
+    drug = str(row['alpha_drug_name']).strip() if pd.notna(row['alpha_drug_name']) else "Unknown Drug"
+    sponsor = str(row['lead_sponsor_canonical']).strip() if pd.notna(row['lead_sponsor_canonical']) else "Unknown Sponsor"
+    ta = str(row['therapeutic_area']).strip() if pd.notna(row['therapeutic_area']) else "Unclassified"
+    year = str(int(row['start_year'])) if pd.notna(row['start_year']) else "YYYY"
+    prefix = f"[{acro}] " if acro and acro.lower() != 'nan' else ""
+    return f"{prefix}{drug} ({sponsor}) | {ta} ({year})"
+
+if 'ui_search_label' not in df_full.columns:
+    df_full['ui_search_label'] = df_full.apply(create_search_label, axis=1)
+
+# 4. BACKTESTING VERIFICATION LOGIC (Demo Accuracy)
+def check_accuracy(row):
+    if pd.isna(row.get('target')): return None
+    target = row['target']
+    score = row.get('Clinical_Score', 0)
+    if (score >= 50.0 and target == 0.0) or (score < 50.0 and target == 1.0):
+        return True
+    return False
+
+df_full['is_correct'] = df_full.apply(check_accuracy, axis=1)
+
+# 5. SURGICAL REGISTRY PRUNING (Dynamic Lean Export)
+# IDENTITY COLS - Updated to include Sidebar Filter requirements (Human-Readable)
+identity_cols = [
+    "nct_id", "ui_search_label", "alpha_drug_name", "lead_sponsor_canonical", 
+    "therapeutic_area", "gbd_indication_name", "phase", "start_year"
+]
+scoring_cols = ["overall_status", "trial_segment", "target", "is_correct", "Clinical_Score", "Zone"]
+prose_cols = ["ui_title", "ui_brief_title", "ui_summary", "ui_criteria"]
+
+# Combine all requirements and filter against existing columns
+all_needed = list(set(identity_cols + scoring_cols + prose_cols + ui_required_fields))
+final_registry_cols = [c for c in all_needed if c in df_full.columns]
+
+print(f">>> Pruning Registry: Keeping {len(final_registry_cols)} columns (Sidebar Filters + Taxonomy)")
+df_lean = df_full[final_registry_cols].copy()
+
+# 6. EXPORT REGISTRY TO FRONTEND
+REGISTRY_PATH = FRONTEND_DATA_PATH / "search_registry.csv"
+df_lean.to_csv(REGISTRY_PATH, index=True)
+
+# 7. SERIALIZE PRODUCTION ARTIFACTS
+print(">>> Persisting Production Artifacts to /models...")
+joblib.dump(model, MODELS_PATH / "model_prod_01.joblib")
+joblib.dump(shap_values, MODELS_PATH / "shap_values_01.joblib")
+with open(MODELS_PATH / "thresholds_01.json", 'w') as f:
+    json.dump(cal_arts, f, indent=4)
+
+print("✅ All artifacts persisted. Production Engine Ready.")
+print(f"   - Model:      {MODELS_PATH / 'model_prod_01.joblib'}")
+print(f"   - Taxonomy:   {MODELS_PATH / 'taxonomy_01.json'}")
+print(f"   - Registry:   {REGISTRY_PATH} ({REGISTRY_PATH.stat().st_size / (1024*1024):.2f} MB)")
+# </REF:/PROD_EXPORT_CODE_V3>
