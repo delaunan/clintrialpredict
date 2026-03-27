@@ -375,7 +375,7 @@ if st.session_state.selected_nct_id is None:
     else:
         st.markdown(f"<div class='result-count-label'>Showing {len(filtered_df):,} trials matching criteria</div>", unsafe_allow_html=True)
         st.markdown('<div>', unsafe_allow_html=True)
-        grid_cols = ["nct_id", "ui_search_label", "lead_sponsor_canonical", "therapeutic_area", "phase", "start_year", "Clinical_Score", "is_correct"]
+        grid_cols = ["nct_id", "brief_title", "lead_sponsor_canonical", "therapeutic_area", "phase", "start_year", "Clinical_Score", "is_correct"]
         cols_present = [c for c in grid_cols if c in filtered_df.columns]
         display_df = filtered_df[cols_present].copy()
         
@@ -385,7 +385,7 @@ if st.session_state.selected_nct_id is None:
             display_df["is_correct"] = display_df["is_correct"].map({True: "Yes", False: "No"})
 
         col_map = {
-            "nct_id": "NCT ID", "ui_search_label": "Identity", "lead_sponsor_canonical": "Sponsor",
+            "nct_id": "NCT ID", "brief_title": "Identity", "lead_sponsor_canonical": "Sponsor",
             "therapeutic_area": "Area", "phase": "Phase", "start_year": "Year", 
             "Clinical_Score": "Score", "is_correct": "Accurate"
         }
@@ -426,22 +426,24 @@ else:
         st.markdown(f"""
         <div style="display: flex; align-items: baseline; margin-bottom: 10px;">
             <span class="identity-header-text">{row[ID_COL]}</span>
-            <span class="identity-label-small">{row.get('ui_search_label', 'N/A')}</span>
+            <span class="identity-label-small">{row.get('official_title', 'N/A')}</span>
         </div>
         <div class="title-box-container">
-            <span style="color: #64748b; font-size: 0.75rem; text-transform: uppercase; font-weight: 800; display: block; margin-bottom: 8px;">Brief Title</span>
-            {row.get('ui_title', row.get('brief_title', 'No title available.'))}
+            <span style="color: #64748b; font-size: 0.75rem; text-transform: uppercase; font-weight: 800; display: block; margin-bottom: 8px;">Title</span>
+            {row.get('title', 'No title available.')}
         </div>
         """, unsafe_allow_html=True)
 
     # 2. PILLAR GRID (2x2)
     def render_pillar_features(pillar_ui_name, taxonomy_pillar_name, row_data):
-        features = [
-            (feat_id, feat_meta) for feat_id, feat_meta in TAXONOMY.items() 
-            if feat_meta.get("pillar") == taxonomy_pillar_name
-        ]
+        features = []
+        for feat_id, feat_meta in TAXONOMY.items():
+            ui = feat_meta.get("ui", {})
+            if ui.get("pillar") == taxonomy_pillar_name:
+                features.append((feat_id, feat_meta))
+        
         # Sort by subgroup name then priority
-        features.sort(key=lambda x: (x[1].get("subgroup", ""), x[1].get("priority", 99)))
+        features.sort(key=lambda x: (x[1].get("ui", {}).get("subgroup", ""), x[1].get("ui", {}).get("priority", 99)))
 
         with st.expander(pillar_ui_name, expanded=False):
             # Two features per row
@@ -449,16 +451,17 @@ else:
                 cols = st.columns(2)
                 for j in range(2):
                     if i + j < len(features):
-                        feat_id, meta = features[i + j]
-                        label = meta.get("label", feat_id)
+                        feat_id, feat_meta = features[i + j]
+                        ui = feat_meta.get("ui", {})
+                        label = ui.get("label", feat_id)
                         val = row_data.get(feat_id)
-                        options = meta.get("options")
+                        options = ui.get("options")
                         
                         with cols[j]:
                             if options:
                                 opt_labels = [opt[1] for opt in options]
                                 curr_idx = 0
-                                mapping = meta.get("mapping", {})
+                                mapping = feat_meta.get("mapping", {})
                                 str_val = str(val).upper()
                                 if str_val in mapping:
                                     mapped_label = mapping[str_val][1]

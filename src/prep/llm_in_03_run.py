@@ -169,11 +169,15 @@ async def main():
             with open(OUTPUT_FILE, 'a', newline='') as f:
                 # [IRON GATE] Apply strict quoting for data integrity
                 writer = csv.DictWriter(f, fieldnames=FIELDNAMES, quoting=csv.QUOTE_ALL)
-                if not os.path.exists(OUTPUT_FILE) or os.stat(OUTPUT_FILE).st_size == 0: writer.writeheader()
-            semaphore = asyncio.Semaphore(CONCURRENCY_LIMIT)
-            tasks = [process_batch(semaphore, df_todo.iloc[i:i+BATCH_SIZE], cache.name, writer, f) for i in range(0, len(df_todo), BATCH_SIZE)]
-            await tqdm.gather(*tasks)
-        client.caches.delete(name=cache.name)
+                if not os.path.exists(OUTPUT_FILE) or os.stat(OUTPUT_FILE).st_size == 0:
+                    writer.writeheader()
+                
+                semaphore = asyncio.Semaphore(CONCURRENCY_LIMIT)
+                tasks = [process_batch(semaphore, df_todo.iloc[i:i+BATCH_SIZE], cache.name, writer, f) for i in range(0, len(df_todo), BATCH_SIZE)]
+                await tqdm.gather(*tasks)
+        finally:
+            print(f"> Deleting Cache: {cache.name}")
+            client.caches.delete(name=cache.name)
     except Exception as e:
         print(f"[!] ERROR: {e}")
 

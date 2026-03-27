@@ -62,9 +62,12 @@ def load_artifacts():
     # Also identify where the calibration offset should be applied
     app.state.calibration_target = {"pillar": "Therapeutic Context", "subcategory": "Indication Risk Profile"}
 
-    for feat_name, meta in app.state.registry.items():
-        pillar = meta.get("pillar")
-        subgroup = meta.get("subgroup")
+    for feat_name, feat_meta in app.state.registry.items():
+        # Handle nested UI metadata
+        ui = feat_meta.get("ui", {})
+        pillar = ui.get("pillar")
+        subgroup = ui.get("subgroup")
+        
         if not pillar or not subgroup:
             continue
             
@@ -75,7 +78,7 @@ def load_artifacts():
 
         # Determine prefix based on encoding (replicating notebook logic)
         prefix = ""
-        enc = meta.get("encoding")
+        enc = feat_meta.get("encoding")
         if enc == "ordinal": prefix = "ordinal__"
         elif enc == "target": prefix = "target__"
         elif enc == "numeric":
@@ -94,8 +97,8 @@ def load_artifacts():
                 app.state.feature_to_taxonomy[i] = {
                     "pillar": pillar,
                     "subcategory": subgroup,
-                    "pos_impact": meta.get("pos_impact", ""),
-                    "neg_impact": meta.get("neg_impact", "")
+                    "pos_impact": ui.get("pos_impact", ""),
+                    "neg_impact": ui.get("neg_impact", "")
                 }
 
     print(f"Mapped {len(app.state.feature_to_taxonomy)} features to taxonomy.")

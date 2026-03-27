@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 
 #emb: Prepares text for embeddings
 # from src.prep.text_cleaning import day_zero_reconstructor
-from src.prep.text_cleaning_ui import ui_clean_text
+from src.prep.text_cleaning_ui import ui_clean_text, ui_format_multiline
 # --- DYNAMIC PIPELINE IMPORT ---
 from src.prep.pipeline import FEATURE_REGISTRY, UI_SCHEMA
 
@@ -75,6 +75,7 @@ class ClinicalTrialLoader:
         except:
             try: return pd.read_csv(full_path, usecols=cols, **self.params_robust)
             except: return pd.DataFrame()
+            
 
     def get_filtered_universe(self):
         """Applies raw clinical filters to identify the target cohort from AACT files."""
@@ -191,6 +192,7 @@ class ClinicalTrialLoader:
         df = self._engineer_facilities(df)
         df = self._engineer_safe_features(df)
         df = self._engineer_placebo(df)
+        df = self._engineer_raw_scientific_evidence(df)
         df = self._add_ui_text_fields(df)
         df = self._apply_master_mapping(df)
         #emb: Prepares text for embeddings
@@ -205,16 +207,25 @@ class ClinicalTrialLoader:
         if 'is_rare_disease' in df.columns:
             df['is_rare_disease'] = df['is_rare_disease'].astype(str).str.upper().map({'TRUE': 1, 'FALSE': 0, '1': 1, '0': 0, '1.0': 1, '0.0': 0}).fillna(0)
 
-        registry_ml_cols = list(FEATURE_REGISTRY.keys())
+        # Fix: Only coerce fields that are meant to be numeric for XGBoost
+        # This prevents text-based UI/Raw fields in the registry from being nullified
+        registry_numeric_cols = [
+            f for f, conf in FEATURE_REGISTRY.items() 
+            if conf.get("encoding") in ["numeric", "ordinal", "target"]
+        ]
+        
         ui_numeric_cols = [
             'enrollment', 'number_of_facilities', 'min_p_value', 'scientific_success',
-            'target', 'gbd_cause_id', 'gbd_hierarchy_level', 'Parent ID',
+            'target', 'gbd_cause_id', 'gbd_hierarchy_level',
             'primary_duration_months', 'is_rare_disease',
             'daly_global', 'yld_global', 'yll_global', 'chronic_ratio_global',
             'daly_high_income', 'yld_high_income', 'yll_high_income', 'market_skew_index'
         ]
-        for col in registry_ml_cols + ui_numeric_cols:
-            if col in df.columns: df[col] = pd.to_numeric(df[col], errors='coerce')
+        
+        for col in registry_numeric_cols + ui_numeric_cols:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce')
+        
         return df
 
     def _engineer_geography(self, df):
@@ -229,6 +240,54 @@ class ClinicalTrialLoader:
     def _engineer_facilities(self, df):
         return self._merge_file(df, 'calculated_values.txt', ['nct_id', 'number_of_facilities'])
 
+    def _engineer_raw_scientific_evidence(self, df):
+        """Aggregates raw scientific evidence into pipe-separated structural strings."""
+        print("    -> Merging Raw Scientific Evidence...")
+
+        # 1. Conditions
+        df_cond = self._safe_load('conditions.txt', cols=['nct_id', 'name'])
+        if not df_cond.empty:
+            conds = df_cond.groupby('nct_id')['name'].apply(lambda x: " || ".join(x.dropna().unique())).reset_index(name='raw_conditions')
+            df = df.merge(conds, on='nct_id', how='left')
+
+        # 2. Interventions (Enhanced with Type, Description, and Synonyms)
+        df_int = self._safe_load('interventions.txt', cols=['nct_id', 'id', 'intervention_type', 'name', 'description'])
+        df_others = self._safe_load('intervention_other_names.txt', cols=['nct_id', 'intervention_id', 'name'])
+
+        if not df_int.empty:
+            if not df_others.empty:
+                others = df_others.groupby(['nct_id', 'intervention_id'])['name'].apply(lambda x: ", ".join(x.dropna().unique())).reset_index(name='synonyms')
+                df_int = df_int.merge(others, left_on=['nct_id', 'id'], right_on=['nct_id', 'intervention_id'], how='left')
+            else:
+                df_int['synonyms'] = None
+
+            def fmt_int(r):
+                name = str(r['name'])
+                syns = f" (Aliases: {r['synonyms']})" if pd.notna(r['synonyms']) else ""
+                itype = f" [{r['intervention_type']}]" if pd.notna(r['intervention_type']) else ""
+                desc = f"{r['description']}" if pd.notna(r['description']) else "No description"
+                # [SEMANTIC UPGRADE] Structured with Newlines for easy simulation editing
+                return f"NAME: {name}{syns}{itype}\nDESC: {desc}"
+
+            df_int['fmt'] = df_int.apply(fmt_int, axis=1)
+            ints = df_int.groupby('nct_id')['fmt'].apply(lambda x: "\n".join(x.dropna().unique())).reset_index(name='raw_interventions')
+            df = df.merge(ints, on='nct_id', how='left')
+
+        # 3. Primary Outcomes (Enhanced with Timeframe)
+        df_outcomes = self._safe_load('design_outcomes.txt', cols=['nct_id', 'outcome_type', 'measure', 'time_frame'])
+        if not df_outcomes.empty:
+            primaries = df_outcomes[df_outcomes['outcome_type'].astype(str).str.upper().str.contains('PRIMARY', na=False)].copy()
+            def fmt_out(r):
+                m = str(r['measure'])[:500]
+                tf = f"TIMEFRAME: {r['time_frame']}" if pd.notna(r['time_frame']) else "No timeframe"
+                # [SEMANTIC UPGRADE] Structured with Newlines for easy simulation editing
+                return f"TITLE: {m}\n{tf}"
+            primaries['fmt'] = primaries.apply(fmt_out, axis=1)
+            outcomes = primaries.groupby('nct_id')['fmt'].apply(lambda x: "\n".join(x.dropna().unique())).reset_index(name='raw_primary_outcomes')
+            df = df.merge(outcomes, on='nct_id', how='left')
+
+        return df
+
     def _engineer_eligibility_age(self, df):
         df_elig = self._safe_load('eligibilities.txt', cols=['nct_id', 'gender', 'healthy_volunteers', 'minimum_age', 'maximum_age'])
         if df_elig.empty:
@@ -238,14 +297,14 @@ class ClinicalTrialLoader:
             df['adult'] = np.nan
             df['older_adult'] = np.nan
             return df
-            
+
         df = df.merge(df_elig.drop_duplicates('nct_id'), on='nct_id', how='left')
-        
+
         # Healthy Volunteers: Default to 0 (No) for Phase 2/3 focus
         df['healthy_volunteers'] = df['healthy_volunteers'].astype(str).str.lower().apply(
             lambda x: 1 if x in ['t', 'true', '1', 'yes'] else 0
         )
-        
+
         df['gender'] = df['gender'].fillna('UNKNOWN').str.upper()
 
         def parse_age(val, default):
@@ -263,15 +322,15 @@ class ClinicalTrialLoader:
         # Use NaN as sentinel for derivation logic
         df['min_age_years'] = df['minimum_age'].apply(lambda x: parse_age(x, np.nan))
         df['max_age_years'] = df['maximum_age'].apply(lambda x: parse_age(x, np.nan))
-        
+
         # 1. CHILD: Floor < 18 OR Ceiling < 18
         df['child'] = 0
         df.loc[(df['min_age_years'] < 18) | (df['max_age_years'] < 18), 'child'] = 1
-        
+
         # 2. ADULT: Exclude if Ceiling < 18 OR Floor >= 65. Default 1.
         df['adult'] = 1
         df.loc[(df['max_age_years'] < 18) | (df['min_age_years'] >= 65), 'adult'] = 0
-        
+
         # 3. OLDER ADULT: Exclude if Ceiling <= 65. Default 1.
         df['older_adult'] = 1
         df.loc[df['max_age_years'] <= 65, 'older_adult'] = 0
@@ -280,7 +339,7 @@ class ClinicalTrialLoader:
         mask_no_age = df['min_age_years'].isna() & df['max_age_years'].isna()
         df.loc[mask_no_age, ['adult', 'older_adult', 'child']] = np.nan
 
-        return df.drop(columns=['minimum_age', 'maximum_age', 'min_age_years', 'max_age_years'])
+        return df.drop(columns=['min_age_years', 'max_age_years'])
 
     def _engineer_placebo(self, df):
         df_groups = self._safe_load('design_groups.txt', cols=['nct_id', 'group_type', 'title', 'description'])
@@ -314,13 +373,23 @@ class ClinicalTrialLoader:
         if not df_elig.empty:
             df = df.merge(df_elig.rename(columns={'criteria': 'ui_criteria_raw'}), on='nct_id', how='left')
 
-        df["ui_title"] = df["official_title"].fillna("").astype(str).apply(ui_clean_text)
-        df["ui_brief_title"] = df["brief_title"].fillna("").astype(str).apply(ui_clean_text)
-        df["ui_acronym"] = df["acronym"].fillna("").astype(str).apply(ui_clean_text)
-        df["ui_summary"] = df.get("ui_summary_raw", pd.Series([""]*len(df))).fillna("").astype(str).apply(ui_clean_text)
-        df["ui_criteria"] = df.get("ui_criteria_raw", pd.Series([""]*len(df))).fillna("").astype(str).apply(ui_clean_text)
+        df["title"] = df["official_title"].fillna("").astype(str).apply(ui_clean_text).str[:1000]
+        df["acronym_ui"] = df["acronym"].fillna("").astype(str).apply(ui_clean_text)
+        # [LINGUISTIC DIET] Match LLM Context Caps (Run 1 & 3)
+        df["summary_ui"] = df.get("ui_summary_raw", pd.Series([""]*len(df))).fillna("").astype(str).apply(ui_format_multiline).str[:5000]
+        df["criteria_ui"] = df.get("ui_criteria_raw", pd.Series([""]*len(df))).fillna("").astype(str).apply(ui_format_multiline).str[:10000]
 
-        return df.drop(columns=["ui_summary_raw", "ui_criteria_raw"], errors="ignore")
+        # Raw Scientific Evidence Cleaning (Using Multiline Formatter)
+        df["conditions_ui"] = df.get("raw_conditions", pd.Series([""]*len(df))).fillna("").astype(str).apply(ui_format_multiline)
+        df["interventions_ui"] = df.get("raw_interventions", pd.Series([""]*len(df))).fillna("").astype(str).apply(ui_format_multiline)
+        df["primary_outcomes_ui"] = df.get("raw_primary_outcomes", pd.Series([""]*len(df))).fillna("").astype(str).apply(ui_format_multiline)
+
+        # [SURGICAL PURGE] Drop raw source columns after UI engineering to maintain a clean final output
+        redundant_raw = [
+            "ui_summary_raw", "ui_criteria_raw", 
+            "raw_conditions", "raw_interventions", "raw_primary_outcomes", "raw_geographic_footprint"
+        ]
+        return df.drop(columns=redundant_raw, errors="ignore")
 
     #emb: Restores concatenation of Title + Brief Summary for BioBERT.
     # def _engineer_nlp_pillars(self, df):
@@ -384,7 +453,7 @@ class ClinicalTrialLoader:
         """Dynamically applies FEATURE_REGISTRY to encode _ml and generate _ui fields."""
         print("    -> Applying Universal Registry Mappings...")
         df = df.copy()
-        
+
         for field_name, config in FEATURE_REGISTRY.items():
             # Source detection: check for raw field or _ml field
             source_col = field_name if field_name in df.columns else field_name.replace('_ml', '')
@@ -393,50 +462,49 @@ class ClinicalTrialLoader:
 
             # Determine target column names
             ml_col = field_name
+            # Only create _ui if it's a mapped field (not numeric/target/identity)
             ui_col = field_name.replace('_ml', '') + "_ui"
 
             if "mapping" in config:
                 mapping_dict = config["mapping"]
-                
+
                 def safe_lookup(val, dictionary, f_name):
                     # 1. Handle NaNs/Nulls
                     if pd.isna(val) or str(val).strip().upper() in ["NAN", "NONE", "", "NULL"]:
                         # Special Case for target: fallback to NaN to avoid labeling ongoing trials
                         default_val = np.nan if f_name == 'target' else 0
                         return dictionary.get("UNKNOWN", [default_val, "Not Specified"])
-                    
+
                     # 2. Exact match
                     if val in dictionary: return dictionary[val]
-                    
+
                     # 3. String normalization
                     s_val = str(val).strip().upper()
                     if s_val in dictionary: return dictionary[s_val]
-                    
+
                     # 4. Numeric normalization
                     try:
                         num_val = float(val)
                         if num_val == int(num_val): num_val = int(num_val)
                         if num_val in dictionary: return dictionary[num_val]
                     except: pass
-                    
+
                     # 5. Final fallback
                     return dictionary.get("UNKNOWN", [0, "Not Specified"])
 
                 mapped_data = df[source_col].map(lambda x: safe_lookup(x, mapping_dict, field_name))
                 df[ml_col] = mapped_data.map(lambda x: x[0])
+                # Restore _ui for all mapped fields to ensure registry-aligned labels/sorting
                 df[ui_col] = mapped_data.map(lambda x: x[1])
 
-            elif config.get("encoding") == "numeric":
+            elif config.get("encoding") in ["numeric", "target"]:
                 df[ml_col] = pd.to_numeric(df[source_col], errors='coerce')
-                if ui_col not in df.columns:
-                    df[ui_col] = df[ml_col]
-            
-            elif config.get("encoding") == "target":
-                # Special case for 'target' encoded fields (like gbd_cause_id_3_ml)
-                df[ml_col] = pd.to_numeric(df[source_col], errors='coerce')
-                if ui_col not in df.columns:
-                    df[ui_col] = df[ml_col]
 
+        # [FINAL CLEANUP] Remove ONLY specific redundant Identity/System _ui fields
+        # requested to be listed only once.
+        redundant = ["acronym_ui", "nct_id_ui", "target_ui", "is_duration_unknown_ui"]
+        
+        df = df.drop(columns=redundant, errors="ignore")
         return df
 
     def _merge_file(self, df, filename, cols):

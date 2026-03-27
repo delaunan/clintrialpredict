@@ -58,7 +58,7 @@ Document your audit in the `strategist_logic` field using this exact 5-step veri
 ### 4. strategic_ambition (THE PALLIATIVE FILTER)
 * `PIVOTAL_INTENT`: Primary registration/NDA-enabling study for the core disease.
 * `SIGNAL_SEARCH`: Supportive care, QoL, or Symptom management. **LAW**: Phase 3 supportive care is NOT Pivotal.
-* `SAFETY_DOSING`: Phase 1 focus on tolerability/DLT.
+* `SAFETY_DOSING`: Dose Characterization / Phase 1 focus on tolerability/DLT.
 
 ### 5. endpoint_structure
 * `MULTI_COMPOSITE`: "Time to [Event] or Death", "MACE", or multiple co-primary metrics (e.g. Safety + PK + PD).

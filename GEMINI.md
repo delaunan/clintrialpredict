@@ -1,4 +1,4 @@
-# **Clinical Trial Prediction: Project Status & Architecture (v44.0)**
+# **Clinical Trial Prediction: Project Status & Architecture (v46.0)**
 
 ## **1. The Enrichment Engine Manifest (Production v22.0)**
 | Run | Stage Name | Instruction (Ground Truth) | Input Context | Output Data | Runner Script |
@@ -64,3 +64,37 @@
 - **Registry-Aware Imputation**: The `RegistryImputer` bakes fallback codes (0, 1, 2) into the serialized model, removing run-time dependency on external JSON files.
 - **Zero-Anchor Standard**: Guaranteed that all "Baseline/Unknown" states map to **Integer 0** with standardized **"Not Specified"** UI labels.
 - **Hierarchy Recovery**: `ClinicalTrialLoader` uses recursive lookup to reconstruct full ancestral lineage (ID_4 -> ID_3 -> ID_2) for 100% of the universe.
+- **Clean UI & Logic Refinement (v17.5 Standard)**:
+    - **Global Renaming**: "Early Phase / Dose Finding" has been globally renamed to **"Dose Characterization"** to better reflect scientific intent.
+    - **Selective UI Fields**: `_ui` fields are strictly reserved for categorical/ordinal features that require specific display labels or sorting orders defined in the `PIPELINE_REGISTRY`.
+    - **Identity Purge**: Targeted removal of redundant `_ui` fields for Identity and System columns (e.g., `acronym_ui`, `nct_id_ui`, `target_ui`) to maintain a clean, single-entry project manifest.
+    - **Standardized Subgroups**: Metadata fields are now organized into logical subgroups: `Identity` (IDs/Titles), `Timeline` (Dates/Years), and `System` (Internal flags/Segments).
+
+---
+
+## **5. Simulation-Ready CSV Architecture (v46.0 Upgrade)**
+- **Unified Source of Truth**: The project has transitioned from `.txt` dependencies to a **Self-Documenting CSV** (`data/data_clinpred.csv`).
+- **Semantic Tagging**: Scientific text fields now include parsable semantic tags for effortless LLM simulation:
+    - **Interventions**: `• NAME: [Drug] || DESC: [Mechanism]` (newline-separated).
+    - **Outcomes**: `• TITLE: [Measure] || TIMEFRAME: [Time]` (newline-separated).
+- **Linguistic Diet Synchronization**: CSV character caps are now bit-perfectly matched to LLM context windows:
+    - **`summary_ui`**: 5,000 chars.
+    - **`criteria_ui`**: 10,000 chars.
+    - **`title`**: 1,000 chars.
+- **User-Friendly Interaction**: Switched from technical pipes (` || `) to standard newlines (`\n`) in all multiline fields. This enables users to edit trial protocol directly in Streamlit via "Enter" while maintaining perfect programmatic extractability.
+- **Forensic Purge**: Redundant `raw_` scientific fields (Conditions, Interventions, Outcomes, Geography) are surgically dropped after UI engineering to keep the production dataset lean and secure.
+- **Registry Alignment**: `PIPELINE_REGISTRY` now enforces role-specific documentation:
+    - **ML Fields**: Documented as `Source -> Internal Code`.
+    - **UI Fields**: Documented as `Display Labels` (ordered by dictionary priority).
+
+---
+
+## **6. Industrial Production Workflow (v47.0 Refactor)**
+- **Offline-First Resilience**: Both `production_06.ipynb` and `validation_clinpred.ipynb` now prioritize the `data_clinpred.csv` feature store. The system automatically detects existing columns and skips redundant AACT `.txt` reloads, preventing column suffix collisions (e.g., `healthy_volunteers_x`) and `KeyErrors`.
+- **JSON-Sanitized Taxonomy**: The `export_pipeline_taxonomy` function in `src/prep/pipeline.py` implements a recursive sanitizer for absolute API compatibility:
+    - **Key Unification**: Forces all dictionary keys to strings, eliminating duplicates between integers and string representations.
+    - **NaN Safety**: Mathematically converts `np.nan` to JSON `null`. This preserves the "Ongoing" status for trials, ensuring they are never misclassified as Success (`0`) or Failure (`1`).
+- **Streamlined Handshake Logic**: 
+    - **Identity Key**: Confirmed `nct_id` as the absolute linking key. It serves as the primary index in CSVs and the **Dictionary Key** in `shap_values_01.joblib` for O(1) retrieval speed.
+    - **Workflow Order**: Refactored the production notebook into a logical **Calculate -> Verify -> Export** sequence. All artifacts (Model, SHAP, Taxonomy, Registry) are now saved in a single "One-Click" operation at the very end of the notebook.
+- **UI Column Harmony**: Standardized UI naming conventions across the entire codebase (`ui_title` -> `title`, `ui_summary` -> `summary_ui`, etc.), ensuring the FastAPI server and Streamlit frontend are perfectly synchronized with the notebook's forensic output.

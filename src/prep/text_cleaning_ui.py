@@ -90,3 +90,43 @@ def ui_clean_text(text: Optional[str]) -> str:
     t = _WS.sub(" ", t).strip()
 
     return t
+
+def ui_format_multiline(text: Optional[str]) -> str:
+    """
+    Preserves structural integrity for UI display while keeping content in one line.
+    - Preserves bullet points as '•'
+    - Uses ' || ' as a semantic line separator.
+    """
+    if text is None:
+        return ""
+
+    if not isinstance(text, str):
+        text = str(text)
+
+    t = text.strip()
+    if not t or t.lower() == "nan":
+        return ""
+
+    # 1. Remove struck content first
+    t = _STRIKE_HTML_BLOCK.sub(" ", t)
+    t = _STRIKE_MD_BLOCK.sub(" ", t)
+    t = _STRIKE_TILDE_BLOCK.sub(" ", t)
+    t = _HTML_TAGS.sub(" ", t)
+
+    # 2. Convert any technical pipes to newlines for unified processing
+    t = t.replace(" || ", "\n")
+    
+    # 3. Split into lines to identify bullets and structure
+    lines = t.splitlines()
+    processed_lines = []
+    
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+        # Normalize bullets (detect *, -, +, numbers like 1., or bullets like •)
+        line = re.sub(r'^[\*\-\+\•\d\.\)]+\s*', '• ', line)
+        processed_lines.append(line)
+
+    # 4. Join with a standard newline (Markdown/UI compatible)
+    return "\n".join(processed_lines)

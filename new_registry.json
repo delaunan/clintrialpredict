@@ -178,14 +178,6 @@
       },
       "encoding": "target"
     },
-    "gbd_indication_name_3": {
-      "ui": {
-        "label": "Indication",
-        "pillar": "Therapeutic Context",
-        "subgroup": "Therapeutic Area Profile",
-        "priority": 1.1
-      }
-    },
     "is_rare_disease_ml": {
       "ui": {
         "label": "Rare Condition",
@@ -205,6 +197,14 @@
       },
       "encoding": "ordinal",
       "mapping": {
+        "0": [
+          0,
+          "Unlikely"
+        ],
+        "1": [
+          1,
+          "Yes"
+        ],
         "0": [
           0,
           "Unlikely"
@@ -913,6 +913,14 @@
           1,
           "Yes"
         ],
+        "0": [
+          0,
+          "No"
+        ],
+        "1": [
+          1,
+          "Yes"
+        ],
         "F": [
           0,
           "No"
@@ -1125,6 +1133,14 @@
           1,
           "Yes"
         ],
+        "0": [
+          0,
+          "No"
+        ],
+        "1": [
+          1,
+          "Yes"
+        ],
         "F": [
           0,
           "No"
@@ -1174,6 +1190,14 @@
       },
       "encoding": "ordinal",
       "mapping": {
+        "0": [
+          0,
+          "No"
+        ],
+        "1": [
+          1,
+          "Yes"
+        ],
         "0": [
           0,
           "No"
@@ -1343,6 +1367,14 @@
       },
       "encoding": "ordinal",
       "mapping": {
+        "0": [
+          0,
+          "No"
+        ],
+        "1": [
+          1,
+          "Yes"
+        ],
         "0": [
           0,
           "No"
@@ -1567,6 +1599,14 @@
           1,
           "Healthy Volunteers Accepted"
         ],
+        "0": [
+          0,
+          "Patients Only"
+        ],
+        "1": [
+          1,
+          "Healthy Volunteers Accepted"
+        ],
         "UNKNOWN": [
           0,
           "Patients Only"
@@ -1596,6 +1636,14 @@
       },
       "encoding": "ordinal",
       "mapping": {
+        "1": [
+          1,
+          "Included"
+        ],
+        "0": [
+          0,
+          "Excluded"
+        ],
         "1": [
           1,
           "Included"
@@ -1641,6 +1689,14 @@
           0,
           "Excluded"
         ],
+        "1": [
+          1,
+          "Included"
+        ],
+        "0": [
+          0,
+          "Excluded"
+        ],
         "UNKNOWN": [
           0,
           "Not Specified"
@@ -1670,6 +1726,14 @@
       },
       "encoding": "ordinal",
       "mapping": {
+        "1": [
+          1,
+          "Included"
+        ],
+        "0": [
+          0,
+          "Excluded"
+        ],
         "1": [
           1,
           "Included"
@@ -1711,6 +1775,14 @@
           1,
           "Yes"
         ],
+        "0": [
+          0,
+          "No"
+        ],
+        "1": [
+          1,
+          "Yes"
+        ],
         "F": [
           0,
           "No"
@@ -1731,22 +1803,6 @@
           0,
           "No"
         ]
-      }
-    },
-    "maximum_age": {
-      "ui": {
-        "label": "Maximum Age",
-        "pillar": "Patient Profile",
-        "subgroup": "Population Scope",
-        "priority": 32
-      }
-    },
-    "minimum_age": {
-      "ui": {
-        "label": "Minimum Age",
-        "pillar": "Patient Profile",
-        "subgroup": "Population Scope",
-        "priority": 33
       }
     },
     "gbd_hierarchy_level_ml": {
@@ -1800,6 +1856,26 @@
           4,
           "Level 4 (Specific Condition)"
         ],
+        "0": [
+          0,
+          "Unknown Depth"
+        ],
+        "1": [
+          1,
+          "Level 1 (Unclassified Condition)"
+        ],
+        "2": [
+          2,
+          "Level 2 (Condition High-Level Category)"
+        ],
+        "3": [
+          3,
+          "Level 3 (Condition Group)"
+        ],
+        "4": [
+          4,
+          "Level 4 (Specific Condition)"
+        ],
         "UNKNOWN": [
           0,
           "Unknown Depth"
@@ -1825,6 +1901,14 @@
       },
       "encoding": "ordinal",
       "mapping": {
+        "0": [
+          0,
+          "Known"
+        ],
+        "1": [
+          1,
+          "Duration Missing"
+        ],
         "0": [
           0,
           "Known"
@@ -1882,8 +1966,16 @@
           1,
           "Failure"
         ],
+        "0.0": [
+          0,
+          "Success"
+        ],
+        "1.0": [
+          1,
+          "Failure"
+        ],
         "UNKNOWN": [
-          null,
+          NaN,
           "Not Specified"
         ]
       }
@@ -2088,14 +2180,6 @@
         "priority": 155
       }
     },
-    "p_value_modifier": {
-      "ui": {
-        "label": "P-Value Modifier",
-        "pillar": "Metadata",
-        "subgroup": "Scientific Details",
-        "priority": 156
-      }
-    },
     "start_date": {
       "ui": {
         "label": "Start Date",
@@ -2160,38 +2244,6 @@
         "priority": 194
       }
     },
-    "chronic_ratio_high_income": {
-      "ui": {
-        "label": "Chronic Ratio (High Income)",
-        "pillar": "Metadata",
-        "subgroup": "Epidemiological Stats",
-        "priority": 195
-      }
-    },
-    "daly_high_income": {
-      "ui": {
-        "label": "DALY (High Income)",
-        "pillar": "Metadata",
-        "subgroup": "Epidemiological Stats",
-        "priority": 196
-      }
-    },
-    "yld_high_income": {
-      "ui": {
-        "label": "YLD (High Income)",
-        "pillar": "Metadata",
-        "subgroup": "Epidemiological Stats",
-        "priority": 197
-      }
-    },
-    "yll_high_income": {
-      "ui": {
-        "label": "YLL (High Income)",
-        "pillar": "Metadata",
-        "subgroup": "Epidemiological Stats",
-        "priority": 198
-      }
-    },
     "overall_status": {
       "ui": {
         "label": "Trial Status",
@@ -2214,70 +2266,6 @@
         "pillar": "Metadata",
         "subgroup": "System",
         "priority": 212
-      }
-    },
-    "gbd_cause_id": {
-      "ui": {
-        "label": "Cause ID",
-        "pillar": "Metadata",
-        "subgroup": "Therapeutic Mapping",
-        "priority": 220
-      }
-    },
-    "gbd_cause_id_2": {
-      "ui": {
-        "label": "Cause ID (L2)",
-        "pillar": "Metadata",
-        "subgroup": "Therapeutic Mapping",
-        "priority": 221
-      }
-    },
-    "gbd_cause_id_4": {
-      "ui": {
-        "label": "Cause ID (L4)",
-        "pillar": "Metadata",
-        "subgroup": "Therapeutic Mapping",
-        "priority": 222
-      }
-    },
-    "Cause ID": {
-      "ui": {
-        "label": "Cause ID (Master)",
-        "pillar": "Metadata",
-        "subgroup": "Therapeutic Mapping",
-        "priority": 223
-      }
-    },
-    "Cause Name": {
-      "ui": {
-        "label": "Cause Name",
-        "pillar": "Metadata",
-        "subgroup": "Therapeutic Mapping",
-        "priority": 224
-      }
-    },
-    "gbd_indication_name_2": {
-      "ui": {
-        "label": "Indication Name (L2)",
-        "pillar": "Metadata",
-        "subgroup": "Therapeutic Mapping",
-        "priority": 225
-      }
-    },
-    "gbd_indication_name_4": {
-      "ui": {
-        "label": "Indication Name (L4)",
-        "pillar": "Metadata",
-        "subgroup": "Therapeutic Mapping",
-        "priority": 226
-      }
-    },
-    "model_ta": {
-      "ui": {
-        "label": "Model TA",
-        "pillar": "Metadata",
-        "subgroup": "Therapeutic Mapping",
-        "priority": 227
       }
     }
   }

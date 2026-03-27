@@ -13,6 +13,7 @@ from sklearn.preprocessing import StandardScaler, FunctionTransformer, TargetEnc
 
 PIPELINE_REGISTRY = {
     "FIELDS": {
+        # --- PILLAR 1: THERAPEUTIC CONTEXT ---
         "therapeutic_area_ml": {
             "ui": {
                 "label": "Therapeutic Area",
@@ -74,6 +75,14 @@ PIPELINE_REGISTRY = {
             },
             "encoding": "target"
         },
+        "gbd_indication_name_3": {
+            "ui": {
+                "label": "Indication",
+                "pillar": "Therapeutic Context",
+                "subgroup": "Therapeutic Area Profile",
+                "priority": 1.1
+            }
+        },
         "is_rare_disease_ml": {
             "ui": {
                 "label": "Rare Condition",
@@ -129,7 +138,7 @@ PIPELINE_REGISTRY = {
                 "subgroup": "Development Phase and Goal",
                 "priority": 4,
                 "options": [
-                    ["SAFETY_DOSING", "Early Phase / Dose Finding"],
+                    ["SAFETY_DOSING", "Dose Characterization"],
                     ["SIGNAL_SEARCH", "Efficacy / Signal Detection"],
                     ["PIVOTAL_INTENT", "Confirmatory / Registration"],
                     ["UNKNOWN", "Unknown Intent"]
@@ -139,10 +148,12 @@ PIPELINE_REGISTRY = {
             "mapping": {
                 "SIGNAL_SEARCH": [1, "Efficacy / Signal Detection"],
                 "PIVOTAL_INTENT": [2, "Confirmatory / Registration"],
-                "SAFETY_DOSING": [3, "Early Phase / Dose Finding"],
+                "SAFETY_DOSING": [3, "Dose Characterization"],
                 "UNKNOWN": [2, "Unknown Intent"]
             }
         },
+
+        # --- PILLAR 2: SCIENTIFIC ATTEMPT ---
         "target_precedent_ml": {
             "ui": {
                 "label": "Target Precedent",
@@ -394,12 +405,14 @@ PIPELINE_REGISTRY = {
                 "UNKNOWN": [0, "No"]
             }
         },
+
+        # --- PILLAR 3: EXECUTION FRAMEWORK ---
         "sponsor_tier_ml": {
             "ui": {
                 "label": "Sponsor Type",
                 "pillar": "Execution Framework",
-                "subgroup": "Trial Complexity Footprint",
-                "priority": 20,
+                "subgroup": "Sponsor Type",
+                "priority": 15,
                 "options": [
                     ["TIER 1", "Top-Tier Pharma"],
                     ["MID_CAP", "Mid-Cap Pharma"],
@@ -575,6 +588,32 @@ PIPELINE_REGISTRY = {
                 "UNKNOWN": [2, "Not Specified"]
             }
         },
+        "is_fda_regulated_drug_ml": {
+            "ui": {
+                "label": "FDA Regulated",
+                "pillar": "Execution Framework",
+                "subgroup": "Regulatory Scope",
+                "priority": 36,
+                "options": [
+                    ["1", "Yes"],
+                    ["0", "No"]
+                ]
+            },
+            "encoding": "ordinal",
+            "mapping": {
+                0: [0, "No"],
+                1: [1, "Yes"],
+                "0": [0, "No"],
+                "1": [1, "Yes"],
+                "F": [0, "No"],
+                "T": [1, "Yes"],
+                "FALSE": [0, "No"],
+                "TRUE": [1, "Yes"],
+                "UNKNOWN": [0, "No"]
+            }
+        },
+
+        # --- PILLAR 4: PATIENT PROFILE ---
         "patient_severity_ml": {
             "ui": {
                 "label": "Patient Severity",
@@ -729,12 +768,44 @@ PIPELINE_REGISTRY = {
                 "UNKNOWN": [1, "Not Specified"]
             }
         },
+        "includes_us_ml": {
+            "ui": {
+                "label": "Includes US Sites",
+                "pillar": "Patient Profile",
+                "subgroup": "Population Scope",
+                "priority": 31,
+                "options": [
+                    ["1", "Yes"],
+                    ["0", "No"]
+                ]
+            },
+            "encoding": "ordinal",
+            "mapping": {
+                0: [0, "No"],
+                1: [1, "Yes"],
+                "0": [0, "No"],
+                "1": [1, "Yes"],
+                "F": [0, "No"],
+                "T": [1, "Yes"],
+                "FALSE": [0, "No"],
+                "TRUE": [1, "Yes"],
+                "UNKNOWN": [0, "No"]
+            }
+        },
+        "maximum_age": {
+            "ui": {"label": "Maximum Age", "pillar": "Patient Profile", "subgroup": "Population Scope", "priority": 32}
+        },
+        "minimum_age": {
+            "ui": {"label": "Minimum Age", "pillar": "Patient Profile", "subgroup": "Population Scope", "priority": 33}
+        },
+
+        # --- PILLAR 5: METADATA (Logic & Audit) ---
         "gbd_hierarchy_level_ml": {
             "ui": {
                 "label": "Mapping Depth",
                 "pillar": "Metadata",
                 "subgroup": "System",
-                "priority": 31,
+                "priority": 32,
                 "options": [
                     ["1", "Level 1 (Unclassified Condition)"],
                     ["2", "Level 2 (Condition High-Level Category)"],
@@ -743,7 +814,7 @@ PIPELINE_REGISTRY = {
                     ["0", "Unknown Depth"]
                 ]
             },
-            "encoding": None,
+            "encoding": "ordinal",
             "mapping": {
                 0: [0, "Unknown Depth"],
                 1: [1, "Level 1 (Unclassified Condition)"],
@@ -763,13 +834,13 @@ PIPELINE_REGISTRY = {
                 "label": "Duration Known",
                 "pillar": "Metadata",
                 "subgroup": "System",
-                "priority": 32,
+                "priority": 33,
                 "options": [
                     ["1", "Duration Missing"],
                     ["0", "Known"]
                 ]
             },
-            "encoding": None,
+            "encoding": "ordinal",
             "mapping": {
                 0: [0, "Known"],
                 1: [1, "Duration Missing"],
@@ -787,7 +858,7 @@ PIPELINE_REGISTRY = {
                 "label": "Outcome",
                 "pillar": "Metadata",
                 "subgroup": "System",
-                "priority": 33,
+                "priority": 34,
                 "options": [
                     ["1.0", "Failure"],
                     ["0.0", "Success"]
@@ -799,16 +870,170 @@ PIPELINE_REGISTRY = {
                 "1.0": [1, "Failure"],
                 0.0: [0, "Success"],
                 1.0: [1, "Failure"],
-                "UNKNOWN": [None, "Not Specified"]
+                "UNKNOWN": [np.nan, "Not Specified"]
             }
         },
-        "ui_acronym": {
-            "ui": {
-                "label": "Study Acronym",
-                "pillar": "Metadata",
-                "subgroup": "Identity",
-                "priority": 34
-            }
+
+        # --- METADATA: IDENTITY ---
+        "nct_id": {
+            "ui": {"label": "NCT ID", "pillar": "Metadata", "subgroup": "Identity", "priority": 100}
+        },
+        "acronym": {
+            "ui": {"label": "Acronym", "pillar": "Metadata", "subgroup": "Identity", "priority": 101}
+        },
+        "official_title": {
+            "ui": {"label": "Official Title", "pillar": "Metadata", "subgroup": "Identity", "priority": 102}
+        },
+        "brief_title": {
+            "ui": {"label": "Brief Title", "pillar": "Metadata", "subgroup": "Identity", "priority": 103}
+        },
+        "title": {
+            "ui": {"label": "Title", "pillar": "Metadata", "subgroup": "Identity", "priority": 104}
+        },
+
+        # --- METADATA: TRIAL METADATA ---
+        "lead_sponsor": {
+            "ui": {"label": "Lead Sponsor", "pillar": "Metadata", "subgroup": "Trial Metadata", "priority": 110}
+        },
+        "lead_sponsor_canonical": {
+            "ui": {"label": "Sponsor", "pillar": "Metadata", "subgroup": "Trial Metadata", "priority": 111}
+        },
+        "agency_class": {
+            "ui": {"label": "Agency Class", "pillar": "Metadata", "subgroup": "Trial Metadata", "priority": 112}
+        },
+        "enrollment": {
+            "ui": {"label": "Enrollment", "pillar": "Metadata", "subgroup": "Trial Metadata", "priority": 113}
+        },
+        "enrollment_type": {
+            "ui": {"label": "Enrollment Type", "pillar": "Metadata", "subgroup": "Trial Metadata", "priority": 114}
+        },
+        "number_of_facilities": {
+            "ui": {"label": "Number of Facilities", "pillar": "Metadata", "subgroup": "Trial Metadata", "priority": 115}
+        },
+        "has_expanded_access": {
+            "ui": {"label": "Expanded Access", "pillar": "Metadata", "subgroup": "Trial Metadata", "priority": 116}
+        },
+        "trial_segment": {
+            "ui": {"label": "Trial Segment", "pillar": "Metadata", "subgroup": "Trial Metadata", "priority": 117}
+        },
+        "gbd_indication_name": {
+            "ui": {"label": "Indication Name", "pillar": "Metadata", "subgroup": "Trial Metadata", "priority": 118}
+        },
+
+        # --- METADATA: CLINICAL SOURCE DATA ---
+        "summary_ui": {
+            "ui": {"label": "Summary", "pillar": "Metadata", "subgroup": "Clinical Source Data", "priority": 130}
+        },
+        "criteria_ui": {
+            "ui": {"label": "Criteria", "pillar": "Metadata", "subgroup": "Clinical Source Data", "priority": 131}
+        },
+        "conditions_ui": {
+            "ui": {"label": "Conditions", "pillar": "Metadata", "subgroup": "Clinical Source Data", "priority": 132}
+        },
+        "interventions_ui": {
+            "ui": {"label": "Interventions", "pillar": "Metadata", "subgroup": "Clinical Source Data", "priority": 133}
+        },
+        "primary_outcomes_ui": {
+            "ui": {"label": "Primary Outcomes", "pillar": "Metadata", "subgroup": "Clinical Source Data", "priority": 134}
+        },
+        # --- METADATA: SCIENTIFIC DETAILS ---
+        "alpha_drug_name": {
+            "ui": {"label": "Drug Name", "pillar": "Metadata", "subgroup": "Scientific Details", "priority": 150}
+        },
+        "biomarker_description": {
+            "ui": {"label": "Biomarker Details", "pillar": "Metadata", "subgroup": "Scientific Details", "priority": 151}
+        },
+        "molecular_targets": {
+            "ui": {"label": "Molecular Targets", "pillar": "Metadata", "subgroup": "Scientific Details", "priority": 152}
+        },
+        "scientific_success": {
+            "ui": {"label": "P-Value Success", "pillar": "Metadata", "subgroup": "Scientific Details", "priority": 153}
+        },
+        "p_value": {
+            "ui": {"label": "P-Value", "pillar": "Metadata", "subgroup": "Scientific Details", "priority": 154}
+        },
+        "min_p_value": {
+            "ui": {"label": "Min P-Value", "pillar": "Metadata", "subgroup": "Scientific Details", "priority": 155}
+        },
+        "p_value_modifier": {
+            "ui": {"label": "P-Value Modifier", "pillar": "Metadata", "subgroup": "Scientific Details", "priority": 156}
+        },
+
+        # --- METADATA: TIMELINE ---
+        "start_date": {
+            "ui": {"label": "Start Date", "pillar": "Metadata", "subgroup": "Timeline", "priority": 170}
+        },
+        "completion_date": {
+            "ui": {"label": "Completion Date", "pillar": "Metadata", "subgroup": "Timeline", "priority": 171}
+        },
+        "primary_completion_date": {
+            "ui": {"label": "Primary Completion Date", "pillar": "Metadata", "subgroup": "Timeline", "priority": 172}
+        },
+
+        # --- METADATA: EPIDEMIOLOGICAL STATS ---
+        "daly_global": {
+            "ui": {"label": "DALY Global", "pillar": "Metadata", "subgroup": "Epidemiological Stats", "priority": 190}
+        },
+        "yld_global": {
+            "ui": {"label": "YLD Global", "pillar": "Metadata", "subgroup": "Epidemiological Stats", "priority": 191}
+        },
+        "yll_global": {
+            "ui": {"label": "YLL Global", "pillar": "Metadata", "subgroup": "Epidemiological Stats", "priority": 192}
+        },
+        "market_skew_index": {
+            "ui": {"label": "Market Skew", "pillar": "Metadata", "subgroup": "Epidemiological Stats", "priority": 193}
+        },
+        "chronic_ratio_global": {
+            "ui": {"label": "Chronic Ratio", "pillar": "Metadata", "subgroup": "Epidemiological Stats", "priority": 194}
+        },
+        "chronic_ratio_high_income": {
+            "ui": {"label": "Chronic Ratio (High Income)", "pillar": "Metadata", "subgroup": "Epidemiological Stats", "priority": 195}
+        },
+        "daly_high_income": {
+            "ui": {"label": "DALY (High Income)", "pillar": "Metadata", "subgroup": "Epidemiological Stats", "priority": 196}
+        },
+        "yld_high_income": {
+            "ui": {"label": "YLD (High Income)", "pillar": "Metadata", "subgroup": "Epidemiological Stats", "priority": 197}
+        },
+        "yll_high_income": {
+            "ui": {"label": "YLL (High Income)", "pillar": "Metadata", "subgroup": "Epidemiological Stats", "priority": 198}
+        },
+
+        # --- METADATA: SYSTEM ---
+        "overall_status": {
+            "ui": {"label": "Trial Status", "pillar": "Metadata", "subgroup": "System", "priority": 210}
+        },
+        "study_type": {
+            "ui": {"label": "Study Type", "pillar": "Metadata", "subgroup": "System", "priority": 211}
+        },
+        "why_stopped_ui": {
+            "ui": {"label": "Termination Reason", "pillar": "Metadata", "subgroup": "System", "priority": 212}
+        },
+
+        # --- METADATA: THERAPEUTIC MAPPING ---
+        "gbd_cause_id": {
+            "ui": {"label": "Cause ID", "pillar": "Metadata", "subgroup": "Therapeutic Mapping", "priority": 220}
+        },
+        "gbd_cause_id_2": {
+            "ui": {"label": "Cause ID (L2)", "pillar": "Metadata", "subgroup": "Therapeutic Mapping", "priority": 221}
+        },
+        "gbd_cause_id_4": {
+            "ui": {"label": "Cause ID (L4)", "pillar": "Metadata", "subgroup": "Therapeutic Mapping", "priority": 222}
+        },
+        "Cause ID": {
+            "ui": {"label": "Cause ID (Master)", "pillar": "Metadata", "subgroup": "Therapeutic Mapping", "priority": 223}
+        },
+        "Cause Name": {
+            "ui": {"label": "Cause Name", "pillar": "Metadata", "subgroup": "Therapeutic Mapping", "priority": 224}
+        },
+        "gbd_indication_name_2": {
+            "ui": {"label": "Indication Name (L2)", "pillar": "Metadata", "subgroup": "Therapeutic Mapping", "priority": 225}
+        },
+        "gbd_indication_name_4": {
+            "ui": {"label": "Indication Name (L4)", "pillar": "Metadata", "subgroup": "Therapeutic Mapping", "priority": 226}
+        },
+        "model_ta": {
+            "ui": {"label": "Model TA", "pillar": "Metadata", "subgroup": "Therapeutic Mapping", "priority": 227}
         }
     }
 }
@@ -832,43 +1057,6 @@ def _build_feature_registry():
     return feature_registry, ui_schema
 
 FEATURE_REGISTRY, UI_SCHEMA = _build_feature_registry()
-
-def export_pipeline_taxonomy(file_path):
-    """
-    Exports an integrated Feature Registry & UI Schema to a JSON file.
-    This serves as the single source of truth for the API and UI.
-    The dictionary is wrapped in a top-level "FIELDS" key.
-    """
-    import json
-    import re
-    fields_payload = {}
-    all_features = set(FEATURE_REGISTRY.keys()) | set(UI_SCHEMA.keys())
-    for feat in all_features:
-        merged = {
-            **FEATURE_REGISTRY.get(feat, {}),
-            **UI_SCHEMA.get(feat, {})
-        }
-        # Avoid 'null' (None) as requested and skip empty mappings
-        fields_payload[feat] = {k: v for k, v in merged.items() if v is not None}
-        
-    # Sort for user-friendly reading (by priority then alphabetically)
-    fields_payload = dict(sorted(fields_payload.items(), key=lambda x: (x[1].get("priority", 99), x[0])))
-
-    # Wrap in "FIELDS" key
-    taxonomy_payload = {"FIELDS": fields_payload}
-
-    # Condense the JSON: Start with small indent
-    raw_json = json.dumps(taxonomy_payload, indent=2)
-    
-    # Regex Magic: Collapse arrays of primitives that were split across multiple lines
-    # This specifically targets [val1, val2] and [val] patterns
-    condensed = re.sub(r'\[\s+([^\[\]\{\}]*?)\s+\]', 
-                       lambda m: "[" + re.sub(r'\s+', ' ', m.group(1)).strip() + "]", 
-                       raw_json)
-    
-    with open(file_path, "w") as f:
-        f.write(condensed)
-    print(f"✅ Condensed Taxonomy exported to {file_path}")
 
 # ==============================================================================
 # 3. CUSTOM ML TRANSFORMERS
@@ -962,3 +1150,36 @@ def preprocessor():
         remainder='drop',
         verbose_feature_names_out=True
     )
+
+def export_pipeline_taxonomy(output_path):
+    """
+    Exports the PIPELINE_REGISTRY as a JSON file to serve as the source of truth 
+    for the API and UI layers.
+    Ensures all keys are strings and handles np.nan for JSON compliance.
+    """
+    import json
+    import numpy as np
+    from pathlib import Path
+
+    def sanitize(obj):
+        """Recursively ensures JSON compliance."""
+        if isinstance(obj, dict):
+            # 1. Deduplicate: all keys to string, nested sanitize
+            return {str(k): sanitize(v) for k, v in obj.items()}
+        elif isinstance(obj, (list, tuple)):
+            # 2. Nested sanitize for arrays
+            return [sanitize(i) for i in obj]
+        elif isinstance(obj, float) and np.isnan(obj):
+            # 3. Target Safety: np.nan -> null (None) to distinguish from 0/1
+            return None
+        return obj
+
+    sanitized_registry = sanitize(PIPELINE_REGISTRY)
+
+    out_p = Path(output_path)
+    out_p.parent.mkdir(parents=True, exist_ok=True)
+
+    with open(out_p, 'w') as f:
+        json.dump(sanitized_registry, f, indent=2)
+    
+    print(f"✅ Integrated Taxonomy exported to {out_p}")

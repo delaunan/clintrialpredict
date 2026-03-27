@@ -77,6 +77,9 @@ def plot_success_gauge(score_val):
 # ==========================
 def plot_impact_bar(df_pillars):
     df_plot = df_pillars.copy()
+    # SURGICAL REMOVAL: Exclude Raw Evidence from Strategic Visualization
+    df_plot = df_plot[df_plot['Pillar'] != "AACT Raw Data"]
+    
     df_plot['Pillar_Clean'] = df_plot['Pillar'].apply(lambda x: re.sub(r'^\d+\.\s*', '', x))
     df_plot = df_plot.sort_values(by='Impact', ascending=True)
 
@@ -138,6 +141,10 @@ def plot_impact_bar(df_pillars):
 # 3. TREEMAP
 # ==========================
 def plot_treemap(subcat_impacts, pillar_impacts):
+    # SURGICAL REMOVAL: Exclude Raw Evidence from Driver Decomposition
+    pillar_impacts = [p for p in pillar_impacts if p['Pillar'] != "AACT Raw Data"]
+    subcat_impacts = [s for s in subcat_impacts if s['Pillar'] != "AACT Raw Data"]
+
     nodes = {}
     node_sums = {"ALL_DRIVERS": sum(p['Impact'] for p in pillar_impacts)}
     c = STYLE_CONFIG["colors"]
