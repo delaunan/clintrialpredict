@@ -2,6 +2,36 @@ import re
 from typing import Optional
 
 # ------------------------------------------------------------------------------
+# UI FORMATTING HELPERS
+# ------------------------------------------------------------------------------
+
+def ui_truncate(text: str, limit: int) -> str:
+    """Truncates text to a limit and adds ellipsis if exceeded."""
+    if not text:
+        return ""
+    if len(text) <= limit:
+        return text
+    # Ensure ellipsis doesn't exceed the total limit
+    return text[:limit - 3].strip() + "..."
+
+def ui_smart_title_case(text: str) -> str:
+    """For TITLES: Converts ALL CAPS to Title Case; leaves mixed-case alone."""
+    if not text:
+        return ""
+    # Only transform if the entire string is uppercase
+    if text.isupper():
+        return text.title()
+    return text
+
+def ui_smart_sentence_case(text: str) -> str:
+    """For PHRASES: Converts ALL CAPS to Sentence Case; leaves mixed-case alone."""
+    if not text:
+        return ""
+    if text.isupper():
+        return text.capitalize()
+    return text
+
+# ------------------------------------------------------------------------------
 # STRIKETHROUGH / DELETION PATTERNS (DELETE CONTENT)
 # ------------------------------------------------------------------------------
 

@@ -1158,6 +1158,7 @@ def export_pipeline_taxonomy(output_path):
     Ensures all keys are strings and handles np.nan for JSON compliance.
     """
     import json
+    import re
     import numpy as np
     from pathlib import Path
 
@@ -1179,7 +1180,14 @@ def export_pipeline_taxonomy(output_path):
     out_p = Path(output_path)
     out_p.parent.mkdir(parents=True, exist_ok=True)
 
+    # Generate pretty JSON string
+    json_str = json.dumps(sanitized_registry, indent=2)
+
+    # Post-process: Collapse small 2-element lists (options/mappings) to a single line
+    # Matches patterns like: [ \n    "VAL1", \n    "VAL2" \n  ] -> ["VAL1", "VAL2"]
+    json_str = re.sub(r'\[\s*\n\s*([^,\[\]\n]+),\s*\n\s*([^,\[\]\n]+)\s*\n\s*\]', r'[\1, \2]', json_str)
+
     with open(out_p, 'w') as f:
-        json.dump(sanitized_registry, f, indent=2)
+        f.write(json_str)
     
     print(f"✅ Integrated Taxonomy exported to {out_p}")

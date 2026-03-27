@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 
 #emb: Prepares text for embeddings
 # from src.prep.text_cleaning import day_zero_reconstructor
-from src.prep.text_cleaning_ui import ui_clean_text, ui_format_multiline
+from src.prep.text_cleaning_ui import ui_clean_text, ui_format_multiline, ui_truncate, ui_smart_title_case, ui_smart_sentence_case
 # --- DYNAMIC PIPELINE IMPORT ---
 from src.prep.pipeline import FEATURE_REGISTRY, UI_SCHEMA
 
@@ -172,6 +172,10 @@ class ClinicalTrialLoader:
         # Fallback titles
         df['official_title'] = df['official_title'].fillna(df['brief_title'])
         df['brief_title'] = df['brief_title'].fillna(df['official_title'])
+
+        # [REFINEMENT] Apply Smart Casing to titles for UI consistency
+        df['official_title'] = df['official_title'].astype(str).apply(ui_smart_title_case)
+        df['brief_title'] = df['brief_title'].astype(str).apply(ui_smart_title_case)
 
         return df
 
@@ -373,16 +377,16 @@ class ClinicalTrialLoader:
         if not df_elig.empty:
             df = df.merge(df_elig.rename(columns={'criteria': 'ui_criteria_raw'}), on='nct_id', how='left')
 
-        df["title"] = df["official_title"].fillna("").astype(str).apply(ui_clean_text).str[:1000]
+        df["title"] = df["official_title"].fillna("").astype(str).apply(ui_clean_text).apply(ui_smart_title_case).apply(lambda x: ui_truncate(x, 1000))
         df["acronym_ui"] = df["acronym"].fillna("").astype(str).apply(ui_clean_text)
         # [LINGUISTIC DIET] Match LLM Context Caps (Run 1 & 3)
-        df["summary_ui"] = df.get("ui_summary_raw", pd.Series([""]*len(df))).fillna("").astype(str).apply(ui_format_multiline).str[:5000]
-        df["criteria_ui"] = df.get("ui_criteria_raw", pd.Series([""]*len(df))).fillna("").astype(str).apply(ui_format_multiline).str[:10000]
+        df["summary_ui"] = df.get("ui_summary_raw", pd.Series([""]*len(df))).fillna("").astype(str).apply(ui_format_multiline).apply(ui_smart_sentence_case).apply(lambda x: ui_truncate(x, 5000))
+        df["criteria_ui"] = df.get("ui_criteria_raw", pd.Series([""]*len(df))).fillna("").astype(str).apply(ui_format_multiline).apply(ui_smart_sentence_case).apply(lambda x: ui_truncate(x, 10000))
 
         # Raw Scientific Evidence Cleaning (Using Multiline Formatter)
-        df["conditions_ui"] = df.get("raw_conditions", pd.Series([""]*len(df))).fillna("").astype(str).apply(ui_format_multiline)
-        df["interventions_ui"] = df.get("raw_interventions", pd.Series([""]*len(df))).fillna("").astype(str).apply(ui_format_multiline)
-        df["primary_outcomes_ui"] = df.get("raw_primary_outcomes", pd.Series([""]*len(df))).fillna("").astype(str).apply(ui_format_multiline)
+        df["conditions_ui"] = df.get("raw_conditions", pd.Series([""]*len(df))).fillna("").astype(str).apply(ui_format_multiline).apply(ui_smart_sentence_case)
+        df["interventions_ui"] = df.get("raw_interventions", pd.Series([""]*len(df))).fillna("").astype(str).apply(ui_format_multiline).apply(ui_smart_sentence_case)
+        df["primary_outcomes_ui"] = df.get("raw_primary_outcomes", pd.Series([""]*len(df))).fillna("").astype(str).apply(ui_format_multiline).apply(ui_smart_sentence_case)
 
         # [SURGICAL PURGE] Drop raw source columns after UI engineering to maintain a clean final output
         redundant_raw = [
