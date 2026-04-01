@@ -92,14 +92,15 @@ st.markdown("""
             border-right: 1px solid #606c7a;
         }
 
-        /* High Contrast Inputs - Locked Height for alignment */
+        /* High Contrast Inputs - Flexible Height for multi-select tags */
         div[data-baseweb="select"] > div, input {
             background-color: white !important;
             border: 1.5px solid #94a3b8 !important;
             border-radius: 8px !important;
             transition: all 0.2s;
-            min-height: 42px !important;
-            height: 42px !important;
+            min-height: 36px !important;
+            height: auto !important;
+            font-size: 0.85rem !important;
         }
         div[data-baseweb="select"]:focus-within > div {
             border-color: #52606d !important;
@@ -123,9 +124,15 @@ st.markdown("""
             background-color: #717d8b !important;
             border: 1px solid #606c7a !important;
             border-radius: 14px !important;
-            padding: 12px 20px 16px 20px !important;
+            padding: 34px 25px 35px 25px !important; /* TUNED: Large internal margins for Top/Bottom room */
             box-shadow: -6px 6px 12px -3px rgba(0,0,0,0.12) !important;
             margin-bottom: 4px !important;
+        }
+
+        /* NUCLEAR COMPRESSION: Pull rows closer by force */
+        .st-key-filter_body [data-testid="stVerticalBlock"] > div {
+            margin-bottom: -6px !important;
+            padding-bottom: 0px !important;
         }
 
         /* Standardize text colors for dark panels - Force White for Dropdown Labels */
@@ -136,6 +143,7 @@ st.markdown("""
         .st-key-filter_body [data-testid="stWidgetLabel"] p {
             color: #ffffff !important;
             font-weight: 600 !important;
+            margin-bottom: 01px !important; /* TUNED: Snap text to input box */
         }
 
         .st-key-filter_body div[data-baseweb="select"] > div,
@@ -144,15 +152,23 @@ st.markdown("""
             color: #334155 !important;
             border: 1.5px solid #cbd5e1 !important;
             border-radius: 8px !important;
+            font-size: 0.85rem !important;
         }
 
         .st-key-filter_body input::placeholder {
             color: #94a3b8 !important;
+            font-size: 0.8rem !important;
         }
 
         /* COMPACT IDENTICAL DISTANCE BETWEEN ALL LINES */
         .st-key-filter_body [data-testid="stVerticalBlock"] {
-            gap: 0.35rem !important;
+            gap: 0rem !important;
+        }
+
+        /* BRING LABELS CLOSER TO INPUTS */
+        .st-key-filter_body [data-testid="stWidgetLabel"] {
+            min-height: 0px !important;
+            margin-bottom: 0px !important;
         }
 
         /* Layout Gaps & Symmetry */
@@ -189,20 +205,23 @@ st.markdown("""
         }
 
         /* Tags & Labels */
-        span[data-baseweb="tag"] { background-color: #f1f5f9 !important; color: #334155 !important; border-radius: 4px !important; font-weight: 600 !important; }
+        span[data-baseweb="tag"] { background-color: #f1f5f9 !important; color: #334155 !important; border-radius: 4px !important; font-weight: 600 !important; font-size: 0.75rem !important; }
         label, strong { color: #475569 !important; font-weight: 600 !important; font-size: 0.85rem !important; letter-spacing: -0.01em; }
 
-        /* --- RESTOREST BUTTON STYLES (Locked) --- */
+        /* --- RESTOREST BUTTON STYLES --- */
         .stButton > button {
             border-radius: 8px !important;
             font-weight: 700 !important;
-            padding: 0.6rem 1rem !important;
+            padding: 0px 1rem !important;
             transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
             border: 1.5px solid #99a7b9 !important;
             background-color: #b2bccb !important;
             color: #ffffff !important;
-            min-height: 42px !important;
-            height: 42px !important;
+            min-height: 36px !important;
+            height: 36px !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
         }
 
         .stButton > button * {
@@ -311,12 +330,10 @@ def render_filter_fields(df, is_sidebar=False):
         with r2_c2: st.multiselect("Start Year", get_opts("start_year", "f_year"), key="f_year", placeholder="All Years")
 
         # Line 3: Clinical trial number (AACT), Buttons
-        r3_c1, r3_c2 = st.columns(2, vertical_alignment="bottom")
+        r3_c1, r3_c2, r3_c3 = st.columns([2, 0.6, 1.4], vertical_alignment="bottom")
         with r3_c1: st.multiselect("Clinical trial number (AACT)", get_opts("nct_id", "f_nct_id"), key="f_nct_id", placeholder="All NCT IDs")
-        with r3_c2:
-            bc1, bc2 = st.columns([0.8, 1.7], vertical_alignment="bottom")
-            with bc1: st.button("Reset", use_container_width=True, key="btn_hub_reset", on_click=reset_filters)
-            with bc2: st.button("Search Trials", use_container_width=True, type="primary", on_click=initiate_search)
+        with r3_c2: st.button("Reset", use_container_width=True, key="btn_hub_reset", on_click=reset_filters)
+        with r3_c3: st.button("Search Trials", use_container_width=True, type="primary", on_click=initiate_search)
 
     # Dynamic Filter Application (for the final returned dataframe)
     curr_df = df.copy()
@@ -326,7 +343,7 @@ def render_filter_fields(df, is_sidebar=False):
             curr_df = curr_df[curr_df[col].isin(st.session_state[key])]
 
     if not is_sidebar:
-        st.markdown(f"<div style='text-align:right; font-size:0.8rem; color:#cbd5e1; margin-top: -12px;'>{len(curr_df):,} trials matching criteria</div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='text-align:right; font-size:0.8rem; color:#cbd5e1; margin-top: 4px; margin-bottom: -16px;'>{len(curr_df):,} trials matching criteria</div>", unsafe_allow_html=True)
     return curr_df
 
 # ==========================
@@ -374,7 +391,7 @@ with t1:
                 <div>
                     <div style='font-size: 2.8rem; font-weight: 800; color: #52606d; line-height: 1; margin-top: 10px;'>CTPredict</div>
                     <div style='color: #52606d; white-space: nowrap; font-size: 1.5rem; font-weight: 800; display: flex; align-items: baseline; gap: 15px; margin-top: 5px;'>
-                        <span style='line-height: 1;'>Late Stage Clinical Trial Predictive Engine</span>
+                        <span style='line-height: 1;'>Late-Stage Clinical Trial Predictive Engine</span>
                         <span style='font-size: 0.7rem; font-weight: 800; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.1em; line-height: 1; vertical-align: baseline;'>demo version</span>
                     </div>
                 </div>
@@ -448,7 +465,7 @@ if not st.session_state.selected_nct_id:
                             <div class="highlight-title">Predictive Power & Benchmarking</div>
                             <div style="font-size:0.65rem; font-weight:800; color:#94a3b8; text-transform:uppercase; letter-spacing:0.1em;">Engine Accuracy</div>
                         </div>
-                        <div class="highlight-text">When comparing a completed trial with one that terminated early, the system assigns a <b>higher risk score</b> to the failed trial in <b>75% of cases</b>. It clearly outperforms the 50% random baseline and traditional approaches built on publicly available data (<b>AUC ≈ 0.75</b> vs. 0.50 baseline).</div>
+                        <div class="highlight-text">When comparing a completed trial with one that terminated early, the system assigns a <b>higher risk score</b> to the failed trial in <b>75% of cases</b>. It outperforms the 50% random baseline and traditional approaches built on publicly available data (<b>ROC AUC ≈ 0.75</b> vs. 0.50 baseline).</div>
                     </div>
                 </div>
             ''', unsafe_allow_html=True)

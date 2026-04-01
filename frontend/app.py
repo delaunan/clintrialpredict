@@ -107,6 +107,13 @@ st.markdown("""
             box-shadow: 0 0 0 1px #52606d !important;
         }
 
+        /* GLOBAL MULTISELECT DROPDOWN ALIGNMENT */
+        [data-baseweb="popover"] li,
+        div[data-baseweb="select"] ul li,
+        div[role="listbox"] li {
+            font-size: 0.85rem !important;
+        }
+
         /* --- HARMONIOUS SEPARATED SEARCH PANEL --- */
 
         /* Header Box (Top) - Matched to Mid-tone */
@@ -384,7 +391,7 @@ with t1:
     # UNIFIED HEADER LAYOUT
     if is_landing:
         header_html = f"""
-            <div style='display: flex; align-items: center; gap: 12px; margin-top: 30px; margin-left: 0px;'>
+            <div style='display: flex; align-items: center; gap: 12px; margin-top: 15px; margin-left: 0px;'>
                 <div style='background-color: white; border: 4px solid #52606d; margin-top: 12px; padding: 2px; border-radius: 18px; display: flex; align-items: center; justify-content: center; height: 72px; width: 72px; flex-shrink: 0; box-shadow: 0 4px 12px rgba(0,0,0,0.05); position: relative;'>
                     <img src='data:image/png;base64,{img_base64}' style='height: 70px; filter: {brand_filter}; border: none; outline: none;'>
                 </div>
@@ -399,13 +406,13 @@ with t1:
         """
     else:
         header_html = f"""
-            <div style='display: flex; align-items: center; gap: 22px; margin-top: 30px; margin-left: 20px;'>
-                <div style='background-color: white; border: 6px solid #52606d; padding: 6px; border-radius: 14px; display: flex; align-items: center; justify-content: center; height: 75px; width: 75px; flex-shrink: 0;'>
-                    <img src='data:image/png;base64,{img_base64}' style='height: 55px; filter: {brand_filter}; border: none; outline: none;'>
+            <div style='display: flex; align-items: center; gap: 10px; margin-top: 15px; margin-left: 0px;'>
+                <div style='background-color: white; border: 2px solid #52606d; padding: 0px; border-radius: 7px; display: flex; align-items: center; justify-content: center; height: 44px; width: 44px; flex-shrink: 0; box-shadow: 0 4px 12px rgba(0,0,0,0.05); position: relative;'>
+                    <img src='data:image/png;base64,{img_base64}' style='height: 40px; filter: {brand_filter}; border: none; outline: none;'>
                 </div>
-                <div style='display: flex; align-items: baseline; gap: 15px; margin-top: 10px;'>
+                <div style='display: flex; align-items: baseline; gap: 15px;'>
                     <div style='font-size: 3.2rem; font-weight: 800; color: #52606d; line-height: 1;'>CTPredict</div>
-                    <span style='font-size: 0.7rem; font-weight: 800; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.1em; line-height: 1; vertical-align: baseline;'>demo version</span>
+                    <span style='font-size: 0.7rem; font-weight: 800; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.1em; line-height: 1; vertical-align: baseline;'>Demo Version</span>
                 </div>
             </div>
         """
