@@ -107,6 +107,13 @@ st.markdown("""
             box-shadow: 0 0 0 1px #52606d !important;
         }
 
+        /* GLOBAL MULTISELECT DROPDOWN ALIGNMENT */
+        [data-baseweb="popover"] li,
+        div[data-baseweb="select"] ul li,
+        div[role="listbox"] li {
+            font-size: 0.85rem !important;
+        }
+
         /* --- HARMONIOUS SEPARATED SEARCH PANEL --- */
 
         /* Header Box (Top) - Matched to Mid-tone */
@@ -167,6 +174,38 @@ st.markdown("""
 
         /* BRING LABELS CLOSER TO INPUTS */
         .st-key-filter_body [data-testid="stWidgetLabel"] {
+            min-height: 0px !important;
+            margin-bottom: 0px !important;
+        }
+
+        /* --- SIDEBAR FILTER STYLES (Match Main Panel) --- */
+
+        /* Adjust sidebar content padding to move elements higher */
+        div[data-testid="stSidebarContent"] {
+            padding-top: 0px !important; /* Adjust this value to move content up/down */
+        }
+
+        /* Adjust Reset Filter button position in sidebar */
+        section[data-testid="stSidebar"] .stButton > button {
+            margin-top: 2px !important; /* Move button up by 2mm */
+        }
+
+        /* Standardize text colors for dark panels - Force White for Dropdown Labels in sidebar */
+        section[data-testid="stSidebar"] label,
+        section[data-testid="stSidebar"] div[data-testid="stMarkdownContainer"] p {
+            color: #ffffff !important;
+            font-weight: 600 !important;
+            margin-bottom: 01px !important; /* TUNED: Snap text to input box */
+        }
+
+        /* NUCLEAR COMPRESSION: Pull rows closer by force in sidebar */
+        section[data-testid="stSidebar"] [data-testid="stVerticalBlock"] > div {
+            margin-bottom: -7.5px !important;
+            padding-bottom: 0px !important;
+        }
+
+        /* BRING LABELS CLOSER TO INPUTS in sidebar */
+        section[data-testid="stSidebar"] [data-testid="stWidgetLabel"] {
             min-height: 0px !important;
             margin-bottom: 0px !important;
         }
@@ -251,6 +290,8 @@ st.markdown("""
         .identity-header-text { font-size: 1.2rem; font-weight: 600; color: #334155 !important; margin-right: 15px; }
         .title-box-container { background: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; padding: 15px 18px; margin-top: 15px; margin-bottom: 25px; line-height: 1.6; font-weight: 500; box-shadow: -6px 6px 12px -3px rgba(0,0,0,0.12) !important; }
         .pillar-val-box { background:#ffffff; padding:10px; border:1px solid #cbd5e1; border-radius:6px; font-size:0.9rem; color:#334155 !important; min-height:40px; margin-bottom:15px; box-shadow: -6px 6px 12px -3px rgba(0,0,0,0.12) !important; }
+
+        /* DATAFRAME STYLES */
 
         @media (max-width: 768px) {
             .stButton > button { height: 50px; font-size: 1rem; }
@@ -384,7 +425,7 @@ with t1:
     # UNIFIED HEADER LAYOUT
     if is_landing:
         header_html = f"""
-            <div style='display: flex; align-items: center; gap: 12px; margin-top: 30px; margin-left: 0px;'>
+            <div style='display: flex; align-items: center; gap: 12px; margin-top: 15px; margin-left: 0px;'>
                 <div style='background-color: white; border: 4px solid #52606d; margin-top: 12px; padding: 2px; border-radius: 18px; display: flex; align-items: center; justify-content: center; height: 72px; width: 72px; flex-shrink: 0; box-shadow: 0 4px 12px rgba(0,0,0,0.05); position: relative;'>
                     <img src='data:image/png;base64,{img_base64}' style='height: 70px; filter: {brand_filter}; border: none; outline: none;'>
                 </div>
@@ -399,13 +440,13 @@ with t1:
         """
     else:
         header_html = f"""
-            <div style='display: flex; align-items: center; gap: 22px; margin-top: 30px; margin-left: 20px;'>
-                <div style='background-color: white; border: 6px solid #52606d; padding: 6px; border-radius: 14px; display: flex; align-items: center; justify-content: center; height: 75px; width: 75px; flex-shrink: 0;'>
-                    <img src='data:image/png;base64,{img_base64}' style='height: 55px; filter: {brand_filter}; border: none; outline: none;'>
+            <div style='display: flex; align-items: center; gap: 10px; margin-top: 15px; margin-left: 0px;'>
+                <div style='background-color: white; border: 2px solid #52606d; padding: 0px; border-radius: 7px; display: flex; align-items: center; justify-content: center; height: 44px; width: 44px; flex-shrink: 0; box-shadow: 0 4px 12px rgba(0,0,0,0.05); position: relative;'>
+                    <img src='data:image/png;base64,{img_base64}' style='height: 40px; filter: {brand_filter}; border: none; outline: none;'>
                 </div>
-                <div style='display: flex; align-items: baseline; gap: 15px; margin-top: 10px;'>
+                <div style='display: flex; align-items: baseline; gap: 15px;'>
                     <div style='font-size: 3.2rem; font-weight: 800; color: #52606d; line-height: 1;'>CTPredict</div>
-                    <span style='font-size: 0.7rem; font-weight: 800; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.1em; line-height: 1; vertical-align: baseline;'>demo version</span>
+                    <span style='font-size: 0.7rem; font-weight: 800; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.1em; line-height: 1; vertical-align: baseline;'>Demo Version</span>
                 </div>
             </div>
         """
@@ -472,14 +513,16 @@ if not st.session_state.selected_nct_id:
     else:
         # SEARCH RESULTS GRID
         with st.sidebar:
-            st.markdown("<h2 style='color:#f8fafc; font-weight:800;'>Filters</h2>", unsafe_allow_html=True)
+            # Removed the problematic sidebar-content-spacer
+            # st.markdown("<div class='sidebar-content-spacer'></div>", unsafe_allow_html=True) # Spacer to push content down
             if st.button("Reset Filter", use_container_width=True): reset_filters(); st.rerun()
+            st.markdown("<div style='margin-top: 56px;'></div>", unsafe_allow_html=True) # Spacer after reset button
             filtered_df = render_filter_fields(x_base, is_sidebar=True)
-            st.markdown("<div style='height: 300px;'></div>---", unsafe_allow_html=True)
+            st.markdown("<div style='height: 300px;'></div>--- ", unsafe_allow_html=True)
             st.text_input("Register", key="s_registry", placeholder="")
             st.text_input("Analysis", key="s_mode", placeholder="")
 
-        st.markdown(f"<div style='margin-top:20px; color:#64748b; font-weight:600;'>{len(filtered_df):,} Matching Trials</div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='margin-top:20px; color:#94a3b8; font-weight:600; font-size:0.7rem;'>{len(filtered_df):,} Matching Trials</div>", unsafe_allow_html=True)
         grid_df = filtered_df[["nct_id", "ui_search_label", "lead_sponsor_canonical", "therapeutic_area", "phase", "start_year", "Clinical_Score"]].copy()
         grid_df.columns = ["NCT ID", "Identity", "Sponsor", "Area", "Phase", "Year", "Score"]
 

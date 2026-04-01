@@ -11,6 +11,7 @@ import requests
 
 # IMPORT PLOTTING UTILS
 from utils.plot import plot_success_gauge, plot_impact_bar, plot_treemap
+from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode, JsCode
 
 # Load environment variables
 load_dotenv()
@@ -69,7 +70,10 @@ st.markdown("""
 
         .block-container {
             max-width: 1400px !important;
-            padding: 0rem 2rem 2rem !important; margin: auto !important;
+            padding: 0rem 2rem 2rem !important;
+            margin-top: 0rem !important;
+            margin-left: auto !important;
+            margin-right: auto !important;
         }
 
         /* Header Styling - Allow toggle button to show and stay visible */
@@ -187,7 +191,7 @@ st.markdown("""
 
         /* Adjust Reset Filter button position in sidebar */
         section[data-testid="stSidebar"] .stButton > button {
-            margin-top: 0px !important; /* Move button up by 2mm */
+            margin-top: 2px !important; /* Move button up by 2mm */
         }
 
         /* Standardize text colors for dark panels - Force White for Dropdown Labels in sidebar */
@@ -291,6 +295,8 @@ st.markdown("""
         .title-box-container { background: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; padding: 15px 18px; margin-top: 15px; margin-bottom: 25px; line-height: 1.6; font-weight: 500; box-shadow: -6px 6px 12px -3px rgba(0,0,0,0.12) !important; }
         .pillar-val-box { background:#ffffff; padding:10px; border:1px solid #cbd5e1; border-radius:6px; font-size:0.9rem; color:#334155 !important; min-height:40px; margin-bottom:15px; box-shadow: -6px 6px 12px -3px rgba(0,0,0,0.12) !important; }
 
+
+
         @media (max-width: 768px) {
             .stButton > button { height: 50px; font-size: 1rem; }
             h1 { font-size: 1.8rem !important; }
@@ -337,12 +343,20 @@ def get_risk_tier(score: float):
 # 4. COMPONENTS
 # ==========================
 def render_filter_fields(df, is_sidebar=False):
+    # Map logical filter keys to UI-optimized columns
+    COL_MAP = {
+        "f_sponsor": "lead_sponsor_canonical",
+        "f_ta": "therapeutic_area_ui",
+        "f_phase": "phase_ui",
+        "f_year": "start_year",
+        "f_nct_id": "nct_id"
+    }
+
     # Dynamic Options Calculation (Interdependent Filtering)
     def get_opts(col, key):
         tdf = df.copy()
         # Filter tdf by ALL OTHER selections
-        for c, k in [("lead_sponsor_canonical", "f_sponsor"), ("therapeutic_area", "f_ta"),
-                     ("phase", "f_phase"), ("start_year", "f_year"), ("nct_id", "f_nct_id")]:
+        for k, c in COL_MAP.items():
             if k == key: continue
             val = st.session_state.get(k)
             if val:
@@ -352,32 +366,31 @@ def render_filter_fields(df, is_sidebar=False):
         return sorted(tdf[col].dropna().unique())
 
     if is_sidebar:
-        st.multiselect("Company / Sponsor", get_opts("lead_sponsor_canonical", "f_sponsor"), key="f_sponsor", placeholder="All Sponsors")
-        st.multiselect("Therapeutic Area", get_opts("therapeutic_area", "f_ta"), key="f_ta", placeholder="All Therapeutic Areas")
-        st.multiselect("Trial Phase", get_opts("phase", "f_phase"), key="f_phase", placeholder="All Phases")
-        st.multiselect("Start Year", get_opts("start_year", "f_year"), key="f_year", placeholder="All Years")
-        st.multiselect("Clinical trial number (AACT)", get_opts("nct_id", "f_nct_id"), key="f_nct_id", placeholder="All NCT IDs")
+        st.multiselect("Company / Sponsor", get_opts(COL_MAP["f_sponsor"], "f_sponsor"), key="f_sponsor", placeholder="All Sponsors")
+        st.multiselect("Therapeutic Area", get_opts(COL_MAP["f_ta"], "f_ta"), key="f_ta", placeholder="All Therapeutic Areas")
+        st.multiselect("Trial Phase", get_opts(COL_MAP["f_phase"], "f_phase"), key="f_phase", placeholder="All Phases")
+        st.multiselect("Start Year", get_opts(COL_MAP["f_year"], "f_year"), key="f_year", placeholder="All Years")
+        st.multiselect("Clinical trial number (AACT)", get_opts(COL_MAP["f_nct_id"], "f_nct_id"), key="f_nct_id", placeholder="All NCT IDs")
     else:
         # Line 1: Company / Sponsor, Therapeutic Area
         r1_c1, r1_c2 = st.columns(2)
-        with r1_c1: st.multiselect("Company / Sponsor", get_opts("lead_sponsor_canonical", "f_sponsor"), key="f_sponsor", placeholder="All Sponsors")
-        with r1_c2: st.multiselect("Therapeutic Area", get_opts("therapeutic_area", "f_ta"), key="f_ta", placeholder="All Therapeutic Areas")
+        with r1_c1: st.multiselect("Company / Sponsor", get_opts(COL_MAP["f_sponsor"], "f_sponsor"), key="f_sponsor", placeholder="All Sponsors")
+        with r1_c2: st.multiselect("Therapeutic Area", get_opts(COL_MAP["f_ta"], "f_ta"), key="f_ta", placeholder="All Therapeutic Areas")
 
         # Line 2: Trial Phase, Start Year
         r2_c1, r2_c2 = st.columns(2)
-        with r2_c1: st.multiselect("Trial Phase", get_opts("phase", "f_phase"), key="f_phase", placeholder="All Phases")
-        with r2_c2: st.multiselect("Start Year", get_opts("start_year", "f_year"), key="f_year", placeholder="All Years")
+        with r2_c1: st.multiselect("Trial Phase", get_opts(COL_MAP["f_phase"], "f_phase"), key="f_phase", placeholder="All Phases")
+        with r2_c2: st.multiselect("Start Year", get_opts(COL_MAP["f_year"], "f_year"), key="f_year", placeholder="All Years")
 
         # Line 3: Clinical trial number (AACT), Buttons
         r3_c1, r3_c2, r3_c3 = st.columns([2, 0.6, 1.4], vertical_alignment="bottom")
-        with r3_c1: st.multiselect("Clinical trial number (AACT)", get_opts("nct_id", "f_nct_id"), key="f_nct_id", placeholder="All NCT IDs")
+        with r3_c1: st.multiselect("Clinical trial number (AACT)", get_opts(COL_MAP["f_nct_id"], "f_nct_id"), key="f_nct_id", placeholder="All NCT IDs")
         with r3_c2: st.button("Reset", use_container_width=True, key="btn_hub_reset", on_click=reset_filters)
         with r3_c3: st.button("Search Trials", use_container_width=True, type="primary", on_click=initiate_search)
 
     # Dynamic Filter Application (for the final returned dataframe)
     curr_df = df.copy()
-    for col, key in [("lead_sponsor_canonical", "f_sponsor"), ("therapeutic_area", "f_ta"),
-                     ("phase", "f_phase"), ("start_year", "f_year"), ("nct_id", "f_nct_id")]:
+    for key, col in COL_MAP.items():
         if st.session_state.get(key):
             curr_df = curr_df[curr_df[col].isin(st.session_state[key])]
 
@@ -404,20 +417,15 @@ with t1:
     if logo_path.exists():
         img_base64 = get_base64_image(logo_path)
 
-    # --- FINAL SETTINGS ---
+    # --- BRAND FILTER CONFIG ---
     HUE = 180
     INTENSITY = 0.8
     DARKNESS = 0.85
-    THICKNESS = 0  # Removed to eliminate artificial borders
-    # ----------------------
-
-    # 1. We harden the outlines first to make them feel thicker/more solid
+    THICKNESS = 0
+    
     harden = "contrast(1.5) brightness(0.9)"
-    # 2. Apply your tuned slate-blue tint
     tint = f"grayscale(100%) sepia(100%) hue-rotate({HUE}deg) saturate({INTENSITY}) brightness({DARKNESS}) contrast(1.2)"
-    # 3. Add the exact title color as a sharp shadow for the final "weight"
     shadows = f"drop-shadow({THICKNESS}px {THICKNESS}px 0px #52606d) drop-shadow(-{THICKNESS}px -{THICKNESS}px 0px #52606d)"
-
     brand_filter = f"{harden} {tint} {shadows}"
 
     # UNIFIED HEADER LAYOUT
@@ -514,20 +522,226 @@ if not st.session_state.selected_nct_id:
             # Removed the problematic sidebar-content-spacer
             # st.markdown("<div class='sidebar-content-spacer'></div>", unsafe_allow_html=True) # Spacer to push content down
             if st.button("Reset Filter", use_container_width=True): reset_filters(); st.rerun()
-            st.markdown("<div style='margin-top: 58px;'></div>", unsafe_allow_html=True) # Spacer after reset button
+            st.markdown("<div style='margin-top: 56px;'></div>", unsafe_allow_html=True) # Spacer after reset button
             filtered_df = render_filter_fields(x_base, is_sidebar=True)
             st.markdown("<div style='height: 300px;'></div>--- ", unsafe_allow_html=True)
             st.text_input("Register", key="s_registry", placeholder="")
             st.text_input("Analysis", key="s_mode", placeholder="")
 
-        st.markdown(f"<div style='margin-top:20px; color:#94a3b8; font-weight:600; font-size:0.7rem;'>{len(filtered_df):,} Matching Trials</div>", unsafe_allow_html=True)
-        grid_df = filtered_df[["nct_id", "ui_search_label", "lead_sponsor_canonical", "therapeutic_area", "phase", "start_year", "Clinical_Score"]].copy()
-        grid_df.columns = ["NCT ID", "Identity", "Sponsor", "Area", "Phase", "Year", "Score"]
+        st.markdown(f"<div style='margin-top:1.5rem; color:#94a3b8; font-weight:600; font-size:0.7rem;'>{len(filtered_df):,} Matching Trials</div>", unsafe_allow_html=True)
+        
+        grid_df = filtered_df[["nct_id", "ui_search_label", "lead_sponsor_canonical", "therapeutic_area_ui", "phase_ui", "start_year", "Clinical_Score"]].copy()
+        grid_df.columns = ["NCT ID", "Identity", "Sponsor", "Area", "Phase", "Start Year", "Score"]
 
-        event = st.dataframe(grid_df, use_container_width=True, hide_index=True, on_select="rerun", selection_mode="single-row", height=500)
-        if event and event.selection and event.selection.rows:
-            st.session_state.selected_nct_id = grid_df.iloc[event.selection.rows[0]]["NCT ID"]
-            st.rerun()
+# --- AG GRID: clickable rows, no checkbox, refined sizing/alignment ---
+        # --- AG GRID: Identity gets all spare space ---
+        gb = GridOptionsBuilder.from_dataframe(grid_df)
+
+        gb.configure_default_column(
+            sortable=True,
+            filter=False,
+            resizable=True,
+            suppressMenu=True,
+            minWidth=95,
+            flex=1,
+        )
+
+        gb.configure_column(
+            "NCT ID",
+            minWidth=95,
+            maxWidth=110,
+            flex=0.68,
+            headerClass="ag-tight-center-header",
+            cellClass="ag-tight-center-cell",
+        )
+
+        gb.configure_column(
+            "Identity",
+            minWidth=300,
+            flex=3.15,
+            headerClass="ag-left-header",
+            cellClass="ag-identity-cell",
+        )
+
+        gb.configure_column(
+            "Sponsor",
+            minWidth=145,
+            maxWidth=175,
+            flex=1.20,
+            headerClass="ag-tight-center-header",
+            cellClass="ag-tight-center-cell",
+        )
+
+        gb.configure_column(
+            "Area",
+            minWidth=130,
+            maxWidth=160,
+            flex=1.00,
+            headerClass="ag-tight-center-header",
+            cellClass="ag-tight-center-cell",
+        )
+
+        gb.configure_column(
+            "Phase",
+            minWidth=90,
+            maxWidth=105,
+            flex=0.65,
+            headerClass="ag-tight-center-header",
+            cellClass="ag-tight-center-cell",
+        )
+
+        gb.configure_column(
+            "Start Year",
+            minWidth=75,
+            maxWidth=90,
+            flex=0.58,
+            filter=False,
+            headerClass="ag-tight-center-header",
+            cellClass="ag-tight-center-cell",
+        )
+
+        gb.configure_column(
+            "Score",
+            minWidth=70,
+            maxWidth=82,
+            flex=0.52,
+            type=["numericColumn"],
+            valueFormatter=JsCode(
+                "function(params) { return params.value != null ? Number(params.value).toFixed(1).replace('.', ',') : ''; }"
+            ),
+            headerClass="ag-tight-center-header",
+            cellClass="ag-tight-center-cell",
+        )
+
+        gb.configure_selection(
+            selection_mode="single",
+            use_checkbox=False,
+            rowMultiSelectWithClick=False,
+        )
+
+        gb.configure_grid_options(
+            rowHeight=35,
+            headerHeight=36,
+            suppressCellFocus=True,
+            animateRows=True,
+            ensureDomOrder=True,
+            onRowClicked=JsCode("""
+                function(e) {
+                    e.api.deselectAll();
+                    e.node.setSelected(true, true);
+                }
+            """),
+        )
+
+        # Calculate dynamic height: Header (36) + Rows (35 * N) + Border/Padding (2)
+        dynamic_height = min(470, 36 + (len(grid_df) * 35) + 2)
+
+        grid_response = AgGrid(
+            grid_df,
+            gridOptions=gb.build(),
+            height=dynamic_height,
+            fit_columns_on_grid_load=True,
+            allow_unsafe_jscode=True,
+            update_mode=GridUpdateMode.SELECTION_CHANGED,
+            theme="streamlit",
+            custom_css={
+                ".ag-root-wrapper": {
+                    "border": "1px solid #cbd5e1",
+                    "border-radius": "12px",
+                    "overflow": "hidden",
+                    "box-shadow": "-6px 6px 12px -3px rgba(0,0,0,0.12)",
+                },
+                ".ag-header": {
+                    "background-color": "#e2e8f0 !important",
+                    "border-bottom": "1px solid #cbd5e1 !important",
+                },
+                ".ag-header-cell": {
+                    "background-color": "#e2e8f0 !important",
+                    "border-right": "1px solid #cbd5e1 !important",
+                    "padding-left": "0px !important",
+                    "padding-right": "0px !important",
+                },
+
+                ".ag-header-cell-label": {
+                    "width": "100% !important",
+                    "padding-left": "0px !important",
+                    "padding-right": "0px !important",
+                    "gap": "0px !important",
+                },
+
+                ".ag-tight-center-header .ag-header-cell-label": {
+                    "justify-content": "center !important",
+                },
+
+                ".ag-tight-center-header .ag-header-cell-text": {
+                    "width": "100% !important",
+                    "text-align": "center !important",
+                },
+
+                ".ag-left-header .ag-header-cell-label": {
+                    "justify-content": "flex-start !important",
+                    "padding-left": "6px !important",
+                    "padding-right": "6px !important",
+                },
+
+                ".ag-left-header .ag-header-cell-text": {
+                    "text-align": "left !important",
+                },
+                ".ag-row": {
+                    "cursor": "pointer !important",
+                    "color": "#334155 !important",
+                    "border-bottom": "1px solid #e2e8f0 !important",
+                    "font-size": "0.80rem !important",
+                },
+                ".ag-row-hover": {
+                    "background-color": "rgba(82, 96, 109, 0.07) !important",
+                },
+                ".ag-row-selected": {
+                    "background-color": "rgba(82, 96, 109, 0.14) !important",
+                },
+                ".ag-cell": {
+                    "display": "flex",
+                    "align-items": "center",
+                    "padding-left": "0px !important",
+                    "padding-right": "0px !important",
+                    "border-right": "1px solid #f1f5f9 !important",
+                },
+
+                ".ag-tight-center-cell": {
+                    "justify-content": "center !important",
+                    "padding-left": "0px !important",
+                    "padding-right": "0px !important",
+                },
+
+                ".ag-tight-center-cell .ag-cell-value": {
+                    "width": "100% !important",
+                    "text-align": "center !important",
+                },
+
+                ".ag-identity-cell": {
+                    "justify-content": "flex-start !important",
+                    "padding-left": "6px !important",
+                    "padding-right": "6px !important",
+                },
+
+                ".ag-identity-cell .ag-cell-value": {
+                    "width": "100% !important",
+                    "text-align": "left !important",
+                },
+            },
+            key="trial_results_grid",
+        )
+
+        selected_rows = grid_response.get("selected_rows", [])
+
+        if isinstance(selected_rows, pd.DataFrame):
+            if not selected_rows.empty:
+                st.session_state.selected_nct_id = selected_rows.iloc[0]["NCT ID"]
+                st.rerun()
+        else:
+            if selected_rows:
+                st.session_state.selected_nct_id = selected_rows[0]["NCT ID"]
+                st.rerun()
 
 else:
     # 5.2 TRIAL AUDIT DETAIL
@@ -556,7 +770,11 @@ else:
                     if i+j < len(feats):
                         f_id, f_m = feats[i+j]
                         ui = f_m.get("ui", {})
-                        val = data.get(f_id)
+                        
+                        # Standardize on _ui suffix for display labels
+                        display_col = f_id.replace("_ml", "_ui") if "_ml" in f_id else f"{f_id}_ui"
+                        val = data.get(display_col, data.get(f_id))
+                        
                         with cols[j]:
                             st.markdown(f"**{ui.get('label', f_id)}**")
                             st.markdown(f"<div class='pillar-val-box'>{val if not pd.isna(val) else 'N/A'}</div>", unsafe_allow_html=True)
@@ -589,7 +807,5 @@ else:
             cl, cr = st.columns([1.0, 1.4])
             with cl:
                 st.plotly_chart(plot_success_gauge(score), use_container_width=True, config={'displayModeBar': False})
-                st.markdown(f"<div style='background:{bg}; color:{tc}; padding:20px; border-radius:12px; border:1px solid {tc}22;'><div style='font-size:1.4rem; font-weight:800;'>{tier}</div><div>{desc}</div></div>", unsafe_allow_html=True)
+                st.markdown(f"<div style='background:{bg}; color:{tc}; padding:20px; border-radius:12px; border:1px solid {tc + '22'};'><div style='font-size:1.4rem; font-weight:800;'>{tier}</div><div>{desc}</div></div>", unsafe_allow_html=True)
                 if res.get('pillar_impacts'): st.plotly_chart(plot_impact_bar(pd.DataFrame(res['pillar_impacts'])), use_container_width=True)
-            with cr:
-                if res.get('subcat_impacts'): st.plotly_chart(plot_treemap(res['subcat_impacts'], res.get('pillar_impacts', [])), use_container_width=True)
