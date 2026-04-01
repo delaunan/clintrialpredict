@@ -1,5 +1,6 @@
 import os
 import json
+import base64
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -17,7 +18,11 @@ load_dotenv()
 # ==========================
 # 1. SETUP & CONFIG
 # ==========================
-st.set_page_config(page_title="ClinTrialPredict | Predictive Engine", layout="wide")
+st.set_page_config(
+    page_title="ClinTrialPredict | Predictive Engine",
+    layout="wide",
+    initial_sidebar_state="collapsed"
+)
 
 CURRENT_DIR = Path(__file__).resolve().parent
 DATA_PATH = CURRENT_DIR / "data" / "search_registry.csv"
@@ -31,10 +36,31 @@ ID_COL = "nct_id"
 st.markdown("""
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200');
+
+        /* MATERIAL SYMBOLS FIX */
+        .material-symbols-outlined {
+            font-family: 'Material Symbols Outlined' !important;
+            font-weight: normal;
+            font-style: normal;
+            font-size: 24px;
+            line-height: 1;
+            letter-spacing: normal;
+            text-transform: none;
+            display: inline-block;
+            white-space: nowrap;
+            word-wrap: normal;
+            direction: ltr;
+            -webkit-font-smoothing: antialiased;
+        }
 
         /* LOCK TO LIGHT MODE & GLOBAL FONT CONSISTENCY */
         :root { color-scheme: light !important; }
-        * { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important; }
+
+        /* Target main text containers without breaking icon fonts */
+        html, body, [data-testid="stAppViewContainer"], .stMarkdown, p, span, label, div {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+        }
 
         html, body, [data-testid="stAppViewContainer"] {
             background-color: #f8fafc !important;
@@ -43,10 +69,22 @@ st.markdown("""
 
         .block-container {
             max-width: 1400px !important;
-            padding: 1rem 2rem 2rem !important;
-            margin: auto !important;
+            padding: 0rem 2rem 2rem !important; margin: auto !important;
         }
-        [data-testid="stHeader"] { background-color: rgba(0,0,0,0) !important; }
+
+        /* Header Styling - Allow toggle button to show and stay visible */
+        [data-testid="stHeader"] {
+            background-color: rgba(0,0,0,0) !important;
+            color: #334155 !important;
+        }
+
+        /* FORCE SIDEBAR TOGGLE BUTTONS VISIBILITY (No Hover Required) */
+        button[kind="header"],
+        [data-testid="stSidebarCollapseButton"],
+        [data-testid="collapsedControl"] {
+            opacity: 1 !important;
+            visibility: visible !important;
+        }
 
         /* Sidebar Styling - Balanced Mid-tone (#717d8b) */
         section[data-testid="stSidebar"] {
@@ -54,30 +92,30 @@ st.markdown("""
             border-right: 1px solid #606c7a;
         }
 
-        /* High Contrast Inputs - Locked Height for alignment */
+        /* High Contrast Inputs - Flexible Height for multi-select tags */
         div[data-baseweb="select"] > div, input {
             background-color: white !important;
             border: 1.5px solid #94a3b8 !important;
             border-radius: 8px !important;
             transition: all 0.2s;
-            min-height: 42px !important;
-            height: 42px !important;
+            min-height: 36px !important;
+            height: auto !important;
+            font-size: 0.85rem !important;
         }
         div[data-baseweb="select"]:focus-within > div {
             border-color: #52606d !important;
             box-shadow: 0 0 0 1px #52606d !important;
         }
 
-
         /* --- HARMONIOUS SEPARATED SEARCH PANEL --- */
-        
+
         /* Header Box (Top) - Matched to Mid-tone */
         .st-key-filter_header {
             background-color: #717d8b !important;
             border: 1px solid #606c7a !important;
             border-radius: 14px !important;
             padding: 22px 20px 36px 20px !important;
-            box-shadow: -6px 6px 12px -3px rgba(0,0,0,0.12) !important; 
+            box-shadow: -6px 6px 12px -3px rgba(0,0,0,0.12) !important;
             margin-bottom: 0px !important;
         }
 
@@ -86,34 +124,57 @@ st.markdown("""
             background-color: #717d8b !important;
             border: 1px solid #606c7a !important;
             border-radius: 14px !important;
-            padding: 12px 20px 16px 20px !important; 
-            box-shadow: -6px 6px 12px -3px rgba(0,0,0,0.12) !important; 
-            margin-bottom: 4px !important; 
+            padding: 34px 25px 35px 25px !important; /* TUNED: Large internal margins for Top/Bottom room */
+            box-shadow: -6px 6px 12px -3px rgba(0,0,0,0.12) !important;
+            margin-bottom: 4px !important;
         }
 
-        /* Standardize text colors for dark panels */
+        /* NUCLEAR COMPRESSION: Pull rows closer by force */
+        .st-key-filter_body [data-testid="stVerticalBlock"] > div {
+            margin-bottom: -6px !important;
+            padding-bottom: 0px !important;
+        }
+
+        /* Standardize text colors for dark panels - Force White for Dropdown Labels */
         .st-key-filter_header .highlight-title,
         .st-key-filter_body label,
         .st-key-filter_body p,
-        .st-key-filter_body div[data-testid="stMarkdownContainer"] p {
+        .st-key-filter_body div[data-testid="stMarkdownContainer"] p,
+        .st-key-filter_body [data-testid="stWidgetLabel"] p {
             color: #ffffff !important;
+            font-weight: 600 !important;
+            margin-bottom: 01px !important; /* TUNED: Snap text to input box */
         }
 
         .st-key-filter_body div[data-baseweb="select"] > div,
         .st-key-filter_body input {
             background-color: white !important;
+            color: #334155 !important;
+            border: 1.5px solid #cbd5e1 !important;
             border-radius: 8px !important;
+            font-size: 0.85rem !important;
+        }
+
+        .st-key-filter_body input::placeholder {
+            color: #94a3b8 !important;
+            font-size: 0.8rem !important;
         }
 
         /* COMPACT IDENTICAL DISTANCE BETWEEN ALL LINES */
         .st-key-filter_body [data-testid="stVerticalBlock"] {
-            gap: 0.35rem !important;
+            gap: 0rem !important;
+        }
+
+        /* BRING LABELS CLOSER TO INPUTS */
+        .st-key-filter_body [data-testid="stWidgetLabel"] {
+            min-height: 0px !important;
+            margin-bottom: 0px !important;
         }
 
         /* Layout Gaps & Symmetry */
         [data-testid="stHorizontalBlock"] { gap: 1rem !important; }
         .right-column-stack { display: flex; flex-direction: column; gap: 1rem; height: 100%; }
-        .top-box-margin { margin-bottom: 1rem !important; }
+        .top-box-margin { margin-top: 1.5rem !important; margin-bottom: 1rem !important; }
 
         /* Highlight & Info Boxes */
         .highlight-box {
@@ -124,57 +185,72 @@ st.markdown("""
             box-shadow: -6px 6px 12px -3px rgba(0,0,0,0.12) !important;
             height: 100%;
         }
-        
+
         /* Box 1 Tint (Clean, No thick left line) */
         .mission-box {
             background-color: #e2e8f0 !important;
             border: 1px solid #cbd5e1 !important;
         }
         .mission-box .highlight-text {
-            color: #334155 !important;
-            font-weight: 450 !important;
+            color: #52606d !important;
         }
 
-        .highlight-title { font-weight: 800; color: #334155 !important; font-size: 1.15rem; margin-bottom: 8px; letter-spacing: -0.02em; }
+        .highlight-title { font-weight: 800; color: #52606d !important; font-size: 1.15rem; margin-bottom: 8px; letter-spacing: -0.02em; }
         .highlight-text { color: #64748b; font-size: 0.95rem; line-height: 1.55; font-weight: 450; }
 
+        /* FORCE BOLD VISIBILITY */
+        .highlight-text b, .highlight-text strong {
+            font-weight: 700 !important;
+            color: inherit !important;
+        }
+
         /* Tags & Labels */
-        span[data-baseweb="tag"] { background-color: #f1f5f9 !important; color: #334155 !important; border-radius: 4px !important; font-weight: 600 !important; }
+        span[data-baseweb="tag"] { background-color: #f1f5f9 !important; color: #334155 !important; border-radius: 4px !important; font-weight: 600 !important; font-size: 0.75rem !important; }
         label, strong { color: #475569 !important; font-weight: 600 !important; font-size: 0.85rem !important; letter-spacing: -0.01em; }
 
-        /* --- RESTORED BUTTON STYLES (Locked) --- */
+        /* --- RESTOREST BUTTON STYLES --- */
         .stButton > button {
             border-radius: 8px !important;
             font-weight: 700 !important;
-            padding: 0.6rem 1rem !important;
-            transition: all 0.2s !important;
-            border: 1.5px solid #bfc7d1 !important;
-            background-color: #cfd5dd !important;
-            color: #4b5563 !important; /* DARK GREY TEXT */
-            min-height: 42px !important;
-            height: 42px !important;
+            padding: 0px 1rem !important;
+            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+            border: 1.5px solid #99a7b9 !important;
+            background-color: #b2bccb !important;
+            color: #ffffff !important;
+            min-height: 36px !important;
+            height: 36px !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
         }
 
         .stButton > button * {
-            color: #4b5563 !important; /* DARK GREY TEXT/ICONS */
-            fill: #4b5563 !important;
+            color: #ffffff !important;
+            fill: #ffffff !important;
         }
 
         .stButton > button:hover {
-            background-color: #c2c9d2 !important;
-            border: 1px solid #aeb8c4 !important;
+            background-color: #334155 !important;
+            border-color: #1e293b !important;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.2) !important;
+            transform: scale(1.02) translateY(-2px) !important;
+            color: #ffffff !important;
+        }
+
+        .stButton > button:active {
+            transform: scale(0.98) translateY(0px) !important;
         }
 
         .stButton > button:hover * {
-            color: #374151 !important;
-            fill: #374151 !important;
+            color: #ffffff !important;
+            fill: #ffffff !important;
         }
 
         /* Detail View Elements */
-        h1 { color: #334155 !important; } 
-        .identity-header-text { font-size: 1.2rem; font-weight: 600; color: #334155 !important; margin-right: 15px; } 
-        .title-box-container { background: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; padding: 15px 18px; margin-top: 15px; margin-bottom: 25px; line-height: 1.6; font-weight: 500; box-shadow: -6px 6px 12px -3px rgba(0,0,0,0.12) !important; } 
-        .pillar-val-box { background:#ffffff; padding:10px; border:1px solid #cbd5e1; border-radius:6px; font-size:0.9rem; color:#334155 !important; min-height:40px; margin-bottom:15px; box-shadow: -6px 6px 12px -3px rgba(0,0,0,0.12) !important; } 
+        h1 { color: #334155 !important; }
+        .identity-header-text { font-size: 1.2rem; font-weight: 600; color: #334155 !important; margin-right: 15px; }
+        .title-box-container { background: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; padding: 15px 18px; margin-top: 15px; margin-bottom: 25px; line-height: 1.6; font-weight: 500; box-shadow: -6px 6px 12px -3px rgba(0,0,0,0.12) !important; }
+        .pillar-val-box { background:#ffffff; padding:10px; border:1px solid #cbd5e1; border-radius:6px; font-size:0.9rem; color:#334155 !important; min-height:40px; margin-bottom:15px; box-shadow: -6px 6px 12px -3px rgba(0,0,0,0.12) !important; }
 
         @media (max-width: 768px) {
             .stButton > button { height: 50px; font-size: 1rem; }
@@ -184,8 +260,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # Sidebar visibility logic
-if not st.session_state.get("search_initiated", False):
-    st.markdown("<style>section[data-testid='stSidebar'] { display: none !important; }</style>", unsafe_allow_html=True)
+# Removed restrictive 'display: none' to allow manual expansion/collapse
 
 # ==========================
 # 3. DATA & STATE
@@ -204,7 +279,7 @@ for key, val in {"search_initiated": False, "selected_nct_id": None, "trigger_pr
     if key not in st.session_state: st.session_state[key] = val
 
 def reset_filters():
-    for key in ["f_sponsor", "f_ta", "f_indication", "f_phase", "f_year", "f_nct_id", "s_registry", "s_mode"]:
+    for key in ["f_sponsor", "f_ta", "f_phase", "f_year", "f_nct_id", "s_registry", "s_mode"]:
         if key in st.session_state:
             st.session_state[key] = [] if key.startswith("f_") else ""
     st.session_state.selected_nct_id = None
@@ -223,60 +298,118 @@ def get_risk_tier(score: float):
 # 4. COMPONENTS
 # ==========================
 def render_filter_fields(df, is_sidebar=False):
-    curr_df = df.copy()
+    # Dynamic Options Calculation (Interdependent Filtering)
+    def get_opts(col, key):
+        tdf = df.copy()
+        # Filter tdf by ALL OTHER selections
+        for c, k in [("lead_sponsor_canonical", "f_sponsor"), ("therapeutic_area", "f_ta"),
+                     ("phase", "f_phase"), ("start_year", "f_year"), ("nct_id", "f_nct_id")]:
+            if k == key: continue
+            val = st.session_state.get(k)
+            if val:
+                tdf = tdf[tdf[c].isin(val)]
+        if col == "start_year":
+            return sorted([y for y in tdf[col].unique() if y > 0], reverse=True)
+        return sorted(tdf[col].dropna().unique())
 
     if is_sidebar:
-        st.multiselect("Company / Sponsor", sorted(curr_df["lead_sponsor_canonical"].dropna().unique()), key="f_sponsor", placeholder="All Sponsors")
-        st.multiselect("Therapeutic Area", sorted(curr_df["therapeutic_area"].dropna().unique()), key="f_ta", placeholder="All Therapeutic Areas")
-        st.multiselect("Indication (GBD)", sorted(curr_df["gbd_indication_name"].dropna().unique()), key="f_indication", placeholder="All Indications")
-        st.multiselect("Clinical trial number (AACT)", sorted(curr_df["nct_id"].dropna().unique()), key="f_nct_id", placeholder="All NCT IDs")
-        st.multiselect("Trial Phase", sorted(curr_df["phase"].dropna().unique()), key="f_phase", placeholder="All Phases")
-        years = sorted([y for y in curr_df["start_year"].unique() if y > 0], reverse=True)
-        st.multiselect("Start Year", years, key="f_year", placeholder="All Years")
+        st.multiselect("Company / Sponsor", get_opts("lead_sponsor_canonical", "f_sponsor"), key="f_sponsor", placeholder="All Sponsors")
+        st.multiselect("Therapeutic Area", get_opts("therapeutic_area", "f_ta"), key="f_ta", placeholder="All Therapeutic Areas")
+        st.multiselect("Trial Phase", get_opts("phase", "f_phase"), key="f_phase", placeholder="All Phases")
+        st.multiselect("Start Year", get_opts("start_year", "f_year"), key="f_year", placeholder="All Years")
+        st.multiselect("Clinical trial number (AACT)", get_opts("nct_id", "f_nct_id"), key="f_nct_id", placeholder="All NCT IDs")
     else:
+        # Line 1: Company / Sponsor, Therapeutic Area
         r1_c1, r1_c2 = st.columns(2)
-        with r1_c1: st.multiselect("Company / Sponsor", sorted(curr_df["lead_sponsor_canonical"].dropna().unique()), key="f_sponsor", placeholder="All Sponsors")
-        with r1_c2: st.multiselect("Therapeutic Area", sorted(curr_df["therapeutic_area"].dropna().unique()), key="f_ta", placeholder="All Therapeutic Areas")
+        with r1_c1: st.multiselect("Company / Sponsor", get_opts("lead_sponsor_canonical", "f_sponsor"), key="f_sponsor", placeholder="All Sponsors")
+        with r1_c2: st.multiselect("Therapeutic Area", get_opts("therapeutic_area", "f_ta"), key="f_ta", placeholder="All Therapeutic Areas")
 
+        # Line 2: Trial Phase, Start Year
         r2_c1, r2_c2 = st.columns(2)
-        with r2_c1: st.multiselect("Clinical trial number (AACT)", sorted(curr_df["nct_id"].dropna().unique()), key="f_nct_id", placeholder="All NCT IDs")
-        with r2_c2: st.multiselect("Trial Phase", sorted(curr_df["phase"].dropna().unique()), key="f_phase", placeholder="All Phases")
+        with r2_c1: st.multiselect("Trial Phase", get_opts("phase", "f_phase"), key="f_phase", placeholder="All Phases")
+        with r2_c2: st.multiselect("Start Year", get_opts("start_year", "f_year"), key="f_year", placeholder="All Years")
 
-        # Locked alignment for Start Year and Buttons
-        r3_c1, r3_c2 = st.columns(2, vertical_alignment="bottom")
-        with r3_c1:
-            st.multiselect("Start Year", sorted([y for y in curr_df["start_year"].unique() if y > 0], reverse=True), key="f_year", placeholder="All Years")
-        with r3_c2:
-            # Reversed order: Reset first, then Search. Adjusted weights: [0.8, 1.7] total 2.5
-            bc1, bc2 = st.columns([0.8, 1.7], vertical_alignment="bottom")
-            with bc1:
-                st.button("Reset", use_container_width=True, key="btn_hub_reset", on_click=reset_filters)
-            with bc2:
-                st.button("Search Trials", use_container_width=True, type="primary", on_click=initiate_search)
+        # Line 3: Clinical trial number (AACT), Buttons
+        r3_c1, r3_c2, r3_c3 = st.columns([2, 0.6, 1.4], vertical_alignment="bottom")
+        with r3_c1: st.multiselect("Clinical trial number (AACT)", get_opts("nct_id", "f_nct_id"), key="f_nct_id", placeholder="All NCT IDs")
+        with r3_c2: st.button("Reset", use_container_width=True, key="btn_hub_reset", on_click=reset_filters)
+        with r3_c3: st.button("Search Trials", use_container_width=True, type="primary", on_click=initiate_search)
 
-    # Dynamic Filter Application
+    # Dynamic Filter Application (for the final returned dataframe)
+    curr_df = df.copy()
     for col, key in [("lead_sponsor_canonical", "f_sponsor"), ("therapeutic_area", "f_ta"),
-                     ("gbd_indication_name", "f_indication"), ("nct_id", "f_nct_id"),
-                     ("phase", "f_phase"), ("start_year", "f_year")]:
+                     ("phase", "f_phase"), ("start_year", "f_year"), ("nct_id", "f_nct_id")]:
         if st.session_state.get(key):
             curr_df = curr_df[curr_df[col].isin(st.session_state[key])]
 
     if not is_sidebar:
-        # PUSHED HIGHER (-12px) relative to bottom line
-        st.markdown(f"<div style='text-align:right; font-size:0.8rem; color:#cbd5e1; margin-top: -12px;'>{len(curr_df):,} trials matching criteria</div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='text-align:right; font-size:0.8rem; color:#cbd5e1; margin-top: 4px; margin-bottom: -16px;'>{len(curr_df):,} trials matching criteria</div>", unsafe_allow_html=True)
     return curr_df
 
 # ==========================
 # 5. MAIN UI FLOW
 # ==========================
+
+# Helper to load image as base64
+def get_base64_image(image_path):
+    with open(image_path, "rb") as img_file:
+        return base64.b64encode(img_file.read()).decode()
+
 # Header
 t1, t2 = st.columns([3, 1])
+is_landing = not st.session_state.get("search_initiated", False) and not st.session_state.get("selected_nct_id")
+
 with t1:
-    st.markdown("""
-        <h1 style='font-size: 3rem; margin-bottom: 0;'>ClinTrialPrediction
-            <span style='font-size:0.65rem; font-weight:800; color:#94a3b8; text-transform:uppercase; letter-spacing:0.1em; vertical-align: baseline; margin-left: 15px;'>demo version</span>
-        </h1>
-    """, unsafe_allow_html=True)
+    logo_path = CURRENT_DIR / "logo_grey_title.png"
+    img_base64 = ""
+    if logo_path.exists():
+        img_base64 = get_base64_image(logo_path)
+
+    # --- FINAL SETTINGS ---
+    HUE = 180
+    INTENSITY = 0.8
+    DARKNESS = 0.85
+    THICKNESS = 0  # Removed to eliminate artificial borders
+    # ----------------------
+
+    # 1. We harden the outlines first to make them feel thicker/more solid
+    harden = "contrast(1.5) brightness(0.9)"
+    # 2. Apply your tuned slate-blue tint
+    tint = f"grayscale(100%) sepia(100%) hue-rotate({HUE}deg) saturate({INTENSITY}) brightness({DARKNESS}) contrast(1.2)"
+    # 3. Add the exact title color as a sharp shadow for the final "weight"
+    shadows = f"drop-shadow({THICKNESS}px {THICKNESS}px 0px #52606d) drop-shadow(-{THICKNESS}px -{THICKNESS}px 0px #52606d)"
+
+    brand_filter = f"{harden} {tint} {shadows}"
+
+    # UNIFIED HEADER LAYOUT
+    if is_landing:
+        header_html = f"""
+            <div style='display: flex; align-items: center; gap: 12px; margin-top: 30px; margin-left: 0px;'>
+                <div style='background-color: white; border: 4px solid #52606d; margin-top: 12px; padding: 2px; border-radius: 18px; display: flex; align-items: center; justify-content: center; height: 72px; width: 72px; flex-shrink: 0; box-shadow: 0 4px 12px rgba(0,0,0,0.05); position: relative;'>
+                    <img src='data:image/png;base64,{img_base64}' style='height: 70px; filter: {brand_filter}; border: none; outline: none;'>
+                </div>
+                <div>
+                    <div style='font-size: 2.8rem; font-weight: 800; color: #52606d; line-height: 1; margin-top: 10px;'>CTPredict</div>
+                    <div style='color: #52606d; white-space: nowrap; font-size: 1.5rem; font-weight: 800; display: flex; align-items: baseline; gap: 15px; margin-top: 5px;'>
+                        <span style='line-height: 1;'>Late-Stage Clinical Trial Predictive Engine</span>
+                        <span style='font-size: 0.7rem; font-weight: 800; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.1em; line-height: 1; vertical-align: baseline;'>demo version</span>
+                    </div>
+                </div>
+            </div>
+        """
+    else:
+        header_html = f"""
+            <div style='display: flex; align-items: center; gap: 22px; margin-top: 30px; margin-left: 20px;'>
+                <div style='background-color: white; border: 6px solid #52606d; padding: 6px; border-radius: 14px; display: flex; align-items: center; justify-content: center; height: 75px; width: 75px; flex-shrink: 0;'>
+                    <img src='data:image/png;base64,{img_base64}' style='height: 55px; filter: {brand_filter}; border: none; outline: none;'>
+                </div>
+                <div style='display: flex; align-items: baseline; gap: 15px; margin-top: 10px;'>
+                    <div style='font-size: 3.2rem; font-weight: 800; color: #52606d; line-height: 1;'>CTPredict</div>
+                    <span style='font-size: 0.7rem; font-weight: 800; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.1em; line-height: 1; vertical-align: baseline;'>demo version</span>
+                </div>
+            </div>
+        """
+    st.markdown(header_html, unsafe_allow_html=True)
 
 with t2:
     if st.session_state.selected_nct_id:
@@ -298,7 +431,7 @@ if not st.session_state.selected_nct_id:
                     <div class="highlight-title">Operational Success & Risk Stratification</div>
                     <div style="font-size:0.65rem; font-weight:800; color:#94a3b8; text-transform:uppercase; letter-spacing:0.1em;">Core Mission</div>
                 </div>
-                <div class="highlight-text">This predictive engine estimates the likelihood of operational completion and the risk of early termination using only data available at clinical trial initiation. Each trial is systematically evaluated and classified into four distinct tiers - High Risk, Watchlist, Favorable, and Robust - providing a clear and actionable risk profile.</div>
+                <div class="highlight-text">This predictive engine estimates the <b>likelihood of operational completion</b> and the <b>risk of early termination</b> using only data available at clinical trial initiation. Each trial is systematically evaluated and classified into <b>four distinct tiers</b> - High Risk, Watchlist, Favorable, and Robust - providing a clear and actionable risk profile.</div>
             </div>
         ''', unsafe_allow_html=True)
 
@@ -317,8 +450,6 @@ if not st.session_state.selected_nct_id:
             with st.container(key="filter_body"):
                 render_filter_fields(x_base, is_sidebar=False)
 
-
-
         with col_right:
             st.markdown('''
                 <div class="right-column-stack">
@@ -327,14 +458,14 @@ if not st.session_state.selected_nct_id:
                             <div class="highlight-title">Industry-Scale Clinical Data</div>
                             <div style="font-size:0.65rem; font-weight:800; color:#94a3b8; text-transform:uppercase; letter-spacing:0.1em;">Intelligence Source</div>
                         </div>
-                        <div class="highlight-text">Built on the publicly available AACT registry, this machine learning system leverages execution patterns from 30,000+ Phase II and III trials since 2005. The analytical scope focuses on late-stage studies, where strategic and financial stakes are highest.</div>
+                        <div class="highlight-text">Built on the publicly available <b>AACT registry</b>, this machine learning system leverages execution patterns from <b>30,000+ Phase II and III trials</b> since 2005. The analytical scope focuses on <b>late-stage studies</b>, where strategic and financial stakes are highest.</div>
                     </div>
                     <div class="highlight-box">
                         <div style="display: flex; justify-content: space-between; align-items: baseline;">
                             <div class="highlight-title">Predictive Power & Benchmarking</div>
                             <div style="font-size:0.65rem; font-weight:800; color:#94a3b8; text-transform:uppercase; letter-spacing:0.1em;">Engine Accuracy</div>
                         </div>
-                        <div class="highlight-text">When comparing a completed trial with one that terminated early, the system assigns a higher risk score to the failed trial in 75% of cases. It clearly outperforms the 50% random baseline and traditional approaches built on publicly available data (AUC ≈ 0.75 vs. 0.50 baseline).</div>
+                        <div class="highlight-text">When comparing a completed trial with one that terminated early, the system assigns a <b>higher risk score</b> to the failed trial in <b>75% of cases</b>. It outperforms the 50% random baseline and traditional approaches built on publicly available data (<b>ROC AUC ≈ 0.75</b> vs. 0.50 baseline).</div>
                     </div>
                 </div>
             ''', unsafe_allow_html=True)
@@ -345,8 +476,8 @@ if not st.session_state.selected_nct_id:
             if st.button("Reset Filter", use_container_width=True): reset_filters(); st.rerun()
             filtered_df = render_filter_fields(x_base, is_sidebar=True)
             st.markdown("<div style='height: 300px;'></div>---", unsafe_allow_html=True)
-            st.text_input("Register", key="s_registry", placeholder="all")
-            st.text_input("Analysis", key="s_mode", placeholder="all")
+            st.text_input("Register", key="s_registry", placeholder="")
+            st.text_input("Analysis", key="s_mode", placeholder="")
 
         st.markdown(f"<div style='margin-top:20px; color:#64748b; font-weight:600;'>{len(filtered_df):,} Matching Trials</div>", unsafe_allow_html=True)
         grid_df = filtered_df[["nct_id", "ui_search_label", "lead_sponsor_canonical", "therapeutic_area", "phase", "start_year", "Clinical_Score"]].copy()
