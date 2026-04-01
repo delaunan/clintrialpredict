@@ -178,6 +178,38 @@ st.markdown("""
             margin-bottom: 0px !important;
         }
 
+        /* --- SIDEBAR FILTER STYLES (Match Main Panel) --- */
+
+        /* Adjust sidebar content padding to move elements higher */
+        div[data-testid="stSidebarContent"] {
+            padding-top: 0px !important; /* Adjust this value to move content up/down */
+        }
+
+        /* Adjust Reset Filter button position in sidebar */
+        section[data-testid="stSidebar"] .stButton > button {
+            margin-top: 0px !important; /* Move button up by 2mm */
+        }
+
+        /* Standardize text colors for dark panels - Force White for Dropdown Labels in sidebar */
+        section[data-testid="stSidebar"] label,
+        section[data-testid="stSidebar"] div[data-testid="stMarkdownContainer"] p {
+            color: #ffffff !important;
+            font-weight: 600 !important;
+            margin-bottom: 01px !important; /* TUNED: Snap text to input box */
+        }
+
+        /* NUCLEAR COMPRESSION: Pull rows closer by force in sidebar */
+        section[data-testid="stSidebar"] [data-testid="stVerticalBlock"] > div {
+            margin-bottom: -7.5px !important;
+            padding-bottom: 0px !important;
+        }
+
+        /* BRING LABELS CLOSER TO INPUTS in sidebar */
+        section[data-testid="stSidebar"] [data-testid="stWidgetLabel"] {
+            min-height: 0px !important;
+            margin-bottom: 0px !important;
+        }
+
         /* Layout Gaps & Symmetry */
         [data-testid="stHorizontalBlock"] { gap: 1rem !important; }
         .right-column-stack { display: flex; flex-direction: column; gap: 1rem; height: 100%; }
@@ -479,14 +511,16 @@ if not st.session_state.selected_nct_id:
     else:
         # SEARCH RESULTS GRID
         with st.sidebar:
-            st.markdown("<h2 style='color:#f8fafc; font-weight:800;'>Filters</h2>", unsafe_allow_html=True)
+            # Removed the problematic sidebar-content-spacer
+            # st.markdown("<div class='sidebar-content-spacer'></div>", unsafe_allow_html=True) # Spacer to push content down
             if st.button("Reset Filter", use_container_width=True): reset_filters(); st.rerun()
+            st.markdown("<div style='margin-top: 58px;'></div>", unsafe_allow_html=True) # Spacer after reset button
             filtered_df = render_filter_fields(x_base, is_sidebar=True)
-            st.markdown("<div style='height: 300px;'></div>---", unsafe_allow_html=True)
+            st.markdown("<div style='height: 300px;'></div>--- ", unsafe_allow_html=True)
             st.text_input("Register", key="s_registry", placeholder="")
             st.text_input("Analysis", key="s_mode", placeholder="")
 
-        st.markdown(f"<div style='margin-top:20px; color:#64748b; font-weight:600;'>{len(filtered_df):,} Matching Trials</div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='margin-top:20px; color:#94a3b8; font-weight:600; font-size:0.7rem;'>{len(filtered_df):,} Matching Trials</div>", unsafe_allow_html=True)
         grid_df = filtered_df[["nct_id", "ui_search_label", "lead_sponsor_canonical", "therapeutic_area", "phase", "start_year", "Clinical_Score"]].copy()
         grid_df.columns = ["NCT ID", "Identity", "Sponsor", "Area", "Phase", "Year", "Score"]
 
