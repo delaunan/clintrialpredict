@@ -102,13 +102,43 @@ def inject_custom_styles():
                 gap: 0rem !important;
             }}
 
-            div[data-baseweb="select"] > div, input {{
+            /* SELECTBOXES */
+            div[data-baseweb="select"] > div {{
                 background-color: white !important;
                 border: 1.5px solid #94a3b8 !important;
                 border-radius: 8px !important;
                 transition: all 0.2s;
-                min-height: 36px !important;
-                height: auto !important;
+                min-height: 38px !important;
+                height: 38px !important;
+                font-size: 0.80rem !important;
+                padding-top: 0 !important;
+                padding-bottom: 0 !important;
+                display: flex !important;
+                align-items: center !important;
+            }}
+
+            div[data-baseweb="select"] > div > div {{
+                align-items: center !important;
+            }}
+
+            div[data-baseweb="select"] span {{
+                line-height: 1.1 !important;
+            }}
+
+            div[data-baseweb="select"] input {{
+                padding-top: 0 !important;
+                padding-bottom: 0 !important;
+                line-height: 1.1 !important;
+            }}
+
+            /* TEXT INPUTS */
+            [data-testid="stTextInputRootElement"] input {{
+                background-color: white !important;
+                border: 1.5px solid #94a3b8 !important;
+                border-radius: 8px !important;
+                transition: all 0.2s;
+                min-height: 38px !important;
+                height: 38px !important;
                 font-size: 0.80rem !important;
             }}
 
@@ -208,7 +238,6 @@ def inject_custom_styles():
             .highlight-text b, .highlight-text strong {{ font-weight: 700 !important; color: inherit !important; }}
 
             /* Tags & Labels */
-            span[data-baseweb="tag"] {{ background-color: #f1f5f9 !important; color: #334155 !important; border-radius: 4px !important; font-weight: 600 !important; font-size: 0.80rem !important; }}
             label, strong {{ color: #475569 !important; font-weight: 600 !important; font-size: 0.85rem !important; letter-spacing: -0.01em; }}
 
             /* Detail View */
@@ -229,7 +258,7 @@ def inject_custom_styles():
                 border-radius: 8px !important; font-weight: 700 !important; padding: 0px 1rem !important;
                 transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
                 border: 1.5px solid #99a7b9 !important; background-color: #b2bccb !important;
-                color: #ffffff !important; min-height: 36px !important; height: 36px !important;
+                color: #ffffff !important; min-height: 38px !important; height: 38px !important;
                 display: flex !important; align-items: center !important; justify-content: center !important;
             }}
             .stButton > button:hover {{
@@ -260,16 +289,23 @@ def init_session_state():
         "trigger_prediction": False,
         "analysis_result": None,
         "analysis_nct_id": None,
-        "f_sponsor": [], "f_ta": [], "f_phase": [], "f_year": [], "f_nct_id": [],
-        "s_registry": "", "s_mode": ""
+        "f_sponsor": None,
+        "f_ta": None,
+        "f_phase": None,
+        "f_year": None,
+        "f_nct_id": None,
+        "s_registry": "",
+        "s_mode": ""
     }
     for key, val in defaults.items():
         if key not in st.session_state:
             st.session_state[key] = val
 
 def reset_filters():
-    for key in ["f_sponsor", "f_ta", "f_phase", "f_year", "f_nct_id", "s_registry", "s_mode"]:
-        st.session_state[key] = [] if key.startswith("f_") else ""
+    for key in ["f_sponsor", "f_ta", "f_phase", "f_year", "f_nct_id"]:
+        st.session_state[key] = None
+    for key in ["s_registry", "s_mode"]:
+        st.session_state[key] = ""
     st.session_state.selected_nct_id = None
     st.session_state.search_initiated = False
 
@@ -324,40 +360,77 @@ def render_filters(df, is_sidebar=False):
         "f_nct_id": "nct_id"
     }
 
-    def get_opts(col_key):
-        tdf = df.copy()
+    def apply_filters(base_df, skip_key=None):
+        tdf = base_df.copy()
         for k, c in COL_MAP.items():
-            if k == col_key or not st.session_state.get(k): continue
-            tdf = tdf[tdf[c].isin(st.session_state[k])]
+            val = st.session_state.get(k)
+            if k == skip_key or val in (None, ""):
+                continue
+            tdf = tdf[tdf[c] == val]
+        return tdf
+
+    def get_opts(col_key):
+        tdf = apply_filters(df, skip_key=col_key)
         col = COL_MAP[col_key]
+
         if col == "start_year":
-            return sorted([y for y in tdf[col].unique() if y > 0], reverse=True)
+            return sorted([y for y in tdf[col].dropna().unique() if y > 0], reverse=True)
+
         return sorted(tdf[col].dropna().unique())
 
+    def render_select(label, col_key, placeholder):
+        opts = list(get_opts(col_key))
+
+        if st.session_state.get(col_key) not in opts:
+            st.session_state[col_key] = None
+
+        st.selectbox(
+            label,
+            options=opts,
+            key=col_key,
+            index=None,
+            placeholder=placeholder
+        )
+
     if is_sidebar:
-        st.multiselect("Company / Sponsor", get_opts("f_sponsor"), key="f_sponsor", placeholder="All Sponsors")
-        st.multiselect("Therapeutic Area", get_opts("f_ta"), key="f_ta", placeholder="All Therapeutic Areas")
-        st.multiselect("Trial Phase", get_opts("f_phase"), key="f_phase", placeholder="All Phases")
-        st.multiselect("Start Year", get_opts("f_year"), key="f_year", placeholder="All Years")
-        st.multiselect("Clinical trial number (AACT)", get_opts("f_nct_id"), key="f_nct_id", placeholder="All NCT IDs")
+        render_select("Company / Sponsor", "f_sponsor", "All Sponsors")
+        render_select("Therapeutic Area", "f_ta", "All Therapeutic Areas")
+        render_select("Trial Phase", "f_phase", "All Phases")
+        render_select("Start Year", "f_year", "All Years")
+        render_select("Clinical trial number (AACT)", "f_nct_id", "All NCT IDs")
     else:
         r1_c1, r1_c2 = st.columns(2)
-        with r1_c1: st.multiselect("Company / Sponsor", get_opts("f_sponsor"), key="f_sponsor", placeholder="All Sponsors")
-        with r1_c2: st.multiselect("Therapeutic Area", get_opts("f_ta"), key="f_ta", placeholder="All Therapeutic Areas")
-        r2_c1, r2_c2 = st.columns(2)
-        with r2_c1: st.multiselect("Trial Phase", get_opts("f_phase"), key="f_phase", placeholder="All Phases")
-        with r2_c2: st.multiselect("Start Year", get_opts("f_year"), key="f_year", placeholder="All Years")
-        r3_c1, r3_c2, r3_c3 = st.columns([2, 0.6, 1.4], vertical_alignment="bottom")
-        with r3_c1: st.multiselect("Clinical trial number (AACT)", get_opts("f_nct_id"), key="f_nct_id", placeholder="All NCT IDs")
-        with r3_c2: st.button("Reset", use_container_width=True, on_click=reset_filters)
-        with r3_c3: st.button("Search Trials", use_container_width=True, type="primary", on_click=lambda: setattr(st.session_state, "search_initiated", True))
+        with r1_c1:
+            render_select("Company / Sponsor", "f_sponsor", "All Sponsors")
+        with r1_c2:
+            render_select("Therapeutic Area", "f_ta", "All Therapeutic Areas")
 
-    curr_df = df.copy()
-    for k, c in COL_MAP.items():
-        if st.session_state.get(k): curr_df = curr_df[curr_df[c].isin(st.session_state[k])]
+        r2_c1, r2_c2 = st.columns(2)
+        with r2_c1:
+            render_select("Trial Phase", "f_phase", "All Phases")
+        with r2_c2:
+            render_select("Start Year", "f_year", "All Years")
+
+        r3_c1, r3_c2, r3_c3 = st.columns([2, 0.6, 1.4], vertical_alignment="bottom")
+        with r3_c1:
+            render_select("Clinical trial number (AACT)", "f_nct_id", "All NCT IDs")
+        with r3_c2:
+            st.button("Reset", use_container_width=True, on_click=reset_filters)
+        with r3_c3:
+            st.button(
+                "Search Trials",
+                use_container_width=True,
+                type="primary",
+                on_click=lambda: setattr(st.session_state, "search_initiated", True)
+            )
+
+    curr_df = apply_filters(df)
 
     if not is_sidebar:
-        st.markdown(f"<div style='text-align:right; font-size:0.8rem; color:#cbd5e1; margin-top: 4px; margin-bottom: -16px;'>{len(curr_df):,} trials matching criteria</div>", unsafe_allow_html=True)
+        st.markdown(
+            f"<div style='text-align:right; font-size:0.8rem; color:#cbd5e1; margin-top: 4px; margin-bottom: -16px;'>{len(curr_df):,} trials matching criteria</div>",
+            unsafe_allow_html=True
+        )
     return curr_df
 
 def render_trials_grid(df):
