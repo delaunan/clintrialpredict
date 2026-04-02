@@ -186,7 +186,6 @@ def inject_custom_styles():
             }}
 
             .st-key-filter_body label,
-            .st-key-filter_body div[data-testid="stMarkdownContainer"] p,
             .st-key-filter_body [data-testid="stWidgetLabel"] p {{
                 color: #ffffff !important;
                 font-weight: 600 !important;
@@ -214,7 +213,6 @@ def inject_custom_styles():
             }}
 
             .st-key-sidebar_filters label,
-            .st-key-sidebar_filters div[data-testid="stMarkdownContainer"] p,
             .st-key-sidebar_filters [data-testid="stWidgetLabel"] p {{
                 color: #ffffff !important;
                 font-weight: 600 !important;
@@ -255,17 +253,68 @@ def inject_custom_styles():
 
             /* Buttons */
             .stButton > button {{
-                border-radius: 8px !important; font-weight: 700 !important; padding: 0px 1rem !important;
+                border-radius: 8px !important;
+                font-weight: 400 !important;
+                font-size: 0.85rem !important;
+                line-height: 1 !important;
+                padding: 0px 1rem !important;
                 transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
-                border: 1.5px solid #99a7b9 !important; background-color: #b2bccb !important;
-                color: #ffffff !important; min-height: 38px !important; height: 38px !important;
-                display: flex !important; align-items: center !important; justify-content: center !important;
+                min-height: 37px !important;
+                height: 37px !important;
+                display: flex !important;
+                align-items: center !important;
+                justify-content: center !important;
+                cursor: pointer !important;
             }}
+
+            .stButton > button[kind="secondary"],
+            .stButton > button:not([kind="primary"]) {{
+                border: 1.5px solid #99a7b9 !important;
+                background-color: #b2bccb !important;
+                color: #ffffff !important;
+            }}
+
+            .stButton > button[kind="primary"] {{
+                border: 1.5px solid #52606d !important;
+                background-color: #52606d !important;
+                color: #ffffff !important;
+                box-shadow: -4px 4px 10px -3px rgba(0,0,0,0.18) !important;
+            }}
+
             .stButton > button:hover {{
-                background-color: #334155 !important; border-color: #1e293b !important;
-                box-shadow: 0 8px 20px rgba(0,0,0,0.2) !important; transform: scale(1.02) translateY(-2px) !important;
+                background-color: #334155 !important;
+                border-color: #1e293b !important;
+                box-shadow: 0 8px 20px rgba(0,0,0,0.2) !important;
+                transform: scale(1.02) translateY(-2px) !important;
             }}
-            .stButton > button * {{ color: #ffffff !important; fill: #ffffff !important; }}
+
+            .stButton > button,
+            .stButton > button span,
+            .stButton > button p,
+            .stButton > button div {{
+                font-size: 0.85rem !important;
+                font-weight: 400 !important;
+                line-height: 1 !important;
+                letter-spacing: 0 !important;
+            }}
+
+            .stButton > button:hover,
+            .stButton > button:hover span,
+            .stButton > button:hover p,
+            .stButton > button:hover div {{
+                font-weight: 700 !important;
+            }}
+
+            .stButton > button * {{
+                color: #ffffff !important;
+                fill: #ffffff !important;
+                font-size: inherit !important;
+                font-weight: inherit !important;
+                line-height: inherit !important;
+                letter-spacing: inherit !important;
+                pointer-events: none !important;
+            }}
+
         </style>
     """, unsafe_allow_html=True)
 
@@ -309,6 +358,19 @@ def reset_filters():
     st.session_state.selected_nct_id = None
     st.session_state.search_initiated = False
 
+def keep_search_widget_state():
+    for key in [
+        "f_sponsor",
+        "f_ta",
+        "f_phase",
+        "f_year",
+        "f_nct_id",
+        "s_registry",
+        "s_mode",
+    ]:
+        if key in st.session_state:
+            st.session_state[key] = st.session_state[key]
+
 def get_risk_tier(score: float):
     if score >= 75: return "Robust", "Strong success patterns detected.", "#f0fdf4", "#166534"
     if score >= 50: return "Favorable", "Favorable historical indicators.", "#eff6ff", "#1e40af"
@@ -319,14 +381,14 @@ def get_risk_tier(score: float):
 # 4. COMPONENTS
 # ==========================
 
-def render_header(is_landing=True):
+def render_header(is_landing=True, show_predict_button=False, show_back_button=False):
     logo_path = CURRENT_DIR / "logo_grey_title.png"
     img_base64 = ""
     if logo_path.exists():
         with open(logo_path, "rb") as f:
             img_base64 = base64.b64encode(f.read()).decode()
 
-    t1, t2 = st.columns([3, 1])
+    t1, t2 = st.columns([3, 1.7])
     with t1:
         size = 72 if is_landing else 44
         border = 4 if is_landing else 2
@@ -347,9 +409,29 @@ def render_header(is_landing=True):
         st.markdown(html, unsafe_allow_html=True)
 
     with t2:
-        if st.session_state.selected_nct_id:
-            if st.button("Predict Completion", use_container_width=True, type="primary"):
-                st.session_state.trigger_prediction = True
+        if show_back_button or show_predict_button:
+            st.markdown("<div style='height: 35px;'></div>", unsafe_allow_html=True)
+
+            a1, a2 = st.columns([1.0, 1.65], gap="small")
+
+            with a1:
+                if show_back_button:
+                    if st.button("Back to Results", use_container_width=True, key="header_back_btn"):
+                        st.session_state.selected_nct_id = None
+                        st.session_state.trigger_prediction = False
+                        st.session_state.analysis_result = None
+                        st.session_state.analysis_nct_id = None
+                        st.rerun()
+
+            with a2:
+                if show_predict_button:
+                    if st.button(
+                        "Predict Trial Completion",
+                        use_container_width=True,
+                        type="primary",
+                        key="header_predict_btn"
+                    ):
+                        st.session_state.trigger_prediction = True
 
 def render_filters(df, is_sidebar=False):
     COL_MAP = {
@@ -588,6 +670,100 @@ def render_pillar_expander(title, pillar_name, data):
                         st.markdown(f"**{f_m.get('ui', {}).get('label', f_id)}**")
                         st.markdown(f"<div class='pillar-val-box'>{val if not pd.isna(val) else 'N/A'}</div>", unsafe_allow_html=True)
 
+def open_trial_third_ui(selected_id):
+    st.session_state.selected_nct_id = selected_id
+    st.session_state.trigger_prediction = False
+    st.session_state.analysis_result = None
+    st.session_state.analysis_nct_id = None
+    st.rerun()
+
+
+def render_third_ui_shell():
+    # Intentionally empty for now.
+    st.markdown("<div style='height: 1px;'></div>", unsafe_allow_html=True)
+
+
+def render_fourth_ui(row):
+    with st.expander("Identity", expanded=True):
+        st.markdown(f'''
+            <div style="display: flex; align-items: baseline; margin-bottom: 10px;">
+                <span class="identity-header-text">{row[ID_COL]}</span>
+                <span style="font-size: 1.2rem; color: #475569; font-weight: 600;">{row.get("ui_search_label", "N/A")}</span>
+            </div>
+            <div class="title-box-container">
+                <span style="color: #64748b; font-size: 0.75rem; text-transform: uppercase; font-weight: 800; display: block; margin-bottom: 8px;">Title</span>
+                {row.get("title", "No title available.")}
+            </div>
+        ''', unsafe_allow_html=True)
+
+    c1, c2 = st.columns(2)
+    with c1:
+        render_pillar_expander("Therapeutic Context", "Therapeutic Context", row)
+    with c2:
+        render_pillar_expander("Execution Framework", "Execution Framework", row)
+
+    c3, c4 = st.columns(2)
+    with c3:
+        render_pillar_expander("Scientific Attempt", "Scientific Attempt", row)
+    with c4:
+        render_pillar_expander("Patient Profile", "Patient Profile", row)
+
+    if st.session_state.trigger_prediction or st.session_state.get("analysis_result"):
+        if (
+            not st.session_state.get("analysis_result")
+            or st.session_state.get("analysis_nct_id") != st.session_state.selected_nct_id
+        ):
+            with st.spinner("Analyzing signals..."):
+                try:
+                    res = requests.post(API_URL, json=row.replace({np.nan: None}).to_dict())
+                    if res.status_code == 200:
+                        st.session_state.analysis_result = res.json()
+                        st.session_state.analysis_nct_id = st.session_state.selected_nct_id
+                        st.session_state.trigger_prediction = False
+                    else:
+                        st.error(f"API Error: {res.status_code}")
+                except Exception as e:
+                    st.error(f"System Error: {e}")
+
+        if st.session_state.get("analysis_result"):
+            res = st.session_state.analysis_result
+            score = res.get("score", 0)
+            tier, desc, bg, tc = get_risk_tier(score)
+
+            st.markdown("<hr style='margin: 40px 0;'>", unsafe_allow_html=True)
+            cl, cr = st.columns([1.0, 1.4])
+
+            with cl:
+                st.plotly_chart(
+                    plot_success_gauge(score),
+                    use_container_width=True,
+                    config={"displayModeBar": False}
+                )
+                st.markdown(
+                    f"<div style='background:{bg}; color:{tc}; padding:20px; border-radius:12px; border:1px solid {tc + '22'};'><div style='font-size:1.4rem; font-weight:800;'>{tier}</div><div>{desc}</div></div>",
+                    unsafe_allow_html=True
+                )
+
+            with cr:
+                if res.get("pillar_impacts"):
+                    st.plotly_chart(
+                        plot_impact_bar(pd.DataFrame(res["pillar_impacts"])),
+                        use_container_width=True
+                    )
+
+                # Future fourth UI:
+                # add your treemap here when ready
+                # for example:
+                # if res.get("treemap_data"):
+                #     st.plotly_chart(
+                #         plot_treemap(pd.DataFrame(res["treemap_data"])),
+                #         use_container_width=True
+                #     )
+
+
+
+
+
 # ==========================
 # 5. MAIN UI FLOW
 # ==========================
@@ -597,8 +773,26 @@ inject_custom_styles()
 # Landing or Detail Logic
 if not st.session_state.selected_nct_id:
     x_base = X_ALL.copy()
-    if st.session_state.get("s_mode", "").lower() != "all":
-        x_base = x_base[(x_base["is_correct"] == True) | (x_base["trial_segment"] == "ONGOING")]
+
+    registry_mode = st.session_state.get("s_registry", "").strip().lower()
+    analysis_mode = st.session_state.get("s_mode", "").strip().lower()
+
+    include_ongoing = (registry_mode == "all")
+    include_incorrect_historical = (analysis_mode == "all")
+
+    historical_mask = x_base["trial_segment"] != "ONGOING"
+    ongoing_mask = x_base["trial_segment"] == "ONGOING"
+
+    if include_incorrect_historical:
+        historical_df = x_base[historical_mask]
+    else:
+        historical_df = x_base[historical_mask & (x_base["is_correct"] == True)]
+
+    if include_ongoing:
+        ongoing_df = x_base[ongoing_mask]
+        x_base = pd.concat([historical_df, ongoing_df], ignore_index=True)
+    else:
+        x_base = historical_df.copy()
 
     render_header(is_landing=not st.session_state.search_initiated)
 
@@ -654,52 +848,13 @@ if not st.session_state.selected_nct_id:
         st.markdown(f"<div style='margin-top:1.5rem; position:relative; top:-4px; color:#94a3b8; font-weight:600; font-size:0.7rem;'>{len(filtered_df):,} Matching Trials</div>", unsafe_allow_html=True)
         selected_id = render_trials_grid(filtered_df)
         if selected_id:
-            st.session_state.selected_nct_id = selected_id
-            st.rerun()
+            open_trial_third_ui(selected_id)
 else:
-    render_header(is_landing=False)
-    row = X_ALL[X_ALL[ID_COL] == st.session_state.selected_nct_id].iloc[0]
-    if st.button("← Back to Results"): st.session_state.selected_nct_id = None; st.rerun()
+    keep_search_widget_state()
 
-    with st.expander("Identity", expanded=True):
-        st.markdown(f'''
-            <div style="display: flex; align-items: baseline; margin-bottom: 10px;">
-                <span class="identity-header-text">{row[ID_COL]}</span>
-                <span style="font-size: 1.2rem; color: #475569; font-weight: 600;">{row.get("ui_search_label", "N/A")}</span>
-            </div>
-            <div class="title-box-container">
-                <span style="color: #64748b; font-size: 0.75rem; text-transform: uppercase; font-weight: 800; display: block; margin-bottom: 8px;">Title</span>
-                {row.get("title", "No title available.")}
-            </div>
-        ''', unsafe_allow_html=True)
-
-    c1, c2 = st.columns(2)
-    with c1: render_pillar_expander("Therapeutic Context", "Therapeutic Context", row)
-    with c2: render_pillar_expander("Execution Framework", "Execution Framework", row)
-    c3, c4 = st.columns(2)
-    with c3: render_pillar_expander("Scientific Attempt", "Scientific Attempt", row)
-    with c4: render_pillar_expander("Patient Profile", "Patient Profile", row)
-
-    if st.session_state.trigger_prediction or st.session_state.get("analysis_result"):
-        if not st.session_state.get("analysis_result") or st.session_state.get("analysis_nct_id") != st.session_state.selected_nct_id:
-            with st.spinner("Analyzing signals..."):
-                try:
-                    res = requests.post(API_URL, json=row.replace({np.nan: None}).to_dict())
-                    if res.status_code == 200:
-                        st.session_state.analysis_result = res.json()
-                        st.session_state.analysis_nct_id = st.session_state.selected_nct_id
-                        st.session_state.trigger_prediction = False
-                    else: st.error(f"API Error: {res.status_code}")
-                except Exception as e: st.error(f"System Error: {e}")
-
-        if st.session_state.get("analysis_result"):
-            res = st.session_state.analysis_result
-            score = res.get('score', 0)
-            tier, desc, bg, tc = get_risk_tier(score)
-            st.markdown("<hr style='margin: 40px 0;'>", unsafe_allow_html=True)
-            cl, cr = st.columns([1.0, 1.4])
-            with cl:
-                st.plotly_chart(plot_success_gauge(score), use_container_width=True, config={'displayModeBar': False})
-                st.markdown(f"<div style='background:{bg}; color:{tc}; padding:20px; border-radius:12px; border:1px solid {tc + '22'};'><div style='font-size:1.4rem; font-weight:800;'>{tier}</div><div>{desc}</div></div>", unsafe_allow_html=True)
-            with cr:
-                if res.get('pillar_impacts'): st.plotly_chart(plot_impact_bar(pd.DataFrame(res['pillar_impacts'])), use_container_width=True)
+    render_header(
+        is_landing=False,
+        show_predict_button=True,
+        show_back_button=True
+    )
+    render_third_ui_shell()
