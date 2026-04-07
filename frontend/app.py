@@ -1,5 +1,6 @@
 import os
 import json
+import html
 import base64
 from pathlib import Path
 from dotenv import load_dotenv
@@ -38,6 +39,8 @@ HUE = 180
 INTENSITY = 0.8
 DARKNESS = 0.85
 THICKNESS = 0
+
+
 BRAND_FILTER = (
     f"contrast(1.5) brightness(0.9) grayscale(100%) sepia(100%) "
     f"hue-rotate({HUE}deg) saturate({INTENSITY}) brightness({DARKNESS}) "
@@ -45,10 +48,205 @@ BRAND_FILTER = (
     f"drop-shadow(-{THICKNESS}px -{THICKNESS}px 0px #52606d)"
 )
 
+
+DEBUG_OVERLAY = True
+DEBUG_HOVER_INDEX = True
+
 # ==========================
 # 2. STYLES (Consolidated)
 # ==========================
 def inject_custom_styles():
+    debug_overlay_css = """
+            /* =========================
+               DEBUG OVERLAP VISUALIZER
+               ========================= */
+
+            [data-testid="stHeader"] {
+                background: rgba(255, 0, 0, 0.12) !important;
+                outline: 2px solid red !important;
+            }
+
+            .block-container {
+                outline: 2px solid orange !important;
+            }
+
+            [data-testid="stVerticalBlock"] {
+                outline: 1px dashed magenta !important;
+            }
+
+            [data-testid="stElementContainer"] {
+                outline: 1px dashed cyan !important;
+                background: rgba(0, 255, 255, 0.05) !important;
+            }
+
+            .st-key-header_action_buttons {
+                outline: 3px solid lime !important;
+                background: rgba(0, 255, 0, 0.08) !important;
+            }
+
+            .st-key-header_action_buttons .stButton {
+                outline: 2px solid blue !important;
+                background: rgba(0, 0, 255, 0.05) !important;
+            }
+
+            .st-key-header_action_buttons .stButton > button {
+                outline: 2px solid black !important;
+            }
+    """ if DEBUG_OVERLAY else ""
+
+    debug_hover_index_css = """
+            /* =========================
+               DEBUG LABELS - HOVER + INDEX
+               ========================= */
+
+            body {
+                counter-reset: dbg-ec dbg-vb dbg-btn;
+            }
+
+            [data-testid="stHeader"],
+            .block-container,
+            [data-testid="stVerticalBlock"],
+            [data-testid="stElementContainer"],
+            .st-key-header_action_buttons,
+            .st-key-header_action_buttons .stButton,
+            .st-key-header_action_buttons .stButton > button,
+            .st-key-filter_header,
+            .st-key-filter_body,
+            .st-key-sidebar_filters,
+            .st-key-trial_top_strip,
+            .st-key-trial_title_identity,
+            .st-key-trial_title_shell,
+            .st-key-trial_meta_shell,
+            .st-key-trial_top_meta {
+                position: relative !important;
+            }
+
+            [data-testid="stElementContainer"] {
+                counter-increment: dbg-ec;
+            }
+
+            [data-testid="stVerticalBlock"] {
+                counter-increment: dbg-vb;
+            }
+
+            .st-key-header_action_buttons .stButton {
+                counter-increment: dbg-btn;
+            }
+
+            [data-testid="stHeader"]::before,
+            .block-container::before,
+            [data-testid="stVerticalBlock"]::before,
+            [data-testid="stElementContainer"]::before,
+            .st-key-header_action_buttons::before,
+            .st-key-header_action_buttons .stButton::before,
+            .st-key-header_action_buttons .stButton > button::before,
+            .st-key-filter_header::before,
+            .st-key-filter_body::before,
+            .st-key-sidebar_filters::before,
+            .st-key-trial_top_strip::before,
+            .st-key-trial_title_identity::before,
+            .st-key-trial_title_shell::before,
+            .st-key-trial_meta_shell::before,
+            .st-key-trial_top_meta::before {
+                position: absolute !important;
+                top: 0 !important;
+                left: 0 !important;
+                transform: translate(0, -100%) !important;
+                background: rgba(15, 23, 42, 0.92) !important;
+                color: #ffffff !important;
+                font-size: 10px !important;
+                font-weight: 700 !important;
+                line-height: 1 !important;
+                padding: 3px 6px !important;
+                border-radius: 4px !important;
+                white-space: nowrap !important;
+                z-index: 99999 !important;
+                pointer-events: none !important;
+                text-transform: none !important;
+                letter-spacing: 0 !important;
+                opacity: 0 !important;
+                transition: opacity 0.12s ease !important;
+            }
+
+            [data-testid="stHeader"]:hover::before,
+            .block-container:hover::before,
+            [data-testid="stVerticalBlock"]:hover::before,
+            [data-testid="stElementContainer"]:hover::before,
+            .st-key-header_action_buttons:hover::before,
+            .st-key-header_action_buttons .stButton:hover::before,
+            .st-key-header_action_buttons .stButton > button:hover::before,
+            .st-key-filter_header:hover::before,
+            .st-key-filter_body:hover::before,
+            .st-key-sidebar_filters:hover::before,
+            .st-key-trial_top_strip:hover::before,
+            .st-key-trial_title_identity:hover::before,
+            .st-key-trial_title_shell:hover::before,
+            .st-key-trial_meta_shell:hover::before,
+            .st-key-trial_top_meta:hover::before {
+                opacity: 1 !important;
+            }
+
+            [data-testid="stHeader"]::before {
+                content: "stHeader" !important;
+            }
+
+            .block-container::before {
+                content: "block-container" !important;
+            }
+
+            [data-testid="stVerticalBlock"]::before {
+                content: "stVerticalBlock #" counter(dbg-vb) !important;
+            }
+
+            [data-testid="stElementContainer"]::before {
+                content: "stElementContainer #" counter(dbg-ec) !important;
+            }
+
+            .st-key-header_action_buttons::before {
+                content: "header_action_buttons" !important;
+            }
+
+            .st-key-header_action_buttons .stButton::before {
+                content: "stButton wrapper #" counter(dbg-btn) !important;
+            }
+
+            .st-key-header_action_buttons .stButton > button::before {
+                content: "actual button" !important;
+            }
+
+            .st-key-filter_header::before {
+                content: "filter_header" !important;
+            }
+
+            .st-key-filter_body::before {
+                content: "filter_body" !important;
+            }
+
+            .st-key-sidebar_filters::before {
+                content: "sidebar_filters" !important;
+            }
+
+            .st-key-trial_top_strip::before {
+                content: "trial_top_strip" !important;
+            }
+
+            .st-key-trial_title_identity::before {
+                content: "trial_title_identity" !important;
+            }
+
+            .st-key-trial_title_shell::before {
+                content: "trial_title_shell" !important;
+            }
+
+            .st-key-trial_meta_shell::before {
+                content: "trial_meta_shell" !important;
+            }
+
+            .st-key-trial_top_meta::before {
+                content: "trial_top_meta" !important;
+            }
+    """ if DEBUG_HOVER_INDEX else ""
+
     st.markdown(f"""
         <style>
             @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
@@ -227,7 +425,146 @@ def inject_custom_styles():
                 margin-bottom: -3px !important;
             }}
 
-            .right-column-stack {{ display: flex; flex-direction: column; gap: 1rem; height: 100%; }}
+            /* TOP STRIP */
+            .st-key-trial_top_strip {{
+                position: relative !important;
+                top: -20px !important;
+            }}
+
+            .st-key-trial_top_strip [data-testid="stVerticalBlock"] {{
+                gap: 0rem !important;
+            }}
+
+            .st-key-trial_title_identity {{
+                margin-bottom: 6px !important;
+            }}
+
+            .st-key-trial_title_identity [data-testid="stVerticalBlock"] {{
+                gap: 0rem !important;
+            }}
+
+            .st-key-trial_title_shell {{
+                background-color: #e2e8f0 !important;
+                border: 1px solid #cbd5e1 !important;
+                border-radius: 14px !important;
+                padding: 14px 16px 14px 16px !important;
+                box-shadow: -6px 6px 12px -3px rgba(0,0,0,0.12) !important;
+                min-height: 138px !important;
+            }}
+
+            .st-key-trial_title_shell [data-testid="stVerticalBlock"] {{
+                gap: 0rem !important;
+            }}
+
+            .st-key-trial_title_shell [data-testid="stTextArea"] {{
+                margin-top: 0 !important;
+            }}
+
+            .st-key-trial_title_shell [data-testid="stTextArea"] [data-baseweb="textarea"] {{
+                background: transparent !important;
+                border: none !important;
+                box-shadow: none !important;
+                padding: 0 !important;
+            }}
+
+            .st-key-trial_title_shell .stTextArea textarea {{
+                background: transparent !important;
+                padding: 0 !important;
+                min-height: 78px !important;
+                line-height: 1.42 !important;
+                font-size: 0.92rem !important;
+                font-weight: 600 !important;
+                color: #334155 !important;
+            }}
+
+            .st-key-trial_title_shell .stTextArea textarea:disabled {{
+                background: transparent !important;
+                -webkit-text-fill-color: #334155 !important;
+                opacity: 1 !important;
+            }}
+
+            .st-key-trial_title_shell .stTextArea textarea:not(:disabled) {{
+                background: #ffffff !important;
+                border-radius: 10px !important;
+                padding: 10px 12px !important;
+            }}
+
+            .st-key-trial_meta_shell {{
+                background-color: #e2e8f0 !important;
+                border: 1px solid #cbd5e1 !important;
+                border-radius: 14px !important;
+                padding: 14px 14px 14px 14px !important;
+                box-shadow: -6px 6px 12px -3px rgba(0,0,0,0.12) !important;
+                margin-top: 38px !important;
+            }}
+
+            .st-key-trial_meta_shell [data-testid="stVerticalBlock"] {{
+                gap: 0rem !important;
+            }}
+
+            .st-key-trial_top_meta {{
+                max-width: 100% !important;
+            }}
+
+            .st-key-trial_top_meta [data-testid="stVerticalBlock"] {{
+                gap: 0.46rem !important;
+            }}
+
+            .st-key-trial_top_meta [data-testid="stElementContainer"] {{
+                margin-bottom: 0 !important;
+            }}
+
+            .st-key-trial_top_meta div[data-baseweb="select"] > div,
+            .st-key-trial_top_meta [data-testid="stTextInputRootElement"] input {{
+                min-height: 38px !important;
+                height: 38px !important;
+                font-size: 0.80rem !important;
+            }}
+
+            /* UNIFIED TEXT PANELS: same look in read and edit mode */
+            [data-testid="stTextArea"] [data-baseweb="textarea"] {{
+                border: 1px solid #cbd5e1 !important;
+                border-radius: 10px !important;
+                background-color: #ffffff !important;
+                box-shadow: -4px 4px 10px -4px rgba(0,0,0,0.10) !important;
+                overflow: hidden !important;
+            }}
+
+            [data-testid="stTextArea"] [data-baseweb="textarea"] > div {{
+                background-color: #ffffff !important;
+                padding: 0 !important;
+            }}
+
+            .stTextArea textarea {{
+                font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
+                font-size: 0.84rem !important;
+                line-height: 1.45 !important;
+                font-weight: 500 !important;
+                color: #334155 !important;
+                background-color: #ffffff !important;
+                border: none !important;
+                border-radius: 10px !important;
+                padding: 10px 12px !important;
+                margin: 0 !important;
+                resize: none !important;
+                white-space: pre-wrap !important;
+                overflow-wrap: break-word !important;
+                tab-size: 4 !important;
+                caret-color: #334155 !important;
+            }}
+
+            .stTextArea textarea:focus {{
+                outline: none !important;
+                box-shadow: none !important;
+            }}
+
+            .stTextArea textarea:disabled {{
+                color: #334155 !important;
+                -webkit-text-fill-color: #334155 !important;
+                opacity: 1 !important;
+                cursor: default !important;
+                background-color: #ffffff !important;
+            }}
 
             /* Boxes & Highlights */
             .highlight-box {{
@@ -319,42 +656,9 @@ def inject_custom_styles():
                 line-height: inherit !important;
                 letter-spacing: inherit !important;
             }}
+            {debug_overlay_css}
+            {debug_hover_index_css}
 
-            /* =========================
-               DEBUG OVERLAP VISUALIZER
-               ========================= */
-
-            [data-testid="stHeader"] {{
-                background: rgba(255, 0, 0, 0.12) !important;
-                outline: 2px solid red !important;
-            }}
-
-            .block-container {{
-                outline: 2px solid orange !important;
-            }}
-
-            [data-testid="stVerticalBlock"] {{
-                outline: 1px dashed magenta !important;
-            }}
-
-            [data-testid="stElementContainer"] {{
-                outline: 1px dashed cyan !important;
-                background: rgba(0, 255, 255, 0.05) !important;
-            }}
-
-            .st-key-header_action_buttons {{
-                outline: 3px solid lime !important;
-                background: rgba(0, 255, 0, 0.08) !important;
-            }}
-
-            .st-key-header_action_buttons .stButton {{
-                outline: 2px solid blue !important;
-                background: rgba(0, 0, 255, 0.05) !important;
-            }}
-
-            .st-key-header_action_buttons .stButton > button {{
-                outline: 2px solid black !important;
-            }}
         </style>
     """, unsafe_allow_html=True)
 
@@ -384,7 +688,8 @@ def init_session_state():
         "f_year": None,
         "f_nct_id": None,
         "s_registry": "",
-        "s_mode": ""
+        "s_mode": "",
+        "global_edit_mode": False,
     }
     for key, val in defaults.items():
         if key not in st.session_state:
@@ -421,7 +726,7 @@ def get_risk_tier(score: float):
 # 4. COMPONENTS
 # ==========================
 
-def render_header(is_landing=True, show_predict_button=False, show_back_button=False):
+def render_header(is_landing=True, show_predict_button=False, show_back_button=False, show_global_edit_toggle=False):
     logo_path = CURRENT_DIR / "logo_grey_title.png"
     img_base64 = ""
     if logo_path.exists():
@@ -449,7 +754,8 @@ def render_header(is_landing=True, show_predict_button=False, show_back_button=F
         st.markdown(html, unsafe_allow_html=True)
 
     with t2:
-        if show_back_button or show_predict_button:
+
+        if show_back_button or show_predict_button or show_global_edit_toggle:
             st.markdown("<div style='height: 35px;'></div>", unsafe_allow_html=True)
 
             with st.container(key="header_action_buttons"):
@@ -462,6 +768,7 @@ def render_header(is_landing=True, show_predict_button=False, show_back_button=F
                             st.session_state.trigger_prediction = False
                             st.session_state.analysis_result = None
                             st.session_state.analysis_nct_id = None
+                            st.session_state.global_edit_mode = False
                             st.rerun()
 
                 with a2:
@@ -473,6 +780,15 @@ def render_header(is_landing=True, show_predict_button=False, show_back_button=F
                             key="header_predict_btn"
                         ):
                             st.session_state.trigger_prediction = True
+
+                if show_global_edit_toggle:
+                    st.markdown("<div style='height: 8px;'></div>", unsafe_allow_html=True)
+                    _, b2 = st.columns([1.0, 1.65], gap="small")
+                    with b2:
+                        st.toggle(
+                            "Edit trial fields",
+                            key="global_edit_mode"
+                        )
 
 def render_filters(df, is_sidebar=False):
     COL_MAP = {
@@ -696,6 +1012,84 @@ def render_trials_grid(df):
         return selected[0]["NCT ID"]
     return None
 
+def get_edited_row(row):
+    edited_row = row.copy()
+    trial_key = st.session_state.get("selected_nct_id", "no_trial")
+
+    # 1. Update from Smart Info Boxes (inputs and selectboxes)
+    for key in st.session_state:
+        if key.startswith(f"input_{trial_key}_"):
+            field_id = key.replace(f"input_{trial_key}_", "")
+            val = st.session_state[key]
+
+            meta = TAXONOMY.get(field_id, {})
+            options = meta.get("ui", {}).get("options")
+            if options:
+                # Map label back to code for ML compatibility
+                for opt in options:
+                    if opt[1] == val:
+                        # If field_id ends with _ml, we store the code
+                        # If it's a UI field, we store the label
+                        if field_id.endswith("_ml"):
+                            edited_row[field_id] = opt[0]
+                        else:
+                            edited_row[field_id] = opt[1]
+                        break
+            else:
+                edited_row[field_id] = val
+
+    # 2. Update from Scroll Panels (text areas)
+    panel_map = {
+        "top_title": "title",
+        "study_summary": "summary_ui",
+        "conditions": "conditions_ui",
+        "interventions": "interventions_ui",
+        "primary_outcomes": "primary_outcomes_ui",
+        "eligibility_criteria": "criteria_ui"
+    }
+    for panel_key, col in panel_map.items():
+        text_key = f"text_{trial_key}_{panel_key}"
+        if text_key in st.session_state:
+            edited_row[col] = st.session_state[text_key]
+
+    return edited_row
+
+def render_smart_info_box(label, field_id, row, min_h=48):
+    """Dynamically renders a field as a selectbox, text_input, or static box based on taxonomy and edit mode."""
+    trial_key = st.session_state.get("selected_nct_id", "no_trial")
+    state_key = f"input_{trial_key}_{field_id}"
+    is_edit = st.session_state.get("global_edit_mode", False)
+
+    # Get initial value from row
+    display_col = field_id.replace("_ml", "_ui") if "_ml" in field_id else f"{field_id}_ui"
+    initial_val = trial_val(row, display_col, field_id)
+
+    # Initialize state if not present
+    if state_key not in st.session_state:
+        st.session_state[state_key] = initial_val
+
+    if is_edit:
+        meta = TAXONOMY.get(field_id, {})
+        options = meta.get("ui", {}).get("options")
+
+        st.markdown(f"<div style='margin-bottom:4px; color:#475569; font-size:0.80rem; font-weight:700;'>{label}</div>", unsafe_allow_html=True)
+
+        if options:
+            # Categorical dropdown
+            labels = [opt[1] for opt in options]
+            try:
+                curr = st.session_state[state_key]
+                idx = labels.index(curr) if curr in labels else 0
+            except:
+                idx = 0
+            st.selectbox(label, options=labels, index=idx, key=state_key, label_visibility="collapsed")
+        else:
+            # Simple text input
+            st.text_input(label, key=state_key, label_visibility="collapsed")
+    else:
+        # Static display using original styling
+        render_compact_info_box(label, st.session_state.get(state_key, initial_val), min_h=min_h)
+
 def render_pillar_expander(title, pillar_name, data):
     feats = sorted([(f_id, f_m) for f_id, f_m in TAXONOMY.items() if f_m.get("ui", {}).get("pillar") == pillar_name],
                    key=lambda x: (x[1].get("ui", {}).get("subgroup", ""), x[1].get("ui", {}).get("priority", 99)))
@@ -705,11 +1099,9 @@ def render_pillar_expander(title, pillar_name, data):
             for j in range(2):
                 if i+j < len(feats):
                     f_id, f_m = feats[i+j]
-                    display_col = f_id.replace("_ml", "_ui") if "_ml" in f_id else f"{f_id}_ui"
-                    val = data.get(display_col, data.get(f_id))
+                    label = f_m.get("ui", {}).get("label", f_id)
                     with cols[j]:
-                        st.markdown(f"**{f_m.get('ui', {}).get('label', f_id)}**")
-                        st.markdown(f"<div class='pillar-val-box'>{val if not pd.isna(val) else 'N/A'}</div>", unsafe_allow_html=True)
+                        render_smart_info_box(label, f_id, data, min_h=40)
 
 def open_trial_third_ui(selected_id):
     st.session_state.selected_nct_id = selected_id
@@ -763,79 +1155,137 @@ def render_compact_info_box(label, value, min_h=48):
     )
 
 
-def render_scroll_panel(label, value, height=180):
-    safe_value = value if value != "N/A" else ""
+def render_scroll_panel(label, value, height=180, key=None):
+    trial_key = st.session_state.get("selected_nct_id", "no_trial")
+    panel_key = key or label.lower().replace(" ", "_")
+    text_key = f"text_{trial_key}_{panel_key}"
+
+    safe_value = "" if value == "N/A" else str(value)
+
+    if text_key not in st.session_state:
+        st.session_state[text_key] = safe_value
+
     st.markdown(
-        f"""
-        <div style="margin-bottom:10px;">
-            <div style="
-                color:#475569;
-                font-size:0.80rem;
-                font-weight:700;
-                margin-bottom:6px;
-            ">{label}</div>
-            <div style="
-                background:#ffffff;
-                border:1px solid #cbd5e1;
-                border-radius:10px;
-                padding:12px 14px;
-                height:{height}px;
-                overflow-y:auto;
-                color:#334155;
-                font-size:0.84rem;
-                line-height:1.45;
-                white-space:pre-wrap;
-                box-shadow:-4px 4px 10px -4px rgba(0,0,0,0.10);
-            ">{safe_value}</div>
-        </div>
-        """,
+        f"<div style='color:#475569; font-size:0.80rem; font-weight:700; margin-bottom:6px;'>{label}</div>",
+        unsafe_allow_html=True
+    )
+
+    st.text_area(
+        label,
+        key=text_key,
+        height=height,
+        label_visibility="collapsed",
+        disabled=not st.session_state.get("global_edit_mode", False)
+    )
+
+
+
+def render_top_meta_field(label, field_id, row):
+    trial_key = st.session_state.get("selected_nct_id", "no_trial")
+    state_key = f"input_{trial_key}_{field_id}"
+    is_edit = st.session_state.get("global_edit_mode", False)
+
+    display_col = field_id.replace("_ml", "_ui") if "_ml" in field_id else f"{field_id}_ui"
+    initial_val = trial_val(row, display_col, field_id)
+
+    if state_key not in st.session_state:
+        st.session_state[state_key] = initial_val
+
+    safe_label = html.escape(label)
+    safe_value = html.escape(str(st.session_state.get(state_key, initial_val)))
+
+    c_label, c_value = st.columns([0.78, 1.22], gap="small")
+
+    with c_label:
+        st.markdown(
+            f"<div style='height:38px; display:flex; align-items:center; justify-content:flex-end; color:#64748b; font-size:0.64rem; font-weight:800; text-transform:uppercase; letter-spacing:0.05em; white-space:nowrap; padding-right:2px;'>{safe_label}</div>",
+            unsafe_allow_html=True
+        )
+
+    with c_value:
+        meta = TAXONOMY.get(field_id, {})
+        options = meta.get("ui", {}).get("options")
+
+        if is_edit:
+            if options:
+                labels = [opt[1] for opt in options]
+                curr = st.session_state[state_key]
+                idx = labels.index(curr) if curr in labels else 0
+                st.selectbox(
+                    label,
+                    options=labels,
+                    index=idx,
+                    key=state_key,
+                    label_visibility="collapsed"
+                )
+            else:
+                st.text_input(
+                    label,
+                    key=state_key,
+                    label_visibility="collapsed"
+                )
+        else:
+            st.markdown(
+                f"<div style='height:38px; display:flex; align-items:center; background:#ffffff; border:1px solid #cbd5e1; border-radius:8px; padding:0 10px; color:#334155; font-size:0.80rem; font-weight:500; box-shadow:-4px 4px 10px -4px rgba(0,0,0,0.10); overflow:hidden; white-space:nowrap; text-overflow:ellipsis;'>{safe_value}</div>",
+                unsafe_allow_html=True
+            )
+
+
+def render_top_identity_line(row):
+    safe_nct = html.escape(trial_val(row, "nct_id"))
+    safe_identity = html.escape(trial_val(row, "ui_search_label"))
+
+    st.markdown(
+        (
+            f"<div style='display:flex; align-items:baseline; gap:16px; margin:0; flex-wrap:wrap;'>"
+            f"<span style='color:#52606d; font-size:1.04rem; font-weight:800; letter-spacing:0.02em; line-height:1.1; white-space:nowrap;'>{safe_nct}</span>"
+            f"<span style='color:#475569; font-size:1.22rem; font-weight:700; line-height:1.18; letter-spacing:-0.01em;'>{safe_identity}</span>"
+            f"</div>"
+        ),
         unsafe_allow_html=True
     )
 
 
-def render_trial_top_strip_refined(row):
-    left, right = st.columns([1.9, 1.1], gap="medium")
+def render_top_title_panel(row):
+    trial_key = st.session_state.get("selected_nct_id", "no_trial")
+    text_key = f"text_{trial_key}_top_title"
 
-    with left:
+    current_value = trial_val(row, "title")
+    current_value = "" if current_value == "N/A" else str(current_value)
+
+    if text_key not in st.session_state:
+        st.session_state[text_key] = current_value
+
+    with st.container(key="trial_title_shell"):
         st.markdown(
-            f"""
-            <div style="
-                background:#e2e8f0;
-                border:1px solid #cbd5e1;
-                border-radius:12px;
-                padding:12px 14px;
-                height:92px;
-                overflow-y:auto;
-                box-shadow:-4px 4px 10px -4px rgba(0,0,0,0.10);
-            ">
-                <div style="
-                    color:#94a3b8;
-                    font-size:0.64rem;
-                    font-weight:800;
-                    text-transform:uppercase;
-                    letter-spacing:0.08em;
-                    margin-bottom:6px;
-                ">Title</div>
-                <div style="
-                    color:#334155;
-                    font-size:0.90rem;
-                    font-weight:600;
-                    line-height:1.38;
-                    white-space:pre-wrap;
-                ">{trial_val(row, "title")}</div>
-            </div>
-            """,
+            "<div style='color:#94a3b8; font-size:0.64rem; font-weight:800; text-transform:uppercase; letter-spacing:0.08em; margin:0 0 6px 0;'>Title</div>",
             unsafe_allow_html=True
         )
 
-    with right:
-        r1, r2 = st.columns(2, gap="small")
-        with r1:
-            render_compact_info_box("Sponsor", trial_val(row, "lead_sponsor_canonical"), min_h=48)
-            render_compact_info_box("Therapeutic Area", trial_val(row, "therapeutic_area_ui", "therapeutic_area"), min_h=48)
-        with r2:
-            render_compact_info_box("Phase", trial_val(row, "phase_ui", "phase"), min_h=48)
-            render_compact_info_box("Start Date", trial_val(row, "start_date"), min_h=48)
+        st.text_area(
+            "Title",
+            key=text_key,
+            height=82,
+            label_visibility="collapsed",
+            disabled=not st.session_state.get("global_edit_mode", False)
+        )
+
+def render_trial_top_strip_refined(row):
+    with st.container(key="trial_top_strip"):
+        left, right = st.columns([3.62, 1.08], gap="small")
+
+        with left:
+            with st.container(key="trial_title_identity"):
+                render_top_identity_line(row)
+
+            render_top_title_panel(row)
+
+        with right:
+            with st.container(key="trial_meta_shell"):
+                with st.container(key="trial_top_meta"):
+                    render_top_meta_field("Sponsor", "lead_sponsor_canonical", row)
+                    render_top_meta_field("Phase", "phase_ml", row)
+                    render_top_meta_field("Start Date", "start_date", row)
 
 
 def render_trial_detail_tabs_refined(row):
@@ -848,6 +1298,14 @@ def render_trial_detail_tabs_refined(row):
     ])
 
     with tab1:
+        meta_c1, meta_c2, meta_c3 = st.columns([1, 1, 1], gap="small")
+        with meta_c1:
+            render_smart_info_box("Therapeutic Area", "therapeutic_area_ml", row, min_h=48)
+        with meta_c2:
+            st.empty()
+        with meta_c3:
+            st.empty()
+
         left, right = st.columns([1.15, 1.0], gap="medium")
 
         with left:
@@ -879,29 +1337,29 @@ def render_trial_detail_tabs_refined(row):
         c1, c2, c3, c4 = st.columns(4, gap="small")
 
         with c1:
-            render_compact_info_box("Allocation", trial_val(row, "allocation_ui", "allocation"))
-            render_compact_info_box("Intervention Model", trial_val(row, "intervention_model_ui", "intervention_model"))
+            render_smart_info_box("Allocation", "allocation_ml", row)
+            render_smart_info_box("Intervention Model", "intervention_model_ml", row)
 
         with c2:
-            render_compact_info_box("Masking", trial_val(row, "masking_ui", "masking"))
-            render_compact_info_box("Number of Arms", trial_val(row, "number_of_arms_ui", "number_of_arms_ml"))
+            render_smart_info_box("Masking", "masking_ml", row)
+            render_smart_info_box("Number of Arms", "number_of_arms_ml", row)
 
         with c3:
-            render_compact_info_box("Has DMC", trial_val(row, "has_dmc_ui", "has_dmc"))
-            render_compact_info_box("Has Placebo", trial_val(row, "has_placebo_ui", "has_placebo"))
+            render_smart_info_box("Has DMC", "has_dmc_ml", row)
+            render_smart_info_box("Has Placebo", "has_placebo_ml", row)
 
         with c4:
-            render_compact_info_box("Includes US", trial_val(row, "includes_us_ui", "includes_us"))
-            render_compact_info_box("Healthy Volunteers", trial_val(row, "healthy_volunteers_ui", "healthy_volunteers"))
+            render_smart_info_box("Includes US", "includes_us_ml", row)
+            render_smart_info_box("Healthy Volunteers", "healthy_volunteers_ml", row)
 
     with tab3:
         p1, p2, p3 = st.columns(3, gap="small")
         with p1:
-            render_compact_info_box("Minimum Age", trial_val(row, "minimum_age"))
+            render_smart_info_box("Minimum Age", "minimum_age", row)
         with p2:
-            render_compact_info_box("Maximum Age", trial_val(row, "maximum_age"))
+            render_smart_info_box("Maximum Age", "maximum_age", row)
         with p3:
-            render_compact_info_box("Gender", trial_val(row, "gender_ui", "gender"))
+            render_smart_info_box("Gender", "gender_ml", row)
 
         render_scroll_panel(
             "Eligibility Criteria",
@@ -942,7 +1400,9 @@ def render_fourth_ui(row):
         ):
             with st.spinner("Analyzing signals..."):
                 try:
-                    res = requests.post(API_URL, json=row.replace({np.nan: None}).to_dict())
+                    # Merge edited fields into the row before sending to API
+                    row_to_predict = get_edited_row(row)
+                    res = requests.post(API_URL, json=row_to_predict.replace({np.nan: None}).to_dict())
                     if res.status_code == 200:
                         st.session_state.analysis_result = res.json()
                         st.session_state.analysis_nct_id = st.session_state.selected_nct_id
@@ -1084,7 +1544,8 @@ else:
     render_header(
         is_landing=False,
         show_predict_button=True,
-        show_back_button=True
+        show_back_button=True,
+        show_global_edit_toggle=True
     )
 
     if selected_df.empty:

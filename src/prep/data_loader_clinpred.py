@@ -283,9 +283,10 @@ class ClinicalTrialLoader:
             primaries = df_outcomes[df_outcomes['outcome_type'].astype(str).str.upper().str.contains('PRIMARY', na=False)].copy()
             def fmt_out(r):
                 m = str(r['measure'])[:500]
-                tf = f"TIMEFRAME: {r['time_frame']}" if pd.notna(r['time_frame']) else "No timeframe"
-                # [SEMANTIC UPGRADE] Structured with Newlines for easy simulation editing
-                return f"TITLE: {m}\n{tf}"
+                # [FIX] Clean timeframe to prevent dangling line returns in UI
+                tf_raw = str(r['time_frame']) if pd.notna(r['time_frame']) else "No timeframe"
+                tf_clean = " ".join(tf_raw.replace("~", " ").split())
+                return f"TITLE: {m}\nTIMEFRAME: {tf_clean}"
             primaries['fmt'] = primaries.apply(fmt_out, axis=1)
             outcomes = primaries.groupby('nct_id')['fmt'].apply(lambda x: "\n".join(x.dropna().unique())).reset_index(name='raw_primary_outcomes')
             df = df.merge(outcomes, on='nct_id', how='left')
@@ -380,8 +381,8 @@ class ClinicalTrialLoader:
         df["title"] = df["official_title"].fillna("").astype(str).apply(ui_clean_text).apply(ui_smart_title_case).apply(lambda x: ui_truncate(x, 1000))
         df["acronym_ui"] = df["acronym"].fillna("").astype(str).apply(ui_clean_text)
         # [LINGUISTIC DIET] Match LLM Context Caps (Run 1 & 3)
-        df["summary_ui"] = df.get("ui_summary_raw", pd.Series([""]*len(df))).fillna("").astype(str).apply(ui_format_multiline).apply(ui_smart_sentence_case).apply(lambda x: ui_truncate(x, 5000))
-        df["criteria_ui"] = df.get("ui_criteria_raw", pd.Series([""]*len(df))).fillna("").astype(str).apply(ui_format_multiline).apply(ui_smart_sentence_case).apply(lambda x: ui_truncate(x, 10000))
+        df["summary_ui"] = df.get("ui_summary_raw", pd.Series([""]*len(df))).fillna("").astype(str).apply(ui_format_multiline).apply(ui_smart_sentence_case).apply(lambda x: ui_truncate(x, 8000))
+        df["criteria_ui"] = df.get("ui_criteria_raw", pd.Series([""]*len(df))).fillna("").astype(str).apply(ui_format_multiline).apply(ui_smart_sentence_case).apply(lambda x: ui_truncate(x, 15000))
 
         # Raw Scientific Evidence Cleaning (Using Multiline Formatter)
         df["conditions_ui"] = df.get("raw_conditions", pd.Series([""]*len(df))).fillna("").astype(str).apply(ui_format_multiline).apply(ui_smart_sentence_case)

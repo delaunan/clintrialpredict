@@ -73,14 +73,20 @@ def inject_custom_styles():
 
             .block-container {{
                 max-width: 1400px !important;
-                padding: 0rem 2rem 2rem !important;
+                padding: 0.60rem 2rem 2rem !important;
                 margin-left: auto !important; margin-right: auto !important;
             }}
 
-            [data-testid="stHeader"] {{ background-color: rgba(0,0,0,0) !important; color: #334155 !important; }}
+            [data-testid="stHeader"] {{
+                background-color: rgba(0,0,0,0) !important;
+                color: #334155 !important;
+            }}
 
-            button[kind="header"], [data-testid="stSidebarCollapseButton"], [data-testid="collapsedControl"] {{
-                opacity: 1 !important; visibility: visible !important;
+            button[kind="header"],
+            [data-testid="stSidebarCollapseButton"],
+            [data-testid="collapsedControl"] {{
+                opacity: 1 !important;
+                visibility: visible !important;
             }}
 
             [data-testid="stSidebarCollapseButton"],
@@ -312,9 +318,43 @@ def inject_custom_styles():
                 font-weight: inherit !important;
                 line-height: inherit !important;
                 letter-spacing: inherit !important;
-                pointer-events: none !important;
             }}
 
+            /* =========================
+               DEBUG OVERLAP VISUALIZER
+               ========================= */
+
+            [data-testid="stHeader"] {{
+                background: rgba(255, 0, 0, 0.12) !important;
+                outline: 2px solid red !important;
+            }}
+
+            .block-container {{
+                outline: 2px solid orange !important;
+            }}
+
+            [data-testid="stVerticalBlock"] {{
+                outline: 1px dashed magenta !important;
+            }}
+
+            [data-testid="stElementContainer"] {{
+                outline: 1px dashed cyan !important;
+                background: rgba(0, 255, 255, 0.05) !important;
+            }}
+
+            .st-key-header_action_buttons {{
+                outline: 3px solid lime !important;
+                background: rgba(0, 255, 0, 0.08) !important;
+            }}
+
+            .st-key-header_action_buttons .stButton {{
+                outline: 2px solid blue !important;
+                background: rgba(0, 0, 255, 0.05) !important;
+            }}
+
+            .st-key-header_action_buttons .stButton > button {{
+                outline: 2px solid black !important;
+            }}
         </style>
     """, unsafe_allow_html=True)
 
@@ -412,26 +452,27 @@ def render_header(is_landing=True, show_predict_button=False, show_back_button=F
         if show_back_button or show_predict_button:
             st.markdown("<div style='height: 35px;'></div>", unsafe_allow_html=True)
 
-            a1, a2 = st.columns([1.0, 1.65], gap="small")
+            with st.container(key="header_action_buttons"):
+                a1, a2 = st.columns([1.0, 1.65], gap="small")
 
-            with a1:
-                if show_back_button:
-                    if st.button("Back to Results", use_container_width=True, key="header_back_btn"):
-                        st.session_state.selected_nct_id = None
-                        st.session_state.trigger_prediction = False
-                        st.session_state.analysis_result = None
-                        st.session_state.analysis_nct_id = None
-                        st.rerun()
+                with a1:
+                    if show_back_button:
+                        if st.button("Back to Results", use_container_width=True, key="header_back_btn"):
+                            st.session_state.selected_nct_id = None
+                            st.session_state.trigger_prediction = False
+                            st.session_state.analysis_result = None
+                            st.session_state.analysis_nct_id = None
+                            st.rerun()
 
-            with a2:
-                if show_predict_button:
-                    if st.button(
-                        "Predict Trial Completion",
-                        use_container_width=True,
-                        type="primary",
-                        key="header_predict_btn"
-                    ):
-                        st.session_state.trigger_prediction = True
+                with a2:
+                    if show_predict_button:
+                        if st.button(
+                            "Predict Trial Completion",
+                            use_container_width=True,
+                            type="primary",
+                            key="header_predict_btn"
+                        ):
+                            st.session_state.trigger_prediction = True
 
 def render_filters(df, is_sidebar=False):
     COL_MAP = {
@@ -678,9 +719,195 @@ def open_trial_third_ui(selected_id):
     st.rerun()
 
 
-def render_third_ui_shell():
-    # Intentionally empty for now.
-    st.markdown("<div style='height: 1px;'></div>", unsafe_allow_html=True)
+def trial_val(row, *candidates, default="N/A"):
+    for col in candidates:
+        if col in row.index:
+            val = row[col]
+            if pd.notna(val) and str(val).strip() != "":
+                if isinstance(val, float) and float(val).is_integer():
+                    return str(int(val))
+                return str(val)
+    return default
+
+def render_compact_info_box(label, value, min_h=48):
+    st.markdown(
+        f"""
+        <div style="
+            background:#ffffff;
+            border:1px solid #cbd5e1;
+            border-radius:9px;
+            padding:9px 11px;
+            min-height:{min_h}px;
+            margin-bottom:8px;
+            box-shadow:-4px 4px 10px -4px rgba(0,0,0,0.10);
+        ">
+            <div style="
+                color:#64748b;
+                font-size:0.66rem;
+                text-transform:uppercase;
+                font-weight:800;
+                letter-spacing:0.05em;
+                margin-bottom:4px;
+                line-height:1.1;
+            ">{label}</div>
+            <div style="
+                color:#334155;
+                font-size:0.84rem;
+                line-height:1.25;
+                font-weight:500;
+                word-break:break-word;
+            ">{value}</div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+
+def render_scroll_panel(label, value, height=180):
+    safe_value = value if value != "N/A" else ""
+    st.markdown(
+        f"""
+        <div style="margin-bottom:10px;">
+            <div style="
+                color:#475569;
+                font-size:0.80rem;
+                font-weight:700;
+                margin-bottom:6px;
+            ">{label}</div>
+            <div style="
+                background:#ffffff;
+                border:1px solid #cbd5e1;
+                border-radius:10px;
+                padding:12px 14px;
+                height:{height}px;
+                overflow-y:auto;
+                color:#334155;
+                font-size:0.84rem;
+                line-height:1.45;
+                white-space:pre-wrap;
+                box-shadow:-4px 4px 10px -4px rgba(0,0,0,0.10);
+            ">{safe_value}</div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+
+def render_trial_top_strip_refined(row):
+    left, right = st.columns([1.9, 1.1], gap="medium")
+
+    with left:
+        st.markdown(
+            f"""
+            <div style="
+                background:#e2e8f0;
+                border:1px solid #cbd5e1;
+                border-radius:12px;
+                padding:12px 14px;
+                height:92px;
+                overflow-y:auto;
+                box-shadow:-4px 4px 10px -4px rgba(0,0,0,0.10);
+            ">
+                <div style="
+                    color:#94a3b8;
+                    font-size:0.64rem;
+                    font-weight:800;
+                    text-transform:uppercase;
+                    letter-spacing:0.08em;
+                    margin-bottom:6px;
+                ">Title</div>
+                <div style="
+                    color:#334155;
+                    font-size:0.90rem;
+                    font-weight:600;
+                    line-height:1.38;
+                    white-space:pre-wrap;
+                ">{trial_val(row, "title")}</div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+    with right:
+        r1, r2 = st.columns(2, gap="small")
+        with r1:
+            render_compact_info_box("Sponsor", trial_val(row, "lead_sponsor_canonical"), min_h=48)
+            render_compact_info_box("Therapeutic Area", trial_val(row, "therapeutic_area_ui", "therapeutic_area"), min_h=48)
+        with r2:
+            render_compact_info_box("Phase", trial_val(row, "phase_ui", "phase"), min_h=48)
+            render_compact_info_box("Start Date", trial_val(row, "start_date"), min_h=48)
+
+
+def render_trial_detail_tabs_refined(row):
+    render_trial_top_strip_refined(row)
+
+    tab1, tab2, tab3 = st.tabs([
+        "Summary",
+        "Study Information",
+        "Population Details"
+    ])
+
+    with tab1:
+        left, right = st.columns([1.15, 1.0], gap="medium")
+
+        with left:
+            render_scroll_panel(
+                "Study Summary",
+                trial_val(row, "summary_ui"),
+                height=250
+            )
+
+        with right:
+            render_scroll_panel(
+                "Conditions",
+                trial_val(row, "conditions_ui"),
+                height=118
+            )
+            render_scroll_panel(
+                "Interventions",
+                trial_val(row, "interventions_ui"),
+                height=118
+            )
+
+        render_scroll_panel(
+            "Primary Outcomes",
+            trial_val(row, "primary_outcomes_ui"),
+            height=165
+        )
+
+    with tab2:
+        c1, c2, c3, c4 = st.columns(4, gap="small")
+
+        with c1:
+            render_compact_info_box("Allocation", trial_val(row, "allocation_ui", "allocation"))
+            render_compact_info_box("Intervention Model", trial_val(row, "intervention_model_ui", "intervention_model"))
+
+        with c2:
+            render_compact_info_box("Masking", trial_val(row, "masking_ui", "masking"))
+            render_compact_info_box("Number of Arms", trial_val(row, "number_of_arms_ui", "number_of_arms_ml"))
+
+        with c3:
+            render_compact_info_box("Has DMC", trial_val(row, "has_dmc_ui", "has_dmc"))
+            render_compact_info_box("Has Placebo", trial_val(row, "has_placebo_ui", "has_placebo"))
+
+        with c4:
+            render_compact_info_box("Includes US", trial_val(row, "includes_us_ui", "includes_us"))
+            render_compact_info_box("Healthy Volunteers", trial_val(row, "healthy_volunteers_ui", "healthy_volunteers"))
+
+    with tab3:
+        p1, p2, p3 = st.columns(3, gap="small")
+        with p1:
+            render_compact_info_box("Minimum Age", trial_val(row, "minimum_age"))
+        with p2:
+            render_compact_info_box("Maximum Age", trial_val(row, "maximum_age"))
+        with p3:
+            render_compact_info_box("Gender", trial_val(row, "gender_ui", "gender"))
+
+        render_scroll_panel(
+            "Eligibility Criteria",
+            trial_val(row, "criteria_ui"),
+            height=295
+        )
 
 
 def render_fourth_ui(row):
@@ -798,7 +1025,7 @@ if not st.session_state.selected_nct_id:
 
     if not st.session_state.search_initiated:
         st.markdown('''
-            <div class="highlight-box mission-box" style="margin-top: 1.5rem; margin-bottom: 1rem;">
+            <div class="highlight-box mission-box" style="margin-top: 1.2rem; margin-bottom: 1rem;">
                 <div style="display: flex; justify-content: space-between; align-items: flex-start;">
                     <div class="highlight-title">Operational Success & Risk Stratification</div>
                     <div style="font-size:0.65rem; font-weight:800; color:#94a3b8; text-transform:uppercase; letter-spacing:0.1em;">Core Mission</div>
@@ -852,9 +1079,16 @@ if not st.session_state.selected_nct_id:
 else:
     keep_search_widget_state()
 
+    selected_df = X_ALL[X_ALL[ID_COL] == st.session_state.selected_nct_id]
+
     render_header(
         is_landing=False,
         show_predict_button=True,
         show_back_button=True
     )
-    render_third_ui_shell()
+
+    if selected_df.empty:
+        st.warning("Selected trial not found.")
+    else:
+        row = selected_df.iloc[0]
+        render_trial_detail_tabs_refined(row)
