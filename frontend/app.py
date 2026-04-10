@@ -49,8 +49,8 @@ BRAND_FILTER = (
 )
 
 
-DEBUG_OVERLAY = True
-DEBUG_HOVER_INDEX = True
+DEBUG_OVERLAY = False
+
 
 # ==========================
 # 2. STYLES (Consolidated)
@@ -61,14 +61,6 @@ def inject_custom_styles():
                DEBUG OVERLAP VISUALIZER
                ========================= */
 
-            [data-testid="stHeader"] {
-                background: rgba(255, 0, 0, 0.12) !important;
-                outline: 2px solid red !important;
-            }
-
-            .block-container {
-                outline: 2px solid orange !important;
-            }
 
             [data-testid="stVerticalBlock"] {
                 outline: 1px dashed magenta !important;
@@ -94,158 +86,6 @@ def inject_custom_styles():
             }
     """ if DEBUG_OVERLAY else ""
 
-    debug_hover_index_css = """
-            /* =========================
-               DEBUG LABELS - HOVER + INDEX
-               ========================= */
-
-            body {
-                counter-reset: dbg-ec dbg-vb dbg-btn;
-            }
-
-            [data-testid="stHeader"],
-            .block-container,
-            [data-testid="stVerticalBlock"],
-            [data-testid="stElementContainer"],
-            .st-key-header_action_buttons,
-            .st-key-header_action_buttons .stButton,
-            .st-key-header_action_buttons .stButton > button,
-            .st-key-filter_header,
-            .st-key-filter_body,
-            .st-key-sidebar_filters,
-            .st-key-trial_top_strip,
-            .st-key-trial_title_identity,
-            .st-key-trial_title_shell,
-            .st-key-trial_meta_shell,
-            .st-key-trial_top_meta {
-                position: relative !important;
-            }
-
-            [data-testid="stElementContainer"] {
-                counter-increment: dbg-ec;
-            }
-
-            [data-testid="stVerticalBlock"] {
-                counter-increment: dbg-vb;
-            }
-
-            .st-key-header_action_buttons .stButton {
-                counter-increment: dbg-btn;
-            }
-
-            [data-testid="stHeader"]::before,
-            .block-container::before,
-            [data-testid="stVerticalBlock"]::before,
-            [data-testid="stElementContainer"]::before,
-            .st-key-header_action_buttons::before,
-            .st-key-header_action_buttons .stButton::before,
-            .st-key-header_action_buttons .stButton > button::before,
-            .st-key-filter_header::before,
-            .st-key-filter_body::before,
-            .st-key-sidebar_filters::before,
-            .st-key-trial_top_strip::before,
-            .st-key-trial_title_identity::before,
-            .st-key-trial_title_shell::before,
-            .st-key-trial_meta_shell::before,
-            .st-key-trial_top_meta::before {
-                position: absolute !important;
-                top: 0 !important;
-                left: 0 !important;
-                transform: translate(0, -100%) !important;
-                background: rgba(15, 23, 42, 0.92) !important;
-                color: #ffffff !important;
-                font-size: 10px !important;
-                font-weight: 700 !important;
-                line-height: 1 !important;
-                padding: 3px 6px !important;
-                border-radius: 4px !important;
-                white-space: nowrap !important;
-                z-index: 99999 !important;
-                pointer-events: none !important;
-                text-transform: none !important;
-                letter-spacing: 0 !important;
-                opacity: 0 !important;
-                transition: opacity 0.12s ease !important;
-            }
-
-            [data-testid="stHeader"]:hover::before,
-            .block-container:hover::before,
-            [data-testid="stVerticalBlock"]:hover::before,
-            [data-testid="stElementContainer"]:hover::before,
-            .st-key-header_action_buttons:hover::before,
-            .st-key-header_action_buttons .stButton:hover::before,
-            .st-key-header_action_buttons .stButton > button:hover::before,
-            .st-key-filter_header:hover::before,
-            .st-key-filter_body:hover::before,
-            .st-key-sidebar_filters:hover::before,
-            .st-key-trial_top_strip:hover::before,
-            .st-key-trial_title_identity:hover::before,
-            .st-key-trial_title_shell:hover::before,
-            .st-key-trial_meta_shell:hover::before,
-            .st-key-trial_top_meta:hover::before {
-                opacity: 1 !important;
-            }
-
-            [data-testid="stHeader"]::before {
-                content: "stHeader" !important;
-            }
-
-            .block-container::before {
-                content: "block-container" !important;
-            }
-
-            [data-testid="stVerticalBlock"]::before {
-                content: "stVerticalBlock #" counter(dbg-vb) !important;
-            }
-
-            [data-testid="stElementContainer"]::before {
-                content: "stElementContainer #" counter(dbg-ec) !important;
-            }
-
-            .st-key-header_action_buttons::before {
-                content: "header_action_buttons" !important;
-            }
-
-            .st-key-header_action_buttons .stButton::before {
-                content: "stButton wrapper #" counter(dbg-btn) !important;
-            }
-
-            .st-key-header_action_buttons .stButton > button::before {
-                content: "actual button" !important;
-            }
-
-            .st-key-filter_header::before {
-                content: "filter_header" !important;
-            }
-
-            .st-key-filter_body::before {
-                content: "filter_body" !important;
-            }
-
-            .st-key-sidebar_filters::before {
-                content: "sidebar_filters" !important;
-            }
-
-            .st-key-trial_top_strip::before {
-                content: "trial_top_strip" !important;
-            }
-
-            .st-key-trial_title_identity::before {
-                content: "trial_title_identity" !important;
-            }
-
-            .st-key-trial_title_shell::before {
-                content: "trial_title_shell" !important;
-            }
-
-            .st-key-trial_meta_shell::before {
-                content: "trial_meta_shell" !important;
-            }
-
-            .st-key-trial_top_meta::before {
-                content: "trial_top_meta" !important;
-            }
-    """ if DEBUG_HOVER_INDEX else ""
 
     st.markdown(f"""
         <style>
@@ -258,21 +98,46 @@ def inject_custom_styles():
                 display: inline-block; white-space: nowrap; direction: ltr; -webkit-font-smoothing: antialiased;
             }}
 
-            :root {{ color-scheme: light !important; }}
+            :root {{
+                --app-bg: #f1f5f9;
+                --panel-bg: #717d8b;
+                --panel-border: #606c7a;
+                --ui-control-h: 38px;
 
-            html, body, [data-testid="stAppViewContainer"], .stMarkdown, p, span, label, div {{
-                font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+                --ui-control-radius: 8px;
+                --ui-control-border: 1.5px solid #94a3b8;
+                --ui-control-shadow: -4px 4px 10px -4px rgba(0,0,0,0.10);
+                --ui-control-font-size: 0.80rem;
+                --ui-control-text: #334155;
+                --ui-stack-label-gap: 6px;
+                --ui-field-gap: 10px;
+                --ui-title-label-gap: 2px;
+                --ui-title-control-h: 96px;
+                --ui-header-nonlanding-h: 56px;
+                --ui-nonlanding-header-top-pad: 10px;
+                --ui-nonlanding-body-gap: 0px;
+                --ui-meta-shell-pad-top: 0px;
+                --ui-meta-shell-pad-right: 10px;
+                --ui-meta-shell-pad-bottom: 0px;
+                --ui-meta-shell-pad-left: 10px;
+                --ui-meta-top-gap: 26px;
+                --ui-meta-row-gap: 24px;
+                --ui-meta-bottom-gap: 26px;
+                --ui-meta-inline-control-h: 28px;
+                --ui-meta-label-pad-right: 15px;
+                --ui-meta-label-y-offset: -6px;
+
+
             }}
 
-            html, body, [data-testid="stAppViewContainer"] {{
-                background-color: #f8fafc !important;
+            html, body, [data-testid="stApp"], [data-testid="stAppViewContainer"] {{
+                background-color: var(--app-bg) !important;
                 color: #334155 !important;
             }}
 
             .block-container {{
-                max-width: 1400px !important;
-                padding: 0.60rem 2rem 2rem !important;
-                margin-left: auto !important; margin-right: auto !important;
+                background: transparent !important;
+                padding-top: 2rem !important;
             }}
 
             [data-testid="stHeader"] {{
@@ -280,41 +145,56 @@ def inject_custom_styles():
                 color: #334155 !important;
             }}
 
-            button[kind="header"],
-            [data-testid="stSidebarCollapseButton"],
-            [data-testid="collapsedControl"] {{
-                opacity: 1 !important;
-                visibility: visible !important;
-            }}
-
-            [data-testid="stSidebarCollapseButton"],
-            [data-testid="collapsedControl"] {{
-                transform: translateY(20px) !important;
+            section[data-testid="stSidebar"],
+            section[data-testid="stSidebar"] > div,
+            div[data-testid="stSidebarContent"] {{
+                background-color: var(--panel-bg) !important;
             }}
 
             section[data-testid="stSidebar"] {{
-                background-color: #717d8b !important;
-                border-right: 1px solid #606c7a;
+                border-right: 1px solid var(--panel-border) !important;
             }}
 
             div[data-testid="stSidebarContent"] {{
-                padding-top: 0px !important;
-                transform: translateY(-26px) !important;
+                padding-top: -0px !important;
+                transform: translateY(0px) !important;
             }}
 
             section[data-testid="stSidebar"] [data-testid="stVerticalBlock"] {{
                 gap: 0rem !important;
             }}
 
-            /* SELECTBOXES */
+
+
+            /* SELECTBOXES + TEXT INPUTS */
+            div[data-baseweb="select"],
+            [data-testid="stSelectbox"],
+            [data-testid="stTextInput"],
+            [data-testid="stTextInputRootElement"] {{
+                margin: 0 !important;
+            }}
+
+            div[data-baseweb="select"] {{
+                margin-top: 0 !important;
+            }}
+
+
+            div[data-baseweb="select"] > div,
+            [data-testid="stTextInputRootElement"] {{
+                background-color: #ffffff !important;
+                border: var(--ui-control-border) !important;
+                border-radius: var(--ui-control-radius) !important;
+                min-height: var(--ui-control-h) !important;
+                height: var(--ui-control-h) !important;
+                box-sizing: border-box !important;
+                font-size: var(--ui-control-font-size) !important;
+                color: var(--ui-control-text) !important;
+                box-shadow: var(--ui-control-shadow) !important;
+                transition: all 0.2s !important;
+            }}
+
+
             div[data-baseweb="select"] > div {{
-                background-color: white !important;
-                border: 1.5px solid #94a3b8 !important;
-                border-radius: 8px !important;
-                transition: all 0.2s;
-                min-height: 38px !important;
-                height: 38px !important;
-                font-size: 0.80rem !important;
                 padding-top: 0 !important;
                 padding-bottom: 0 !important;
                 display: flex !important;
@@ -325,9 +205,18 @@ def inject_custom_styles():
                 align-items: center !important;
             }}
 
-            div[data-baseweb="select"] span {{
+            div[data-baseweb="select"] span,
+            div[data-baseweb="select"] input,
+            [data-testid="stTextInputRootElement"] input {{
+                font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
+                font-size: var(--ui-control-font-size) !important;
+                font-weight: 500 !important;
                 line-height: 1.1 !important;
+                color: var(--ui-control-text) !important;
+                letter-spacing: 0 !important;
             }}
+
+
 
             div[data-baseweb="select"] input {{
                 padding-top: 0 !important;
@@ -335,16 +224,43 @@ def inject_custom_styles():
                 line-height: 1.1 !important;
             }}
 
-            /* TEXT INPUTS */
-            [data-testid="stTextInputRootElement"] input {{
-                background-color: white !important;
-                border: 1.5px solid #94a3b8 !important;
-                border-radius: 8px !important;
-                transition: all 0.2s;
-                min-height: 38px !important;
-                height: 38px !important;
-                font-size: 0.80rem !important;
+            div[data-baseweb="select"] > div > div:first-child {{
+                font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
+                font-size: var(--ui-control-font-size) !important;
+                font-weight: 500 !important;
+                line-height: 1.1 !important;
+                color: var(--ui-control-text) !important;
+                letter-spacing: 0 !important;
             }}
+
+
+
+            [data-testid="stTextInputRootElement"] input {{
+                padding: 0 12px !important;
+                background: transparent !important;
+                border: none !important;
+                box-shadow: none !important;
+                min-height: 100% !important;
+                height: 100% !important;
+            }}
+
+
+            [data-testid="stTextInputRootElement"]:has(input:disabled) {{
+                opacity: 1 !important;
+                background-color: #ffffff !important;
+                cursor: default !important;
+            }}
+
+            [data-testid="stTextInputRootElement"] input:disabled {{
+                opacity: 1 !important;
+                -webkit-text-fill-color: var(--ui-control-text) !important;
+                color: var(--ui-control-text) !important;
+                background: transparent !important;
+                cursor: default !important;
+            }}
+
+
+
 
             /* GLOBAL MULTISELECT DROPDOWN ALIGNMENT */
             [data-baseweb="popover"] li,
@@ -353,21 +269,39 @@ def inject_custom_styles():
                 font-size: 0.80rem !important;
             }}
 
+
             /* Filter Panel Styles */
             .st-key-filter_header {{
-                background-color: #717d8b !important; border: 1px solid #606c7a !important;
-                border-radius: 14px !important; padding: 22px 20px 36px 20px !important;
+                background-color: var(--panel-bg) !important;
+                border: 1px solid var(--panel-border) !important;
+                border-radius: 14px !important;
+                padding: 22px 24px 28px 24px !important;
                 box-shadow: -6px 6px 12px -3px rgba(0,0,0,0.12) !important;
-                margin-bottom: 0px !important;
+                margin-bottom: 0rem !important;
             }}
 
-            .st-key-filter_header .highlight-title {{ color: #ffffff !important; }}
+            .st-key-filter_header .highlight-title {{
+                color: #ffffff !important;
+            }}
 
             .st-key-filter_body {{
-                background-color: #717d8b !important; border: 1px solid #606c7a !important;
-                border-radius: 14px !important; padding: 34px 25px 35px 25px !important;
+                background-color: var(--panel-bg) !important;
+                border: 1px solid var(--panel-border) !important;
+                border-radius: 14px !important;
+                padding: 12px 25px 18px 25px !important;
                 box-shadow: -6px 6px 12px -3px rgba(0,0,0,0.12) !important;
+                margin-top: 0 !important;
                 margin-bottom: 4px !important;
+            }}
+
+            .right-column-stack {{
+                display: flex !important;
+                flex-direction: column !important;
+                gap: 1rem !important;
+            }}
+
+            .right-column-stack .highlight-box {{
+                margin: 0 !important;
             }}
 
             /* LANDING PAGE FILTERS */
@@ -399,6 +333,17 @@ def inject_custom_styles():
             }}
 
             /* SIDEBAR FILTERS */
+
+            .st-key-sidebar_reset_wrap {{
+                margin-top: -12px !important;
+                margin-bottom: 0px !important;
+            }}
+
+            .st-key-sidebar_filters {{
+                margin-top: 46px !important;
+            }}
+
+
             .st-key-sidebar_filters div[data-baseweb="select"] {{
                 margin-top: 6px !important;
             }}
@@ -408,7 +353,7 @@ def inject_custom_styles():
             }}
 
             .st-key-sidebar_filters [data-testid="stElementContainer"]:last-child {{
-                margin-bottom: 0px !important;
+                margin-bottom: 300px !important;
             }}
 
             .st-key-sidebar_filters [data-testid="stWidgetLabel"] {{
@@ -425,100 +370,45 @@ def inject_custom_styles():
                 margin-bottom: -3px !important;
             }}
 
-            /* TOP STRIP */
-            .st-key-trial_top_strip {{
-                position: relative !important;
-                top: -20px !important;
+
+
+            .ui-field-label {{
+                width: 100%;
             }}
 
-            .st-key-trial_top_strip [data-testid="stVerticalBlock"] {{
-                gap: 0rem !important;
+            .ui-field-label--meta {{
+                height: 100%;
+                min-height: 100%;
+                display: flex;
+                align-items: center;
+                justify-content: flex-end;
+                color: #475569;
+                font-size: 0.80rem;
+                font-weight: 700;
+                line-height: 1.15;
+                letter-spacing: -0.01em;
+                white-space: nowrap;
+                padding-right: var(--ui-meta-label-pad-right);
+                margin: 0;
+                text-transform: none;
+                transform: translateY(var(--ui-meta-label-y-offset));
             }}
 
-            .st-key-trial_title_identity {{
-                margin-bottom: 6px !important;
+            .ui-field-label--stack {{
+                display: block;
+                color: #475569;
+                font-size: 0.80rem;
+                font-weight: 700;
+                line-height: 1.15;
+                margin: 0 0 var(--ui-stack-label-gap) 0;
             }}
 
-            .st-key-trial_title_identity [data-testid="stVerticalBlock"] {{
-                gap: 0rem !important;
+            [class*="st-key-ui_field_box_"] {{
+                margin-bottom: var(--ui-field-gap) !important;
             }}
 
-            .st-key-trial_title_shell {{
-                background-color: #e2e8f0 !important;
-                border: 1px solid #cbd5e1 !important;
-                border-radius: 14px !important;
-                padding: 14px 16px 14px 16px !important;
-                box-shadow: -6px 6px 12px -3px rgba(0,0,0,0.12) !important;
-                min-height: 138px !important;
-            }}
-
-            .st-key-trial_title_shell [data-testid="stVerticalBlock"] {{
-                gap: 0rem !important;
-            }}
-
-            .st-key-trial_title_shell [data-testid="stTextArea"] {{
-                margin-top: 0 !important;
-            }}
-
-            .st-key-trial_title_shell [data-testid="stTextArea"] [data-baseweb="textarea"] {{
-                background: transparent !important;
-                border: none !important;
-                box-shadow: none !important;
-                padding: 0 !important;
-            }}
-
-            .st-key-trial_title_shell .stTextArea textarea {{
-                background: transparent !important;
-                padding: 0 !important;
-                min-height: 78px !important;
-                line-height: 1.42 !important;
-                font-size: 0.92rem !important;
-                font-weight: 600 !important;
-                color: #334155 !important;
-            }}
-
-            .st-key-trial_title_shell .stTextArea textarea:disabled {{
-                background: transparent !important;
-                -webkit-text-fill-color: #334155 !important;
-                opacity: 1 !important;
-            }}
-
-            .st-key-trial_title_shell .stTextArea textarea:not(:disabled) {{
-                background: #ffffff !important;
-                border-radius: 10px !important;
-                padding: 10px 12px !important;
-            }}
-
-            .st-key-trial_meta_shell {{
-                background-color: #e2e8f0 !important;
-                border: 1px solid #cbd5e1 !important;
-                border-radius: 14px !important;
-                padding: 14px 14px 14px 14px !important;
-                box-shadow: -6px 6px 12px -3px rgba(0,0,0,0.12) !important;
-                margin-top: 38px !important;
-            }}
-
-            .st-key-trial_meta_shell [data-testid="stVerticalBlock"] {{
-                gap: 0rem !important;
-            }}
-
-            .st-key-trial_top_meta {{
-                max-width: 100% !important;
-            }}
-
-            .st-key-trial_top_meta [data-testid="stVerticalBlock"] {{
-                gap: 0.46rem !important;
-            }}
-
-            .st-key-trial_top_meta [data-testid="stElementContainer"] {{
+            [class*="st-key-ui_field_box_"]:last-child {{
                 margin-bottom: 0 !important;
-            }}
-
-            .st-key-trial_top_meta div[data-baseweb="select"] > div,
-            .st-key-trial_top_meta [data-testid="stTextInputRootElement"] input {{
-                min-height: 38px !important;
-                height: 38px !important;
-                font-size: 0.80rem !important;
             }}
 
             /* UNIFIED TEXT PANELS: same look in read and edit mode */
@@ -553,6 +443,7 @@ def inject_custom_styles():
                 caret-color: #334155 !important;
             }}
 
+
             .stTextArea textarea:focus {{
                 outline: none !important;
                 box-shadow: none !important;
@@ -565,6 +456,7 @@ def inject_custom_styles():
                 cursor: default !important;
                 background-color: #ffffff !important;
             }}
+
 
             /* Boxes & Highlights */
             .highlight-box {{
@@ -593,6 +485,80 @@ def inject_custom_styles():
                 font-size:0.9rem; color:#334155 !important; min-height:40px; margin-bottom:15px;
                 box-shadow: -6px 6px 12px -3px rgba(0,0,0,0.12) !important;
             }}
+
+            /* HEADER RIGHT COLUMN TIGHT WRAPPERS */
+
+            .st-key-app_header_landing {{
+                display: flex !important;
+                align-items: flex-start !important;
+                margin: 0 !important;
+                padding: 10px 0 0 0 !important;
+            }}
+
+            .st-key-app_header_nonlanding {{
+                display: flex !important;
+                align-items: center !important;
+                margin: 0 !important;
+                padding: var(--ui-nonlanding-header-top-pad) 0 0 0 !important;
+                min-height: var(--ui-header-nonlanding-h) !important;
+            }}
+
+            .st-key-app_header_landing [data-testid="stVerticalBlock"],
+            .st-key-app_header_nonlanding [data-testid="stVerticalBlock"] {{
+                gap: 0 !important;
+            }}
+
+            .st-key-header_action_buttons [data-testid="stVerticalBlock"] {{
+                gap: 0rem !important;
+            }}
+
+            .st-key-header_action_buttons {{
+                padding-top: var(--ui-nonlanding-header-top-pad) !important;
+            }}
+
+            .st-key-header_action_buttons [data-testid="column"] > div {{
+                height: 100% !important;
+                display: flex !important;
+                flex-direction: column !important;
+                justify-content: flex-start !important;
+            }}
+
+            .st-key-header_action_buttons [data-testid="stWidgetLabel"] {{
+                min-height: 0 !important;
+                margin: 0 !important;
+                padding: 0 !important;
+            }}
+
+            .st-key-header_action_buttons [data-testid="stWidgetLabel"] p,
+            .st-key-header_action_buttons label p {{
+                font-size: 0.72rem !important;
+                line-height: 1 !important;
+                white-space: nowrap !important;
+            }}
+
+
+            .st-key-header_action_buttons [data-baseweb="checkbox"] {{
+                display: inline-flex !important;
+                align-items: center !important;
+            }}
+
+            .st-key-header_action_buttons [data-baseweb="checkbox"] > div {{
+                display: inline-flex !important;
+                align-items: center !important;
+            }}
+
+            .st-key-header_action_buttons [data-baseweb="checkbox"] label,
+            .st-key-header_action_buttons [data-baseweb="checkbox"] span,
+            .st-key-header_action_buttons [data-baseweb="checkbox"] p {{
+                display: inline-flex !important;
+                align-items: center !important;
+                line-height: 1.1 !important;
+                margin: 0 !important;
+                padding: 0 !important;
+            }}
+
+
+
 
             /* Buttons */
             .stButton > button {{
@@ -656,8 +622,141 @@ def inject_custom_styles():
                 line-height: inherit !important;
                 letter-spacing: inherit !important;
             }}
+
+
+
+            /* META SHELL = VISUAL SHELL ONLY */
+            .st-key-trial_meta_shell {{
+                background-color: #e2e8f0 !important;
+                border: 1px solid #cbd5e1 !important;
+                border-radius: 14px !important;
+                box-shadow: -6px 6px 12px -3px rgba(0,0,0,0.12) !important;
+                margin: 0 !important;
+                padding: 0 !important;
+            }}
+
+            .st-key-trial_meta_shell > div,
+            .st-key-trial_meta_shell > div > [data-testid="stVerticalBlock"] {{
+                margin: 0 !important;
+                padding: 0 !important;
+                gap: 0 !important;
+            }}
+
+            /* META INNER = CONTENT INSET LAYER ONLY */
+            .st-key-trial_meta_inner {{
+                margin: 0 !important;
+                padding: 0 !important;
+            }}
+
+            .st-key-trial_meta_inner > div {{
+                margin: 0 !important;
+                padding:
+                    var(--ui-meta-shell-pad-top)
+                    var(--ui-meta-shell-pad-right)
+                    var(--ui-meta-shell-pad-bottom)
+                    var(--ui-meta-shell-pad-left) !important;
+            }}
+
+            .st-key-trial_meta_inner > div > [data-testid="stVerticalBlock"] {{
+                margin: 0 !important;
+                padding: 0 !important;
+                gap: 0 !important;
+            }}
+
+            .st-key-trial_meta_inner [data-testid="stWidgetLabel"] {{
+                min-height: 0 !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                display: none !important;
+            }}
+
+            .st-key-trial_meta_inner div[data-baseweb="select"] > div,
+            .st-key-trial_meta_inner [data-testid="stTextInputRootElement"] {{
+                min-height: var(--ui-meta-inline-control-h) !important;
+                height: var(--ui-meta-inline-control-h) !important;
+            }}
+
+            .st-key-trial_meta_inner [data-testid="stTextInputRootElement"] input {{
+                min-height: 100% !important;
+                height: 100% !important;
+            }}
+
+
+            /* EXPLICIT META SPACER BLOCKS */
+            .trial-meta-top-gap {{
+                height: var(--ui-meta-top-gap);
+            }}
+
+            .trial-meta-row-gap {{
+                height: var(--ui-meta-row-gap);
+            }}
+
+            .trial-meta-bottom-gap {{
+                height: var(--ui-meta-bottom-gap);
+            }}
+
+
+
+            .st-key-trial_top_strip {{
+                margin-top: var(--ui-nonlanding-body-gap) !important;
+            }}
+
+            .st-key-trial_top_strip > div,
+            .st-key-trial_top_strip [data-testid="stVerticalBlock"] {{
+                margin-top: 0 !important;
+                padding-top: 0 !important;
+            }}
+
+            /* TITLE SHELL = GREY ROUNDED CONTAINER */
+            .st-key-trial_title_shell {{
+                background-color: #e2e8f0 !important;
+                border: 1px solid #cbd5e1 !important;
+                border-radius: 14px !important;
+                box-shadow: -6px 6px 12px -3px rgba(0,0,0,0.12) !important;
+                margin: 0px 0px 0px 0px !important;
+                padding: 10px 10px 10px 10px !important;
+            }}
+
+            .st-key-trial_title_shell > div,
+            .st-key-trial_title_shell [data-testid="stVerticalBlock"] {{
+                width: 100% !important;
+                gap: 0 !important;
+                margin: 0 !important;
+                padding: 0px !important;
+            }}
+
+
+            .top-strip-title-label {{
+                color: #475569 !important;
+                font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
+                font-size: 1.0rem !important;
+                font-weight: 700 !important;
+                line-height: 1.15 !important;
+                letter-spacing: -0.01em !important;
+                text-transform: none !important;
+                margin: 8px 0 6px 0 !important;
+                padding: 0 !important;
+                text-align: left !important;
+                display: block !important;
+                white-space: nowrap !important;
+            }}
+
+            .st-key-trial_title_shell [data-testid="stTextArea"] {{
+                margin: 0 !important;
+                width: 100% !important;
+            }}
+
+            .st-key-trial_title_shell .stTextArea textarea {{
+                min-height: 0 !important;
+                height: 75px !important;
+                font-size: 0.90rem !important;
+                font-weight: 600 !important;
+                line-height: 1.34 !important;
+                padding: 10px 12px !important;
+            }}
+
             {debug_overlay_css}
-            {debug_hover_index_css}
+
 
         </style>
     """, unsafe_allow_html=True)
@@ -716,6 +815,15 @@ def keep_search_widget_state():
         if key in st.session_state:
             st.session_state[key] = st.session_state[key]
 
+def go_back_to_results():
+    st.session_state.selected_nct_id = None
+    st.session_state.trigger_prediction = False
+    st.session_state.analysis_result = None
+    st.session_state.analysis_nct_id = None
+    st.session_state.global_edit_mode = False
+
+
+
 def get_risk_tier(score: float):
     if score >= 75: return "Robust", "Strong success patterns detected.", "#f0fdf4", "#166534"
     if score >= 50: return "Favorable", "Favorable historical indicators.", "#eff6ff", "#1e40af"
@@ -733,45 +841,54 @@ def render_header(is_landing=True, show_predict_button=False, show_back_button=F
         with open(logo_path, "rb") as f:
             img_base64 = base64.b64encode(f.read()).decode()
 
-    t1, t2 = st.columns([3, 1.7])
+    t1, t2 = st.columns([3, 2.5], vertical_alignment="top")
     with t1:
-        size = 72 if is_landing else 44
-        border = 4 if is_landing else 2
-        radius = 18 if is_landing else 7
-        title_size = "2.8rem" if is_landing else "3.2rem"
+        shell_key = "app_header_landing" if is_landing else "app_header_nonlanding"
+        with st.container(key=shell_key):
+            size = 72 if is_landing else 44
+            border = 4 if is_landing else 2
+            radius = 18 if is_landing else 7
+            title_size = "2.8rem" if is_landing else "2.5rem"
+            logo_gap = "12px" if is_landing else "10px"
+            title_demo_gap = "0px" if is_landing else "8px"
 
-        html = f"""
-            <div style='display: flex; align-items: center; gap: 12px; margin-top: {"15px" if is_landing else "25px"};'>
-                <div style='background-color: white; border: {border}px solid #52606d; padding: 2px; border-radius: {radius}px; display: flex; align-items: center; justify-content: center; height: {size}px; width: {size}px; flex-shrink: 0; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-top: {"10px" if is_landing else "-0px"};'>
-                    <img src='data:image/png;base64,{img_base64}' style='height: {size-2}px; filter: {BRAND_FILTER};'>
+            html = f"""
+                <div style='display: flex; align-items: center; gap: {logo_gap};'>
+                    <div style='background-color: white; border: {border}px solid #52606d; padding: 2px; border-radius: {radius}px; display: flex; align-items: center; justify-content: center; height: {size}px; width: {size}px; flex-shrink: 0; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-top: {"0px" if is_landing else "0px"};'>
+                        <img src='data:image/png;base64,{img_base64}' style='height: {size-2}px; filter: {BRAND_FILTER};'>
+                    </div>
+                    <div style='display: {"block" if is_landing else "flex"}; align-items: {"stretch" if is_landing else "flex-end"}; gap: {title_demo_gap};'>
+                        <div style='font-size: {title_size}; font-weight: 800; color: #52606d; line-height: 1; {"margin-top: 0px;" if is_landing else ""}'>CTPredict</div>
+                        {"<div style='color: #52606d; font-size: 1.5rem; font-weight: 800; display: flex; align-items: baseline; gap: 15px; margin-top: 0px;'><span style='line-height: 1;'>Late-Stage Clinical Trial Predictive Engine</span><span style='font-size: 0.7rem; color: #94a3b8; text-transform: uppercase;'>demo version</span></div>" if is_landing else "<span style='font-size: 0.7rem; font-weight: 800; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.1em; line-height: 1; margin-bottom: 0px;'>Demo Version</span>"}
+                    </div>
                 </div>
-                <div style='display: {"block" if is_landing else "flex"}; align-items: {"stretch" if is_landing else "flex-end"}; gap: {"0px" if is_landing else "14px"};'>
-                    <div style='font-size: {title_size}; font-weight: 800; color: #52606d; line-height: 1; {"margin-top: 10px;" if is_landing else ""}'>CTPredict</div>
-                    {"<div style='color: #52606d; font-size: 1.5rem; font-weight: 800; display: flex; align-items: baseline; gap: 15px; margin-top: 5px;'><span style='line-height: 1;'>Late-Stage Clinical Trial Predictive Engine</span><span style='font-size: 0.7rem; color: #94a3b8; text-transform: uppercase;'>demo version</span></div>" if is_landing else "<span style='font-size: 0.7rem; font-weight: 800; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.1em; line-height: 1; margin-bottom: 5px;'>Demo Version</span>"}
-                </div>
-            </div>
-        """
-        st.markdown(html, unsafe_allow_html=True)
+            """
+            st.markdown(html, unsafe_allow_html=True)
 
     with t2:
 
         if show_back_button or show_predict_button or show_global_edit_toggle:
-            st.markdown("<div style='height: 35px;'></div>", unsafe_allow_html=True)
 
             with st.container(key="header_action_buttons"):
-                a1, a2 = st.columns([1.0, 1.65], gap="small")
+                c_toggle, c_back, c_predict = st.columns([1.18, 1.22, 2.6], gap="small", vertical_alignment="top")
 
-                with a1:
+                with c_toggle:
+                    if show_global_edit_toggle:
+                        st.toggle(
+                            "Edit trial fields",
+                            key="global_edit_mode"
+                        )
+
+                with c_back:
                     if show_back_button:
-                        if st.button("Back to Results", use_container_width=True, key="header_back_btn"):
-                            st.session_state.selected_nct_id = None
-                            st.session_state.trigger_prediction = False
-                            st.session_state.analysis_result = None
-                            st.session_state.analysis_nct_id = None
-                            st.session_state.global_edit_mode = False
-                            st.rerun()
+                        st.button(
+                            "Back to Results",
+                            use_container_width=True,
+                            key="header_back_btn",
+                            on_click=go_back_to_results
+                        )
 
-                with a2:
+                with c_predict:
                     if show_predict_button:
                         if st.button(
                             "Predict Trial Completion",
@@ -781,14 +898,7 @@ def render_header(is_landing=True, show_predict_button=False, show_back_button=F
                         ):
                             st.session_state.trigger_prediction = True
 
-                if show_global_edit_toggle:
-                    st.markdown("<div style='height: 8px;'></div>", unsafe_allow_html=True)
-                    _, b2 = st.columns([1.0, 1.65], gap="small")
-                    with b2:
-                        st.toggle(
-                            "Edit trial fields",
-                            key="global_edit_mode"
-                        )
+
 
 def render_filters(df, is_sidebar=False):
     COL_MAP = {
@@ -867,7 +977,7 @@ def render_filters(df, is_sidebar=False):
 
     if not is_sidebar:
         st.markdown(
-            f"<div style='text-align:right; font-size:0.8rem; color:#cbd5e1; margin-top: 4px; margin-bottom: -16px;'>{len(curr_df):,} trials matching criteria</div>",
+            f"<div style='text-align:right; font-size:0.8rem; color:#cbd5e1; margin-top: 0.5px; margin-bottom: 0px; line-height:1.05;'>{len(curr_df):,} trials matching criteria</div>",
             unsafe_allow_html=True
         )
     return curr_df
@@ -1054,41 +1164,8 @@ def get_edited_row(row):
 
     return edited_row
 
-def render_smart_info_box(label, field_id, row, min_h=48):
-    """Dynamically renders a field as a selectbox, text_input, or static box based on taxonomy and edit mode."""
-    trial_key = st.session_state.get("selected_nct_id", "no_trial")
-    state_key = f"input_{trial_key}_{field_id}"
-    is_edit = st.session_state.get("global_edit_mode", False)
 
-    # Get initial value from row
-    display_col = field_id.replace("_ml", "_ui") if "_ml" in field_id else f"{field_id}_ui"
-    initial_val = trial_val(row, display_col, field_id)
 
-    # Initialize state if not present
-    if state_key not in st.session_state:
-        st.session_state[state_key] = initial_val
-
-    if is_edit:
-        meta = TAXONOMY.get(field_id, {})
-        options = meta.get("ui", {}).get("options")
-
-        st.markdown(f"<div style='margin-bottom:4px; color:#475569; font-size:0.80rem; font-weight:700;'>{label}</div>", unsafe_allow_html=True)
-
-        if options:
-            # Categorical dropdown
-            labels = [opt[1] for opt in options]
-            try:
-                curr = st.session_state[state_key]
-                idx = labels.index(curr) if curr in labels else 0
-            except:
-                idx = 0
-            st.selectbox(label, options=labels, index=idx, key=state_key, label_visibility="collapsed")
-        else:
-            # Simple text input
-            st.text_input(label, key=state_key, label_visibility="collapsed")
-    else:
-        # Static display using original styling
-        render_compact_info_box(label, st.session_state.get(state_key, initial_val), min_h=min_h)
 
 def render_pillar_expander(title, pillar_name, data):
     feats = sorted([(f_id, f_m) for f_id, f_m in TAXONOMY.items() if f_m.get("ui", {}).get("pillar") == pillar_name],
@@ -1120,6 +1197,138 @@ def trial_val(row, *candidates, default="N/A"):
                     return str(int(val))
                 return str(val)
     return default
+
+
+def _field_token(field_id):
+    trial_key = st.session_state.get("selected_nct_id", "no_trial")
+    raw = f"{trial_key}_{field_id}"
+    return "".join(ch.lower() if ch.isalnum() else "_" for ch in raw)
+
+
+def _get_dynamic_field_options(field_id):
+    if field_id == "lead_sponsor_canonical" and "lead_sponsor_canonical" in X_ALL.columns:
+        sponsors = sorted(
+            s.strip()
+            for s in X_ALL["lead_sponsor_canonical"].dropna().astype(str).unique()
+            if str(s).strip()
+        )
+        return [(s, s) for s in sponsors]
+
+    return None
+
+
+def _init_trial_field_state(field_id, row):
+    trial_key = st.session_state.get("selected_nct_id", "no_trial")
+    state_key = f"input_{trial_key}_{field_id}"
+
+    display_col = field_id.replace("_ml", "_ui") if "_ml" in field_id else f"{field_id}_ui"
+    initial_val = trial_val(row, display_col, field_id)
+
+    if state_key not in st.session_state:
+        st.session_state[state_key] = initial_val
+
+    meta = TAXONOMY.get(field_id, {})
+    options = meta.get("ui", {}).get("options")
+
+    if not options:
+        options = _get_dynamic_field_options(field_id)
+
+    return state_key, initial_val, options
+
+
+def _render_labeled_trial_field(label, field_id, row, layout="stack"):
+    state_key, initial_val, options = _init_trial_field_state(field_id, row)
+    token = _field_token(field_id)
+    safe_label = html.escape(label)
+
+    if layout == "inline":
+        with st.container(key=f"ui_meta_row_{token}"):
+            c_label, c_value = st.columns([0.74, 1.46], gap="small", vertical_alignment="bottom")
+
+            with c_label:
+                with st.container(key=f"ui_meta_label_{token}"):
+                    st.markdown(
+                        f"<div class='ui-field-label ui-field-label--meta'>{safe_label}</div>",
+                        unsafe_allow_html=True
+                    )
+
+            with c_value:
+                _render_two_state_field_control(
+                    label=label,
+                    state_key=state_key,
+                    initial_val=initial_val,
+                    options=options,
+                    control_key=f"ui_meta_control_{token}"
+                )
+    else:
+        with st.container(key=f"ui_field_box_{token}"):
+            st.markdown(
+                f"<div class='ui-field-label ui-field-label--stack'>{safe_label}</div>",
+                unsafe_allow_html=True
+            )
+
+            _render_two_state_field_control(
+                label=label,
+                state_key=state_key,
+                initial_val=initial_val,
+                options=options,
+                control_key=f"ui_field_control_{token}"
+            )
+
+
+def _render_two_state_field_control(label, state_key, initial_val, options, control_key):
+    is_edit = st.session_state.get("global_edit_mode", False)
+
+    with st.container(key=control_key):
+        if options:
+            labels = [opt[1] for opt in options]
+            current_value = st.session_state.get(state_key, initial_val)
+
+            if current_value not in labels and current_value not in (None, "", "N/A"):
+                labels = [current_value] + labels
+
+            selected_index = labels.index(current_value) if current_value in labels else 0
+
+            if is_edit:
+                st.selectbox(
+                    label,
+                    options=labels,
+                    index=selected_index,
+                    key=state_key,
+                    label_visibility="collapsed"
+                )
+            else:
+                readonly_key = f"{state_key}__readonly"
+                readonly_value = labels[selected_index] if labels else ""
+
+                st.session_state[readonly_key] = readonly_value
+
+                st.text_input(
+                    label,
+                    key=readonly_key,
+                    label_visibility="collapsed",
+                    disabled=True
+                )
+        else:
+            st.text_input(
+                label,
+                key=state_key,
+                label_visibility="collapsed",
+                disabled=not is_edit
+            )
+
+
+def render_smart_info_box(label, field_id, row, min_h=48):
+    _ = min_h  # kept only for call compatibility
+    _render_labeled_trial_field(
+        label=label,
+        field_id=field_id,
+        row=row,
+        layout="stack"
+    )
+
+
+
 
 def render_compact_info_box(label, value, min_h=48):
     st.markdown(
@@ -1179,67 +1388,15 @@ def render_scroll_panel(label, value, height=180, key=None):
     )
 
 
-
-def render_top_meta_field(label, field_id, row):
-    trial_key = st.session_state.get("selected_nct_id", "no_trial")
-    state_key = f"input_{trial_key}_{field_id}"
-    is_edit = st.session_state.get("global_edit_mode", False)
-
-    display_col = field_id.replace("_ml", "_ui") if "_ml" in field_id else f"{field_id}_ui"
-    initial_val = trial_val(row, display_col, field_id)
-
-    if state_key not in st.session_state:
-        st.session_state[state_key] = initial_val
-
-    safe_label = html.escape(label)
-    safe_value = html.escape(str(st.session_state.get(state_key, initial_val)))
-
-    c_label, c_value = st.columns([0.78, 1.22], gap="small")
-
-    with c_label:
-        st.markdown(
-            f"<div style='height:38px; display:flex; align-items:center; justify-content:flex-end; color:#64748b; font-size:0.64rem; font-weight:800; text-transform:uppercase; letter-spacing:0.05em; white-space:nowrap; padding-right:2px;'>{safe_label}</div>",
-            unsafe_allow_html=True
-        )
-
-    with c_value:
-        meta = TAXONOMY.get(field_id, {})
-        options = meta.get("ui", {}).get("options")
-
-        if is_edit:
-            if options:
-                labels = [opt[1] for opt in options]
-                curr = st.session_state[state_key]
-                idx = labels.index(curr) if curr in labels else 0
-                st.selectbox(
-                    label,
-                    options=labels,
-                    index=idx,
-                    key=state_key,
-                    label_visibility="collapsed"
-                )
-            else:
-                st.text_input(
-                    label,
-                    key=state_key,
-                    label_visibility="collapsed"
-                )
-        else:
-            st.markdown(
-                f"<div style='height:38px; display:flex; align-items:center; background:#ffffff; border:1px solid #cbd5e1; border-radius:8px; padding:0 10px; color:#334155; font-size:0.80rem; font-weight:500; box-shadow:-4px 4px 10px -4px rgba(0,0,0,0.10); overflow:hidden; white-space:nowrap; text-overflow:ellipsis;'>{safe_value}</div>",
-                unsafe_allow_html=True
-            )
-
-
 def render_top_identity_line(row):
     safe_nct = html.escape(trial_val(row, "nct_id"))
     safe_identity = html.escape(trial_val(row, "ui_search_label"))
 
     st.markdown(
         (
-            f"<div style='display:flex; align-items:baseline; gap:16px; margin:0; flex-wrap:wrap;'>"
-            f"<span style='color:#52606d; font-size:1.04rem; font-weight:800; letter-spacing:0.02em; line-height:1.1; white-space:nowrap;'>{safe_nct}</span>"
-            f"<span style='color:#475569; font-size:1.22rem; font-weight:700; line-height:1.18; letter-spacing:-0.01em;'>{safe_identity}</span>"
+            f"<div style='display:inline-flex; align-items:baseline; gap:16px; margin:0; flex-wrap:wrap;'>"
+            f"<span style='color:#52606d; font-size:1.0rem; font-weight:800; letter-spacing:0.02em; line-height:1.18; white-space:nowrap;'>{safe_nct}</span>"
+            f"<span style='color:#475569; font-size:1.0rem; font-weight:700; line-height:1.18; letter-spacing:-0.01em;'>{safe_identity}</span>"
             f"</div>"
         ),
         unsafe_allow_html=True
@@ -1256,36 +1413,128 @@ def render_top_title_panel(row):
     if text_key not in st.session_state:
         st.session_state[text_key] = current_value
 
+    safe_nct = html.escape(trial_val(row, "nct_id"))
+    safe_identity = html.escape(trial_val(row, "ui_search_label"))
+
     with st.container(key="trial_title_shell"):
         st.markdown(
-            "<div style='color:#94a3b8; font-size:0.64rem; font-weight:800; text-transform:uppercase; letter-spacing:0.08em; margin:0 0 6px 0;'>Title</div>",
+            f"<div class='top-strip-title-label'>{safe_nct}&nbsp;&nbsp;&nbsp;{safe_identity}</div>",
             unsafe_allow_html=True
         )
-
         st.text_area(
             "Title",
             key=text_key,
-            height=82,
+            height=75,
             label_visibility="collapsed",
             disabled=not st.session_state.get("global_edit_mode", False)
         )
+
+
+def _render_top_meta_select(label, field_id, row):
+    state_key, initial_val, options = _init_trial_field_state(field_id, row)
+    is_edit = st.session_state.get("global_edit_mode", False)
+
+    labels = [opt[1] for opt in options] if options else []
+    current_value = st.session_state.get(state_key, initial_val)
+
+    if current_value not in labels and current_value not in (None, "", "N/A"):
+        labels = [current_value] + labels
+
+    if not labels:
+        labels = [""]
+
+    if state_key not in st.session_state:
+        st.session_state[state_key] = current_value if current_value in labels else labels[0]
+
+    selected_index = (
+        labels.index(st.session_state[state_key])
+        if st.session_state.get(state_key) in labels
+        else 0
+    )
+
+    if is_edit:
+        st.selectbox(
+            label,
+            options=labels,
+            index=selected_index,
+            key=state_key,
+            label_visibility="collapsed"
+        )
+    else:
+        readonly_key = f"{state_key}__readonly"
+        readonly_value = labels[selected_index] if labels else ""
+
+        st.session_state[readonly_key] = readonly_value
+
+        st.text_input(
+            label,
+            key=readonly_key,
+            label_visibility="collapsed",
+            disabled=True
+        )
+
+
+def _render_top_meta_text(label, field_id, row):
+    state_key, initial_val, _ = _init_trial_field_state(field_id, row)
+
+    if state_key not in st.session_state:
+        st.session_state[state_key] = initial_val
+
+    st.text_input(
+        label,
+        key=state_key,
+        label_visibility="collapsed",
+        disabled=not st.session_state.get("global_edit_mode", False)
+    )
+
+
+
+def render_top_meta_row(label, field_renderer):
+    c_label, c_field = st.columns([0.72, 1.48], gap=None, vertical_alignment="center")
+
+    with c_label:
+        st.markdown(
+            f"<div class='ui-field-label ui-field-label--meta'>{html.escape(label)}</div>",
+            unsafe_allow_html=True
+        )
+
+    with c_field:
+        field_renderer()
+
+
+def render_top_meta_panel(row):
+    rows = [
+        ("Sponsor", lambda: _render_top_meta_select("Sponsor", "lead_sponsor_canonical", row)),
+        ("Phase", lambda: _render_top_meta_select("Phase", "phase_ml", row)),
+        ("Start Date", lambda: _render_top_meta_text("Start Date", "start_date", row)),
+    ]
+
+    with st.container(key="trial_meta_shell"):
+        with st.container(key="trial_meta_inner"):
+            st.markdown("<div class='trial-meta-top-gap'></div>", unsafe_allow_html=True)
+
+            for idx, (label, field_renderer) in enumerate(rows):
+                render_top_meta_row(label, field_renderer)
+
+                if idx < len(rows) - 1:
+                    st.markdown(
+                        "<div class='trial-meta-row-gap'></div>",
+                        unsafe_allow_html=True
+                    )
+
+            st.markdown("<div class='trial-meta-bottom-gap'></div>", unsafe_allow_html=True)
+
 
 def render_trial_top_strip_refined(row):
     with st.container(key="trial_top_strip"):
         left, right = st.columns([3.62, 1.08], gap="small")
 
         with left:
-            with st.container(key="trial_title_identity"):
-                render_top_identity_line(row)
-
             render_top_title_panel(row)
 
         with right:
-            with st.container(key="trial_meta_shell"):
-                with st.container(key="trial_top_meta"):
-                    render_top_meta_field("Sponsor", "lead_sponsor_canonical", row)
-                    render_top_meta_field("Phase", "phase_ml", row)
-                    render_top_meta_field("Start Date", "start_date", row)
+            render_top_meta_panel(row)
+
 
 
 def render_trial_detail_tabs_refined(row):
@@ -1483,6 +1732,7 @@ if not st.session_state.selected_nct_id:
 
     render_header(is_landing=not st.session_state.search_initiated)
 
+
     if not st.session_state.search_initiated:
         st.markdown('''
             <div class="highlight-box mission-box" style="margin-top: 1.2rem; margin-bottom: 1rem;">
@@ -1496,8 +1746,10 @@ if not st.session_state.selected_nct_id:
 
         cl, cr = st.columns(2)
         with cl:
-            with st.container(key="filter_header"): st.markdown('<div class="highlight-title" style="margin:0;">Clinical Trial Selection</div>', unsafe_allow_html=True)
-            with st.container(key="filter_body"): render_filters(x_base)
+            with st.container(key="filter_header"):
+                st.markdown('<div class="highlight-title" style="margin:0;">Clinical Trial Selection</div>', unsafe_allow_html=True)
+            with st.container(key="filter_body"):
+                render_filters(x_base)
         with cr:
             st.markdown('''
                 <div class="right-column-stack">
@@ -1519,21 +1771,24 @@ if not st.session_state.selected_nct_id:
             ''', unsafe_allow_html=True)
     else:
         with st.sidebar:
-            if st.button("Reset Filter", use_container_width=True):
-                reset_filters()
-                st.rerun()
-
-            st.markdown("<div style='margin-top: 78px;'></div>", unsafe_allow_html=True)
+            with st.container(key="sidebar_reset_wrap"):
+                if st.button("Reset Filter", use_container_width=True):
+                    reset_filters()
+                    st.rerun()
 
             with st.container(key="sidebar_filters"):
                 filtered_df = render_filters(x_base, is_sidebar=True)
 
-            st.markdown("<div style='height: 300px;'></div>--- ", unsafe_allow_html=True)
             st.text_input("Register", key="s_registry")
             st.text_input("Analysis", key="s_mode")
 
-        st.markdown(f"<div style='margin-top:1.5rem; position:relative; top:-4px; color:#94a3b8; font-weight:600; font-size:0.7rem;'>{len(filtered_df):,} Matching Trials</div>", unsafe_allow_html=True)
+        st.markdown(
+            f"<div style='text-align:left; margin:var(--ui-nonlanding-body-gap) 0 6px 0; color:#94a3b8; font-weight:600; font-size:0.7rem; line-height:1;'>{len(filtered_df):,} trials matching criteria</div>",
+            unsafe_allow_html=True
+        )
+
         selected_id = render_trials_grid(filtered_df)
+
         if selected_id:
             open_trial_third_ui(selected_id)
 else:
@@ -1547,6 +1802,7 @@ else:
         show_back_button=True,
         show_global_edit_toggle=True
     )
+
 
     if selected_df.empty:
         st.warning("Selected trial not found.")
