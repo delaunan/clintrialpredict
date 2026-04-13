@@ -43,13 +43,13 @@ THICKNESS = 0
 
 BRAND_FILTER = (
     f"contrast(1.5) brightness(0.9) grayscale(100%) sepia(100%) "
-    f"hue-rotate({HUE}deg) saturate({INTENSITY}) brightness({DARKNESS}) "gi
+    f"hue-rotate({HUE}deg) saturate({INTENSITY}) brightness({DARKNESS}) "
     f"contrast(1.2) drop-shadow({THICKNESS}px {THICKNESS}px 0px #52606d) "
     f"drop-shadow(-{THICKNESS}px -{THICKNESS}px 0px #52606d)"
 )
 
 
-DEBUG_OVERLAY = False
+DEBUG_OVERLAY = True
 
 
 # ==========================
@@ -1547,74 +1547,53 @@ def render_trial_detail_tabs_refined(row):
     ])
 
     with tab1:
-        meta_c1, meta_c2, meta_c3 = st.columns([1, 1, 1], gap="small")
-        with meta_c1:
-            render_smart_info_box("Therapeutic Area", "therapeutic_area_ml", row, min_h=48)
-        with meta_c2:
-            st.empty()
-        with meta_c3:
-            st.empty()
+        conditions_h = 80
+        middle_top_h = 170
+        middle_bottom_h = 170
+        right_bottom_h = 170
 
-        left, right = st.columns([1.15, 1.0], gap="medium")
+        col_1, col_23, col_45 = st.columns([1, 2, 2], gap="small")
 
-        with left:
-            render_scroll_panel(
-                "Study Summary",
-                trial_val(row, "summary_ui"),
-                height=250
-            )
+        with col_1:
+            render_smart_info_box("Therapeutic Area", "therapeutic_area_ml", row)
 
-        with right:
             render_scroll_panel(
                 "Conditions",
                 trial_val(row, "conditions_ui"),
-                height=118
+                height=conditions_h
             )
+
+        with col_23:
+            render_scroll_panel(
+                "Study Summary",
+                trial_val(row, "summary_ui"),
+                height=middle_top_h
+            )
+
             render_scroll_panel(
                 "Interventions",
                 trial_val(row, "interventions_ui"),
-                height=118
+                height=middle_bottom_h
             )
 
-        render_scroll_panel(
-            "Primary Outcomes",
-            trial_val(row, "primary_outcomes_ui"),
-            height=165
-        )
+        with col_45:
+            col_4, col_5 = st.columns(2, gap="small")
 
-    with tab2:
-        c1, c2, c3, c4 = st.columns(4, gap="small")
+            with col_4:
+                render_smart_info_box("Allocation", "allocation_ml", row)
+                render_smart_info_box("Intervention Model", "intervention_model_ml", row)
+                render_smart_info_box("Number of Arms", "number_of_arms_ml", row)
 
-        with c1:
-            render_smart_info_box("Allocation", "allocation_ml", row)
-            render_smart_info_box("Intervention Model", "intervention_model_ml", row)
+            with col_5:
+                render_smart_info_box("Masking", "masking_ml", row)
+                render_smart_info_box("Has Placebo", "has_placebo_ml", row)
+                render_smart_info_box("Data Monitoring Committee", "has_dmc_ml", row)
 
-        with c2:
-            render_smart_info_box("Masking", "masking_ml", row)
-            render_smart_info_box("Number of Arms", "number_of_arms_ml", row)
-
-        with c3:
-            render_smart_info_box("Has DMC", "has_dmc_ml", row)
-            render_smart_info_box("Has Placebo", "has_placebo_ml", row)
-
-        with c4:
-            render_smart_info_box("Includes US", "includes_us_ml", row)
-            render_smart_info_box("Healthy Volunteers", "healthy_volunteers_ml", row)
-
-    with tab3:
-        p1, p2, p3 = st.columns(3, gap="small")
-        with p1:
-            render_smart_info_box("Minimum Age", "minimum_age", row)
-        with p2:
-            render_smart_info_box("Maximum Age", "maximum_age", row)
-        with p3:
-            render_smart_info_box("Gender", "gender_ml", row)
-
-        render_scroll_panel(
-            "Eligibility Criteria",
-            trial_val(row, "criteria_ui"),
-            height=295
-        )
+            render_scroll_panel(
+                "Primary Outcomes",
+                trial_val(row, "primary_outcomes_ui"),
+                height=right_bottom_h
+            )
 
 
 def render_fourth_ui(row):
