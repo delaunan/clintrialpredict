@@ -43,7 +43,7 @@ THICKNESS = 0
 
 BRAND_FILTER = (
     f"contrast(1.5) brightness(0.9) grayscale(100%) sepia(100%) "
-    f"hue-rotate({HUE}deg) saturate({INTENSITY}) brightness({DARKNESS}) "
+    f"hue-rotate({HUE}deg) saturate({INTENSITY}) brightness({DARKNESS}) "gi
     f"contrast(1.2) drop-shadow({THICKNESS}px {THICKNESS}px 0px #52606d) "
     f"drop-shadow(-{THICKNESS}px -{THICKNESS}px 0px #52606d)"
 )
