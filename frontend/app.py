@@ -52,6 +52,7 @@ BRAND_FILTER = (
 DEBUG_OVERLAY = True
 
 
+
 # ==========================
 # 2. STYLES (Consolidated)
 # ==========================
@@ -117,16 +118,16 @@ def inject_custom_styles():
                 --ui-nonlanding-header-top-pad: 10px;
                 --ui-nonlanding-body-gap: 0px;
                 --ui-meta-shell-pad-top: 0px;
-                --ui-meta-shell-pad-right: 10px;
+                --ui-meta-shell-pad-right: 5px;
                 --ui-meta-shell-pad-bottom: 0px;
-                --ui-meta-shell-pad-left: 10px;
-                --ui-meta-top-gap: 26px;
-                --ui-meta-row-gap: 24px;
-                --ui-meta-bottom-gap: 26px;
-                --ui-meta-inline-control-h: 28px;
+                --ui-meta-shell-pad-left: 5px;
+                --ui-meta-top-gap: 20px;
+                --ui-meta-row-gap: 20px;
+                --ui-meta-bottom-gap: 22px;
+                --ui-meta-inline-control-h: var(--ui-top-strip-control-h);
                 --ui-meta-label-pad-right: 15px;
                 --ui-meta-label-y-offset: -6px;
-
+                --ui-top-strip-control-h: 24px;
 
             }}
 
@@ -377,17 +378,19 @@ def inject_custom_styles():
             }}
 
             .ui-field-label--meta {{
-                height: 100%;
-                min-height: 100%;
+                min-height: var(--ui-meta-inline-control-h);
                 display: flex;
                 align-items: center;
                 justify-content: flex-end;
                 color: #475569;
                 font-size: 0.80rem;
                 font-weight: 700;
-                line-height: 1.15;
+                line-height: 1.08;
                 letter-spacing: -0.01em;
-                white-space: nowrap;
+                white-space: normal;
+                overflow-wrap: anywhere;
+                word-break: break-word;
+                text-align: right;
                 padding-right: var(--ui-meta-label-pad-right);
                 margin: 0;
                 text-transform: none;
@@ -409,6 +412,33 @@ def inject_custom_styles():
 
             [class*="st-key-ui_field_box_"]:last-child {{
                 margin-bottom: 0 !important;
+            }}
+
+            [class*="st-key-meta_native_field_"] {{
+                margin-bottom: 10px !important;
+            }}
+
+            [class*="st-key-meta_native_field_"]:last-child {{
+                margin-bottom: 0 !important;
+            }}
+
+            [class*="st-key-meta_native_field_"] [data-testid="stWidgetLabel"] {{
+                min-height: 0 !important;
+                margin: 0 0 1px 0 !important;
+                padding: 0 !important;
+                display: block !important;
+            }}
+
+            [class*="st-key-meta_native_field_"] [data-testid="stWidgetLabel"] p,
+            [class*="st-key-meta_native_field_"] label p {{
+                color: #475569 !important;
+                font-size: 0.80rem !important;
+                font-weight: 700 !important;
+                line-height: 1.15 !important;
+                white-space: nowrap !important;
+                overflow: hidden !important;
+                text-overflow: ellipsis !important;
+                margin: 0 !important;
             }}
 
             /* UNIFIED TEXT PANELS: same look in read and edit mode */
@@ -434,9 +464,9 @@ def inject_custom_styles():
                 background-color: #ffffff !important;
                 border: none !important;
                 border-radius: 10px !important;
-                padding: 10px 12px !important;
+                padding: 4px 12px 10px 12px !important;
                 margin: 0 !important;
-                resize: none !important;
+                resize: vertical !important;
                 white-space: pre-wrap !important;
                 overflow-wrap: break-word !important;
                 tab-size: 4 !important;
@@ -455,6 +485,25 @@ def inject_custom_styles():
                 opacity: 1 !important;
                 cursor: default !important;
                 background-color: #ffffff !important;
+            }}
+
+            .ui-readonly-resizable-panel {{
+                width: 100%;
+                box-sizing: border-box;
+                background-color: #ffffff;
+                border: 1px solid #cbd5e1;
+                border-radius: 10px;
+                box-shadow: -4px 4px 10px -4px rgba(0,0,0,0.10);
+                color: #334155;
+                font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+                font-size: 0.84rem;
+                line-height: 1.45;
+                font-weight: 500;
+                padding: 4px 12px 10px 12px;
+                overflow: auto;
+                resize: vertical;
+                white-space: pre-wrap;
+                overflow-wrap: break-word;
             }}
 
 
@@ -663,12 +712,6 @@ def inject_custom_styles():
                 gap: 0 !important;
             }}
 
-            .st-key-trial_meta_inner [data-testid="stWidgetLabel"] {{
-                min-height: 0 !important;
-                margin: 0 !important;
-                padding: 0 !important;
-                display: none !important;
-            }}
 
             .st-key-trial_meta_inner div[data-baseweb="select"] > div,
             .st-key-trial_meta_inner [data-testid="stTextInputRootElement"] {{
@@ -680,6 +723,69 @@ def inject_custom_styles():
                 min-height: 100% !important;
                 height: 100% !important;
             }}
+
+            /* SUMMARY SIDE SHELLS = WHITE TAB BOXES, SAME SPACING SYSTEM AS TOP META BOX */
+            [class*="st-key-summary_side_shell_"] {{
+                background-color: #ffffff !important;
+                border: 1px solid #e2e8f0 !important;
+                border-radius: 14px !important;
+                box-shadow: -6px 6px 12px -3px rgba(0,0,0,0.12) !important;
+                margin: 0 !important;
+                padding: 0 !important;
+            }}
+
+            [class*="st-key-summary_side_shell_"] > div,
+            [class*="st-key-summary_side_shell_"] > div > [data-testid="stVerticalBlock"] {{
+                margin: 0 !important;
+                padding: 0 !important;
+                gap: 0 !important;
+            }}
+
+            [class*="st-key-summary_side_inner_"] {{
+                margin: 0 !important;
+                padding: 0 !important;
+            }}
+
+            [class*="st-key-summary_side_inner_"] > div {{
+                margin: 0 !important;
+                padding:
+                    var(--ui-meta-shell-pad-top)
+                    var(--ui-meta-shell-pad-right)
+                    var(--ui-meta-shell-pad-bottom)
+                    var(--ui-meta-shell-pad-left) !important;
+            }}
+
+            [class*="st-key-summary_side_inner_"] > div > [data-testid="stVerticalBlock"] {{
+                margin: 0 !important;
+                padding: 0 !important;
+                gap: 0 !important;
+            }}
+
+            [class*="st-key-summary_side_inner_"] div[data-baseweb="select"] > div,
+            [class*="st-key-summary_side_inner_"] [data-testid="stTextInputRootElement"] {{
+                min-height: var(--ui-meta-inline-control-h) !important;
+                height: var(--ui-meta-inline-control-h) !important;
+            }}
+
+            [class*="st-key-summary_side_inner_"] [data-testid="stTextInputRootElement"] input {{
+                min-height: 100% !important;
+                height: 100% !important;
+            }}
+
+            [class*="st-key-summary_side_inner_"] [data-testid="stTextArea"] {{
+                margin: 0 !important;
+                width: 100% !important;
+            }}
+
+            [class*="st-key-summary_side_inner_"] .stTextArea textarea {{
+                padding: 6px 12px 10px 12px !important;
+            }}
+
+
+
+
+
+
 
 
             /* EXPLICIT META SPACER BLOCKS */
@@ -714,7 +820,7 @@ def inject_custom_styles():
                 border-radius: 14px !important;
                 box-shadow: -6px 6px 12px -3px rgba(0,0,0,0.12) !important;
                 margin: 0px 0px 0px 0px !important;
-                padding: 10px 10px 10px 10px !important;
+                padding: 5px 5px 5px 5px !important;
             }}
 
             .st-key-trial_title_shell > div,
@@ -729,12 +835,12 @@ def inject_custom_styles():
             .top-strip-title-label {{
                 color: #475569 !important;
                 font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
-                font-size: 1.0rem !important;
-                font-weight: 700 !important;
+                font-size: 1.1rem !important;
+                font-weight: 800 !important;
                 line-height: 1.15 !important;
                 letter-spacing: -0.01em !important;
                 text-transform: none !important;
-                margin: 8px 0 6px 0 !important;
+                margin: 20px 0px 15px 10px !important;
                 padding: 0 !important;
                 text-align: left !important;
                 display: block !important;
@@ -841,7 +947,7 @@ def render_header(is_landing=True, show_predict_button=False, show_back_button=F
         with open(logo_path, "rb") as f:
             img_base64 = base64.b64encode(f.read()).decode()
 
-    t1, t2 = st.columns([3, 2.5], vertical_alignment="top")
+    t1, t2 = st.columns([3.8, 3.2], vertical_alignment="top")
     with t1:
         shell_key = "app_header_landing" if is_landing else "app_header_nonlanding"
         with st.container(key=shell_key):
@@ -870,7 +976,7 @@ def render_header(is_landing=True, show_predict_button=False, show_back_button=F
         if show_back_button or show_predict_button or show_global_edit_toggle:
 
             with st.container(key="header_action_buttons"):
-                c_toggle, c_back, c_predict = st.columns([1.18, 1.22, 2.6], gap="small", vertical_alignment="top")
+                c_toggle, c_back, c_predict = st.columns([0.75, 1.1, 1.25], gap="small", vertical_alignment="top")
 
                 with c_toggle:
                     if show_global_edit_toggle:
@@ -1132,6 +1238,10 @@ def get_edited_row(row):
             field_id = key.replace(f"input_{trial_key}_", "")
             val = st.session_state[key]
 
+            if field_id in {"has_placebo_ml", "has_dmc_ml"} and isinstance(val, bool):
+                edited_row[field_id] = int(val)
+                continue
+
             meta = TAXONOMY.get(field_id, {})
             options = meta.get("ui", {}).get("options")
             if options:
@@ -1216,6 +1326,14 @@ def _get_dynamic_field_options(field_id):
 
     return None
 
+def _coerce_checkbox_value(value):
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return False
+
+    text = str(value).strip().lower()
+    return text in {"1", "true", "yes", "y", "oui"}
 
 def _init_trial_field_state(field_id, row):
     trial_key = st.session_state.get("selected_nct_id", "no_trial")
@@ -1243,7 +1361,7 @@ def _render_labeled_trial_field(label, field_id, row, layout="stack"):
 
     if layout == "inline":
         with st.container(key=f"ui_meta_row_{token}"):
-            c_label, c_value = st.columns([0.74, 1.46], gap="small", vertical_alignment="bottom")
+            c_label, c_value = st.columns([0.72, 1.48], gap=None, vertical_alignment="center")
 
             with c_label:
                 with st.container(key=f"ui_meta_label_{token}"):
@@ -1318,6 +1436,63 @@ def _render_two_state_field_control(label, state_key, initial_val, options, cont
             )
 
 
+def _render_native_meta_field(label, field_id, row):
+    trial_key = st.session_state.get("selected_nct_id", "no_trial")
+    state_key = f"input_{trial_key}_{field_id}"
+    token = _field_token(field_id)
+
+    with st.container(key=f"meta_native_field_{token}"):
+        if field_id in {"has_placebo_ml", "has_dmc_ml"}:
+            initial_val = _coerce_checkbox_value(
+                trial_val(row, field_id.replace("_ml", "_ui"), field_id, default=False)
+            )
+
+            if state_key not in st.session_state:
+                st.session_state[state_key] = initial_val
+
+            st.checkbox(
+                label,
+                key=state_key,
+                disabled=not st.session_state.get("global_edit_mode", False)
+            )
+            return
+
+        state_key, initial_val, options = _init_trial_field_state(field_id, row)
+        is_edit = st.session_state.get("global_edit_mode", False)
+
+        if options:
+            labels = [opt[1] for opt in options]
+            current_value = st.session_state.get(state_key, initial_val)
+
+            if current_value not in labels and current_value not in (None, "", "N/A"):
+                labels = [current_value] + labels
+
+            selected_index = labels.index(current_value) if current_value in labels else 0
+
+            if is_edit:
+                st.selectbox(
+                    label,
+                    options=labels,
+                    index=selected_index,
+                    key=state_key
+                )
+            else:
+                readonly_key = f"{state_key}__readonly"
+                readonly_value = labels[selected_index] if labels else ""
+                st.session_state[readonly_key] = readonly_value
+
+                st.text_input(
+                    label,
+                    key=readonly_key,
+                    disabled=True
+                )
+        else:
+            st.text_input(
+                label,
+                key=state_key,
+                disabled=not is_edit
+            )
+
 def render_smart_info_box(label, field_id, row, min_h=48):
     _ = min_h  # kept only for call compatibility
     _render_labeled_trial_field(
@@ -1379,13 +1554,28 @@ def render_scroll_panel(label, value, height=180, key=None):
         unsafe_allow_html=True
     )
 
-    st.text_area(
-        label,
-        key=text_key,
-        height=height,
-        label_visibility="collapsed",
-        disabled=not st.session_state.get("global_edit_mode", False)
-    )
+    if st.session_state.get("global_edit_mode", False):
+        st.text_area(
+            label,
+            key=text_key,
+            height=height,
+            label_visibility="collapsed",
+            disabled=False
+        )
+    else:
+        current_value = st.session_state.get(text_key, safe_value)
+        safe_html = html.escape(current_value).replace("\n", "<br>")
+
+        if safe_html.strip() == "":
+            safe_html = "&nbsp;"
+
+        st.markdown(
+            f'<div class="ui-readonly-resizable-panel" style="height: {height}px;">{safe_html}</div>',
+            unsafe_allow_html=True
+        )
+
+
+
 
 
 def render_top_identity_line(row):
@@ -1430,91 +1620,23 @@ def render_top_title_panel(row):
         )
 
 
-def _render_top_meta_select(label, field_id, row):
-    state_key, initial_val, options = _init_trial_field_state(field_id, row)
-    is_edit = st.session_state.get("global_edit_mode", False)
-
-    labels = [opt[1] for opt in options] if options else []
-    current_value = st.session_state.get(state_key, initial_val)
-
-    if current_value not in labels and current_value not in (None, "", "N/A"):
-        labels = [current_value] + labels
-
-    if not labels:
-        labels = [""]
-
-    if state_key not in st.session_state:
-        st.session_state[state_key] = current_value if current_value in labels else labels[0]
-
-    selected_index = (
-        labels.index(st.session_state[state_key])
-        if st.session_state.get(state_key) in labels
-        else 0
-    )
-
-    if is_edit:
-        st.selectbox(
-            label,
-            options=labels,
-            index=selected_index,
-            key=state_key,
-            label_visibility="collapsed"
-        )
-    else:
-        readonly_key = f"{state_key}__readonly"
-        readonly_value = labels[selected_index] if labels else ""
-
-        st.session_state[readonly_key] = readonly_value
-
-        st.text_input(
-            label,
-            key=readonly_key,
-            label_visibility="collapsed",
-            disabled=True
-        )
-
-
-def _render_top_meta_text(label, field_id, row):
-    state_key, initial_val, _ = _init_trial_field_state(field_id, row)
-
-    if state_key not in st.session_state:
-        st.session_state[state_key] = initial_val
-
-    st.text_input(
-        label,
-        key=state_key,
-        label_visibility="collapsed",
-        disabled=not st.session_state.get("global_edit_mode", False)
-    )
-
-
-
-def render_top_meta_row(label, field_renderer):
-    c_label, c_field = st.columns([0.72, 1.48], gap=None, vertical_alignment="center")
-
-    with c_label:
-        st.markdown(
-            f"<div class='ui-field-label ui-field-label--meta'>{html.escape(label)}</div>",
-            unsafe_allow_html=True
-        )
-
-    with c_field:
-        field_renderer()
-
-
 def render_top_meta_panel(row):
     rows = [
-        ("Sponsor", lambda: _render_top_meta_select("Sponsor", "lead_sponsor_canonical", row)),
-        ("Phase", lambda: _render_top_meta_select("Phase", "phase_ml", row)),
-        ("Start Date", lambda: _render_top_meta_text("Start Date", "start_date", row)),
+        ("Sponsor", "lead_sponsor_canonical"),
+        ("Phase", "phase_ml"),
+        ("Start Date", "start_date"),
     ]
 
     with st.container(key="trial_meta_shell"):
         with st.container(key="trial_meta_inner"):
             st.markdown("<div class='trial-meta-top-gap'></div>", unsafe_allow_html=True)
 
-            for idx, (label, field_renderer) in enumerate(rows):
-                render_top_meta_row(label, field_renderer)
+            for idx, (label, field_id) in enumerate(rows):
+                _render_native_meta_field(
+                    label=label,
+                    field_id=field_id,
+                    row=row
+                )
 
                 if idx < len(rows) - 1:
                     st.markdown(
@@ -1525,9 +1647,50 @@ def render_top_meta_panel(row):
             st.markdown("<div class='trial-meta-bottom-gap'></div>", unsafe_allow_html=True)
 
 
+
+def render_summary_side_panel(row, rows, panel_suffix):
+    with st.container(key=f"summary_side_shell_{panel_suffix}"):
+        with st.container(key=f"summary_side_inner_{panel_suffix}"):
+            st.markdown("<div class='trial-meta-top-gap'></div>", unsafe_allow_html=True)
+
+            for idx, (label, field_id) in enumerate(rows):
+                _render_native_meta_field(
+                    label=label,
+                    field_id=field_id,
+                    row=row
+                )
+
+                if idx < len(rows) - 1:
+                    st.markdown("<div class='trial-meta-row-gap'></div>", unsafe_allow_html=True)
+
+            st.markdown("<div class='trial-meta-bottom-gap'></div>", unsafe_allow_html=True)
+
+
+def render_ta_start_date_panel(row):
+    with st.container(key="summary_side_shell_ta_start_date_block"):
+        with st.container(key="summary_side_inner_ta_start_date_block"):
+            st.markdown("<div class='trial-meta-top-gap'></div>", unsafe_allow_html=True)
+
+            _render_native_meta_field(
+                label="Therapeutic Area",
+                field_id="therapeutic_area_ml",
+                row=row
+            )
+
+            st.markdown("<div class='trial-meta-row-gap'></div>", unsafe_allow_html=True)
+
+            _render_native_meta_field(
+                label="Conditions",
+                field_id="conditions_ui",
+                row=row
+            )
+
+            st.markdown("<div class='trial-meta-bottom-gap'></div>", unsafe_allow_html=True)
+
+
 def render_trial_top_strip_refined(row):
     with st.container(key="trial_top_strip"):
-        left, right = st.columns([3.62, 1.08], gap="small")
+        left, right = st.columns([3.70, 0.82], gap="small")
 
         with left:
             render_top_title_panel(row)
@@ -1546,54 +1709,87 @@ def render_trial_detail_tabs_refined(row):
         "Population Details"
     ])
 
+
     with tab1:
-        conditions_h = 80
-        middle_top_h = 170
-        middle_bottom_h = 170
-        right_bottom_h = 170
 
-        col_1, col_23, col_45 = st.columns([1, 2, 2], gap="small")
+        study_summary_h = 210
+        bottom_panel_h = 230
 
-        with col_1:
-            render_smart_info_box("Therapeutic Area", "therapeutic_area_ml", row)
+        main_area, right_rail = st.columns([3.70, 0.82], gap="small")
 
-            render_scroll_panel(
-                "Conditions",
-                trial_val(row, "conditions_ui"),
-                height=conditions_h
-            )
-
-        with col_23:
+        with main_area:
             render_scroll_panel(
                 "Study Summary",
                 trial_val(row, "summary_ui"),
-                height=middle_top_h
+                height=study_summary_h
             )
 
-            render_scroll_panel(
-                "Interventions",
-                trial_val(row, "interventions_ui"),
-                height=middle_bottom_h
+            bottom_left, bottom_mid = st.columns([2, 2], gap="small")
+
+            with bottom_left:
+                render_scroll_panel(
+                    "Interventions",
+                    trial_val(row, "interventions_ui"),
+                    height=bottom_panel_h
+                )
+
+            with bottom_mid:
+                render_scroll_panel(
+                    "Primary Outcomes",
+                    trial_val(row, "primary_outcomes_ui"),
+                    height=bottom_panel_h
+                )
+
+        with right_rail:
+            render_ta_start_date_panel(row)
+
+            render_summary_side_panel(
+                row=row,
+                rows=[
+                    ("Allocation", "allocation_ml"),
+                    ("Intervention Model", "intervention_model_ml"),
+                    ("Number of Arms", "number_of_arms_ml"),
+                ],
+                panel_suffix="allocation_block"
             )
 
-        with col_45:
-            col_4, col_5 = st.columns(2, gap="small")
-
-            with col_4:
-                render_smart_info_box("Allocation", "allocation_ml", row)
-                render_smart_info_box("Intervention Model", "intervention_model_ml", row)
-                render_smart_info_box("Number of Arms", "number_of_arms_ml", row)
-
-            with col_5:
-                render_smart_info_box("Masking", "masking_ml", row)
-                render_smart_info_box("Has Placebo", "has_placebo_ml", row)
-                render_smart_info_box("Data Monitoring Committee", "has_dmc_ml", row)
-
-            render_scroll_panel(
-                "Primary Outcomes",
-                trial_val(row, "primary_outcomes_ui"),
-                height=right_bottom_h
+            render_summary_side_panel(
+                row=row,
+                rows=[
+                    ("Masking", "masking_ml"),
+                    ("Has Placebo", "has_placebo_ml"),
+                    ("Data Monitoring Committee", "has_dmc_ml"),
+                ],
+                panel_suffix="masking_block"
             )
+
+
+    with tab2:
+        c1, c2 = st.columns(2, gap="small")
+
+        with c1:
+            render_smart_info_box("Includes US", "includes_us_ml", row)
+
+        with c2:
+            render_smart_info_box("Healthy Volunteers", "healthy_volunteers_ml", row)
+
+    with tab3:
+        p1, p2, p3 = st.columns(3, gap="small")
+
+        with p1:
+            render_smart_info_box("Minimum Age", "minimum_age", row)
+
+        with p2:
+            render_smart_info_box("Maximum Age", "maximum_age", row)
+
+        with p3:
+            render_smart_info_box("Gender", "gender_ml", row)
+
+        render_scroll_panel(
+            "Eligibility Criteria",
+            trial_val(row, "criteria_ui"),
+            height=295
+        )
 
 
 def render_fourth_ui(row):
