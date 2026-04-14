@@ -49,7 +49,7 @@ BRAND_FILTER = (
 )
 
 
-DEBUG_OVERLAY = True
+DEBUG_OVERLAY = False
 
 
 
@@ -128,6 +128,7 @@ def inject_custom_styles():
                 --ui-meta-label-pad-right: 15px;
                 --ui-meta-label-y-offset: -6px;
                 --ui-top-strip-control-h: 24px;
+                --ui-meta-conditions-h: 84px;
 
             }}
 
@@ -778,11 +779,27 @@ def inject_custom_styles():
             }}
 
             [class*="st-key-summary_side_inner_"] .stTextArea textarea {{
-                padding: 6px 12px 10px 12px !important;
+                padding: 4px 12px 10px 12px !important;
             }}
 
 
+            .st-key-summary_side_inner_ta_conditions_block [data-testid="stTextArea"] {{
+                margin: 0 !important;
+                width: 100% !important;
+            }}
 
+            .st-key-summary_side_inner_ta_conditions_block [data-testid="stTextArea"] [data-baseweb="textarea"] {{
+                min-height: var(--ui-meta-conditions-h) !important;
+                height: var(--ui-meta-conditions-h) !important;
+                box-sizing: border-box !important;
+            }}
+
+            .st-key-summary_side_inner_ta_conditions_block .stTextArea textarea {{
+                min-height: calc(var(--ui-meta-conditions-h) - 2px) !important;
+                height: calc(var(--ui-meta-conditions-h) - 2px) !important;
+                padding: 4px 12px 10px 12px !important;
+                resize: none !important;
+            }}
 
 
 
@@ -1493,6 +1510,24 @@ def _render_native_meta_field(label, field_id, row):
                 disabled=not is_edit
             )
 
+
+def _render_native_meta_textarea_field(label, value, state_suffix):
+    trial_key = st.session_state.get("selected_nct_id", "no_trial")
+    state_key = f"text_{trial_key}_{state_suffix}"
+    safe_value = "" if value == "N/A" else str(value)
+
+    if state_key not in st.session_state:
+        st.session_state[state_key] = safe_value
+
+    with st.container(key=f"meta_native_field_{state_suffix}"):
+        st.text_area(
+            label,
+            key=state_key,
+            height=84,
+            disabled=not st.session_state.get("global_edit_mode", False)
+        )
+
+
 def render_smart_info_box(label, field_id, row, min_h=48):
     _ = min_h  # kept only for call compatibility
     _render_labeled_trial_field(
@@ -1554,26 +1589,13 @@ def render_scroll_panel(label, value, height=180, key=None):
         unsafe_allow_html=True
     )
 
-    if st.session_state.get("global_edit_mode", False):
-        st.text_area(
-            label,
-            key=text_key,
-            height=height,
-            label_visibility="collapsed",
-            disabled=False
-        )
-    else:
-        current_value = st.session_state.get(text_key, safe_value)
-        safe_html = html.escape(current_value).replace("\n", "<br>")
-
-        if safe_html.strip() == "":
-            safe_html = "&nbsp;"
-
-        st.markdown(
-            f'<div class="ui-readonly-resizable-panel" style="height: {height}px;">{safe_html}</div>',
-            unsafe_allow_html=True
-        )
-
+    st.text_area(
+        label,
+        key=text_key,
+        height=height,
+        label_visibility="collapsed",
+        disabled=not st.session_state.get("global_edit_mode", False)
+    )
 
 
 
@@ -1646,8 +1668,6 @@ def render_top_meta_panel(row):
 
             st.markdown("<div class='trial-meta-bottom-gap'></div>", unsafe_allow_html=True)
 
-
-
 def render_summary_side_panel(row, rows, panel_suffix):
     with st.container(key=f"summary_side_shell_{panel_suffix}"):
         with st.container(key=f"summary_side_inner_{panel_suffix}"):
@@ -1666,9 +1686,9 @@ def render_summary_side_panel(row, rows, panel_suffix):
             st.markdown("<div class='trial-meta-bottom-gap'></div>", unsafe_allow_html=True)
 
 
-def render_ta_start_date_panel(row):
-    with st.container(key="summary_side_shell_ta_start_date_block"):
-        with st.container(key="summary_side_inner_ta_start_date_block"):
+def render_ta_conditions_panel(row):
+    with st.container(key="summary_side_shell_ta_conditions_block"):
+        with st.container(key="summary_side_inner_ta_conditions_block"):
             st.markdown("<div class='trial-meta-top-gap'></div>", unsafe_allow_html=True)
 
             _render_native_meta_field(
@@ -1679,13 +1699,14 @@ def render_ta_start_date_panel(row):
 
             st.markdown("<div class='trial-meta-row-gap'></div>", unsafe_allow_html=True)
 
-            _render_native_meta_field(
+            _render_native_meta_textarea_field(
                 label="Conditions",
-                field_id="conditions_ui",
-                row=row
+                value=trial_val(row, "conditions_ui"),
+                state_suffix="conditions"
             )
 
             st.markdown("<div class='trial-meta-bottom-gap'></div>", unsafe_allow_html=True)
+
 
 
 def render_trial_top_strip_refined(row):
@@ -1741,7 +1762,7 @@ def render_trial_detail_tabs_refined(row):
                 )
 
         with right_rail:
-            render_ta_start_date_panel(row)
+            render_ta_conditions_panel(row)
 
             render_summary_side_panel(
                 row=row,
@@ -1749,18 +1770,11 @@ def render_trial_detail_tabs_refined(row):
                     ("Allocation", "allocation_ml"),
                     ("Intervention Model", "intervention_model_ml"),
                     ("Number of Arms", "number_of_arms_ml"),
-                ],
-                panel_suffix="allocation_block"
-            )
-
-            render_summary_side_panel(
-                row=row,
-                rows=[
                     ("Masking", "masking_ml"),
                     ("Has Placebo", "has_placebo_ml"),
                     ("Data Monitoring Committee", "has_dmc_ml"),
                 ],
-                panel_suffix="masking_block"
+                panel_suffix="design_block"
             )
 
 
