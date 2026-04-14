@@ -49,7 +49,8 @@ BRAND_FILTER = (
 )
 
 
-DEBUG_OVERLAY = False
+DEBUG_OVERLAY = True
+
 
 
 
@@ -896,7 +897,6 @@ def inject_custom_styles():
             }}
 
 
-
             .st-key-trial_top_strip {{
                 margin-top: var(--ui-nonlanding-body-gap) !important;
             }}
@@ -953,6 +953,20 @@ def inject_custom_styles():
                 font-weight: 600 !important;
                 line-height: 1.34 !important;
                 padding: 8px 10px !important;
+            }}
+
+
+            /* PREDICT TRIAL COMPLETION — REMOVE ALL BOX SHADOWS */
+            .st-key-trial_title_shell,
+            .st-key-trial_meta_shell,
+            [class*="st-key-summary_side_shell_"],
+            .st-key-trial_title_shell [data-testid="stTextArea"] [data-baseweb="textarea"],
+            .st-key-trial_top_strip [data-testid="stTextInputRootElement"],
+            .st-key-trial_top_strip div[data-baseweb="select"] > div,
+            [class*="st-key-summary_side_inner_"] [data-testid="stTextInputRootElement"],
+            [class*="st-key-summary_side_inner_"] div[data-baseweb="select"] > div,
+            [class*="st-key-summary_side_inner_"] [data-testid="stTextArea"] [data-baseweb="textarea"] {{
+                box-shadow: 0 1px 4px rgba(0,0,0,0.05) !important;
             }}
 
             {debug_overlay_css}
@@ -1726,7 +1740,7 @@ def render_summary_text_shell_panel(label, value, state_suffix, panel_suffix):
 
 def render_trial_top_strip_refined(row):
     with st.container(key="trial_top_strip"):
-        left, right = st.columns([3.70, 0.82], gap="small")
+        left, right = st.columns([3.70, 0.82], gap="xsmall")
 
         with left:
             render_top_title_panel(row)
@@ -1746,10 +1760,11 @@ def render_trial_detail_tabs_refined(row):
     ])
 
     with tab1:
-        content_col, alloc_col = st.columns([3.70, 0.82], gap="small")
+
+        content_col, alloc_col = st.columns([3.70, 0.82], gap="xsmall")
 
         with content_col:
-            top_left, top_mid = st.columns([0.82, 2.88], gap="small")
+            top_left, top_mid = st.columns([0.82, 2.88], gap="xsmall")
 
             with top_left:
                 render_ta_conditions_panel(row)
@@ -1762,7 +1777,7 @@ def render_trial_detail_tabs_refined(row):
                     panel_suffix="study_summary_block"
                 )
 
-            bottom_left, bottom_mid = st.columns(2, gap="small")
+            bottom_left, bottom_mid = st.columns(2, gap="xsmall")
 
             with bottom_left:
                 render_summary_text_shell_panel(
@@ -1797,7 +1812,7 @@ def render_trial_detail_tabs_refined(row):
 
 
     with tab2:
-        c1, c2 = st.columns(2, gap="small")
+        c1, c2 = st.columns(2, gap="xsmall")
 
         with c1:
             render_smart_info_box("Includes US", "includes_us_ml", row)
@@ -1806,7 +1821,7 @@ def render_trial_detail_tabs_refined(row):
             render_smart_info_box("Healthy Volunteers", "healthy_volunteers_ml", row)
 
     with tab3:
-        p1, p2, p3 = st.columns(3, gap="small")
+        p1, p2, p3 = st.columns(3, gap="xsmall")
 
         with p1:
             render_smart_info_box("Minimum Age", "minimum_age", row)
