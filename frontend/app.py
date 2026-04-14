@@ -129,6 +129,9 @@ def inject_custom_styles():
                 --ui-meta-label-y-offset: -6px;
                 --ui-top-strip-control-h: 24px;
                 --ui-meta-conditions-h: 84px;
+                --ui-study-summary-h: 210px;
+                --ui-bottom-summary-h: 230px;
+                --ui-eligibility-h: 295px;
 
             }}
 
@@ -783,11 +786,6 @@ def inject_custom_styles():
             }}
 
 
-            .st-key-summary_side_inner_ta_conditions_block [data-testid="stTextArea"] {{
-                margin: 0 !important;
-                width: 100% !important;
-            }}
-
             .st-key-summary_side_inner_ta_conditions_block [data-testid="stTextArea"] [data-baseweb="textarea"] {{
                 min-height: var(--ui-meta-conditions-h) !important;
                 height: var(--ui-meta-conditions-h) !important;
@@ -797,6 +795,59 @@ def inject_custom_styles():
             .st-key-summary_side_inner_ta_conditions_block .stTextArea textarea {{
                 min-height: calc(var(--ui-meta-conditions-h) - 2px) !important;
                 height: calc(var(--ui-meta-conditions-h) - 2px) !important;
+                padding: 4px 12px 10px 12px !important;
+                resize: none !important;
+            }}
+
+
+            .st-key-summary_side_inner_study_summary_block [data-testid="stTextArea"] [data-baseweb="textarea"] {{
+                min-height: var(--ui-study-summary-h) !important;
+                height: var(--ui-study-summary-h) !important;
+                box-sizing: border-box !important;
+            }}
+
+            .st-key-summary_side_inner_study_summary_block .stTextArea textarea {{
+                min-height: calc(var(--ui-study-summary-h) - 2px) !important;
+                height: calc(var(--ui-study-summary-h) - 2px) !important;
+                padding: 4px 12px 10px 12px !important;
+                resize: none !important;
+            }}
+
+            .st-key-summary_side_inner_interventions_block [data-testid="stTextArea"] [data-baseweb="textarea"] {{
+                min-height: var(--ui-bottom-summary-h) !important;
+                height: var(--ui-bottom-summary-h) !important;
+                box-sizing: border-box !important;
+            }}
+
+            .st-key-summary_side_inner_interventions_block .stTextArea textarea {{
+                min-height: calc(var(--ui-bottom-summary-h) - 2px) !important;
+                height: calc(var(--ui-bottom-summary-h) - 2px) !important;
+                padding: 4px 12px 10px 12px !important;
+                resize: none !important;
+            }}
+
+            .st-key-summary_side_inner_primary_outcomes_block [data-testid="stTextArea"] [data-baseweb="textarea"] {{
+                min-height: var(--ui-bottom-summary-h) !important;
+                height: var(--ui-bottom-summary-h) !important;
+                box-sizing: border-box !important;
+            }}
+
+            .st-key-summary_side_inner_primary_outcomes_block .stTextArea textarea {{
+                min-height: calc(var(--ui-bottom-summary-h) - 2px) !important;
+                height: calc(var(--ui-bottom-summary-h) - 2px) !important;
+                padding: 4px 12px 10px 12px !important;
+                resize: none !important;
+            }}
+
+            .st-key-summary_side_inner_eligibility_block [data-testid="stTextArea"] [data-baseweb="textarea"] {{
+                min-height: var(--ui-eligibility-h) !important;
+                height: var(--ui-eligibility-h) !important;
+                box-sizing: border-box !important;
+            }}
+
+            .st-key-summary_side_inner_eligibility_block .stTextArea textarea {{
+                min-height: calc(var(--ui-eligibility-h) - 2px) !important;
+                height: calc(var(--ui-eligibility-h) - 2px) !important;
                 padding: 4px 12px 10px 12px !important;
                 resize: none !important;
             }}
@@ -1511,6 +1562,7 @@ def _render_native_meta_field(label, field_id, row):
             )
 
 
+
 def _render_native_meta_textarea_field(label, value, state_suffix):
     trial_key = st.session_state.get("selected_nct_id", "no_trial")
     state_key = f"text_{trial_key}_{state_suffix}"
@@ -1523,10 +1575,8 @@ def _render_native_meta_textarea_field(label, value, state_suffix):
         st.text_area(
             label,
             key=state_key,
-            height=84,
             disabled=not st.session_state.get("global_edit_mode", False)
         )
-
 
 def render_smart_info_box(label, field_id, row, min_h=48):
     _ = min_h  # kept only for call compatibility
@@ -1537,82 +1587,6 @@ def render_smart_info_box(label, field_id, row, min_h=48):
         layout="stack"
     )
 
-
-
-
-def render_compact_info_box(label, value, min_h=48):
-    st.markdown(
-        f"""
-        <div style="
-            background:#ffffff;
-            border:1px solid #cbd5e1;
-            border-radius:9px;
-            padding:9px 11px;
-            min-height:{min_h}px;
-            margin-bottom:8px;
-            box-shadow:-4px 4px 10px -4px rgba(0,0,0,0.10);
-        ">
-            <div style="
-                color:#64748b;
-                font-size:0.66rem;
-                text-transform:uppercase;
-                font-weight:800;
-                letter-spacing:0.05em;
-                margin-bottom:4px;
-                line-height:1.1;
-            ">{label}</div>
-            <div style="
-                color:#334155;
-                font-size:0.84rem;
-                line-height:1.25;
-                font-weight:500;
-                word-break:break-word;
-            ">{value}</div>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-
-
-def render_scroll_panel(label, value, height=180, key=None):
-    trial_key = st.session_state.get("selected_nct_id", "no_trial")
-    panel_key = key or label.lower().replace(" ", "_")
-    text_key = f"text_{trial_key}_{panel_key}"
-
-    safe_value = "" if value == "N/A" else str(value)
-
-    if text_key not in st.session_state:
-        st.session_state[text_key] = safe_value
-
-    st.markdown(
-        f"<div style='color:#475569; font-size:0.80rem; font-weight:700; margin-bottom:6px;'>{label}</div>",
-        unsafe_allow_html=True
-    )
-
-    st.text_area(
-        label,
-        key=text_key,
-        height=height,
-        label_visibility="collapsed",
-        disabled=not st.session_state.get("global_edit_mode", False)
-    )
-
-
-
-
-def render_top_identity_line(row):
-    safe_nct = html.escape(trial_val(row, "nct_id"))
-    safe_identity = html.escape(trial_val(row, "ui_search_label"))
-
-    st.markdown(
-        (
-            f"<div style='display:inline-flex; align-items:baseline; gap:16px; margin:0; flex-wrap:wrap;'>"
-            f"<span style='color:#52606d; font-size:1.0rem; font-weight:800; letter-spacing:0.02em; line-height:1.18; white-space:nowrap;'>{safe_nct}</span>"
-            f"<span style='color:#475569; font-size:1.0rem; font-weight:700; line-height:1.18; letter-spacing:-0.01em;'>{safe_identity}</span>"
-            f"</div>"
-        ),
-        unsafe_allow_html=True
-    )
 
 
 def render_top_title_panel(row):
@@ -1709,6 +1683,22 @@ def render_ta_conditions_panel(row):
 
 
 
+def render_summary_text_shell_panel(label, value, state_suffix, panel_suffix):
+    with st.container(key=f"summary_side_shell_{panel_suffix}"):
+        with st.container(key=f"summary_side_inner_{panel_suffix}"):
+            st.markdown("<div class='trial-meta-top-gap'></div>", unsafe_allow_html=True)
+
+            _render_native_meta_textarea_field(
+                label=label,
+                value=value,
+                state_suffix=state_suffix
+            )
+
+            st.markdown("<div class='trial-meta-bottom-gap'></div>", unsafe_allow_html=True)
+
+
+
+
 def render_trial_top_strip_refined(row):
     with st.container(key="trial_top_strip"):
         left, right = st.columns([3.70, 0.82], gap="small")
@@ -1733,32 +1723,33 @@ def render_trial_detail_tabs_refined(row):
 
     with tab1:
 
-        study_summary_h = 210
-        bottom_panel_h = 230
 
         main_area, right_rail = st.columns([3.70, 0.82], gap="small")
 
         with main_area:
-            render_scroll_panel(
-                "Study Summary",
-                trial_val(row, "summary_ui"),
-                height=study_summary_h
+            render_summary_text_shell_panel(
+                label="Study Summary",
+                value=trial_val(row, "summary_ui"),
+                state_suffix="study_summary",
+                panel_suffix="study_summary_block"
             )
 
             bottom_left, bottom_mid = st.columns([2, 2], gap="small")
 
             with bottom_left:
-                render_scroll_panel(
-                    "Interventions",
-                    trial_val(row, "interventions_ui"),
-                    height=bottom_panel_h
+                render_summary_text_shell_panel(
+                    label="Interventions",
+                    value=trial_val(row, "interventions_ui"),
+                    state_suffix="interventions",
+                    panel_suffix="interventions_block"
                 )
 
             with bottom_mid:
-                render_scroll_panel(
-                    "Primary Outcomes",
-                    trial_val(row, "primary_outcomes_ui"),
-                    height=bottom_panel_h
+                render_summary_text_shell_panel(
+                    label="Primary Outcomes",
+                    value=trial_val(row, "primary_outcomes_ui"),
+                    state_suffix="primary_outcomes",
+                    panel_suffix="primary_outcomes_block"
                 )
 
         with right_rail:
@@ -1799,10 +1790,11 @@ def render_trial_detail_tabs_refined(row):
         with p3:
             render_smart_info_box("Gender", "gender_ml", row)
 
-        render_scroll_panel(
-            "Eligibility Criteria",
-            trial_val(row, "criteria_ui"),
-            height=295
+        render_summary_text_shell_panel(
+            label="Eligibility Criteria",
+            value=trial_val(row, "criteria_ui"),
+            state_suffix="eligibility_criteria",
+            panel_suffix="eligibility_block"
         )
 
 
