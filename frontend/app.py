@@ -110,7 +110,7 @@ def inject_custom_styles():
                 --ui-control-shadow: -4px 4px 10px -4px rgba(0,0,0,0.10);
                 --ui-control-font-size: 0.80rem;
                 --ui-control-text: #334155;
-                --ui-stack-label-gap: 6px;
+                --ui-stack-label-gap: 0px;
                 --ui-field-gap: 10px;
                 --ui-title-label-gap: 2px;
                 --ui-title-control-h: 96px;
@@ -118,19 +118,19 @@ def inject_custom_styles():
                 --ui-nonlanding-header-top-pad: 10px;
                 --ui-nonlanding-body-gap: 0px;
                 --ui-meta-shell-pad-top: 0px;
-                --ui-meta-shell-pad-right: 5px;
+                --ui-meta-shell-pad-right: 10px;
                 --ui-meta-shell-pad-bottom: 0px;
-                --ui-meta-shell-pad-left: 5px;
-                --ui-meta-top-gap: 20px;
-                --ui-meta-row-gap: 20px;
-                --ui-meta-bottom-gap: 22px;
+                --ui-meta-shell-pad-left: 10px;
+                --ui-meta-top-gap: 25px;
+                --ui-meta-row-gap: 25px;
+                --ui-meta-bottom-gap: 25px;
                 --ui-meta-inline-control-h: var(--ui-top-strip-control-h);
                 --ui-meta-label-pad-right: 15px;
                 --ui-meta-label-y-offset: -6px;
                 --ui-top-strip-control-h: 24px;
-                --ui-meta-conditions-h: 84px;
+                --ui-meta-conditions-h: 78px;
                 --ui-study-summary-h: 128px;
-                --ui-bottom-summary-h: 230px;
+                --ui-bottom-summary-h: 128px;
                 --ui-eligibility-h: 295px;
 
             }}
@@ -428,7 +428,7 @@ def inject_custom_styles():
 
             [class*="st-key-meta_native_field_"] [data-testid="stWidgetLabel"] {{
                 min-height: 0 !important;
-                margin: 0 0 1px 0 !important;
+                margin: 0 0 3px 0 !important;
                 padding: 0 !important;
                 display: block !important;
             }}
@@ -776,6 +776,32 @@ def inject_custom_styles():
                 height: 100% !important;
             }}
 
+            .st-key-summary_side_inner_design_block [data-baseweb="checkbox"] {{
+                display: flex !important;
+                align-items: center !important;
+                gap: 8px !important;
+                min-height: 24px !important;
+                padding-left: 6px !important;
+            }}
+
+            .st-key-summary_side_inner_design_block [data-baseweb="checkbox"] > div {{
+                display: flex !important;
+                align-items: center !important;
+            }}
+
+            .st-key-summary_side_inner_design_block [data-baseweb="checkbox"] label {{
+                display: flex !important;
+                align-items: center !important;
+                gap: 8px !important;
+                margin: 0 !important;
+            }}
+
+            .st-key-summary_side_inner_design_block [data-baseweb="checkbox"] p {{
+                margin: 0 !important;
+                line-height: 1 !important;
+            }}
+
+
             [class*="st-key-summary_side_inner_"] [data-testid="stTextArea"] {{
                 margin: 0 !important;
                 width: 100% !important;
@@ -903,12 +929,12 @@ def inject_custom_styles():
             .top-strip-title-label {{
                 color: #475569 !important;
                 font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
-                font-size: 1.1rem !important;
+                font-size: 0.9rem !important;
                 font-weight: 800 !important;
                 line-height: 1.15 !important;
                 letter-spacing: -0.01em !important;
                 text-transform: none !important;
-                margin: 20px 0px 15px 10px !important;
+                margin: 10px 0px 8px 10px !important;
                 padding: 0 !important;
                 text-align: left !important;
                 display: block !important;
@@ -922,11 +948,11 @@ def inject_custom_styles():
 
             .st-key-trial_title_shell .stTextArea textarea {{
                 min-height: 0 !important;
-                height: 75px !important;
-                font-size: 0.90rem !important;
+                height: 70px !important;
+                font-size: 0.85rem !important;
                 font-weight: 600 !important;
                 line-height: 1.34 !important;
-                padding: 10px 12px !important;
+                padding: 8px 10px !important;
             }}
 
             {debug_overlay_css}
@@ -1619,7 +1645,6 @@ def render_top_title_panel(row):
 def render_top_meta_panel(row):
     rows = [
         ("Sponsor", "lead_sponsor_canonical"),
-        ("Phase", "phase_ml"),
         ("Start Date", "start_date"),
     ]
 
@@ -1720,21 +1745,24 @@ def render_trial_detail_tabs_refined(row):
         "Population Details"
     ])
 
-
     with tab1:
+        content_col, alloc_col = st.columns([3.70, 0.82], gap="small")
 
+        with content_col:
+            top_left, top_mid = st.columns([0.82, 2.88], gap="small")
 
-        main_area, right_rail = st.columns([3.70, 0.82], gap="small")
+            with top_left:
+                render_ta_conditions_panel(row)
 
-        with main_area:
-            render_summary_text_shell_panel(
-                label="Study Summary",
-                value=trial_val(row, "summary_ui"),
-                state_suffix="study_summary",
-                panel_suffix="study_summary_block"
-            )
+            with top_mid:
+                render_summary_text_shell_panel(
+                    label="Study Summary",
+                    value=trial_val(row, "summary_ui"),
+                    state_suffix="study_summary",
+                    panel_suffix="study_summary_block"
+                )
 
-            bottom_left, bottom_mid = st.columns([2, 2], gap="small")
+            bottom_left, bottom_mid = st.columns(2, gap="small")
 
             with bottom_left:
                 render_summary_text_shell_panel(
@@ -1752,12 +1780,11 @@ def render_trial_detail_tabs_refined(row):
                     panel_suffix="primary_outcomes_block"
                 )
 
-        with right_rail:
-            render_ta_conditions_panel(row)
-
+        with alloc_col:
             render_summary_side_panel(
                 row=row,
                 rows=[
+                    ("Phase", "phase_ml"),
                     ("Allocation", "allocation_ml"),
                     ("Intervention Model", "intervention_model_ml"),
                     ("Number of Arms", "number_of_arms_ml"),
