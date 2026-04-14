@@ -129,10 +129,20 @@ def inject_custom_styles():
                 --ui-meta-label-pad-right: 15px;
                 --ui-meta-label-y-offset: -6px;
                 --ui-top-strip-control-h: 24px;
-                --ui-meta-conditions-h: 78px;
-                --ui-study-summary-h: 128px;
-                --ui-bottom-summary-h: 128px;
+                --ui-meta-conditions-h: 81px;
+                --ui-study-summary-h: 132px;
+                --ui-bottom-summary-h: 132px;
+
                 --ui-eligibility-h: 295px;
+
+                --ui-detail-tabs-offset-y: 0px;
+                --ui-detail-tabs-gap-below: 10px;
+                --ui-detail-tabs-pad-y: 5px;
+                --ui-detail-tabs-pad-x: 6px;
+                --ui-detail-tabs-radius: 12px;
+
+                --ui-summary-tab-top-pad: 8px;
+                --ui-summary-row-overlap: -8px;
 
             }}
 
@@ -913,8 +923,12 @@ def inject_custom_styles():
                 border: 1px solid #cbd5e1 !important;
                 border-radius: 14px !important;
                 box-shadow: -6px 6px 12px -3px rgba(0,0,0,0.12) !important;
-                margin: 0px 0px 0px 0px !important;
-                padding: 5px 5px 5px 5px !important;
+                margin: 0 !important;
+                padding:
+                    var(--ui-meta-shell-pad-top)
+                    var(--ui-meta-shell-pad-right)
+                    10px
+                    var(--ui-meta-shell-pad-left) !important;
             }}
 
             .st-key-trial_title_shell > div,
@@ -934,7 +948,7 @@ def inject_custom_styles():
                 line-height: 1.15 !important;
                 letter-spacing: -0.01em !important;
                 text-transform: none !important;
-                margin: 10px 0px 8px 10px !important;
+                margin: 10px 0 8px 0 !important;
                 padding: 0 !important;
                 text-align: left !important;
                 display: block !important;
@@ -948,11 +962,11 @@ def inject_custom_styles():
 
             .st-key-trial_title_shell .stTextArea textarea {{
                 min-height: 0 !important;
-                height: 70px !important;
+                height: 65px !important;
                 font-size: 0.85rem !important;
                 font-weight: 600 !important;
                 line-height: 1.34 !important;
-                padding: 8px 10px !important;
+                padding: 4px 12px 10px 12px !important;
             }}
 
 
@@ -967,6 +981,79 @@ def inject_custom_styles():
             [class*="st-key-summary_side_inner_"] div[data-baseweb="select"] > div,
             [class*="st-key-summary_side_inner_"] [data-testid="stTextArea"] [data-baseweb="textarea"] {{
                 box-shadow: 0 1px 4px rgba(0,0,0,0.05) !important;
+            }}
+
+            /* DETAIL TABS */
+            .st-key-trial_detail_tabs {{
+                margin-top: var(--ui-detail-tabs-offset-y) !important;
+            }}
+
+            .st-key-trial_detail_tabs .stTabs [data-baseweb="tab-list"] {{
+                gap: 8px !important;
+                background: transparent !important;
+                border: none !important;
+                border-radius: 0 !important;
+                padding: 3px 0 0 0 !important;
+                margin: -3px 0 0px 0 !important;
+                box-shadow: none !important;
+            }}
+
+            .st-key-trial_detail_tabs .stTabs [data-baseweb="tab"] {{
+                height: 37px !important;
+                background-color: #e2e8f0 !important;
+                border: 1px solid #cbd5e1 !important;
+                border-radius: 10px !important;
+                padding: 0 15px !important;
+                color: #64748b !important;
+                font-size: 0.85rem !important;
+                font-weight: 400 !important;
+                line-height: 1 !important;
+                letter-spacing: 0 !important;
+                transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+                box-shadow: none !important;
+            }}
+
+            .st-key-trial_detail_tabs .stTabs [data-baseweb="tab"]:hover {{
+                background-color: #334155 !important;
+                border-color: #1e293b !important;
+                color: #ffffff !important;
+                transform: scale(1.02) translateY(-2px) !important;
+            }}
+
+            .st-key-trial_detail_tabs .stTabs [data-baseweb="tab"]:hover p,
+            .st-key-trial_detail_tabs .stTabs [data-baseweb="tab"]:hover span,
+            .st-key-trial_detail_tabs .stTabs [data-baseweb="tab"]:hover div {{
+                color: #ffffff !important;
+            }}
+
+            .st-key-trial_detail_tabs .stTabs [aria-selected="true"] {{
+                background-color: #52606d !important;
+                border-color: #52606d !important;
+                color: #ffffff !important;
+                font-weight: 400 !important;
+                line-height: 1 !important;
+                box-shadow: -4px 4px 10px -4px rgba(0,0,0,0.10) !important;
+            }}
+
+            .st-key-trial_detail_tabs .stTabs [aria-selected="true"] p,
+            .st-key-trial_detail_tabs .stTabs [aria-selected="true"] span,
+            .st-key-trial_detail_tabs .stTabs [aria-selected="true"] div {{
+                color: #ffffff !important;
+                font-weight: 400 !important;
+                line-height: 1 !important;
+            }}
+
+            .st-key-trial_detail_tabs .stTabs [data-baseweb="tab-highlight"] {{
+                display: none !important;
+            }}
+
+            .st-key-trial_detail_tabs .stTabs [data-baseweb="tab-panel"] {{
+                padding-top: var(--ui-summary-tab-top-pad) !important;
+                margin-top: 0 !important;
+            }}
+
+            .st-key-trial_detail_tabs .st-key-summary_top_row {{
+                margin-bottom: var(--ui-summary-row-overlap) !important;
             }}
 
             {debug_overlay_css}
@@ -1628,7 +1715,6 @@ def render_smart_info_box(label, field_id, row, min_h=48):
     )
 
 
-
 def render_top_title_panel(row):
     trial_key = st.session_state.get("selected_nct_id", "no_trial")
     text_key = f"text_{trial_key}_top_title"
@@ -1749,96 +1835,88 @@ def render_trial_top_strip_refined(row):
             render_top_meta_panel(row)
 
 
-
 def render_trial_detail_tabs_refined(row):
     render_trial_top_strip_refined(row)
 
-    tab1, tab2, tab3 = st.tabs([
-        "Summary",
-        "Study Information",
-        "Population Details"
-    ])
+    with st.container(key="trial_detail_tabs"):
+        tab1, tab2 = st.tabs([
+            "Trial Information",
+            "Population Details"
+        ])
 
-    with tab1:
+        with tab1:
 
-        content_col, alloc_col = st.columns([3.70, 0.82], gap="xsmall")
+            content_col, alloc_col = st.columns([3.70, 0.82], gap="xsmall")
 
-        with content_col:
-            top_left, top_mid = st.columns([0.82, 2.88], gap="xsmall")
+            with content_col:
+                with st.container(key="summary_top_row"):
+                    top_left, top_mid = st.columns([0.82, 2.88], gap="xsmall")
 
-            with top_left:
-                render_ta_conditions_panel(row)
+                    with top_left:
+                        render_ta_conditions_panel(row)
 
-            with top_mid:
-                render_summary_text_shell_panel(
-                    label="Study Summary",
-                    value=trial_val(row, "summary_ui"),
-                    state_suffix="study_summary",
-                    panel_suffix="study_summary_block"
+                    with top_mid:
+                        render_summary_text_shell_panel(
+                            label="Study Summary",
+                            value=trial_val(row, "summary_ui"),
+                            state_suffix="study_summary",
+                            panel_suffix="study_summary_block"
+                        )
+
+                bottom_left, bottom_mid = st.columns(2, gap="xsmall")
+
+                with bottom_left:
+                    render_summary_text_shell_panel(
+                        label="Interventions",
+                        value=trial_val(row, "interventions_ui"),
+                        state_suffix="interventions",
+                        panel_suffix="interventions_block"
+                    )
+
+                with bottom_mid:
+                    render_summary_text_shell_panel(
+                        label="Primary Outcomes",
+                        value=trial_val(row, "primary_outcomes_ui"),
+                        state_suffix="primary_outcomes",
+                        panel_suffix="primary_outcomes_block"
+                    )
+
+            with alloc_col:
+                render_summary_side_panel(
+                    row=row,
+                    rows=[
+                        ("Phase", "phase_ml"),
+                        ("Allocation", "allocation_ml"),
+                        ("Intervention Model", "intervention_model_ml"),
+                        ("Number of Arms", "number_of_arms_ml"),
+                        ("Masking", "masking_ml"),
+                        ("Has Placebo", "has_placebo_ml"),
+                        ("Data Monitoring Committee", "has_dmc_ml"),
+                    ],
+                    panel_suffix="design_block"
                 )
 
-            bottom_left, bottom_mid = st.columns(2, gap="xsmall")
+        with tab2:
+            p1, p2, p3, p4 = st.columns(4, gap="xsmall")
 
-            with bottom_left:
-                render_summary_text_shell_panel(
-                    label="Interventions",
-                    value=trial_val(row, "interventions_ui"),
-                    state_suffix="interventions",
-                    panel_suffix="interventions_block"
-                )
+            with p1:
+                render_smart_info_box("Minimum Age", "minimum_age", row)
 
-            with bottom_mid:
-                render_summary_text_shell_panel(
-                    label="Primary Outcomes",
-                    value=trial_val(row, "primary_outcomes_ui"),
-                    state_suffix="primary_outcomes",
-                    panel_suffix="primary_outcomes_block"
-                )
+            with p2:
+                render_smart_info_box("Maximum Age", "maximum_age", row)
 
-        with alloc_col:
-            render_summary_side_panel(
-                row=row,
-                rows=[
-                    ("Phase", "phase_ml"),
-                    ("Allocation", "allocation_ml"),
-                    ("Intervention Model", "intervention_model_ml"),
-                    ("Number of Arms", "number_of_arms_ml"),
-                    ("Masking", "masking_ml"),
-                    ("Has Placebo", "has_placebo_ml"),
-                    ("Data Monitoring Committee", "has_dmc_ml"),
-                ],
-                panel_suffix="design_block"
+            with p3:
+                render_smart_info_box("Gender", "gender_ml", row)
+
+            with p4:
+                render_smart_info_box("Healthy Volunteers", "healthy_volunteers_ml", row)
+
+            render_summary_text_shell_panel(
+                label="Eligibility Criteria",
+                value=trial_val(row, "criteria_ui"),
+                state_suffix="eligibility_criteria",
+                panel_suffix="eligibility_block"
             )
-
-
-    with tab2:
-        c1, c2 = st.columns(2, gap="xsmall")
-
-        with c1:
-            render_smart_info_box("Includes US", "includes_us_ml", row)
-
-        with c2:
-            render_smart_info_box("Healthy Volunteers", "healthy_volunteers_ml", row)
-
-    with tab3:
-        p1, p2, p3 = st.columns(3, gap="xsmall")
-
-        with p1:
-            render_smart_info_box("Minimum Age", "minimum_age", row)
-
-        with p2:
-            render_smart_info_box("Maximum Age", "maximum_age", row)
-
-        with p3:
-            render_smart_info_box("Gender", "gender_ml", row)
-
-        render_summary_text_shell_panel(
-            label="Eligibility Criteria",
-            value=trial_val(row, "criteria_ui"),
-            state_suffix="eligibility_criteria",
-            panel_suffix="eligibility_block"
-        )
-
 
 def render_fourth_ui(row):
     with st.expander("Identity", expanded=True):
