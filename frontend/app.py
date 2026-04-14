@@ -129,7 +129,7 @@ def inject_custom_styles():
                 --ui-meta-label-y-offset: -6px;
                 --ui-top-strip-control-h: 24px;
                 --ui-meta-conditions-h: 84px;
-                --ui-study-summary-h: 210px;
+                --ui-study-summary-h: 128px;
                 --ui-bottom-summary-h: 230px;
                 --ui-eligibility-h: 295px;
 
