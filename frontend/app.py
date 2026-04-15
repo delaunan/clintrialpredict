@@ -49,7 +49,7 @@ BRAND_FILTER = (
 )
 
 
-DEBUG_OVERLAY = False
+DEBUG_OVERLAY = True
 
 
 
@@ -88,6 +88,11 @@ def inject_custom_styles():
             }
     """ if DEBUG_OVERLAY else ""
 
+    is_edit = st.session_state.get("global_edit_mode", False)
+
+    field_bg = "#ffffff" if is_edit else "#f8fafc"
+    field_text = "#334155" if is_edit else "#64748b"
+
 
     st.markdown(f"""
         <style>
@@ -102,9 +107,15 @@ def inject_custom_styles():
 
             :root {{
                 --app-bg: #f1f5f9;
-                --ui-readonly-field-bg: #ffffff;
-                --ui-edit-text: #111827;
-                --ui-locked-text: #334155;
+
+                --ui-field-bg: {field_bg};
+                --ui-field-text: {field_text};
+
+                --ui-readonly-field-bg: var(--ui-field-bg);
+                --ui-edit-text: var(--ui-field-text);
+                --ui-locked-text: var(--ui-field-text);
+                --ui-control-text: var(--ui-field-text);
+
                 --ui-scrollbar-width: 10px;
                 --ui-scrollbar-thumb: #cbd5e1;
                 --ui-scrollbar-track: #e2e8f0;
@@ -113,11 +124,11 @@ def inject_custom_styles():
                 --panel-border: #606c7a;
                 --ui-control-h: 38px;
 
-                --ui-control-radius: 8px;
-                --ui-control-border: 1.5px solid #94a3b8;
+                --ui-control-radius: 10px;
+                --ui-control-border: 1px solid #cbd5e1;
                 --ui-control-shadow: -4px 4px 10px -4px rgba(0,0,0,0.10);
                 --ui-control-font-size: 0.80rem;
-                --ui-control-text: var(--ui-edit-text);
+
                 --ui-stack-label-gap: 0px;
                 --ui-field-gap: 10px;
                 --ui-title-label-gap: 2px;
@@ -136,7 +147,7 @@ def inject_custom_styles():
                 --ui-meta-label-pad-right: 15px;
                 --ui-meta-label-y-offset: -6px;
                 --ui-top-strip-control-h: 24px;
-                --ui-meta-conditions-h: 81px;
+                --ui-meta-conditions-h: 259px;
                 --ui-study-summary-h: 132px;
                 --ui-bottom-summary-h: 132px;
 
@@ -189,8 +200,13 @@ def inject_custom_styles():
 
 
 
+
+
             /* SELECTBOXES + TEXT INPUTS */
+
             div[data-baseweb="select"],
+            div[data-baseweb="input"],
+            div[data-baseweb="base-input"],
             [data-testid="stSelectbox"],
             [data-testid="stTextInput"],
             [data-testid="stTextInputRootElement"] {{
@@ -201,21 +217,31 @@ def inject_custom_styles():
                 margin-top: 0 !important;
             }}
 
-
             div[data-baseweb="select"] > div,
-            [data-testid="stTextInputRootElement"] {{
-                background-color: #ffffff !important;
+            div[data-baseweb="input"] > div,
+            div[data-baseweb="base-input"] > div {{
+                background-color: var(--ui-field-bg) !important;
                 border: var(--ui-control-border) !important;
                 border-radius: var(--ui-control-radius) !important;
                 min-height: var(--ui-control-h) !important;
                 height: var(--ui-control-h) !important;
                 box-sizing: border-box !important;
                 font-size: var(--ui-control-font-size) !important;
-                color: var(--ui-control-text) !important;
+                color: var(--ui-field-text) !important;
                 box-shadow: var(--ui-control-shadow) !important;
-                transition: all 0.2s !important;
+                transition: none !important;
+                opacity: 1 !important;
             }}
 
+            [data-testid="stTextInputRootElement"] {{
+                background: transparent !important;
+                border: none !important;
+                border-radius: 0 !important;
+                box-shadow: none !important;
+                min-height: 0 !important;
+                height: auto !important;
+                padding: 0 !important;
+            }}
 
             div[data-baseweb="select"] > div {{
                 padding-top: 0 !important;
@@ -230,59 +256,46 @@ def inject_custom_styles():
 
             div[data-baseweb="select"] span,
             div[data-baseweb="select"] input,
-            [data-testid="stTextInputRootElement"] input {{
+            div[data-baseweb="select"] > div > div:first-child,
+            div[data-baseweb="input"] input,
+            div[data-baseweb="base-input"] input,
+            div[data-baseweb="input"] input:disabled,
+            div[data-baseweb="base-input"] input:disabled,
+            [data-testid="stTextInputRootElement"] input,
+            [data-testid="stTextInputRootElement"] input:disabled {{
                 font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
                 font-size: var(--ui-control-font-size) !important;
                 font-weight: 500 !important;
                 line-height: 1.1 !important;
-                color: var(--ui-control-text) !important;
+                color: var(--ui-field-text) !important;
+                -webkit-text-fill-color: var(--ui-field-text) !important;
                 letter-spacing: 0 !important;
+                opacity: 1 !important;
+                background: transparent !important;
             }}
 
-
-
-            div[data-baseweb="select"] input {{
-                padding-top: 0 !important;
-                padding-bottom: 0 !important;
-                line-height: 1.1 !important;
-            }}
-
-            div[data-baseweb="select"] > div > div:first-child {{
-                font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
-                font-size: var(--ui-control-font-size) !important;
-                font-weight: 500 !important;
-                line-height: 1.1 !important;
-                color: var(--ui-control-text) !important;
-                letter-spacing: 0 !important;
-            }}
-
-
-
+            div[data-baseweb="input"] input,
+            div[data-baseweb="base-input"] input,
             [data-testid="stTextInputRootElement"] input {{
                 padding: 0 12px !important;
-                background: transparent !important;
+                margin: 0 !important;
                 border: none !important;
                 box-shadow: none !important;
-                min-height: 100% !important;
-                height: 100% !important;
+                min-height: 0 !important;
+                height: auto !important;
+                line-height: 1 !important;
+                align-self: center !important;
+                flex: 1 1 auto !important;
+                width: 100% !important;
             }}
 
-
-            [data-testid="stTextInputRootElement"]:has(input:disabled) {{
+            [data-testid="stTextInputRootElement"]:has(input:disabled),
+            div[data-baseweb="input"]:has(input:disabled) > div,
+            div[data-baseweb="base-input"]:has(input:disabled) > div {{
+                background-color: var(--ui-field-bg) !important;
                 opacity: 1 !important;
-                background-color: var(--ui-readonly-field-bg) !important;
                 cursor: default !important;
             }}
-
-
-            [data-testid="stTextInputRootElement"] input:disabled {{
-                opacity: 1 !important;
-                -webkit-text-fill-color: var(--ui-locked-text) !important;
-                color: var(--ui-locked-text) !important;
-                background: transparent !important;
-                cursor: default !important;
-            }}
-
 
 
 
@@ -464,33 +477,30 @@ def inject_custom_styles():
                 margin: 0 !important;
             }}
 
-            /* UNIFIED TEXT PANELS: same look in read and edit mode */
+
+            /* TEXTAREAS — CLEAN RESET */
             [data-testid="stTextArea"] [data-baseweb="textarea"] {{
                 border: 1px solid #cbd5e1 !important;
                 border-radius: 10px !important;
-                background-color: #ffffff !important;
+                background-color: var(--ui-field-bg) !important;
                 box-shadow: -4px 4px 10px -4px rgba(0,0,0,0.10) !important;
                 overflow: hidden !important;
             }}
 
             [data-testid="stTextArea"] [data-baseweb="textarea"] > div {{
-                background-color: #ffffff !important;
+                background-color: var(--ui-field-bg) !important;
                 padding: 0 !important;
             }}
 
-            [data-testid="stTextArea"] [data-baseweb="textarea"]:has(textarea:disabled),
-            [data-testid="stTextArea"] [data-baseweb="textarea"]:has(textarea:disabled) > div,
-            [data-testid="stTextArea"] [data-baseweb="textarea"] textarea:disabled {{
-                background-color: var(--ui-readonly-field-bg) !important;
-            }}
-
-            .stTextArea textarea {{
+            .stTextArea textarea,
+            .stTextArea textarea:disabled {{
                 font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
                 font-size: 0.84rem !important;
                 line-height: 1.45 !important;
                 font-weight: 500 !important;
-                color: var(--ui-edit-text) !important;
-                background-color: #ffffff !important;
+                color: var(--ui-field-text) !important;
+                -webkit-text-fill-color: var(--ui-field-text) !important;
+                background-color: var(--ui-field-bg) !important;
                 border: none !important;
                 border-radius: 10px !important;
                 padding: 4px 12px 10px 12px !important;
@@ -503,45 +513,30 @@ def inject_custom_styles():
                 scrollbar-width: thin !important;
                 scrollbar-color: var(--ui-scrollbar-thumb) var(--ui-scrollbar-track) !important;
                 tab-size: 4 !important;
-                caret-color: var(--ui-edit-text) !important;
-            }}
-
-            .stTextArea textarea:focus {{
-                outline: none !important;
-                box-shadow: none !important;
-            }}
-
-            .stTextArea textarea:disabled {{
-                color: var(--ui-locked-text) !important;
-                -webkit-text-fill-color: var(--ui-locked-text) !important;
+                caret-color: var(--ui-field-text) !important;
                 opacity: 1 !important;
                 cursor: default !important;
-                background-color: #ffffff !important;
             }}
 
-            .stTextArea textarea::-webkit-scrollbar {{
-                width: var(--ui-scrollbar-width) !important;
+            [data-testid="stTextArea"] [data-baseweb="textarea"]:has(textarea:disabled),
+            [data-testid="stTextArea"] [data-baseweb="textarea"]:has(textarea:disabled) > div,
+            [data-testid="stTextArea"] [data-baseweb="textarea"] textarea:disabled {{
+                background-color: var(--ui-field-bg) !important;
+                opacity: 1 !important;
             }}
 
-            .stTextArea textarea::-webkit-scrollbar-track {{
-                background: var(--ui-scrollbar-track) !important;
-                border-radius: 10px !important;
-            }}
 
-            .stTextArea textarea::-webkit-scrollbar-thumb {{
-                background: var(--ui-scrollbar-thumb) !important;
-                border-radius: 10px !important;
-                border: 2px solid var(--ui-scrollbar-track) !important;
-            }}
+
+
 
             .ui-readonly-resizable-panel {{
                 width: 100%;
                 box-sizing: border-box;
-                background-color: #ffffff;
+                background-color: var(--ui-field-bg);
                 border: 1px solid #cbd5e1;
                 border-radius: 10px;
                 box-shadow: -4px 4px 10px -4px rgba(0,0,0,0.10);
-                color: var(--ui-locked-text);
+                color: var(--ui-field-text);
                 font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
                 font-size: 0.84rem;
                 line-height: 1.45;
@@ -723,7 +718,7 @@ def inject_custom_styles():
 
             /* META SHELL = VISUAL SHELL ONLY */
             .st-key-trial_meta_shell {{
-                background-color: #e2e8f0 !important;
+                background-color: #ffffff !important;
                 border: 1px solid #cbd5e1 !important;
                 border-radius: 14px !important;
                 box-shadow: -6px 6px 12px -3px rgba(0,0,0,0.12) !important;
@@ -761,9 +756,14 @@ def inject_custom_styles():
 
 
             .st-key-trial_meta_inner div[data-baseweb="select"] > div,
-            .st-key-trial_meta_inner [data-testid="stTextInputRootElement"] {{
+            .st-key-trial_meta_inner div[data-baseweb="input"] > div,
+            .st-key-trial_meta_inner div[data-baseweb="base-input"] > div {{
                 min-height: var(--ui-meta-inline-control-h) !important;
                 height: var(--ui-meta-inline-control-h) !important;
+                display: flex !important;
+                align-items: center !important;
+                padding: 0 !important;
+                overflow: hidden !important;
             }}
 
             .st-key-trial_meta_inner [data-testid="stTextInputRootElement"] input {{
@@ -809,9 +809,14 @@ def inject_custom_styles():
             }}
 
             [class*="st-key-summary_side_inner_"] div[data-baseweb="select"] > div,
-            [class*="st-key-summary_side_inner_"] [data-testid="stTextInputRootElement"] {{
+            [class*="st-key-summary_side_inner_"] div[data-baseweb="input"] > div,
+            [class*="st-key-summary_side_inner_"] div[data-baseweb="base-input"] > div {{
                 min-height: var(--ui-meta-inline-control-h) !important;
                 height: var(--ui-meta-inline-control-h) !important;
+                display: flex !important;
+                align-items: center !important;
+                padding: 0 !important;
+                overflow: hidden !important;
             }}
 
             [class*="st-key-summary_side_inner_"] [data-testid="stTextInputRootElement"] input {{
@@ -951,7 +956,7 @@ def inject_custom_styles():
 
             /* TITLE SHELL = GREY ROUNDED CONTAINER */
             .st-key-trial_title_shell {{
-                background-color: #e2e8f0 !important;
+                background-color: #ffffff !important;
                 border: 1px solid #cbd5e1 !important;
                 border-radius: 14px !important;
                 box-shadow: -6px 6px 12px -3px rgba(0,0,0,0.12) !important;
@@ -1007,10 +1012,12 @@ def inject_custom_styles():
             .st-key-trial_meta_shell,
             [class*="st-key-summary_side_shell_"],
             .st-key-trial_title_shell [data-testid="stTextArea"] [data-baseweb="textarea"],
-            .st-key-trial_top_strip [data-testid="stTextInputRootElement"],
             .st-key-trial_top_strip div[data-baseweb="select"] > div,
-            [class*="st-key-summary_side_inner_"] [data-testid="stTextInputRootElement"],
+            .st-key-trial_top_strip div[data-baseweb="input"] > div,
+            .st-key-trial_top_strip div[data-baseweb="base-input"] > div,
             [class*="st-key-summary_side_inner_"] div[data-baseweb="select"] > div,
+            [class*="st-key-summary_side_inner_"] div[data-baseweb="input"] > div,
+            [class*="st-key-summary_side_inner_"] div[data-baseweb="base-input"] > div,
             [class*="st-key-summary_side_inner_"] [data-testid="stTextArea"] [data-baseweb="textarea"] {{
                 box-shadow: 0 1px 4px rgba(0,0,0,0.05) !important;
             }}
@@ -1878,24 +1885,21 @@ def render_trial_detail_tabs_refined(row):
 
         with tab1:
 
-            content_col, alloc_col = st.columns([3.70, 0.82], gap="xsmall")
+            left_col, middle_col, right_col = st.columns([0.82, 2.88, 0.82], gap="xsmall")
 
-            with content_col:
+            with left_col:
+                render_ta_conditions_panel(row)
+
+            with middle_col:
                 with st.container(key="summary_top_row"):
-                    top_left, top_mid = st.columns([0.82, 2.88], gap="xsmall")
+                    render_summary_text_shell_panel(
+                        label="Study Summary",
+                        value=trial_val(row, "summary_ui"),
+                        state_suffix="study_summary",
+                        panel_suffix="study_summary_block"
+                    )
 
-                    with top_left:
-                        render_ta_conditions_panel(row)
-
-                    with top_mid:
-                        render_summary_text_shell_panel(
-                            label="Study Summary",
-                            value=trial_val(row, "summary_ui"),
-                            state_suffix="study_summary",
-                            panel_suffix="study_summary_block"
-                        )
-
-                bottom_left, bottom_mid = st.columns(2, gap="xsmall")
+                bottom_left, bottom_right = st.columns(2, gap="xsmall")
 
                 with bottom_left:
                     render_summary_text_shell_panel(
@@ -1905,7 +1909,7 @@ def render_trial_detail_tabs_refined(row):
                         panel_suffix="interventions_block"
                     )
 
-                with bottom_mid:
+                with bottom_right:
                     render_summary_text_shell_panel(
                         label="Primary Outcomes",
                         value=trial_val(row, "primary_outcomes_ui"),
@@ -1913,7 +1917,7 @@ def render_trial_detail_tabs_refined(row):
                         panel_suffix="primary_outcomes_block"
                     )
 
-            with alloc_col:
+            with right_col:
                 render_summary_side_panel(
                     row=row,
                     rows=[
