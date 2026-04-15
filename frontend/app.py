@@ -49,7 +49,7 @@ BRAND_FILTER = (
 )
 
 
-DEBUG_OVERLAY = True
+DEBUG_OVERLAY = False
 
 
 
@@ -102,6 +102,13 @@ def inject_custom_styles():
 
             :root {{
                 --app-bg: #f1f5f9;
+                --ui-readonly-field-bg: #ffffff;
+                --ui-edit-text: #111827;
+                --ui-locked-text: #334155;
+                --ui-scrollbar-width: 10px;
+                --ui-scrollbar-thumb: #cbd5e1;
+                --ui-scrollbar-track: #e2e8f0;
+
                 --panel-bg: #717d8b;
                 --panel-border: #606c7a;
                 --ui-control-h: 38px;
@@ -110,7 +117,7 @@ def inject_custom_styles():
                 --ui-control-border: 1.5px solid #94a3b8;
                 --ui-control-shadow: -4px 4px 10px -4px rgba(0,0,0,0.10);
                 --ui-control-font-size: 0.80rem;
-                --ui-control-text: #334155;
+                --ui-control-text: var(--ui-edit-text);
                 --ui-stack-label-gap: 0px;
                 --ui-field-gap: 10px;
                 --ui-title-label-gap: 2px;
@@ -263,14 +270,15 @@ def inject_custom_styles():
 
             [data-testid="stTextInputRootElement"]:has(input:disabled) {{
                 opacity: 1 !important;
-                background-color: #ffffff !important;
+                background-color: var(--ui-readonly-field-bg) !important;
                 cursor: default !important;
             }}
 
+
             [data-testid="stTextInputRootElement"] input:disabled {{
                 opacity: 1 !important;
-                -webkit-text-fill-color: var(--ui-control-text) !important;
-                color: var(--ui-control-text) !important;
+                -webkit-text-fill-color: var(--ui-locked-text) !important;
+                color: var(--ui-locked-text) !important;
                 background: transparent !important;
                 cursor: default !important;
             }}
@@ -470,12 +478,18 @@ def inject_custom_styles():
                 padding: 0 !important;
             }}
 
+            [data-testid="stTextArea"] [data-baseweb="textarea"]:has(textarea:disabled),
+            [data-testid="stTextArea"] [data-baseweb="textarea"]:has(textarea:disabled) > div,
+            [data-testid="stTextArea"] [data-baseweb="textarea"] textarea:disabled {{
+                background-color: var(--ui-readonly-field-bg) !important;
+            }}
+
             .stTextArea textarea {{
                 font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
                 font-size: 0.84rem !important;
                 line-height: 1.45 !important;
                 font-weight: 500 !important;
-                color: #334155 !important;
+                color: var(--ui-edit-text) !important;
                 background-color: #ffffff !important;
                 border: none !important;
                 border-radius: 10px !important;
@@ -484,10 +498,13 @@ def inject_custom_styles():
                 resize: vertical !important;
                 white-space: pre-wrap !important;
                 overflow-wrap: break-word !important;
+                overflow-y: auto !important;
+                overflow-x: hidden !important;
+                scrollbar-width: thin !important;
+                scrollbar-color: var(--ui-scrollbar-thumb) var(--ui-scrollbar-track) !important;
                 tab-size: 4 !important;
-                caret-color: #334155 !important;
+                caret-color: var(--ui-edit-text) !important;
             }}
-
 
             .stTextArea textarea:focus {{
                 outline: none !important;
@@ -495,11 +512,26 @@ def inject_custom_styles():
             }}
 
             .stTextArea textarea:disabled {{
-                color: #334155 !important;
-                -webkit-text-fill-color: #334155 !important;
+                color: var(--ui-locked-text) !important;
+                -webkit-text-fill-color: var(--ui-locked-text) !important;
                 opacity: 1 !important;
                 cursor: default !important;
                 background-color: #ffffff !important;
+            }}
+
+            .stTextArea textarea::-webkit-scrollbar {{
+                width: var(--ui-scrollbar-width) !important;
+            }}
+
+            .stTextArea textarea::-webkit-scrollbar-track {{
+                background: var(--ui-scrollbar-track) !important;
+                border-radius: 10px !important;
+            }}
+
+            .stTextArea textarea::-webkit-scrollbar-thumb {{
+                background: var(--ui-scrollbar-thumb) !important;
+                border-radius: 10px !important;
+                border: 2px solid var(--ui-scrollbar-track) !important;
             }}
 
             .ui-readonly-resizable-panel {{
@@ -509,7 +541,7 @@ def inject_custom_styles():
                 border: 1px solid #cbd5e1;
                 border-radius: 10px;
                 box-shadow: -4px 4px 10px -4px rgba(0,0,0,0.10);
-                color: #334155;
+                color: var(--ui-locked-text);
                 font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
                 font-size: 0.84rem;
                 line-height: 1.45;
@@ -825,68 +857,68 @@ def inject_custom_styles():
 
             .st-key-summary_side_inner_ta_conditions_block [data-testid="stTextArea"] [data-baseweb="textarea"] {{
                 min-height: var(--ui-meta-conditions-h) !important;
-                height: var(--ui-meta-conditions-h) !important;
+                height: auto !important;
                 box-sizing: border-box !important;
             }}
 
             .st-key-summary_side_inner_ta_conditions_block .stTextArea textarea {{
                 min-height: calc(var(--ui-meta-conditions-h) - 2px) !important;
-                height: calc(var(--ui-meta-conditions-h) - 2px) !important;
+                height: auto !important;
                 padding: 4px 12px 10px 12px !important;
-                resize: none !important;
+                resize: vertical !important;
             }}
 
 
             .st-key-summary_side_inner_study_summary_block [data-testid="stTextArea"] [data-baseweb="textarea"] {{
                 min-height: var(--ui-study-summary-h) !important;
-                height: var(--ui-study-summary-h) !important;
+                height: auto !important;
                 box-sizing: border-box !important;
             }}
 
             .st-key-summary_side_inner_study_summary_block .stTextArea textarea {{
                 min-height: calc(var(--ui-study-summary-h) - 2px) !important;
-                height: calc(var(--ui-study-summary-h) - 2px) !important;
+                height: auto !important;
                 padding: 4px 12px 10px 12px !important;
-                resize: none !important;
+                resize: vertical !important;
             }}
 
             .st-key-summary_side_inner_interventions_block [data-testid="stTextArea"] [data-baseweb="textarea"] {{
                 min-height: var(--ui-bottom-summary-h) !important;
-                height: var(--ui-bottom-summary-h) !important;
+                height: auto !important;
                 box-sizing: border-box !important;
             }}
 
             .st-key-summary_side_inner_interventions_block .stTextArea textarea {{
                 min-height: calc(var(--ui-bottom-summary-h) - 2px) !important;
-                height: calc(var(--ui-bottom-summary-h) - 2px) !important;
+                height: auto !important;
                 padding: 4px 12px 10px 12px !important;
-                resize: none !important;
+                resize: vertical !important;
             }}
 
             .st-key-summary_side_inner_primary_outcomes_block [data-testid="stTextArea"] [data-baseweb="textarea"] {{
                 min-height: var(--ui-bottom-summary-h) !important;
-                height: var(--ui-bottom-summary-h) !important;
+                height: auto !important;
                 box-sizing: border-box !important;
             }}
 
             .st-key-summary_side_inner_primary_outcomes_block .stTextArea textarea {{
                 min-height: calc(var(--ui-bottom-summary-h) - 2px) !important;
-                height: calc(var(--ui-bottom-summary-h) - 2px) !important;
+                height: auto !important;
                 padding: 4px 12px 10px 12px !important;
-                resize: none !important;
+                resize: vertical !important;
             }}
 
             .st-key-summary_side_inner_eligibility_block [data-testid="stTextArea"] [data-baseweb="textarea"] {{
                 min-height: var(--ui-eligibility-h) !important;
-                height: var(--ui-eligibility-h) !important;
+                height: auto !important;
                 box-sizing: border-box !important;
             }}
 
             .st-key-summary_side_inner_eligibility_block .stTextArea textarea {{
                 min-height: calc(var(--ui-eligibility-h) - 2px) !important;
-                height: calc(var(--ui-eligibility-h) - 2px) !important;
+                height: auto !important;
                 padding: 4px 12px 10px 12px !important;
-                resize: none !important;
+                resize: vertical !important;
             }}
 
 
