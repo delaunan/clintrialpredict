@@ -51,7 +51,14 @@ BRAND_FILTER = (
 
 DEBUG_OVERLAY = True
 
-
+TEXTAREA_HEIGHTS = {
+    "top_title": 70,
+    "conditions": 286,
+    "study_summary": 160,
+    "interventions": 160,
+    "primary_outcomes": 160,
+    "eligibility_criteria": 295,
+}
 
 
 # ==========================
@@ -147,11 +154,7 @@ def inject_custom_styles():
                 --ui-meta-label-pad-right: 15px;
                 --ui-meta-label-y-offset: -6px;
                 --ui-top-strip-control-h: 24px;
-                --ui-meta-conditions-h: 259px;
-                --ui-study-summary-h: 132px;
-                --ui-bottom-summary-h: 132px;
 
-                --ui-eligibility-h: 295px;
 
                 --ui-detail-tabs-offset-y: 0px;
                 --ui-detail-tabs-gap-below: 10px;
@@ -860,71 +863,8 @@ def inject_custom_styles():
             }}
 
 
-            .st-key-summary_side_inner_ta_conditions_block [data-testid="stTextArea"] [data-baseweb="textarea"] {{
-                min-height: var(--ui-meta-conditions-h) !important;
-                height: auto !important;
-                box-sizing: border-box !important;
-            }}
-
-            .st-key-summary_side_inner_ta_conditions_block .stTextArea textarea {{
-                min-height: calc(var(--ui-meta-conditions-h) - 2px) !important;
-                height: auto !important;
-                padding: 4px 12px 10px 12px !important;
-                resize: vertical !important;
-            }}
 
 
-            .st-key-summary_side_inner_study_summary_block [data-testid="stTextArea"] [data-baseweb="textarea"] {{
-                min-height: var(--ui-study-summary-h) !important;
-                height: auto !important;
-                box-sizing: border-box !important;
-            }}
-
-            .st-key-summary_side_inner_study_summary_block .stTextArea textarea {{
-                min-height: calc(var(--ui-study-summary-h) - 2px) !important;
-                height: auto !important;
-                padding: 4px 12px 10px 12px !important;
-                resize: vertical !important;
-            }}
-
-            .st-key-summary_side_inner_interventions_block [data-testid="stTextArea"] [data-baseweb="textarea"] {{
-                min-height: var(--ui-bottom-summary-h) !important;
-                height: auto !important;
-                box-sizing: border-box !important;
-            }}
-
-            .st-key-summary_side_inner_interventions_block .stTextArea textarea {{
-                min-height: calc(var(--ui-bottom-summary-h) - 2px) !important;
-                height: auto !important;
-                padding: 4px 12px 10px 12px !important;
-                resize: vertical !important;
-            }}
-
-            .st-key-summary_side_inner_primary_outcomes_block [data-testid="stTextArea"] [data-baseweb="textarea"] {{
-                min-height: var(--ui-bottom-summary-h) !important;
-                height: auto !important;
-                box-sizing: border-box !important;
-            }}
-
-            .st-key-summary_side_inner_primary_outcomes_block .stTextArea textarea {{
-                min-height: calc(var(--ui-bottom-summary-h) - 2px) !important;
-                height: auto !important;
-                padding: 4px 12px 10px 12px !important;
-                resize: vertical !important;
-            }}
-
-            .st-key-summary_side_inner_eligibility_block [data-testid="stTextArea"] [data-baseweb="textarea"] {{
-                min-height: var(--ui-eligibility-h) !important;
-                height: auto !important;
-                box-sizing: border-box !important;
-            }}
-
-            .st-key-summary_side_inner_eligibility_block .stTextArea textarea {{
-                min-height: calc(var(--ui-eligibility-h) - 2px) !important;
-                height: auto !important;
-                padding: 4px 12px 10px 12px !important;
-                resize: vertical !important;
-            }}
 
 
 
@@ -985,7 +925,7 @@ def inject_custom_styles():
                 line-height: 1.15 !important;
                 letter-spacing: -0.01em !important;
                 text-transform: none !important;
-                margin: 10px 0 8px 0 !important;
+                margin: 8px 0 6px 0 !important;
                 padding: 0 !important;
                 text-align: left !important;
                 display: block !important;
@@ -998,8 +938,6 @@ def inject_custom_styles():
             }}
 
             .st-key-trial_title_shell .stTextArea textarea {{
-                min-height: 0 !important;
-                height: 65px !important;
                 font-size: 0.85rem !important;
                 font-weight: 600 !important;
                 line-height: 1.34 !important;
@@ -1729,7 +1667,7 @@ def _render_native_meta_field(label, field_id, row):
 
 
 
-def _render_native_meta_textarea_field(label, value, state_suffix):
+def _render_native_meta_textarea_field(label, value, state_suffix, height):
     trial_key = st.session_state.get("selected_nct_id", "no_trial")
     state_key = f"text_{trial_key}_{state_suffix}"
     safe_value = "" if value == "N/A" else str(value)
@@ -1741,6 +1679,7 @@ def _render_native_meta_textarea_field(label, value, state_suffix):
         st.text_area(
             label,
             key=state_key,
+            height=height,
             disabled=not st.session_state.get("global_edit_mode", False)
         )
 
@@ -1775,7 +1714,7 @@ def render_top_title_panel(row):
         st.text_area(
             "Title",
             key=text_key,
-            height=75,
+            height=TEXTAREA_HEIGHTS["top_title"],
             label_visibility="collapsed",
             disabled=not st.session_state.get("global_edit_mode", False)
         )
@@ -1840,14 +1779,14 @@ def render_ta_conditions_panel(row):
             _render_native_meta_textarea_field(
                 label="Conditions",
                 value=trial_val(row, "conditions_ui"),
-                state_suffix="conditions"
+                state_suffix="conditions",
+                height=TEXTAREA_HEIGHTS["conditions"]
             )
-
             st.markdown("<div class='trial-meta-bottom-gap'></div>", unsafe_allow_html=True)
 
 
 
-def render_summary_text_shell_panel(label, value, state_suffix, panel_suffix):
+def render_summary_text_shell_panel(label, value, state_suffix, panel_suffix, height):
     with st.container(key=f"summary_side_shell_{panel_suffix}"):
         with st.container(key=f"summary_side_inner_{panel_suffix}"):
             st.markdown("<div class='trial-meta-top-gap'></div>", unsafe_allow_html=True)
@@ -1855,7 +1794,8 @@ def render_summary_text_shell_panel(label, value, state_suffix, panel_suffix):
             _render_native_meta_textarea_field(
                 label=label,
                 value=value,
-                state_suffix=state_suffix
+                state_suffix=state_suffix,
+                height=height
             )
 
             st.markdown("<div class='trial-meta-bottom-gap'></div>", unsafe_allow_html=True)
@@ -1896,7 +1836,8 @@ def render_trial_detail_tabs_refined(row):
                         label="Study Summary",
                         value=trial_val(row, "summary_ui"),
                         state_suffix="study_summary",
-                        panel_suffix="study_summary_block"
+                        panel_suffix="study_summary_block",
+                        height=TEXTAREA_HEIGHTS["study_summary"]
                     )
 
                 bottom_left, bottom_right = st.columns(2, gap="xsmall")
@@ -1906,7 +1847,8 @@ def render_trial_detail_tabs_refined(row):
                         label="Interventions",
                         value=trial_val(row, "interventions_ui"),
                         state_suffix="interventions",
-                        panel_suffix="interventions_block"
+                        panel_suffix="interventions_block",
+                        height=TEXTAREA_HEIGHTS["interventions"]
                     )
 
                 with bottom_right:
@@ -1914,7 +1856,8 @@ def render_trial_detail_tabs_refined(row):
                         label="Primary Outcomes",
                         value=trial_val(row, "primary_outcomes_ui"),
                         state_suffix="primary_outcomes",
-                        panel_suffix="primary_outcomes_block"
+                        panel_suffix="primary_outcomes_block",
+                        height=TEXTAREA_HEIGHTS["primary_outcomes"]
                     )
 
             with right_col:
@@ -1951,7 +1894,8 @@ def render_trial_detail_tabs_refined(row):
                 label="Eligibility Criteria",
                 value=trial_val(row, "criteria_ui"),
                 state_suffix="eligibility_criteria",
-                panel_suffix="eligibility_block"
+                panel_suffix="eligibility_block",
+                height=TEXTAREA_HEIGHTS["eligibility_criteria"]
             )
 
 def render_fourth_ui(row):
