@@ -49,7 +49,7 @@ BRAND_FILTER = (
 )
 
 
-DEBUG_OVERLAY = True
+DEBUG_OVERLAY = False
 
 TEXTAREA_HEIGHTS = {
     "top_title": 70,
@@ -57,7 +57,7 @@ TEXTAREA_HEIGHTS = {
     "study_summary": 160,
     "interventions": 160,
     "primary_outcomes": 160,
-    "eligibility_criteria": 295,
+    "eligibility_criteria": 337,
 }
 
 
@@ -164,6 +164,7 @@ def inject_custom_styles():
 
                 --ui-summary-tab-top-pad: 8px;
                 --ui-summary-row-overlap: -8px;
+                --ui-population-bottom-extension: 148px;
 
             }}
 
@@ -721,7 +722,7 @@ def inject_custom_styles():
 
             /* META SHELL = VISUAL SHELL ONLY */
             .st-key-trial_meta_shell {{
-                background-color: #ffffff !important;
+                background-color: #e2e8f0 !important;
                 border: 1px solid #cbd5e1 !important;
                 border-radius: 14px !important;
                 box-shadow: -6px 6px 12px -3px rgba(0,0,0,0.12) !important;
@@ -783,6 +784,7 @@ def inject_custom_styles():
                 margin: 0 !important;
                 padding: 0 !important;
             }}
+
 
             [class*="st-key-summary_side_shell_"] > div,
             [class*="st-key-summary_side_shell_"] > div > [data-testid="stVerticalBlock"] {{
@@ -896,7 +898,7 @@ def inject_custom_styles():
 
             /* TITLE SHELL = GREY ROUNDED CONTAINER */
             .st-key-trial_title_shell {{
-                background-color: #ffffff !important;
+                background-color: #e2e8f0 !important;
                 border: 1px solid #cbd5e1 !important;
                 border-radius: 14px !important;
                 box-shadow: -6px 6px 12px -3px rgba(0,0,0,0.12) !important;
@@ -1332,14 +1334,14 @@ def render_trials_grid(df):
 
     gb.configure_selection(selection_mode="single", use_checkbox=False)
     gb.configure_grid_options(
-        rowHeight=35,
-        headerHeight=36,
+        rowHeight=30,
+        headerHeight=28,
         suppressCellFocus=True,
         animateRows=True,
         onRowClicked=JsCode("function(e) { e.api.deselectAll(); e.node.setSelected(true, true); }")
     )
 
-    dynamic_height = min(545, 36 + (len(grid_df) * 35) + 2)
+    dynamic_height = min(505, 28 + (len(grid_df) * 30) + 2)
     response = AgGrid(
         grid_df,
         gridOptions=gb.build(),
@@ -1745,7 +1747,8 @@ def render_top_meta_panel(row):
 
             st.markdown("<div class='trial-meta-bottom-gap'></div>", unsafe_allow_html=True)
 
-def render_summary_side_panel(row, rows, panel_suffix):
+
+def render_summary_side_panel(row, rows, panel_suffix, bottom_extension_var=None):
     with st.container(key=f"summary_side_shell_{panel_suffix}"):
         with st.container(key=f"summary_side_inner_{panel_suffix}"):
             st.markdown("<div class='trial-meta-top-gap'></div>", unsafe_allow_html=True)
@@ -1759,6 +1762,12 @@ def render_summary_side_panel(row, rows, panel_suffix):
 
                 if idx < len(rows) - 1:
                     st.markdown("<div class='trial-meta-row-gap'></div>", unsafe_allow_html=True)
+
+            if bottom_extension_var:
+                st.markdown(
+                    f"<div style='height: var({bottom_extension_var});'></div>",
+                    unsafe_allow_html=True
+                )
 
             st.markdown("<div class='trial-meta-bottom-gap'></div>", unsafe_allow_html=True)
 
@@ -1784,6 +1793,19 @@ def render_ta_conditions_panel(row):
             )
             st.markdown("<div class='trial-meta-bottom-gap'></div>", unsafe_allow_html=True)
 
+
+def render_population_side_panel(row):
+    render_summary_side_panel(
+        row=row,
+        rows=[
+            ("Population Type", "healthy_volunteers_ml"),
+            ("Minimum Age", "minimum_age"),
+            ("Maximum Age", "maximum_age"),
+            ("Gender", "gender_ml"),
+        ],
+        panel_suffix="population_block",
+        bottom_extension_var="--ui-population-bottom-extension"
+    )
 
 
 def render_summary_text_shell_panel(label, value, state_suffix, panel_suffix, height):
@@ -1876,27 +1898,19 @@ def render_trial_detail_tabs_refined(row):
                 )
 
         with tab2:
-            p1, p2, p3, p4 = st.columns(4, gap="xsmall")
+            left_col, right_col = st.columns([3.70, 0.82], gap="xsmall")
 
-            with p1:
-                render_smart_info_box("Minimum Age", "minimum_age", row)
+            with left_col:
+                render_summary_text_shell_panel(
+                    label="Eligibility Criteria",
+                    value=trial_val(row, "criteria_ui"),
+                    state_suffix="eligibility_criteria",
+                    panel_suffix="eligibility_block",
+                    height=TEXTAREA_HEIGHTS["eligibility_criteria"]
+                )
 
-            with p2:
-                render_smart_info_box("Maximum Age", "maximum_age", row)
-
-            with p3:
-                render_smart_info_box("Gender", "gender_ml", row)
-
-            with p4:
-                render_smart_info_box("Healthy Volunteers", "healthy_volunteers_ml", row)
-
-            render_summary_text_shell_panel(
-                label="Eligibility Criteria",
-                value=trial_val(row, "criteria_ui"),
-                state_suffix="eligibility_criteria",
-                panel_suffix="eligibility_block",
-                height=TEXTAREA_HEIGHTS["eligibility_criteria"]
-            )
+            with right_col:
+                render_population_side_panel(row)
 
 def render_fourth_ui(row):
     with st.expander("Identity", expanded=True):
