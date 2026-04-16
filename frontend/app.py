@@ -104,13 +104,7 @@ def inject_custom_styles():
     st.markdown(f"""
         <style>
             @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
-            @import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200');
 
-            .material-symbols-outlined {{
-                font-family: 'Material Symbols Outlined' !important;
-                font-weight: normal; font-style: normal; font-size: 24px; line-height: 1;
-                display: inline-block; white-space: nowrap; direction: ltr; -webkit-font-smoothing: antialiased;
-            }}
 
             :root {{
                 --app-bg: #f1f5f9;
@@ -118,12 +112,6 @@ def inject_custom_styles():
                 --ui-field-bg: {field_bg};
                 --ui-field-text: {field_text};
 
-                --ui-readonly-field-bg: var(--ui-field-bg);
-                --ui-edit-text: var(--ui-field-text);
-                --ui-locked-text: var(--ui-field-text);
-                --ui-control-text: var(--ui-field-text);
-
-                --ui-scrollbar-width: 10px;
                 --ui-scrollbar-thumb: #cbd5e1;
                 --ui-scrollbar-track: #e2e8f0;
 
@@ -138,8 +126,7 @@ def inject_custom_styles():
 
                 --ui-stack-label-gap: 0px;
                 --ui-field-gap: 10px;
-                --ui-title-label-gap: 2px;
-                --ui-title-control-h: 96px;
+
                 --ui-header-nonlanding-h: 56px;
                 --ui-nonlanding-header-top-pad: 10px;
                 --ui-nonlanding-body-gap: 0px;
@@ -157,10 +144,7 @@ def inject_custom_styles():
 
 
                 --ui-detail-tabs-offset-y: 0px;
-                --ui-detail-tabs-gap-below: 10px;
-                --ui-detail-tabs-pad-y: 5px;
-                --ui-detail-tabs-pad-x: 6px;
-                --ui-detail-tabs-radius: 12px;
+
 
                 --ui-summary-tab-top-pad: 8px;
                 --ui-summary-row-overlap: -8px;
@@ -194,7 +178,7 @@ def inject_custom_styles():
             }}
 
             div[data-testid="stSidebarContent"] {{
-                padding-top: -0px !important;
+                padding-top: 0px !important;
                 transform: translateY(0px) !important;
             }}
 
@@ -529,28 +513,6 @@ def inject_custom_styles():
                 opacity: 1 !important;
             }}
 
-
-
-
-
-            .ui-readonly-resizable-panel {{
-                width: 100%;
-                box-sizing: border-box;
-                background-color: var(--ui-field-bg);
-                border: 1px solid #cbd5e1;
-                border-radius: 10px;
-                box-shadow: -4px 4px 10px -4px rgba(0,0,0,0.10);
-                color: var(--ui-field-text);
-                font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-                font-size: 0.84rem;
-                line-height: 1.45;
-                font-weight: 500;
-                padding: 4px 12px 10px 12px;
-                overflow: auto;
-                resize: vertical;
-                white-space: pre-wrap;
-                overflow-wrap: break-word;
-            }}
 
 
             /* Boxes & Highlights */
@@ -1041,22 +1003,54 @@ def inject_custom_styles():
         </style>
     """, unsafe_allow_html=True)
 
+
+
+
+
 # ==========================
 # 3. DATA & STATE
 # ==========================
 @st.cache_data
 def load_data():
-    df = pd.read_csv(DATA_PATH) if DATA_PATH.exists() else pd.DataFrame()
-    if 'start_year' in df.columns:
-        df['start_year'] = pd.to_numeric(df['start_year'], errors='coerce').fillna(0).astype(int)
-    tax = json.load(open(TAXONOMY_PATH)) if TAXONOMY_PATH.exists() else {}
+    if DATA_PATH.exists():
+        df = pd.read_csv(DATA_PATH)
+    else:
+        df = pd.DataFrame()
+
+    if "start_year" in df.columns:
+        df["start_year"] = (
+            pd.to_numeric(df["start_year"], errors="coerce")
+            .fillna(0)
+            .astype(int)
+        )
+
+    if TAXONOMY_PATH.exists():
+        with TAXONOMY_PATH.open("r", encoding="utf-8") as f:
+            tax = json.load(f)
+    else:
+        tax = {}
+
     return df, tax.get("FIELDS", tax)
 
 X_ALL, TAXONOMY = load_data()
 
+
+@st.cache_data
+def load_logo_base64():
+    logo_path = CURRENT_DIR / "logo_grey_title.png"
+    if not logo_path.exists():
+        return ""
+
+    with logo_path.open("rb") as f:
+        return base64.b64encode(f.read()).decode()
+
+
+
+
 def init_session_state():
     defaults = {
         "search_initiated": False,
+        "last_search_state": None,
         "selected_nct_id": None,
         "trigger_prediction": False,
         "analysis_result": None,
@@ -1074,33 +1068,133 @@ def init_session_state():
         if key not in st.session_state:
             st.session_state[key] = val
 
+FILTER_COL_MAP = {
+    "f_sponsor": "lead_sponsor_canonical",
+    "f_ta": "therapeutic_area_ui",
+    "f_phase": "phase_ui",
+    "f_year": "start_year",
+    "f_nct_id": "nct_id",
+}
+
+
 def reset_filters():
-    for key in ["f_sponsor", "f_ta", "f_phase", "f_year", "f_nct_id"]:
+    for key in FILTER_COL_MAP:
         st.session_state[key] = None
     for key in ["s_registry", "s_mode"]:
         st.session_state[key] = ""
     st.session_state.selected_nct_id = None
     st.session_state.search_initiated = False
+    st.session_state.last_search_state = None
 
-def keep_search_widget_state():
-    for key in [
-        "f_sponsor",
-        "f_ta",
-        "f_phase",
-        "f_year",
-        "f_nct_id",
-        "s_registry",
-        "s_mode",
-    ]:
-        if key in st.session_state:
-            st.session_state[key] = st.session_state[key]
 
-def go_back_to_results():
+
+def start_search():
+    st.session_state.search_initiated = True
     st.session_state.selected_nct_id = None
+
+
+def clear_prediction_state():
     st.session_state.trigger_prediction = False
     st.session_state.analysis_result = None
     st.session_state.analysis_nct_id = None
+
+
+def reset_trial_editor_state():
+    selected_id = st.session_state.get("selected_nct_id")
+    if not selected_id:
+        return
+
+    selected_df = X_ALL[X_ALL[ID_COL] == selected_id]
+    if selected_df.empty:
+        return
+
+    row = selected_df.iloc[0]
+    trial_key = selected_id
+
+    field_ids = [
+        "lead_sponsor_canonical",
+        "start_date",
+        "therapeutic_area_ml",
+        "phase_ml",
+        "allocation_ml",
+        "intervention_model_ml",
+        "number_of_arms_ml",
+        "masking_ml",
+        "has_placebo_ml",
+        "has_dmc_ml",
+        "healthy_volunteers_ml",
+        "minimum_age",
+        "maximum_age",
+        "gender_ml",
+    ]
+
+    for field_id in field_ids:
+        state_key = f"input_{trial_key}_{field_id}"
+
+        if field_id in {"has_placebo_ml", "has_dmc_ml"}:
+            initial_val = _coerce_checkbox_value(
+                trial_val(row, field_id.replace("_ml", "_ui"), field_id, default=False)
+            )
+        else:
+            display_col = field_id.replace("_ml", "_ui") if "_ml" in field_id else f"{field_id}_ui"
+            initial_val = trial_val(row, display_col, field_id)
+
+        st.session_state[state_key] = initial_val
+
+    text_map = {
+        "top_title": trial_val(row, "title"),
+        "study_summary": trial_val(row, "summary_ui"),
+        "conditions": trial_val(row, "conditions_ui"),
+        "interventions": trial_val(row, "interventions_ui"),
+        "primary_outcomes": trial_val(row, "primary_outcomes_ui"),
+        "eligibility_criteria": trial_val(row, "criteria_ui"),
+    }
+
+    for suffix, value in text_map.items():
+        state_key = f"text_{trial_key}_{suffix}"
+        st.session_state[state_key] = "" if value == "N/A" else str(value)
+
+
+def handle_global_edit_toggle():
+    if not st.session_state.get("global_edit_mode", False):
+        reset_trial_editor_state()
+
+def snapshot_search_state():
+    st.session_state.last_search_state = {
+        "f_sponsor": st.session_state.get("f_sponsor"),
+        "f_ta": st.session_state.get("f_ta"),
+        "f_phase": st.session_state.get("f_phase"),
+        "f_year": st.session_state.get("f_year"),
+        "f_nct_id": st.session_state.get("f_nct_id"),
+        "s_registry": st.session_state.get("s_registry", ""),
+        "s_mode": st.session_state.get("s_mode", ""),
+        "search_initiated": st.session_state.get("search_initiated", False),
+    }
+
+def restore_search_state():
+    saved = st.session_state.get("last_search_state")
+    if not saved:
+        return
+
+    for key, value in saved.items():
+        st.session_state[key] = value
+
+def go_back_to_results():
+    restore_search_state()
+    st.session_state.selected_nct_id = None
+    clear_prediction_state()
     st.session_state.global_edit_mode = False
+
+
+def apply_trial_filters(base_df, skip_key=None):
+    tdf = base_df
+    for state_key, col_name in FILTER_COL_MAP.items():
+        val = st.session_state.get(state_key)
+        if state_key == skip_key or val in (None, ""):
+            continue
+        tdf = tdf[tdf[col_name] == val]
+    return tdf
+
 
 
 
@@ -1114,12 +1208,11 @@ def get_risk_tier(score: float):
 # 4. COMPONENTS
 # ==========================
 
+
+
+
 def render_header(is_landing=True, show_predict_button=False, show_back_button=False, show_global_edit_toggle=False):
-    logo_path = CURRENT_DIR / "logo_grey_title.png"
-    img_base64 = ""
-    if logo_path.exists():
-        with open(logo_path, "rb") as f:
-            img_base64 = base64.b64encode(f.read()).decode()
+    img_base64 = load_logo_base64()
 
     t1, t2 = st.columns([3.8, 3.2], vertical_alignment="top")
     with t1:
@@ -1134,7 +1227,7 @@ def render_header(is_landing=True, show_predict_button=False, show_back_button=F
 
             html = f"""
                 <div style='display: flex; align-items: center; gap: {logo_gap};'>
-                    <div style='background-color: white; border: {border}px solid #52606d; padding: 2px; border-radius: {radius}px; display: flex; align-items: center; justify-content: center; height: {size}px; width: {size}px; flex-shrink: 0; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-top: {"0px" if is_landing else "0px"};'>
+                    <div style='background-color: white; border: {border}px solid #52606d; padding: 2px; border-radius: {radius}px; display: flex; align-items: center; justify-content: center; height: {size}px; width: {size}px; flex-shrink: 0; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-top: 0px;'>
                         <img src='data:image/png;base64,{img_base64}' style='height: {size-2}px; filter: {BRAND_FILTER};'>
                     </div>
                     <div style='display: {"block" if is_landing else "flex"}; align-items: {"stretch" if is_landing else "flex-end"}; gap: {title_demo_gap};'>
@@ -1156,7 +1249,8 @@ def render_header(is_landing=True, show_predict_button=False, show_back_button=F
                     if show_global_edit_toggle:
                         st.toggle(
                             "Edit trial fields",
-                            key="global_edit_mode"
+                            key="global_edit_mode",
+                            on_change=handle_global_edit_toggle
                         )
 
                 with c_back:
@@ -1181,26 +1275,12 @@ def render_header(is_landing=True, show_predict_button=False, show_back_button=F
 
 
 def render_filters(df, is_sidebar=False):
-    COL_MAP = {
-        "f_sponsor": "lead_sponsor_canonical",
-        "f_ta": "therapeutic_area_ui",
-        "f_phase": "phase_ui",
-        "f_year": "start_year",
-        "f_nct_id": "nct_id"
-    }
-
     def apply_filters(base_df, skip_key=None):
-        tdf = base_df.copy()
-        for k, c in COL_MAP.items():
-            val = st.session_state.get(k)
-            if k == skip_key or val in (None, ""):
-                continue
-            tdf = tdf[tdf[c] == val]
-        return tdf
+        return apply_trial_filters(base_df, skip_key=skip_key)
 
     def get_opts(col_key):
         tdf = apply_filters(df, skip_key=col_key)
-        col = COL_MAP[col_key]
+        col = FILTER_COL_MAP[col_key]
 
         if col == "start_year":
             return sorted([y for y in tdf[col].dropna().unique() if y > 0], reverse=True)
@@ -1250,7 +1330,7 @@ def render_filters(df, is_sidebar=False):
                 "Search Trials",
                 use_container_width=True,
                 type="primary",
-                on_click=lambda: setattr(st.session_state, "search_initiated", True)
+                on_click=start_search
             )
 
     curr_df = apply_filters(df)
@@ -1462,13 +1542,12 @@ def render_pillar_expander(title, pillar_name, data):
                     f_id, f_m = feats[i+j]
                     label = f_m.get("ui", {}).get("label", f_id)
                     with cols[j]:
-                        render_smart_info_box(label, f_id, data, min_h=40)
+                        render_smart_info_box(label, f_id, data)
 
 def open_trial_third_ui(selected_id):
+    snapshot_search_state()
     st.session_state.selected_nct_id = selected_id
-    st.session_state.trigger_prediction = False
-    st.session_state.analysis_result = None
-    st.session_state.analysis_nct_id = None
+    clear_prediction_state()
     st.rerun()
 
 
@@ -1685,8 +1764,7 @@ def _render_native_meta_textarea_field(label, value, state_suffix, height):
             disabled=not st.session_state.get("global_edit_mode", False)
         )
 
-def render_smart_info_box(label, field_id, row, min_h=48):
-    _ = min_h  # kept only for call compatibility
+def render_smart_info_box(label, field_id, row):
     _render_labeled_trial_field(
         label=label,
         field_id=field_id,
@@ -1946,7 +2024,12 @@ def render_fourth_ui(row):
                 try:
                     # Merge edited fields into the row before sending to API
                     row_to_predict = get_edited_row(row)
-                    res = requests.post(API_URL, json=row_to_predict.replace({np.nan: None}).to_dict())
+                    res = requests.post(
+                        API_URL,
+                        json=row_to_predict.replace({np.nan: None}).to_dict(),
+                        timeout=60
+                    )
+
                     if res.status_code == 200:
                         st.session_state.analysis_result = res.json()
                         st.session_state.analysis_nct_id = st.session_state.selected_nct_id
@@ -2087,7 +2170,7 @@ if not st.session_state.selected_nct_id:
         if selected_id:
             open_trial_third_ui(selected_id)
 else:
-    keep_search_widget_state()
+
 
     selected_df = X_ALL[X_ALL[ID_COL] == st.session_state.selected_nct_id]
 
