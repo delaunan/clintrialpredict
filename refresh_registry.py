@@ -14,6 +14,9 @@ THRESHOLDS_PATH = BASE_DIR / "models" / "thresholds_01.json"
 TAXONOMY_PATH = BASE_DIR / "models" / "taxonomy_01.json"
 REGISTRY_PATH = BASE_DIR / "frontend" / "data" / "search_registry.csv"
 
+# --- DYNAMIC PIPELINE IMPORT ---
+from src.prep.pipeline import preprocessor, create_search_label, PIPELINE_REGISTRY
+
 BIG_PHARMA = [
     'ROCHE', 'GENENTECH (ROCHE)', 'CHUGAI (ROCHE)', 'SPARK (ROCHE)', 
     'J&J', 'ACTELION (J&J)', 'CENTOCOR (J&J)', 'CRUCELL (J&J)', 'MOMENTA (J&J)',
@@ -38,25 +41,23 @@ BIG_PHARMA = [
 ]
 MIN_YEAR = 2019
 
-def create_search_label(row):
-    acro = str(row['acronym']).strip() if pd.notna(row['acronym']) else ""
-    drug = str(row['alpha_drug_name']).strip() if pd.notna(row['alpha_drug_name']) else "Unknown Drug"
-    sponsor = str(row['lead_sponsor_canonical']).strip() if pd.notna(row['lead_sponsor_canonical']) else "Unknown Sponsor"
-    ta_val = row.get('therapeutic_area_ui', row.get('therapeutic_area', 'Unclassified'))
-    ta = str(ta_val).strip()
-    year = str(int(row['start_year'])) if pd.notna(row['start_year']) else "YYYY"
-    prefix = f"[{acro}] " if acro and acro.lower() != 'nan' else ""
-    return f"{prefix}{drug} ({sponsor}) | {ta} ({year})"
-
 def refresh_registry():
-    print(">>> Refreshing Search Registry (Top 50 + Parity Scores)...")
+    print(">>> Refreshing Search Registry (Dynamic Registry-Based Generation)...")
     
     df_full = pd.read_csv(DATA_CLINPRED_PATH, low_memory=False)
-    df_filtered = df_full[(df_full['lead_sponsor_canonical'].isin(BIG_PHARMA)) & (df_full['start_year'] > MIN_YEAR)].copy()
-    df_filtered['ui_search_label'] = df_filtered.apply(create_search_label, axis=1)
     
+    # 1. Prediction Probabilities
     model = joblib.load(MODEL_PATH)
     feature_names = model.named_steps['prep'].get_feature_names_out()
+    
+    cols_to_keep = [c for c in df_full.columns if c.endswith('_ml') or c == 'therapeutic_area']
+    y_prob_full = model.predict_proba(df_full[cols_to_keep])[:, 1]
+    df_full['Internal_Score_Raw'] = y_prob_full
+    
+    # 2. Hybrid Search Identity
+    df_full['ui_search_label'] = df_full.apply(create_search_label, axis=1)
+    
+    # 3. Success Scores & Pillars
     shap_dict = joblib.load(SHAP_PATH)
     with open(THRESHOLDS_PATH, 'r') as f: thresholds = json.load(f)
     with open(TAXONOMY_PATH, 'r') as f: taxonomy_payload = json.load(f)
@@ -69,14 +70,8 @@ def refresh_registry():
     
     DISABLED_COLS = ['includes_us_ml', 'is_fda_regulated_drug_ml', 'gbd_cause_id_ml', 'gbd_cause_id_2_ml', 'gbd_cause_id_4_ml', 'gbd_hierarchy_level_ml', 'is_duration_unknown_ml', 'target', 'masking_ml', 'therapeutic_area_ml', 'strategic_ambition_ml', 'intervention_model_ml']
     
-    pillars = set()
-    for f_name, f_meta in registry_meta.items():
-        p = f_meta.get("ui", {}).get("pillar")
-        if p and p != "Metadata": pillars.add(p)
+    pillars = ["Therapeutic Context", "Scientific Challenge", "Execution Framework", "Patient Profile"]
 
-    new_scores = []
-    print(f"    Calculating Parity Scores for {len(df_filtered)} trials...")
-    
     # Pre-map features for speed
     feat_to_subcat = {}
     mapped_indices = set()
@@ -100,10 +95,16 @@ def refresh_registry():
                 feat_to_subcat[i] = (p, s)
                 mapped_indices.add(i)
 
-    for idx, row in df_filtered.iterrows():
+    print(f"    Calculating Success Scores for {len(df_full)} trials...")
+    all_scores = []; all_zones = []
+    pillar_scores = {p: [] for p in pillars}
+    
+    for idx, row in df_full.iterrows():
         nct_id = str(row['nct_id']); ta = row['therapeutic_area']
         if nct_id not in shap_dict:
-            new_scores.append(30.0); continue
+            all_scores.append(30.0); all_zones.append("Watchlist")
+            for p in pillars: pillar_scores[p].append(0.0)
+            continue
             
         shap_vals = shap_dict[nct_id]
         threshold_logit = float(ta_threshold_logits.get(ta, global_threshold_logit))
@@ -120,12 +121,40 @@ def refresh_registry():
         p_totals = {p: 0.0 for p in pillars}
         for (pk, sk), val in sub_sums_raw.items():
             p_totals[pk] += round(val, 1)
-            
-        new_scores.append(round(50.0 + sum(p_totals.values()), 1))
+        
+        score = round(50.0 + sum(p_totals.values()), 1)
+        all_scores.append(score)
+        all_zones.append("High Risk" if score < 25 else "Watchlist" if score < 50 else "Favorable" if score < 75 else "Low Risk")
+        for p in pillars: pillar_scores[p].append(p_totals[p])
 
-    df_filtered['Clinical_Score'] = new_scores
-    df_filtered['Zone'] = pd.cut(df_filtered['Clinical_Score'], [0, 25, 50, 75, 100], labels=["High Risk", "Watchlist", "Favorable", "Low Risk"])
-    df_filtered.to_csv(REGISTRY_PATH, index=False, quoting=csv.QUOTE_ALL)
+    df_full['Clinical_Score'] = all_scores
+    df_full['Zone'] = all_zones
+    for p in pillars: df_full[p] = pillar_scores[p]
+
+    # 4. Backtesting Correctness
+    def check_accuracy(row):
+        if pd.isna(row.get('target')): return None
+        target = row['target']
+        score = row.get('Clinical_Score', 0)
+        return (score >= 50.0 and target == 0.0) or (score < 50.0 and target == 1.0)
+    
+    df_full['is_correct'] = df_full.apply(check_accuracy, axis=1)
+
+    # 5. DYNAMIC SELECTION
+    registry_fields = list(PIPELINE_REGISTRY["FIELDS"].keys())
+    calculated_artifacts = [
+        'Clinical_Score', 'Zone', 'is_correct', 'ui_search_label', 'Internal_Score_Raw',
+        'Therapeutic Context', 'Scientific Challenge', 'Execution Framework', 'Patient Profile'
+    ]
+    ui_derived = [c for c in df_full.columns if c.endswith('_ui')]
+    
+    cols_to_export = list(set(registry_fields + calculated_artifacts + ui_derived))
+    existing_cols = [c for c in cols_to_export if c in df_full.columns]
+
+    # 6. Filter & Save
+    df_filtered = df_full[(df_full['lead_sponsor_canonical'].isin(BIG_PHARMA)) & (df_full['start_year'] > MIN_YEAR)].copy()
+    
+    df_filtered[existing_cols].to_csv(REGISTRY_PATH, index=False, quoting=csv.QUOTE_ALL)
     print(f">>> Registry Refreshed: {len(df_filtered):,} trials saved to {REGISTRY_PATH}")
 
 if __name__ == "__main__":

@@ -64,13 +64,45 @@ TEXTAREA_HEIGHTS = {
 # ==========================
 # 2. STYLES (Consolidated)
 # ==========================
+
 def inject_custom_styles():
+    # SIDEBAR HIDER: Removes sidebar and toggle in Landing and Detail Views
+    is_landing = not st.session_state.get("search_initiated", False)
+    is_detail = st.session_state.get("selected_nct_id") is not None
+    
+    hide_sidebar_style = ""
+    if is_landing or is_detail:
+        hide_sidebar_style = """
+            [data-testid="stSidebar"] {
+                display: none !important;
+            }
+            [data-testid="collapsedControl"] {
+                display: none !important;
+            }
+            .stApp [data-testid="stHeader"] {
+                left: 0 !important;
+                width: 100% !important;
+            }
+        """
+
+    if is_landing or is_detail:
+        hide_sidebar_style = """
+            [data-testid="stSidebar"] {
+                display: none !important;
+            }
+            [data-testid="collapsedControl"] {
+                display: none !important;
+            }
+            .stApp [data-testid="stHeader"] {
+                left: 0 !important;
+                width: 100% !important;
+            }
+        """
+
     debug_overlay_css = """
             /* =========================
                DEBUG OVERLAP VISUALIZER
                ========================= */
-
-
             [data-testid="stVerticalBlock"] {
                 outline: 1px dashed magenta !important;
             }
@@ -96,7 +128,6 @@ def inject_custom_styles():
     """ if DEBUG_OVERLAY else ""
 
     is_edit = st.session_state.get("global_edit_mode", False)
-
     field_bg = "#ffffff" if is_edit else "#f8fafc"
     field_text = "#334155" if is_edit else "#64748b"
 
@@ -105,6 +136,7 @@ def inject_custom_styles():
         <style>
             @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 
+            {hide_sidebar_style}
 
             :root {{
                 --app-bg: #f1f5f9;
@@ -187,11 +219,7 @@ def inject_custom_styles():
             }}
 
 
-
-
-
             /* SELECTBOXES + TEXT INPUTS */
-
             div[data-baseweb="select"],
             div[data-baseweb="input"],
             div[data-baseweb="base-input"],
@@ -827,13 +855,6 @@ def inject_custom_styles():
             }}
 
 
-
-
-
-
-
-
-
             /* EXPLICIT META SPACER BLOCKS */
             .trial-meta-top-gap {{
                 height: var(--ui-meta-top-gap);
@@ -1062,6 +1083,7 @@ def init_session_state():
         "f_nct_id": None,
         "s_registry": "",
         "s_mode": "",
+        "s_detail": "",
         "global_edit_mode": False,
     }
     for key, val in defaults.items():
@@ -1080,7 +1102,7 @@ FILTER_COL_MAP = {
 def reset_filters():
     for key in FILTER_COL_MAP:
         st.session_state[key] = None
-    for key in ["s_registry", "s_mode"]:
+    for key in ["s_registry", "s_mode", "s_detail"]:
         st.session_state[key] = ""
     st.session_state.selected_nct_id = None
     st.session_state.search_initiated = False
@@ -1168,6 +1190,7 @@ def snapshot_search_state():
         "f_nct_id": st.session_state.get("f_nct_id"),
         "s_registry": st.session_state.get("s_registry", ""),
         "s_mode": st.session_state.get("s_mode", ""),
+        "s_detail": st.session_state.get("s_detail", ""),
         "search_initiated": st.session_state.get("search_initiated", False),
     }
 
@@ -1187,7 +1210,31 @@ def go_back_to_results():
 
 
 def apply_trial_filters(base_df, skip_key=None):
-    tdf = base_df
+    tdf = base_df.copy()
+    
+    # 1. APPLY SECRET "MODE" FILTERS FIRST (Global Constraints)
+    registry_mode = str(st.session_state.get("s_registry", "")).strip().lower()
+    analysis_mode = str(st.session_state.get("s_mode", "")).strip().lower()
+    
+    # Register Filter: Default is Historical only (trial_segment != ONGOING)
+    if registry_mode != "all":
+        tdf = tdf[tdf["trial_segment"] != "ONGOING"]
+    
+    # Analysis Filter: Default is Accurate only (is_correct == True)
+    if analysis_mode != "all":
+        if "is_correct" in tdf.columns:
+            # Logic: Keep if (Correct == True) OR (Accuracy is Pending/Ongoing)
+            # Ongoing trials have is_correct as NaN/None
+            tdf = tdf[tdf["is_correct"].apply(lambda x: 
+                str(x).lower() == "true" or 
+                x == 1 or 
+                x is True or 
+                pd.isna(x) or 
+                str(x).lower() == "none" or
+                str(x).lower() == "nan"
+            )]
+
+    # 2. APPLY STANDARD DROPDOWN FILTERS
     for state_key, col_name in FILTER_COL_MAP.items():
         val = st.session_state.get(state_key)
         if state_key == skip_key or val in (None, ""):
@@ -1740,7 +1787,7 @@ def _render_native_meta_field(label, field_id, row, key_suffix=""):
             else:
                 readonly_key = f"{state_key}__readonly_{key_suffix}" if key_suffix else f"{state_key}__readonly"
                 readonly_value = labels[selected_index] if labels else ""
-                
+
                 # SAFE UPDATE: Avoid StreamlitAPIException if rendered multiple times
                 try:
                     if st.session_state.get(readonly_key) != readonly_value:
@@ -1894,7 +1941,7 @@ def render_population_side_panel(row):
             ("Population Type", "healthy_volunteers_ml"),
             ("Minimum Age", "minimum_age"),
             ("Maximum Age", "maximum_age"),
-            ("Gender", "gender_ml"),
+            ("Patient Gender Eligibility Status", "gender_ml"),
         ],
         panel_suffix="population_block",
         bottom_extension_var="--ui-population-bottom-extension"
@@ -1984,8 +2031,8 @@ def render_trial_detail_tabs_refined(row):
                         ("Intervention Model", "intervention_model_ml"),
                         ("Number of Arms", "number_of_arms_ml"),
                         ("Masking", "masking_ml"),
-                        ("Has Placebo", "has_placebo_ml"),
-                        ("Data Monitoring Committee", "has_dmc_ml"),
+                        ("Placebo Control", "has_placebo_ml"),
+                        ("DMC Involvment Status", "has_dmc_ml"),
                     ],
                     panel_suffix="design_block"
                 )
@@ -2043,7 +2090,7 @@ def render_signal_analysis_section(row):
             tier = get_risk_tier(score)
 
             st.markdown("<hr style='margin: 40px 0; border: 0; border-top: 1px solid #cbd5e1;'>", unsafe_allow_html=True)
-            
+
             # 1. SUMMARY STRIP (GAUGE + BAR)
             cl, cr = st.columns([1.0, 1.4])
 
@@ -2069,9 +2116,16 @@ def render_signal_analysis_section(row):
             # 2. DRILL-DOWN TREEMAP
             if res.get("subcat_impacts") and res.get("pillar_impacts"):
                 st.markdown("<div style='margin-top: 30px;'></div>", unsafe_allow_html=True)
+
+                # Header with Title Only
                 st.markdown("<div class='highlight-title'>Driver Decomposition</div>", unsafe_allow_html=True)
+
+                # Control Logic: Value extraction from the secret sidebar input
+                # Note: widget value is preserved even when sidebar is hidden via CSS
+                show_detailed = str(st.session_state.get("s_detail", "")).strip().lower() == "true"
+
                 st.plotly_chart(
-                    plot_treemap(res["subcat_impacts"], res["pillar_impacts"]),
+                    plot_treemap(res["subcat_impacts"], res["pillar_impacts"], show_values=show_detailed),
                     use_container_width=True,
                     config={"displayModeBar": False}
                 )
@@ -2083,34 +2137,14 @@ def render_signal_analysis_section(row):
 init_session_state()
 inject_custom_styles()
 
-# Landing or Detail Logic
+
+# Main Content Logic
 if not st.session_state.selected_nct_id:
+    # Use raw data as base; apply_trial_filters handles modes internally
     x_base = X_ALL.copy()
 
-    registry_mode = st.session_state.get("s_registry", "").strip().lower()
-    analysis_mode = st.session_state.get("s_mode", "").strip().lower()
-
-    include_ongoing = (registry_mode == "all")
-    include_incorrect_historical = (analysis_mode == "all")
-
-    historical_mask = x_base["trial_segment"] != "ONGOING"
-    ongoing_mask = x_base["trial_segment"] == "ONGOING"
-
-    if include_incorrect_historical:
-        historical_df = x_base[historical_mask]
-    else:
-        historical_df = x_base[historical_mask & (x_base["is_correct"] == True)]
-
-    if include_ongoing:
-        ongoing_df = x_base[ongoing_mask]
-        x_base = pd.concat([historical_df, ongoing_df], ignore_index=True)
-    else:
-        x_base = historical_df.copy()
-
-    render_header(is_landing=not st.session_state.search_initiated)
-
-
     if not st.session_state.search_initiated:
+        render_header(is_landing=True)
         st.markdown('''
             <div class="highlight-box mission-box" style="margin-top: 1.2rem; margin-bottom: 1rem;">
                 <div style="display: flex; justify-content: space-between; align-items: flex-start;">
@@ -2147,6 +2181,7 @@ if not st.session_state.selected_nct_id:
                 </div>
             ''', unsafe_allow_html=True)
     else:
+        # RESULTS VIEW: Sidebar filters + Grid
         with st.sidebar:
             with st.container(key="sidebar_reset_wrap"):
                 if st.button("Reset Filter", use_container_width=True):
@@ -2158,6 +2193,9 @@ if not st.session_state.selected_nct_id:
 
             st.text_input("Register", key="s_registry")
             st.text_input("Analysis", key="s_mode")
+            st.text_input("", key="s_detail")
+        
+        render_header(is_landing=False)
 
         st.markdown(
             f"<div style='text-align:left; margin:var(--ui-nonlanding-body-gap) 0 6px 0; color:#94a3b8; font-weight:600; font-size:0.7rem; line-height:1;'>{len(filtered_df):,} trials matching criteria</div>",
@@ -2187,3 +2225,19 @@ else:
         row = selected_df.iloc[0]
         render_trial_detail_tabs_refined(row)
         render_signal_analysis_section(row)
+
+# ==========================
+# 6. HIDDEN STATE KEEPER
+# ==========================
+# This ensures that secret mode variables persist when switching to Detail View
+# where the primary sidebar widgets are not rendered.
+if st.session_state.selected_nct_id:
+    with st.sidebar:
+        st.text_input("Register", key="s_registry_keeper", value=st.session_state.get("s_registry", ""), label_visibility="collapsed")
+        st.text_input("Analysis", key="s_mode_keeper", value=st.session_state.get("s_mode", ""), label_visibility="collapsed")
+        st.text_input("", key="s_detail_keeper", value=st.session_state.get("s_detail", ""), label_visibility="collapsed")
+
+        # Sync back to primary keys if keeper changes (unlikely in hidden state)
+        st.session_state["s_registry"] = st.session_state["s_registry_keeper"]
+        st.session_state["s_mode"] = st.session_state["s_mode_keeper"]
+        st.session_state["s_detail"] = st.session_state["s_detail_keeper"]

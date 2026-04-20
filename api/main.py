@@ -154,7 +154,7 @@ async def predict(request: Request):
                     mapped_indices.add(idx)
             
             ui_col = feat_name.replace("_ml", "_ui")
-            if "gbd_cause_id_3" in feat_name: ui_col = "gbd_indication_name"
+            if "gbd_cause_id_3" in feat_name: ui_col = "gbd_indication_name_3"
             val_to_show = data.get(ui_col, data.get(feat_name, "N/A"))
             if isinstance(val_to_show, (float, int)): val_to_show = f"{float(val_to_show):.1f}"
             elif not val_to_show: val_to_show = "N/A"
@@ -219,16 +219,31 @@ async def predict(request: Request):
                 "FeatureDetails": [x[1] for x in sorted(sub_features.get((p, s), []), key=lambda x: x[0])]
             })
 
-        # STEP B: Sum rounded pillars for the final score
-        # This guarantees Score = 50 + sum(Pillars) in the UI
+        # STEP B: Robust Parity Alignment (Residual Absorption)
+        # 1. Calculate the raw sum and clipped score
         total_impact_points = sum(v for p, v in pillar_totals.items() if p != "Metadata")
-        final_score = 50.0 + total_impact_points
+        final_score = round(np.clip(50.0 + total_impact_points, 1.0, 99.0), 1)
+
+        # 2. Calculate the residual (the difference created by clipping)
+        # Residual = (Clipped_Score - 50) - Raw_Sum
+        residual = round((final_score - 50.0) - total_impact_points, 1)
+
+        # 3. Absorb residual into the anchor pillar ("Therapeutic Context") and subcategory
+        anchor_pillar = "Therapeutic Context"
+        anchor_subcat = "Therapeutic Area Profile"
         
-        # Optional: Soft clip to 1-99 for sanity, but only if it doesn't break parity
-        # Since parity is the priority, we show the true score.
+        if residual != 0:
+            if anchor_pillar in pillar_totals:
+                pillar_totals[anchor_pillar] = round(pillar_totals[anchor_pillar] + residual, 1)
+            
+            # Also update the leaf node in final_subcats for Treemap parity
+            for sub in final_subcats:
+                if sub["Pillar"] == anchor_pillar and sub["Subcategory"] == anchor_subcat:
+                    sub["Impact"] = round(sub["Impact"] + residual, 1)
+                    break
         
         return {
-            "score": round(final_score, 1),
+            "score": final_score,
             "threshold": 50.0,
             "pillar_impacts": [
                 {"Pillar": p, "Impact": round(v, 1)} 

@@ -77,15 +77,15 @@ PIPELINE_REGISTRY = {
         },
         "gbd_indication_name_3": {
             "ui": {
-                "label": "Indication",
-                "pillar": "Therapeutic Context",
-                "subgroup": "Therapeutic Area Profile",
-                "priority": 1.1
+                "label": "Indication (L3)",
+                "pillar": "Metadata",
+                "subgroup": "Therapeutic Mapping",
+                "priority": 224.1
             }
         },
         "is_rare_disease_ml": {
             "ui": {
-                "label": "Rare Condition",
+                "label": "Rare Condition Status",
                 "pillar": "Therapeutic Context",
                 "subgroup": "Therapeutic Area Profile",
                 "priority": 2,
@@ -156,8 +156,8 @@ PIPELINE_REGISTRY = {
         # --- PILLAR 2: SCIENTIFIC ATTEMPT ---
         "target_precedent_ml": {
             "ui": {
-                "label": "Target Precedent",
-                "pillar": "Scientific Attempt",
+                "label": "Target Precedent Status",
+                "pillar": "Scientific Challenge",
                 "subgroup": "Biological Profile",
                 "priority": 5,
                 "options": [
@@ -178,7 +178,7 @@ PIPELINE_REGISTRY = {
         "target_pathway_class_ml": {
             "ui": {
                 "label": "Pathway Profile",
-                "pillar": "Scientific Attempt",
+                "pillar": "Scientific Challenge",
                 "subgroup": "Biological Profile",
                 "priority": 6,
                 "options": [
@@ -216,7 +216,7 @@ PIPELINE_REGISTRY = {
         "therapeutic_modality_ml": {
             "ui": {
                 "label": "Therapeutic Modality",
-                "pillar": "Scientific Attempt",
+                "pillar": "Scientific Challenge",
                 "subgroup": "Biological Profile",
                 "priority": 7,
                 "options": [
@@ -250,7 +250,7 @@ PIPELINE_REGISTRY = {
         "innovation_tier_ml": {
             "ui": {
                 "label": "Innovation Rank",
-                "pillar": "Scientific Attempt",
+                "pillar": "Scientific Challenge",
                 "subgroup": "Biological Profile",
                 "priority": 8,
                 "options": [
@@ -271,7 +271,7 @@ PIPELINE_REGISTRY = {
         "intervention_model_ml": {
             "ui": {
                 "label": "Intervention Model",
-                "pillar": "Scientific Attempt",
+                "pillar": "Scientific Challenge",
                 "subgroup": "Protocol Architecture",
                 "priority": 9,
                 "options": [
@@ -296,7 +296,7 @@ PIPELINE_REGISTRY = {
         "primary_purpose_ml": {
             "ui": {
                 "label": "Primary Purpose",
-                "pillar": "Scientific Attempt",
+                "pillar": "Scientific Challenge",
                 "subgroup": "Protocol Architecture",
                 "priority": 10,
                 "options": [
@@ -322,8 +322,8 @@ PIPELINE_REGISTRY = {
         },
         "adaptive_design_ml": {
             "ui": {
-                "label": "Design Flexibility",
-                "pillar": "Scientific Attempt",
+                "label": "Design Flexibility Level",
+                "pillar": "Scientific Challenge",
                 "subgroup": "Protocol Architecture",
                 "priority": 11,
                 "options": [
@@ -342,7 +342,7 @@ PIPELINE_REGISTRY = {
         "endpoint_rigor_ml": {
             "ui": {
                 "label": "Primary Endpoint Type",
-                "pillar": "Scientific Attempt",
+                "pillar": "Scientific Challenge",
                 "subgroup": "Protocol Architecture",
                 "priority": 12,
                 "options": [
@@ -362,8 +362,8 @@ PIPELINE_REGISTRY = {
         },
         "endpoint_structure_ml": {
             "ui": {
-                "label": "Primary Endpoints",
-                "pillar": "Scientific Attempt",
+                "label": "Primary Endpoints Number",
+                "pillar": "Scientific Challenge",
                 "subgroup": "Protocol Architecture",
                 "priority": 13,
                 "options": [
@@ -382,7 +382,7 @@ PIPELINE_REGISTRY = {
         "biomarker_stratification_ml": {
             "ui": {
                 "label": "Biomarker Patient Selection",
-                "pillar": "Scientific Attempt",
+                "pillar": "Scientific Challenge",
                 "subgroup": "Protocol Architecture",
                 "priority": 14,
                 "options": [
@@ -411,8 +411,8 @@ PIPELINE_REGISTRY = {
             "ui": {
                 "label": "Sponsor Type",
                 "pillar": "Execution Framework",
-                "subgroup": "Sponsor Type",
-                "priority": 15,
+                "subgroup": "Trial Complexity Footprint",
+                "priority": 20.9,
                 "options": [
                     ["TIER 1", "Top-Tier Pharma"],
                     ["MID_CAP", "Mid-Cap Pharma"],
@@ -477,7 +477,7 @@ PIPELINE_REGISTRY = {
         },
         "has_dmc_ml": {
             "ui": {
-                "label": "Data Monitoring Committee",
+                "label": "DMC Involvment Status",
                 "pillar": "Execution Framework",
                 "subgroup": "Methodological Setup",
                 "priority": 18,
@@ -503,7 +503,7 @@ PIPELINE_REGISTRY = {
         },
         "has_placebo_ml": {
             "ui": {
-                "label": "Includes Placebo Control",
+                "label": "Placebo Control",
                 "pillar": "Execution Framework",
                 "subgroup": "Methodological Setup",
                 "priority": 19,
@@ -591,7 +591,7 @@ PIPELINE_REGISTRY = {
         "is_fda_regulated_drug_ml": {
             "ui": {
                 "label": "FDA Regulated",
-                "pillar": "Execution Framework",
+                "pillar": "Metadata",
                 "subgroup": "Regulatory Scope",
                 "priority": 36,
                 "options": [
@@ -666,7 +666,7 @@ PIPELINE_REGISTRY = {
         },
         "gender_ml": {
             "ui": {
-                "label": "Patient Gender",
+                "label": "Patient Gender Eligibility Status",
                 "pillar": "Patient Profile",
                 "subgroup": "Population Scope",
                 "priority": 26,
@@ -687,7 +687,7 @@ PIPELINE_REGISTRY = {
         },
         "healthy_volunteers_ml": {
             "ui": {
-                "label": "Population Setting",
+                "label": "Population Type",
                 "pillar": "Patient Profile",
                 "subgroup": "Population Scope",
                 "priority": 27,
@@ -707,7 +707,7 @@ PIPELINE_REGISTRY = {
         },
         "adult_ml": {
             "ui": {
-                "label": "Adult Profile",
+                "label": "Adult Profile Eligibility Status",
                 "pillar": "Patient Profile",
                 "subgroup": "Population Scope",
                 "priority": 28,
@@ -728,7 +728,7 @@ PIPELINE_REGISTRY = {
         },
         "child_ml": {
             "ui": {
-                "label": "Pediatric Profile",
+                "label": "Pediatric Profile Eligibility Status",
                 "pillar": "Patient Profile",
                 "subgroup": "Population Scope",
                 "priority": 29,
@@ -749,7 +749,7 @@ PIPELINE_REGISTRY = {
         },
         "older_adult_ml": {
             "ui": {
-                "label": "Geriatric Profile",
+                "label": "Geriatric Profile Eligibility Status",
                 "pillar": "Patient Profile",
                 "subgroup": "Population Scope",
                 "priority": 30,
@@ -771,7 +771,7 @@ PIPELINE_REGISTRY = {
         "includes_us_ml": {
             "ui": {
                 "label": "Includes US Sites",
-                "pillar": "Patient Profile",
+                "pillar": "Metadata",
                 "subgroup": "Population Scope",
                 "priority": 31,
                 "options": [
@@ -793,10 +793,10 @@ PIPELINE_REGISTRY = {
             }
         },
         "maximum_age": {
-            "ui": {"label": "Maximum Age", "pillar": "Patient Profile", "subgroup": "Population Scope", "priority": 32}
+            "ui": {"label": "Maximum Age", "pillar": "Metadata", "subgroup": "Population Scope", "priority": 32}
         },
         "minimum_age": {
-            "ui": {"label": "Minimum Age", "pillar": "Patient Profile", "subgroup": "Population Scope", "priority": 33}
+            "ui": {"label": "Minimum Age", "pillar": "Metadata", "subgroup": "Population Scope", "priority": 33}
         },
 
         # --- PILLAR 5: METADATA (Logic & Audit) ---
@@ -917,7 +917,7 @@ PIPELINE_REGISTRY = {
             "ui": {"label": "Trial Segment", "pillar": "Metadata", "subgroup": "Trial Metadata", "priority": 117}
         },
         "gbd_indication_name": {
-            "ui": {"label": "Indication Name", "pillar": "Metadata", "subgroup": "Trial Metadata", "priority": 118}
+            "ui": {"label": "Specific Indication", "pillar": "Metadata", "subgroup": "Trial Metadata", "priority": 118}
         },
 
         # --- METADATA: CLINICAL SOURCE DATA ---
@@ -968,6 +968,9 @@ PIPELINE_REGISTRY = {
         },
         "primary_completion_date": {
             "ui": {"label": "Primary Completion Date", "pillar": "Metadata", "subgroup": "Timeline", "priority": 172}
+        },
+        "start_year": {
+            "ui": {"label": "Start Year", "pillar": "Metadata", "subgroup": "Timeline", "priority": 173}
         },
 
         # --- METADATA: EPIDEMIOLOGICAL STATS ---
@@ -1191,3 +1194,44 @@ def export_pipeline_taxonomy(output_path):
         f.write(json_str)
     
     print(f"✅ Integrated Taxonomy exported to {out_p}")
+
+# ==============================================================================
+# 5. UI IDENTITY HELPERS
+# ==============================================================================
+
+def create_search_label(row):
+    """
+    Generates a standardized identity label for clinical trials.
+    Implements Hybrid Identity Logic (v1.2):
+    - Acronym exists: [ACRO] (N agents) (SPONSOR) | AREA (YEAR)
+    - No Acronym: Drug A | Drug B (+N) (SPONSOR) | AREA (YEAR)
+    """
+    # 1. Identity Anchors
+    acro = str(row.get('acronym', '')).strip()
+    if not acro or acro.lower() == 'nan': acro = ""
+    
+    drug_raw = str(row.get('alpha_drug_name', 'Unknown Drug')).strip()
+    drugs = [d.strip() for d in drug_raw.split('|')]
+    
+    sponsor = str(row.get('lead_sponsor_canonical', 'Unknown Sponsor')).strip()
+    ta = str(row.get('therapeutic_area_ui', row.get('therapeutic_area', 'Unclassified'))).strip()
+    
+    import pandas as pd
+    year = str(int(row['start_year'])) if pd.notna(row.get('start_year')) else "YYYY"
+    
+    # 2. Hybrid Identity Logic (v1.2)
+    if acro:
+        # If many drugs, show agent count to keep the acronym prominent
+        drug_display = f"({len(drugs)} agents)" if len(drugs) > 2 else " | ".join(drugs)
+    else:
+        # If no acronym, show first 2 drugs + count
+        if len(drugs) > 2:
+            drug_display = f"{drugs[0]} | {drugs[1]} (+{len(drugs)-2})"
+        else:
+            drug_display = " | ".join(drugs)
+            
+    prefix = f"[{acro}] " if acro else ""
+    
+    # 3. Final Assembly
+    label = f"{prefix}{drug_display} ({sponsor})".replace("  ", " ").strip()
+    return f"{label} | {ta} ({year})"

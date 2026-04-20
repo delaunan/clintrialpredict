@@ -1483,7 +1483,7 @@ def render_fourth_ui(row):
 
     c3, c4 = st.columns(2)
     with c3:
-        render_pillar_expander("Scientific Attempt", "Scientific Attempt", row)
+        render_pillar_expander("Scientific Challenge", "Scientific Challenge", row)
     with c4:
         render_pillar_expander("Patient Profile", "Patient Profile", row)
 

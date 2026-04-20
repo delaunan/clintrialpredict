@@ -138,7 +138,7 @@ def plot_impact_bar(df_pillars):
 # ==========================
 # 3. TREEMAP
 # ==========================
-def plot_treemap(subcat_impacts, pillar_impacts):
+def plot_treemap(subcat_impacts, pillar_impacts, show_values=True):
     nodes = {}
     node_sums = {"ALL_DRIVERS": sum(p['Impact'] for p in pillar_impacts)}
     c = STYLE_CONFIG["colors"]
@@ -167,6 +167,10 @@ def plot_treemap(subcat_impacts, pillar_impacts):
         subtopic = item['Subcategory']
         impact = item['Impact']
         feat_details = item.get('FeatureDetails', [])
+
+        if not show_values:
+            # Strip the value part (": <b>...</b>") using regex or splitting
+            feat_details = [re.sub(r":\s*<b>.*</b>", "", f) for f in feat_details]
         
         p_clean = re.sub(r'^\d+\.\s*', '', p_raw)
         parent_id = f"PILLAR_{p_clean}"

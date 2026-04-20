@@ -63,15 +63,15 @@
     },
     "gbd_indication_name_3": {
       "ui": {
-        "label": "Indication",
-        "pillar": "Therapeutic Context",
-        "subgroup": "Therapeutic Area Profile",
-        "priority": 1.1
+        "label": "Indication (L3)",
+        "pillar": "Metadata",
+        "subgroup": "Therapeutic Mapping",
+        "priority": 224.1
       }
     },
     "is_rare_disease_ml": {
       "ui": {
-        "label": "Rare Condition",
+        "label": "Rare Condition Status",
         "pillar": "Therapeutic Context",
         "subgroup": "Therapeutic Area Profile",
         "priority": 2,
@@ -138,8 +138,8 @@
     },
     "target_precedent_ml": {
       "ui": {
-        "label": "Target Precedent",
-        "pillar": "Scientific Attempt",
+        "label": "Target Precedent Status",
+        "pillar": "Scientific Challenge",
         "subgroup": "Biological Profile",
         "priority": 5,
         "options": [
@@ -160,7 +160,7 @@
     "target_pathway_class_ml": {
       "ui": {
         "label": "Pathway Profile",
-        "pillar": "Scientific Attempt",
+        "pillar": "Scientific Challenge",
         "subgroup": "Biological Profile",
         "priority": 6,
         "options": [
@@ -198,7 +198,7 @@
     "therapeutic_modality_ml": {
       "ui": {
         "label": "Therapeutic Modality",
-        "pillar": "Scientific Attempt",
+        "pillar": "Scientific Challenge",
         "subgroup": "Biological Profile",
         "priority": 7,
         "options": [
@@ -232,7 +232,7 @@
     "innovation_tier_ml": {
       "ui": {
         "label": "Innovation Rank",
-        "pillar": "Scientific Attempt",
+        "pillar": "Scientific Challenge",
         "subgroup": "Biological Profile",
         "priority": 8,
         "options": [
@@ -253,7 +253,7 @@
     "intervention_model_ml": {
       "ui": {
         "label": "Intervention Model",
-        "pillar": "Scientific Attempt",
+        "pillar": "Scientific Challenge",
         "subgroup": "Protocol Architecture",
         "priority": 9,
         "options": [
@@ -278,7 +278,7 @@
     "primary_purpose_ml": {
       "ui": {
         "label": "Primary Purpose",
-        "pillar": "Scientific Attempt",
+        "pillar": "Scientific Challenge",
         "subgroup": "Protocol Architecture",
         "priority": 10,
         "options": [
@@ -304,8 +304,8 @@
     },
     "adaptive_design_ml": {
       "ui": {
-        "label": "Design Flexibility",
-        "pillar": "Scientific Attempt",
+        "label": "Design Flexibility Level",
+        "pillar": "Scientific Challenge",
         "subgroup": "Protocol Architecture",
         "priority": 11,
         "options": [
@@ -324,7 +324,7 @@
     "endpoint_rigor_ml": {
       "ui": {
         "label": "Primary Endpoint Type",
-        "pillar": "Scientific Attempt",
+        "pillar": "Scientific Challenge",
         "subgroup": "Protocol Architecture",
         "priority": 12,
         "options": [
@@ -344,8 +344,8 @@
     },
     "endpoint_structure_ml": {
       "ui": {
-        "label": "Primary Endpoints",
-        "pillar": "Scientific Attempt",
+        "label": "Primary Endpoints Number",
+        "pillar": "Scientific Challenge",
         "subgroup": "Protocol Architecture",
         "priority": 13,
         "options": [
@@ -364,7 +364,7 @@
     "biomarker_stratification_ml": {
       "ui": {
         "label": "Biomarker Patient Selection",
-        "pillar": "Scientific Attempt",
+        "pillar": "Scientific Challenge",
         "subgroup": "Protocol Architecture",
         "priority": 14,
         "options": [
@@ -389,8 +389,8 @@
       "ui": {
         "label": "Sponsor Type",
         "pillar": "Execution Framework",
-        "subgroup": "Sponsor Type",
-        "priority": 15,
+        "subgroup": "Trial Complexity Footprint",
+        "priority": 20.9,
         "options": [
           ["TIER 1", "Top-Tier Pharma"],
           ["MID_CAP", "Mid-Cap Pharma"],
@@ -455,7 +455,7 @@
     },
     "has_dmc_ml": {
       "ui": {
-        "label": "Data Monitoring Committee",
+        "label": "DMC Involvment Status",
         "pillar": "Execution Framework",
         "subgroup": "Methodological Setup",
         "priority": 18,
@@ -479,7 +479,7 @@
     },
     "has_placebo_ml": {
       "ui": {
-        "label": "Includes Placebo Control",
+        "label": "Placebo Control",
         "pillar": "Execution Framework",
         "subgroup": "Methodological Setup",
         "priority": 19,
@@ -565,7 +565,7 @@
     "is_fda_regulated_drug_ml": {
       "ui": {
         "label": "FDA Regulated",
-        "pillar": "Execution Framework",
+        "pillar": "Metadata",
         "subgroup": "Regulatory Scope",
         "priority": 36,
         "options": [
@@ -636,7 +636,7 @@
     },
     "gender_ml": {
       "ui": {
-        "label": "Patient Gender",
+        "label": "Patient Gender Eligibility Status",
         "pillar": "Patient Profile",
         "subgroup": "Population Scope",
         "priority": 26,
@@ -657,7 +657,7 @@
     },
     "healthy_volunteers_ml": {
       "ui": {
-        "label": "Population Setting",
+        "label": "Population Type",
         "pillar": "Patient Profile",
         "subgroup": "Population Scope",
         "priority": 27,
@@ -675,7 +675,7 @@
     },
     "adult_ml": {
       "ui": {
-        "label": "Adult Profile",
+        "label": "Adult Profile Eligibility Status",
         "pillar": "Patient Profile",
         "subgroup": "Population Scope",
         "priority": 28,
@@ -694,7 +694,7 @@
     },
     "child_ml": {
       "ui": {
-        "label": "Pediatric Profile",
+        "label": "Pediatric Profile Eligibility Status",
         "pillar": "Patient Profile",
         "subgroup": "Population Scope",
         "priority": 29,
@@ -713,7 +713,7 @@
     },
     "older_adult_ml": {
       "ui": {
-        "label": "Geriatric Profile",
+        "label": "Geriatric Profile Eligibility Status",
         "pillar": "Patient Profile",
         "subgroup": "Population Scope",
         "priority": 30,
@@ -733,7 +733,7 @@
     "includes_us_ml": {
       "ui": {
         "label": "Includes US Sites",
-        "pillar": "Patient Profile",
+        "pillar": "Metadata",
         "subgroup": "Population Scope",
         "priority": 31,
         "options": [
@@ -755,7 +755,7 @@
     "maximum_age": {
       "ui": {
         "label": "Maximum Age",
-        "pillar": "Patient Profile",
+        "pillar": "Metadata",
         "subgroup": "Population Scope",
         "priority": 32
       }
@@ -763,7 +763,7 @@
     "minimum_age": {
       "ui": {
         "label": "Minimum Age",
-        "pillar": "Patient Profile",
+        "pillar": "Metadata",
         "subgroup": "Population Scope",
         "priority": 33
       }
@@ -938,7 +938,7 @@
     },
     "gbd_indication_name": {
       "ui": {
-        "label": "Indication Name",
+        "label": "Specific Indication",
         "pillar": "Metadata",
         "subgroup": "Trial Metadata",
         "priority": 118
@@ -1062,6 +1062,14 @@
         "pillar": "Metadata",
         "subgroup": "Timeline",
         "priority": 172
+      }
+    },
+    "start_year": {
+      "ui": {
+        "label": "Start Year",
+        "pillar": "Metadata",
+        "subgroup": "Timeline",
+        "priority": 173
       }
     },
     "daly_global": {

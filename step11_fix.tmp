@@ -1,0 +1,159 @@
+# <REF:SCORE_ENGINE_CODE>
+import pandas as pd
+import numpy as np
+from scipy.special import logit
+from src.prep.pipeline import FEATURE_REGISTRY, UI_SCHEMA
+
+print("\n>>> STEP 11: SCORING ENGINE (SUCCESS-ORIENTED UI)...")
+
+# --- 1. DYNAMIC TAXONOMY RECONSTRUCTION WITH PRIORITY SORTING ---
+RISK_TAXONOMY = {}
+
+DISABLED_COLS = [
+    'includes_us_ml', 'is_fda_regulated_drug_ml', 'gbd_cause_id_ml',
+    'gbd_cause_id_2_ml', 'gbd_cause_id_4_ml', 'gbd_hierarchy_level_ml',
+    'is_duration_unknown_ml', 'target_ml',  'masking_ml',
+    'therapeutic_area_ml', 'strategic_ambition_ml', 'intervention_model_ml'
+    ]
+
+# First, gather all features with their metadata for sorting
+temp_registry = []
+for feat, meta in UI_SCHEMA.items():
+    p = meta.get("pillar")
+    s = meta.get("subgroup")
+    # SURGICAL REMOVAL: Metadata and AACT Raw Data are excluded from scoring calculations
+    if not p or not s or p in ["Metadata", "AACT Raw Data"]: continue
+
+    temp_registry.append({
+        "feat": feat,
+        "label": meta.get("label", feat),
+        "pillar": p,
+        "subgroup": s,
+        "priority": meta.get("priority", 99)
+    })
+
+# Sort by priority (General to Specific)
+temp_registry = sorted(temp_registry, key=lambda x: x['priority'])
+
+for item in temp_registry:
+    feat, label, p, s = item['feat'], item['label'], item['pillar'], item['subgroup']
+
+    if p not in RISK_TAXONOMY: RISK_TAXONOMY[p] = {}
+    if s not in RISK_TAXONOMY[p]:
+        RISK_TAXONOMY[p][s] = {"features": [], "feature_labels": []}
+
+    # Registration
+    RISK_TAXONOMY[p][s]["feature_labels"].append(label)
+    RISK_TAXONOMY[p][s]["features"].append([])
+    idx = len(RISK_TAXONOMY[p][s]["feature_labels"]) - 1
+
+    if feat == "therapeutic_area_ml":
+        RISK_TAXONOMY[p][s]["features"][idx].append("CALIBRATION_OFFSET")
+    else:
+        f_meta = FEATURE_REGISTRY.get(feat, {})
+        enc = f_meta.get("encoding")
+        prefix = ""
+        if feat not in DISABLED_COLS:
+            if enc == "ordinal": prefix = "ordinal__"
+            elif enc == "target": prefix = "target__"
+            elif enc == "numeric":
+                if "arms" in feat: prefix = "num_arms__"
+                elif "duration" in feat: prefix = "num_duration__"
+
+        RISK_TAXONOMY[p][s]["features"][idx].append(f"{prefix}{feat}")
+
+GAIN_FACTOR = 25.0
+
+def generate_clinical_scorecard(df_scoring, shap_values, feature_names, taxonomy,
+                                base_value, thresholds_logit_map, global_thresh_logit, gain=GAIN_FACTOR):
+    """
+    Computes success scores with absolute mathematical parity (Bottom-Up Rounding).
+    Matches api/main.py logic exactly.
+    """
+    num_trials = len(df_scoring)
+    num_features = len(feature_names)
+
+    # 1. Map features to subcategories
+    # Map: feature_index -> (pillar, subcategory)
+    feat_to_subcat = {}
+    mapped_indices = set()
+    for i, feat in enumerate(feature_names):
+        for pillar, subcats in taxonomy.items():
+            for subcat, details in subcats.items():
+                for f_list in details['features']:
+                    if any(feat == f_item for f_item in f_list):
+                        feat_to_subcat[i] = (pillar, subcat)
+                        mapped_indices.add(i)
+
+    # 2. Compute Raw Subcategory Impacts (Matrix operations for speed)
+    # We invert sign: impact = -shap * gain
+    subcat_impacts_raw = {}
+    for i in range(num_features):
+        key = feat_to_subcat.get(i)
+        if key:
+            impact_vec = -shap_values[:, i] * gain
+            subcat_impacts_raw[key] = subcat_impacts_raw.get(key, 0.0) + impact_vec
+
+    # 3. Handle Unmapped Signals (The "Other Model Signals" catch-all)
+    unmapped_indices = set(range(num_features)) - mapped_indices
+    if unmapped_indices:
+        unmapped_impact_vec = np.zeros(num_trials)
+        for i in unmapped_indices:
+            unmapped_impact_vec += -shap_values[:, i] * gain
+
+        key = ("Therapeutic Context", "Other Model Signals")
+        subcat_impacts_raw[key] = subcat_impacts_raw.get(key, 0.0) + unmapped_impact_vec
+
+    # 4. Calibration Offset (Surgically merged into Therapeutic Area Profile)
+    row_threshold_logits = df_scoring['therapeutic_area'].map(thresholds_logit_map).fillna(global_thresh_logit).values
+    calibration_offset_vec = (row_threshold_logits - base_value) * gain
+
+    cal_key = ("Therapeutic Context", "Therapeutic Area Profile")
+    subcat_impacts_raw[cal_key] = subcat_impacts_raw.get(cal_key, 0.0) + calibration_offset_vec
+
+    # 5. BOTTOM-UP ROUNDING (The core parity rule)
+    # Step A: Round every subcategory to 1 decimal place
+    subcat_impacts_rounded = {key: np.round(vec, 1) for key, vec in subcat_impacts_raw.items()}
+
+    # Step B: Sum rounded subcategories to pillars
+    pillar_cols = list(taxonomy.keys())
+    scorecard = pd.DataFrame(index=df_scoring.index)
+    for p in pillar_cols:
+        p_vec = np.zeros(num_trials)
+        for (pk, sk), vec in subcat_impacts_rounded.items():
+            if pk == p:
+                p_vec += vec
+        scorecard[p] = p_vec
+
+    # --- ROBUST PARITY ALIGNMENT ---
+    # 1. Calculate the target score (with clipping)
+    raw_sum = scorecard[pillar_cols].sum(axis=1)
+    scorecard['Clinical_Score'] = (50.0 + raw_sum).round(1).clip(1, 99)
+    
+    # 2. Calculate the Residual (the discrepancy created by clipping/rounding)
+    scorecard['residual'] = (scorecard['Clinical_Score'] - 50.0) - raw_sum
+    
+    # 3. Absorb Residual into the anchor Pillar ("Therapeutic Context")
+    anchor_pillar = "Therapeutic Context"
+    scorecard[anchor_pillar] = (scorecard[anchor_pillar] + scorecard['residual']).round(1)
+
+    # Post-processing for UI
+    scorecard['CALIBRATION_OFFSET'] = calibration_offset_vec
+    scorecard['Therapeutic_Area'] = df_scoring['therapeutic_area']
+    scorecard['Zone'] = pd.cut(scorecard['Clinical_Score'], [0, 25, 50, 75, 100],
+                               labels=["High Risk", "Watchlist", "Favorable", "Low Risk"])
+
+    # --- RIGOROUS PARITY CHECK ---
+    print("    Verifying Mathematical Parity across all trials...")
+    diffs = scorecard['Clinical_Score'] - (50.0 + scorecard[pillar_cols].sum(axis=1))
+    max_diff = np.abs(diffs).max()
+    if max_diff < 1e-9:
+        print(f"    [PASS] 100% Mathematical Parity confirmed (Max Delta: {max_diff:.2e}).")
+    else:
+        print(f"    [FAIL] Parity violation detected! Max Delta: {max_diff:.4f}")
+
+    return scorecard
+
+df_full_scores = generate_clinical_scorecard(df_full, shap_values, feature_names, RISK_TAXONOMY, model_base_value, final_threshold_logits, global_logit)
+print(f"    Mean Success Score: {df_full_scores['Clinical_Score'].mean():.1f}")
+# <REF:/SCORE_ENGINE_CODE>

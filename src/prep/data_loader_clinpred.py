@@ -204,6 +204,7 @@ class ClinicalTrialLoader:
         #emb: Merges embedding repository
         # df = self._attach_embeddings(df)
         df = self._attach_p_values(df)
+        df = self._generate_ui_identity(df)
 
         print("    -> Finalizing Data Types...")
 
@@ -536,6 +537,40 @@ class ClinicalTrialLoader:
     #
     #     df_delta.to_csv(self.data_path / 'data_clinpred_emb_transform.csv', index=False)
     #     raise EnrichmentCoverageError(f"Missing embeddings for {n_missing} trials.")
+
+    def _generate_ui_identity(self, df):
+        """
+        [CENTRALIZED IDENTITY LOGIC]
+        Generates the official search label using Hybrid Identity Logic (v1.2):
+        - Acronym exists: [ACRO] (N agents) (SPONSOR) | AREA (YEAR)
+        - No Acronym: Drug A | Drug B (+N) (SPONSOR) | AREA (YEAR)
+        """
+        print("    -> Generating Professional Search Identities...")
+        def format_label(row):
+            acro = str(row.get('acronym', '')).strip()
+            if not acro or acro.lower() == 'nan': acro = ""
+            
+            drug_raw = str(row.get('alpha_drug_name', 'Unknown Drug')).strip()
+            drugs = [d.strip() for d in drug_raw.split('|')]
+            
+            sponsor = str(row.get('lead_sponsor_canonical', 'Unknown Sponsor')).strip()
+            ta = str(row.get('therapeutic_area_ui', row.get('therapeutic_area', 'Unclassified'))).strip()
+            year = str(int(row['start_year'])) if pd.notna(row.get('start_year')) else "YYYY"
+            
+            # Hybrid Identity Logic (v1.2)
+            if acro:
+                # If many drugs, show agent count to keep the acronym prominent
+                drug_display = f"({len(drugs)} agents)" if len(drugs) > 2 else " | ".join(drugs)
+            else:
+                # If no acronym, show first 2 drugs + count
+                drug_display = f"{drugs[0]} | {drugs[1]} (+{len(drugs)-2})" if len(drugs) > 2 else " | ".join(drugs)
+            
+            prefix = f"[{acro}] " if acro else ""
+            label = f"{prefix}{drug_display} ({sponsor})".replace("  ", " ").strip()
+            return f"{label} | {ta} ({year})"
+
+        df['ui_search_label'] = df.apply(format_label, axis=1)
+        return df
 
     def save(self, df, filename='data_clinpred.csv'):
         out_path = self.data_path / filename
