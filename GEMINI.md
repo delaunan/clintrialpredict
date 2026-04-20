@@ -89,12 +89,22 @@
 
 ---
 
-## **6. Industrial Production Workflow (v47.0 Refactor)**
-- **Offline-First Resilience**: Both `production_06.ipynb` and `validation_clinpred.ipynb` now prioritize the `data_clinpred.csv` feature store. The system automatically detects existing columns and skips redundant AACT `.txt` reloads, preventing column suffix collisions (e.g., `healthy_volunteers_x`) and `KeyErrors`.
-- **JSON-Sanitized Taxonomy**: The `export_pipeline_taxonomy` function in `src/prep/pipeline.py` implements a recursive sanitizer for absolute API compatibility:
-    - **Key Unification**: Forces all dictionary keys to strings, eliminating duplicates between integers and string representations.
-    - **NaN Safety**: Mathematically converts `np.nan` to JSON `null`. This preserves the "Ongoing" status for trials, ensuring they are never misclassified as Success (`0`) or Failure (`1`).
-- **Streamlined Handshake Logic**: 
-    - **Identity Key**: Confirmed `nct_id` as the absolute linking key. It serves as the primary index in CSVs and the **Dictionary Key** in `shap_values_01.joblib` for O(1) retrieval speed.
-    - **Workflow Order**: Refactored the production notebook into a logical **Calculate -> Verify -> Export** sequence. All artifacts (Model, SHAP, Taxonomy, Registry) are now saved in a single "One-Click" operation at the very end of the notebook.
-- **UI Column Harmony**: Standardized UI naming conventions across the entire codebase (`ui_title` -> `title`, `ui_summary` -> `summary_ui`, etc.), ensuring the FastAPI server and Streamlit frontend are perfectly synchronized with the notebook's forensic output.
+## **7. Streamlit Application Architecture (v48.0)**
+
+### **A. View Hierarchy & Navigation**
+The application implements a multi-view state machine driven by `st.session_state`:
+1.  **View 1: Intelligence Discovery (Landing)**: Interactive search and mission statement. Uses a dual-column layout for filters and value propositions.
+2.  **View 2: Clinical Registry (Results)**: High-density `AgGrid` display with interactive row selection and temporal sorting.
+3.  **View 3: Protocol Forensic (Trial Detail)**: Refined tab-based layout ("Trial Information" and "Population Details") for deep-diving into trial metadata and protocol text.
+4.  **View 4: Signal Analysis (Strategic Audit)**: High-confidence decision support view. It integrates vibrant visualizations (Gauge, Treemap, Impact Bar) aligned with `production_01.ipynb` to decompose the predictive signal into strategic drivers.
+
+### **B. State Management & Interaction Logic**
+- **Surgical Selection**: `open_trial_third_ui` snapshots the search state and triggers a rerun to enter the Detail view, maintaining navigation persistence.
+- **Trial Editor (v18.0)**: Supports real-time editing of trial parameters via `global_edit_mode`. Changes are merged into the clinical vector before being dispatched to the FastAPI inference engine.
+- **Prediction "Handshake"**: Centralized API call logic with error handling and spinning feedback. Results are cached in `session_state` to prevent redundant network calls.
+
+### **C. Visual Intelligence Suite (`utils/plot.py`)**
+- **Clinical Success Gauge**: 0-100 normalized score where 50.0 is the TA-specific boundary. Color-coded risk tiers (High Risk to Robust).
+- **Strategic Impact Bar**: Relative importance of the four clinical pillars (Therapeutic Context, Scientific Attempt, Execution Framework, Patient Profile).
+- **Driver Decomposition (Treemap)**: Recursive visualization of subcategories and individual feature contributions. Aligned with the `# <REF:UI_VIS_CODE>` standard from the production notebook.
+- **Branding Engine**: Custom CSS injection for "Inter" typography, precise spacing, and the "grey-on-white" professional aesthetic.

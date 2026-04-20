@@ -1199,10 +1199,11 @@ def apply_trial_filters(base_df, skip_key=None):
 
 
 def get_risk_tier(score: float):
-    if score >= 75: return "Robust", "Strong success patterns detected.", "#f0fdf4", "#166534"
-    if score >= 50: return "Favorable", "Favorable historical indicators.", "#eff6ff", "#1e40af"
-    if score >= 25: return "Watchlist", "Mixed signals; mitigation required.", "#fff7ed", "#9a3412"
-    return "High Risk", "Significant attrition patterns.", "#fde8e8", "#991b1b"
+    if score >= 75: return "Low Risk"
+    if score >= 50: return "Favorable"
+    if score >= 25: return "Watchlist"
+    return "High Risk"
+
 
 # ==========================
 # 4. COMPONENTS
@@ -1531,7 +1532,7 @@ def get_edited_row(row):
 
 
 
-def render_pillar_expander(title, pillar_name, data):
+def render_pillar_expander(title, pillar_name, data, key_suffix=""):
     feats = sorted([(f_id, f_m) for f_id, f_m in TAXONOMY.items() if f_m.get("ui", {}).get("pillar") == pillar_name],
                    key=lambda x: (x[1].get("ui", {}).get("subgroup", ""), x[1].get("ui", {}).get("priority", 99)))
     with st.expander(title, expanded=False):
@@ -1542,7 +1543,7 @@ def render_pillar_expander(title, pillar_name, data):
                     f_id, f_m = feats[i+j]
                     label = f_m.get("ui", {}).get("label", f_id)
                     with cols[j]:
-                        render_smart_info_box(label, f_id, data)
+                        render_smart_info_box(label, f_id, data, key_suffix=key_suffix)
 
 def open_trial_third_ui(selected_id):
     snapshot_search_state()
@@ -1562,9 +1563,9 @@ def trial_val(row, *candidates, default="N/A"):
     return default
 
 
-def _field_token(field_id):
+def _field_token(field_id, key_suffix=""):
     trial_key = st.session_state.get("selected_nct_id", "no_trial")
-    raw = f"{trial_key}_{field_id}"
+    raw = f"{trial_key}_{field_id}_{key_suffix}"
     return "".join(ch.lower() if ch.isalnum() else "_" for ch in raw)
 
 
@@ -1607,9 +1608,9 @@ def _init_trial_field_state(field_id, row):
     return state_key, initial_val, options
 
 
-def _render_labeled_trial_field(label, field_id, row, layout="stack"):
+def _render_labeled_trial_field(label, field_id, row, layout="stack", key_suffix=""):
     state_key, initial_val, options = _init_trial_field_state(field_id, row)
-    token = _field_token(field_id)
+    token = _field_token(field_id, key_suffix=key_suffix)
     safe_label = html.escape(label)
 
     if layout == "inline":
@@ -1629,7 +1630,8 @@ def _render_labeled_trial_field(label, field_id, row, layout="stack"):
                     state_key=state_key,
                     initial_val=initial_val,
                     options=options,
-                    control_key=f"ui_meta_control_{token}"
+                    control_key=f"ui_meta_control_{token}",
+                    key_suffix=key_suffix
                 )
     else:
         with st.container(key=f"ui_field_box_{token}"):
@@ -1643,11 +1645,12 @@ def _render_labeled_trial_field(label, field_id, row, layout="stack"):
                 state_key=state_key,
                 initial_val=initial_val,
                 options=options,
-                control_key=f"ui_field_control_{token}"
+                control_key=f"ui_field_control_{token}",
+                key_suffix=key_suffix
             )
 
 
-def _render_two_state_field_control(label, state_key, initial_val, options, control_key):
+def _render_two_state_field_control(label, state_key, initial_val, options, control_key, key_suffix=""):
     is_edit = st.session_state.get("global_edit_mode", False)
 
     with st.container(key=control_key):
@@ -1665,14 +1668,19 @@ def _render_two_state_field_control(label, state_key, initial_val, options, cont
                     label,
                     options=labels,
                     index=selected_index,
-                    key=state_key,
+                    key=f"{state_key}_{key_suffix}" if key_suffix else state_key,
                     label_visibility="collapsed"
                 )
             else:
-                readonly_key = f"{state_key}__readonly"
+                readonly_key = f"{state_key}__readonly_{key_suffix}" if key_suffix else f"{state_key}__readonly"
                 readonly_value = labels[selected_index] if labels else ""
 
-                st.session_state[readonly_key] = readonly_value
+                # SAFE UPDATE: Avoid StreamlitAPIException if rendered multiple times
+                try:
+                    if st.session_state.get(readonly_key) != readonly_value:
+                        st.session_state[readonly_key] = readonly_value
+                except st.errors.StreamlitAPIException:
+                    pass
 
                 st.text_input(
                     label,
@@ -1683,16 +1691,16 @@ def _render_two_state_field_control(label, state_key, initial_val, options, cont
         else:
             st.text_input(
                 label,
-                key=state_key,
+                key=f"{state_key}_{key_suffix}" if key_suffix else state_key,
                 label_visibility="collapsed",
                 disabled=not is_edit
             )
 
 
-def _render_native_meta_field(label, field_id, row):
+def _render_native_meta_field(label, field_id, row, key_suffix=""):
     trial_key = st.session_state.get("selected_nct_id", "no_trial")
     state_key = f"input_{trial_key}_{field_id}"
-    token = _field_token(field_id)
+    token = _field_token(field_id, key_suffix=key_suffix)
 
     with st.container(key=f"meta_native_field_{token}"):
         if field_id in {"has_placebo_ml", "has_dmc_ml"}:
@@ -1705,7 +1713,7 @@ def _render_native_meta_field(label, field_id, row):
 
             st.checkbox(
                 label,
-                key=state_key,
+                key=f"{state_key}_{key_suffix}" if key_suffix else state_key,
                 disabled=not st.session_state.get("global_edit_mode", False)
             )
             return
@@ -1727,12 +1735,18 @@ def _render_native_meta_field(label, field_id, row):
                     label,
                     options=labels,
                     index=selected_index,
-                    key=state_key
+                    key=f"{state_key}_{key_suffix}" if key_suffix else state_key
                 )
             else:
-                readonly_key = f"{state_key}__readonly"
+                readonly_key = f"{state_key}__readonly_{key_suffix}" if key_suffix else f"{state_key}__readonly"
                 readonly_value = labels[selected_index] if labels else ""
-                st.session_state[readonly_key] = readonly_value
+                
+                # SAFE UPDATE: Avoid StreamlitAPIException if rendered multiple times
+                try:
+                    if st.session_state.get(readonly_key) != readonly_value:
+                        st.session_state[readonly_key] = readonly_value
+                except st.errors.StreamlitAPIException:
+                    pass
 
                 st.text_input(
                     label,
@@ -1742,7 +1756,7 @@ def _render_native_meta_field(label, field_id, row):
         else:
             st.text_input(
                 label,
-                key=state_key,
+                key=f"{state_key}_{key_suffix}" if key_suffix else state_key,
                 disabled=not is_edit
             )
 
@@ -1764,12 +1778,13 @@ def _render_native_meta_textarea_field(label, value, state_suffix, height):
             disabled=not st.session_state.get("global_edit_mode", False)
         )
 
-def render_smart_info_box(label, field_id, row):
+def render_smart_info_box(label, field_id, row, key_suffix=""):
     _render_labeled_trial_field(
         label=label,
         field_id=field_id,
         row=row,
-        layout="stack"
+        layout="stack",
+        key_suffix=key_suffix
     )
 
 
@@ -1990,31 +2005,12 @@ def render_trial_detail_tabs_refined(row):
             with right_col:
                 render_population_side_panel(row)
 
-def render_fourth_ui(row):
-    with st.expander("Identity", expanded=True):
-        st.markdown(f'''
-            <div style="display: flex; align-items: baseline; margin-bottom: 10px;">
-                <span class="identity-header-text">{row[ID_COL]}</span>
-                <span style="font-size: 1.2rem; color: #475569; font-weight: 600;">{row.get("ui_search_label", "N/A")}</span>
-            </div>
-            <div class="title-box-container">
-                <span style="color: #64748b; font-size: 0.75rem; text-transform: uppercase; font-weight: 800; display: block; margin-bottom: 8px;">Title</span>
-                {row.get("title", "No title available.")}
-            </div>
-        ''', unsafe_allow_html=True)
 
-    c1, c2 = st.columns(2)
-    with c1:
-        render_pillar_expander("Therapeutic Context", "Therapeutic Context", row)
-    with c2:
-        render_pillar_expander("Execution Framework", "Execution Framework", row)
-
-    c3, c4 = st.columns(2)
-    with c3:
-        render_pillar_expander("Scientific Attempt", "Scientific Attempt", row)
-    with c4:
-        render_pillar_expander("Patient Profile", "Patient Profile", row)
-
+def render_signal_analysis_section(row):
+    """
+    Renders the predictive intelligence section below the tabs.
+    Triggered by the 'Predict Trial Completion' button in the header.
+    """
     if st.session_state.trigger_prediction or st.session_state.get("analysis_result"):
         if (
             not st.session_state.get("analysis_result")
@@ -2036,15 +2032,19 @@ def render_fourth_ui(row):
                         st.session_state.trigger_prediction = False
                     else:
                         st.error(f"API Error: {res.status_code}")
+                        return
                 except Exception as e:
                     st.error(f"System Error: {e}")
+                    return
 
         if st.session_state.get("analysis_result"):
             res = st.session_state.analysis_result
             score = res.get("score", 0)
-            tier, desc, bg, tc = get_risk_tier(score)
+            tier = get_risk_tier(score)
 
-            st.markdown("<hr style='margin: 40px 0;'>", unsafe_allow_html=True)
+            st.markdown("<hr style='margin: 40px 0; border: 0; border-top: 1px solid #cbd5e1;'>", unsafe_allow_html=True)
+            
+            # 1. SUMMARY STRIP (GAUGE + BAR)
             cl, cr = st.columns([1.0, 1.4])
 
             with cl:
@@ -2054,7 +2054,7 @@ def render_fourth_ui(row):
                     config={"displayModeBar": False}
                 )
                 st.markdown(
-                    f"<div style='background:{bg}; color:{tc}; padding:20px; border-radius:12px; border:1px solid {tc + '22'};'><div style='font-size:1.4rem; font-weight:800;'>{tier}</div><div>{desc}</div></div>",
+                    f"<div style='text-align:center; font-family:\"Inter\", sans-serif; font-size:1.5rem; font-weight:800; color:#52606d; margin-top:-15px;'>{tier}</div>",
                     unsafe_allow_html=True
                 )
 
@@ -2062,20 +2062,19 @@ def render_fourth_ui(row):
                 if res.get("pillar_impacts"):
                     st.plotly_chart(
                         plot_impact_bar(pd.DataFrame(res["pillar_impacts"])),
-                        use_container_width=True
+                        use_container_width=True,
+                        config={"displayModeBar": False}
                     )
 
-                # Future fourth UI:
-                # add your treemap here when ready
-                # for example:
-                # if res.get("treemap_data"):
-                #     st.plotly_chart(
-                #         plot_treemap(pd.DataFrame(res["treemap_data"])),
-                #         use_container_width=True
-                #     )
-
-
-
+            # 2. DRILL-DOWN TREEMAP
+            if res.get("subcat_impacts") and res.get("pillar_impacts"):
+                st.markdown("<div style='margin-top: 30px;'></div>", unsafe_allow_html=True)
+                st.markdown("<div class='highlight-title'>Driver Decomposition</div>", unsafe_allow_html=True)
+                st.plotly_chart(
+                    plot_treemap(res["subcat_impacts"], res["pillar_impacts"]),
+                    use_container_width=True,
+                    config={"displayModeBar": False}
+                )
 
 
 # ==========================
@@ -2118,7 +2117,7 @@ if not st.session_state.selected_nct_id:
                     <div class="highlight-title">Operational Success & Risk Stratification</div>
                     <div style="font-size:0.65rem; font-weight:800; color:#94a3b8; text-transform:uppercase; letter-spacing:0.1em;">Core Mission</div>
                 </div>
-                <div class="highlight-text">This predictive engine estimates the <b>likelihood of operational completion</b> and the <b>risk of early termination</b> using only data available at clinical trial initiation. Each trial is systematically evaluated and classified into <b>four distinct tiers</b> - High Risk, Watchlist, Favorable, and Robust - providing a clear and actionable risk profile.</div>
+                <div class="highlight-text">This predictive engine estimates the <b>likelihood of operational completion</b> and the <b>risk of early termination</b> using only data available at clinical trial initiation. Each trial is systematically evaluated and classified into <b>four distinct tiers</b> - High Risk, Watchlist, Favorable, and Low Risk - providing a clear and actionable risk profile.</div>
             </div>
         ''', unsafe_allow_html=True)
 
@@ -2187,3 +2186,4 @@ else:
     else:
         row = selected_df.iloc[0]
         render_trial_detail_tabs_refined(row)
+        render_signal_analysis_section(row)

@@ -53,20 +53,24 @@ def load_artifacts():
     prep = app.state.model.named_steps['prep']
     app.state.feature_names = prep.get_feature_names_out()
     
-    # 2. Reconstruct Taxonomy Mapping (Logic-Locked to Registry)
-    # This maps feature indices (i) to {pillar, subcategory, narrative_info}
+    # 2. Reconstruct Taxonomy Mapping
     app.state.feature_to_taxonomy = {}
     app.state.pillars = set()
     app.state.subcategories = {} # pillar -> set of subcategories
     
-    # Also identify where the calibration offset should be applied
-    app.state.calibration_target = {"pillar": "Therapeutic Context", "subcategory": "Indication Risk Profile"}
+    # SYNC WITH NOTEBOOK: Features that were passed directly without transformer prefix
+    app.state.DISABLED_COLS = [
+        'includes_us_ml', 'is_fda_regulated_drug_ml', 'gbd_cause_id_ml',
+        'gbd_cause_id_2_ml', 'gbd_cause_id_4_ml', 'gbd_hierarchy_level_ml',
+        'is_duration_unknown_ml', 'target',  'masking_ml',
+        'therapeutic_area_ml', 'strategic_ambition_ml', 'intervention_model_ml'
+    ]
 
     for feat_name, feat_meta in app.state.registry.items():
-        # Handle nested UI metadata
         ui = feat_meta.get("ui", {})
         pillar = ui.get("pillar")
         subgroup = ui.get("subgroup")
+        label = ui.get("label", feat_name)
         
         if not pillar or not subgroup:
             continue
@@ -76,32 +80,21 @@ def load_artifacts():
             app.state.subcategories[pillar] = set()
         app.state.subcategories[pillar].add(subgroup)
 
-        # Determine prefix based on encoding (replicating notebook logic)
         prefix = ""
-        enc = feat_meta.get("encoding")
-        if enc == "ordinal": prefix = "ordinal__"
-        elif enc == "target": prefix = "target__"
-        elif enc == "numeric":
-            if "arms" in feat_name: prefix = "num_arms__"
-            elif "duration" in feat_name: prefix = "num_duration__"
+        if feat_name not in app.state.DISABLED_COLS:
+            enc = feat_meta.get("encoding")
+            if enc == "ordinal": prefix = "ordinal__"
+            elif enc == "target": prefix = "target__"
+            elif enc == "numeric":
+                if "arms" in feat_name: prefix = "num_arms__"
+                elif "duration" in feat_name: prefix = "num_duration__"
             
         prefixed_feat = f"{prefix}{feat_name}"
         
-        # Check if this is the calibration anchor
         if feat_name == "therapeutic_area_ml":
             app.state.calibration_target = {"pillar": pillar, "subcategory": subgroup}
 
-        # Map to actual indices in model output
-        for i, full_name in enumerate(app.state.feature_names):
-            if full_name == prefixed_feat or full_name.startswith(f"{prefixed_feat}_"):
-                app.state.feature_to_taxonomy[i] = {
-                    "pillar": pillar,
-                    "subcategory": subgroup,
-                    "pos_impact": ui.get("pos_impact", ""),
-                    "neg_impact": ui.get("neg_impact", "")
-                }
-
-    print(f"Mapped {len(app.state.feature_to_taxonomy)} features to taxonomy.")
+    print(f"Taxonomy initialization complete. Pillars: {app.state.pillars}")
 
 @app.get("/")
 def root():
@@ -114,84 +107,135 @@ async def predict(request: Request):
         nct_id = data.get("nct_id")
         ta = data.get("therapeutic_area", "Unclassified")
         
-        # 1. Calibration Constants (Synced with Notebook)
+        # 1. Calibration Constants
         ta_threshold_logits = app.state.thresholds.get("ta_threshold_logits", {})
         threshold_logit = ta_threshold_logits.get(ta, app.state.thresholds.get("global_threshold_logit", 0.0))
         gain_factor = app.state.thresholds.get("gain_factor", 25.0)
         intercept = app.state.thresholds.get("base_value", 0.0)
         
-        # 2. AUDIT-ONLY Logic
+        # 2. SHAP Lookup
         if nct_id in app.state.shap_dict:
             shap_vals = app.state.shap_dict[nct_id]
-            pred_logit = np.sum(shap_vals) + intercept
             mode = "audit"
         else:
-            return {
-                "error": f"Trial ID {nct_id} not found in the production registry.",
-                "status": "simulation_parked",
-                "message": "Real-time simulation is disabled in the current production release (v01)."
-            }
+            return {"error": f"Trial ID {nct_id} not found."}
         
-        # 3. Success Scoring (0-100)
-        # score = 50 + (threshold_logit - pred_logit) * gain_factor
-        raw_score = 50 + (threshold_logit - pred_logit) * gain_factor
-        final_score = float(np.clip(raw_score, 1, 99))
+        # 3. IMPACT AGGREGATION (High Precision)
+        sub_sums_raw = {} # (pillar, subcategory) -> float
+        sub_features = {} # (pillar, subcategory) -> list
         
-        # 4. Aggregation by Taxonomy
-        pillar_impacts = {p: 0.0 for p in app.state.pillars}
-        sub_sums = {} # (pillar, subcategory) -> impact
-        
-        for i, val in enumerate(shap_vals):
-            mapping = app.state.feature_to_taxonomy.get(i)
-            if mapping:
-                p, s = mapping['pillar'], mapping['subcategory']
-                score_impact = -float(val) * gain_factor # Logit-to-Score unit conversion
-                
-                pillar_impacts[p] += score_impact
-                sub_sums[(p, s)] = sub_sums.get((p, s), 0.0) + score_impact
+        feat_to_idx = {name: i for i, name in enumerate(app.state.feature_names)}
+        mapped_indices = set()
 
-        # 5. Inject Calibration Offset into Target Pillar/Subcategory
+        for feat_name, feat_meta in app.state.registry.items():
+            ui = feat_meta.get("ui", {})
+            p = ui.get("pillar")
+            s = ui.get("subgroup")
+            label = ui.get("label", feat_name)
+            
+            if not p or not s or p == "Metadata":
+                continue
+                
+            impact = 0.0
+            prefix = ""
+            if feat_name not in app.state.DISABLED_COLS:
+                enc = feat_meta.get("encoding")
+                if enc == "ordinal": prefix = "ordinal__"
+                elif enc == "target": prefix = "target__"
+                elif enc == "numeric":
+                    if "arms" in feat_name: prefix = "num_arms__"
+                    elif "duration" in feat_name: prefix = "num_duration__"
+            
+            prefixed_feat = f"{prefix}{feat_name}"
+            
+            for full_name, idx in feat_to_idx.items():
+                if full_name == prefixed_feat or full_name.startswith(f"{prefixed_feat}_"):
+                    impact += -float(shap_vals[idx]) * gain_factor
+                    mapped_indices.add(idx)
+            
+            ui_col = feat_name.replace("_ml", "_ui")
+            if "gbd_cause_id_3" in feat_name: ui_col = "gbd_indication_name"
+            val_to_show = data.get(ui_col, data.get(feat_name, "N/A"))
+            if isinstance(val_to_show, (float, int)): val_to_show = f"{float(val_to_show):.1f}"
+            elif not val_to_show: val_to_show = "N/A"
+            
+            feat_str = f"{label}: <b>{val_to_show}</b>"
+            
+            key = (p, s)
+            sub_sums_raw[key] = sub_sums_raw.get(key, 0.0) + impact
+            if key not in sub_features: sub_features[key] = []
+            sub_features[key].append((ui.get("priority", 99), feat_str))
+
+        # DIAGNOSTIC: Check for unmapped SHAP signal
+        all_indices = set(range(len(shap_vals)))
+        unmapped_indices = all_indices - mapped_indices
+        if unmapped_indices:
+            unmapped_impact = 0.0
+            unmapped_details = []
+            for idx in unmapped_indices:
+                name = app.state.feature_names[idx]
+                imp = -float(shap_vals[idx]) * gain_factor
+                unmapped_impact += imp
+                unmapped_details.append(f"{name}: {imp:+.2f}")
+            
+            # Put into a generic bucket to preserve mathematical parity
+            key = ("Therapeutic Context", "Other Model Signals")
+            sub_sums_raw[key] = sub_sums_raw.get(key, 0.0) + unmapped_impact
+            if key not in sub_features: sub_features[key] = []
+            sub_features[key].append((999, f"Unmapped internal factors: <b>{len(unmapped_indices)}</b>"))
+            print(f"DEBUG: Unmapped Signal Detected: {unmapped_impact:+.2f} pts across {len(unmapped_indices)} features.")
+            # print(f"DEBUG: Unmapped Details: {unmapped_details}")
+
+        # 4. Calibration & Systematic Rounding for Absolute Parity
         calibration_offset_pts = (threshold_logit - intercept) * gain_factor
         cp = app.state.calibration_target["pillar"]
         cs = app.state.calibration_target["subcategory"]
+        sub_sums_raw[(cp, cs)] = sub_sums_raw.get((cp, cs), 0.0) + calibration_offset_pts
+
+        # STEP A: Round subcategories to 1 decimal point (UI standard)
+        final_subcats = []
+        pillar_totals = {p: 0.0 for p in app.state.pillars}
         
-        print(f"DEBUG: nct_id={nct_id}, ta={ta}")
-        print(f"DEBUG: calibration_offset_pts={calibration_offset_pts}")
-        print(f"DEBUG: target_pillar={cp}, target_subcategory={cs}")
-        
-        pillar_impacts[cp] = pillar_impacts.get(cp, 0.0) + calibration_offset_pts
-        sub_sums[(cp, cs)] = sub_sums.get((cp, cs), 0.0) + calibration_offset_pts
-        
-        print(f"DEBUG: pillar_impacts after offset={pillar_impacts}")
-        
-        # 6. Format Final Response
-        subcat_impacts = []
-        for (p, s), imp in sub_sums.items():
-            # Find metadata from registry via first feature found for this subcat
-            # (Narrative is usually consistent across subcat features)
+        for (p, s), raw_imp in sub_sums_raw.items():
+            rounded_imp = round(raw_imp, 1)
+            # Ensure -0.0 becomes 0.0 for clean UI
+            if rounded_imp == -0.0: rounded_imp = 0.0
+            
+            pillar_totals[p] += rounded_imp
+            
+            # Narrative lookup
             narrative = ""
-            for mapping in app.state.feature_to_taxonomy.values():
-                if mapping['pillar'] == p and mapping['subcategory'] == s:
-                    narrative = mapping['pos_impact' if imp >= 0 else 'neg_impact']
+            for fn, fm in app.state.registry.items():
+                u = fm.get("ui", {})
+                if u.get("pillar") == p and u.get("subgroup") == s:
+                    narrative = u.get("pos_impact" if rounded_imp >= 0 else "neg_impact", "")
                     break
-                    
-            subcat_impacts.append({
+
+            final_subcats.append({
                 "Pillar": p,
                 "Subcategory": s,
-                "Impact": round(imp, 2),
-                "Narrative": narrative
+                "Impact": rounded_imp,
+                "Narrative": narrative,
+                "FeatureDetails": [x[1] for x in sorted(sub_features.get((p, s), []), key=lambda x: x[0])]
             })
-            
+
+        # STEP B: Sum rounded pillars for the final score
+        # This guarantees Score = 50 + sum(Pillars) in the UI
+        total_impact_points = sum(v for p, v in pillar_totals.items() if p != "Metadata")
+        final_score = 50.0 + total_impact_points
+        
+        # Optional: Soft clip to 1-99 for sanity, but only if it doesn't break parity
+        # Since parity is the priority, we show the true score.
+        
         return {
             "score": round(final_score, 1),
             "threshold": 50.0,
             "pillar_impacts": [
-                {"Pillar": p, "Impact": round(v, 2)} 
-                for p, v in pillar_impacts.items() if p != "Metadata"
+                {"Pillar": p, "Impact": round(v, 1)} 
+                for p, v in pillar_totals.items() if p != "Metadata"
             ],
-            "subcat_impacts": [item for item in subcat_impacts if item['Pillar'] != "Metadata"],
-            "mode": mode,
-            "calibration_offset": round(calibration_offset_pts, 2)
+            "subcat_impacts": final_subcats,
+            "mode": mode
         }
 
     except Exception as e:
