@@ -58,6 +58,8 @@ TEXTAREA_HEIGHTS = {
     "interventions": 160,
     "primary_outcomes": 160,
     "eligibility_criteria": 337,
+    "completion_prediction_left": 220,
+    "completion_prediction_right": 430,
 }
 
 
@@ -69,7 +71,7 @@ def inject_custom_styles():
     # SIDEBAR HIDER: Removes sidebar and toggle in Landing and Detail Views
     is_landing = not st.session_state.get("search_initiated", False)
     is_detail = st.session_state.get("selected_nct_id") is not None
-    
+
     hide_sidebar_style = ""
     if is_landing or is_detail:
         hide_sidebar_style = """
@@ -1018,6 +1020,10 @@ def inject_custom_styles():
                 margin-bottom: var(--ui-summary-row-overlap) !important;
             }}
 
+            .st-key-trial_detail_tabs .st-key-completion_prediction_top_row {{
+                margin-bottom: var(--ui-summary-row-overlap) !important;
+            }}
+
             {debug_overlay_css}
 
 
@@ -1211,25 +1217,25 @@ def go_back_to_results():
 
 def apply_trial_filters(base_df, skip_key=None):
     tdf = base_df.copy()
-    
+
     # 1. APPLY SECRET "MODE" FILTERS FIRST (Global Constraints)
     registry_mode = str(st.session_state.get("s_registry", "")).strip().lower()
     analysis_mode = str(st.session_state.get("s_mode", "")).strip().lower()
-    
+
     # Register Filter: Default is Historical only (trial_segment != ONGOING)
     if registry_mode != "all":
         tdf = tdf[tdf["trial_segment"] != "ONGOING"]
-    
+
     # Analysis Filter: Default is Accurate only (is_correct == True)
     if analysis_mode != "all":
         if "is_correct" in tdf.columns:
             # Logic: Keep if (Correct == True) OR (Accuracy is Pending/Ongoing)
             # Ongoing trials have is_correct as NaN/None
-            tdf = tdf[tdf["is_correct"].apply(lambda x: 
-                str(x).lower() == "true" or 
-                x == 1 or 
-                x is True or 
-                pd.isna(x) or 
+            tdf = tdf[tdf["is_correct"].apply(lambda x:
+                str(x).lower() == "true" or
+                x == 1 or
+                x is True or
+                pd.isna(x) or
                 str(x).lower() == "none" or
                 str(x).lower() == "nan"
             )]
@@ -1962,7 +1968,30 @@ def render_summary_text_shell_panel(label, value, state_suffix, panel_suffix, he
 
             st.markdown("<div class='trial-meta-bottom-gap'></div>", unsafe_allow_html=True)
 
+def render_summary_placeholder_panel(panel_suffix, height):
+    with st.container(key=f"summary_side_shell_{panel_suffix}"):
+        with st.container(key=f"summary_side_inner_{panel_suffix}"):
+            st.markdown("<div class='trial-meta-top-gap'></div>", unsafe_allow_html=True)
+            st.markdown(
+                f"<div style='height: {height}px;'></div>",
+                unsafe_allow_html=True
+            )
+            st.markdown("<div class='trial-meta-bottom-gap'></div>", unsafe_allow_html=True)
 
+
+def render_box_spacer(height):
+    st.markdown(
+        f"<div style='height: {height}px;'></div>",
+        unsafe_allow_html=True
+    )
+
+
+def render_summary_plot_shell_panel(panel_suffix, body_renderer):
+    with st.container(key=f"summary_side_shell_{panel_suffix}"):
+        with st.container(key=f"summary_side_inner_{panel_suffix}"):
+            st.markdown("<div class='trial-meta-top-gap'></div>", unsafe_allow_html=True)
+            body_renderer()
+            st.markdown("<div class='trial-meta-bottom-gap'></div>", unsafe_allow_html=True)
 
 
 def render_trial_top_strip_refined(row):
@@ -1980,9 +2009,10 @@ def render_trial_detail_tabs_refined(row):
     render_trial_top_strip_refined(row)
 
     with st.container(key="trial_detail_tabs"):
-        tab1, tab2 = st.tabs([
+        tab1, tab2, tab3 = st.tabs([
             "Trial Information",
-            "Population Details"
+            "Population Details",
+            "Completion Prediction"
         ])
 
         with tab1:
@@ -2052,84 +2082,124 @@ def render_trial_detail_tabs_refined(row):
             with right_col:
                 render_population_side_panel(row)
 
+        with tab3:
+            render_completion_prediction_tab(row)
 
-def render_signal_analysis_section(row):
-    """
-    Renders the predictive intelligence section below the tabs.
-    Triggered by the 'Predict Trial Completion' button in the header.
-    """
-    if st.session_state.trigger_prediction or st.session_state.get("analysis_result"):
-        if (
-            not st.session_state.get("analysis_result")
-            or st.session_state.get("analysis_nct_id") != st.session_state.selected_nct_id
-        ):
-            with st.spinner("Analyzing signals..."):
-                try:
-                    # Merge edited fields into the row before sending to API
-                    row_to_predict = get_edited_row(row)
-                    res = requests.post(
-                        API_URL,
-                        json=row_to_predict.replace({np.nan: None}).to_dict(),
-                        timeout=60
-                    )
 
-                    if res.status_code == 200:
-                        st.session_state.analysis_result = res.json()
-                        st.session_state.analysis_nct_id = st.session_state.selected_nct_id
-                        st.session_state.trigger_prediction = False
-                    else:
-                        st.error(f"API Error: {res.status_code}")
-                        return
-                except Exception as e:
-                    st.error(f"System Error: {e}")
+def get_analysis_result_for_selected_trial(row):
+    if not (st.session_state.trigger_prediction or st.session_state.get("analysis_result")):
+        return None
+
+    if (
+        not st.session_state.get("analysis_result")
+        or st.session_state.get("analysis_nct_id") != st.session_state.selected_nct_id
+    ):
+        with st.spinner("Analyzing signals..."):
+            try:
+                row_to_predict = get_edited_row(row)
+                res = requests.post(
+                    API_URL,
+                    json=row_to_predict.replace({np.nan: None}).to_dict(),
+                    timeout=60
+                )
+
+                if res.status_code == 200:
+                    st.session_state.analysis_result = res.json()
+                    st.session_state.analysis_nct_id = st.session_state.selected_nct_id
+                    st.session_state.trigger_prediction = False
+                else:
+                    st.error(f"API Error: {res.status_code}")
+                    return None
+
+            except Exception as e:
+                st.error(f"System Error: {e}")
+                return None
+
+    return st.session_state.get("analysis_result")
+
+
+def render_completion_prediction_tab(row):
+    res = get_analysis_result_for_selected_trial(row)
+
+    left_box_h = TEXTAREA_HEIGHTS["completion_prediction_left"]
+    right_box_h = TEXTAREA_HEIGHTS["completion_prediction_right"]
+
+    gauge_plot_h = max(110, left_box_h - 60)
+    bar_plot_h = max(120, left_box_h - 20)
+    treemap_plot_h = max(260, right_box_h - 40)
+
+    left_col, right_col = st.columns([3, 4], gap="xsmall")
+
+    with left_col:
+        with st.container(key="completion_prediction_top_row"):
+
+            def _render_gauge_panel():
+                if not res:
+                    render_box_spacer(left_box_h)
                     return
 
-        if st.session_state.get("analysis_result"):
-            res = st.session_state.analysis_result
-            score = res.get("score", 0)
-            tier = get_risk_tier(score)
+                score = res.get("score", 0)
+                tier = get_risk_tier(score)
 
-            st.markdown("<hr style='margin: 40px 0; border: 0; border-top: 1px solid #cbd5e1;'>", unsafe_allow_html=True)
-
-            # 1. SUMMARY STRIP (GAUGE + BAR)
-            cl, cr = st.columns([1.0, 1.4])
-
-            with cl:
                 st.plotly_chart(
-                    plot_success_gauge(score),
+                    plot_success_gauge(score, height=gauge_plot_h),
                     use_container_width=True,
                     config={"displayModeBar": False}
                 )
+
                 st.markdown(
-                    f"<div style='text-align:center; font-family:\"Inter\", sans-serif; font-size:1.5rem; font-weight:800; color:#52606d; margin-top:-15px;'>{tier}</div>",
+                    f"<div style='text-align:center; font-family:\"Inter\", sans-serif; font-size:1.2rem; font-weight:800; color:#52606d; margin-top:-12px;'>{tier}</div>",
                     unsafe_allow_html=True
                 )
 
-            with cr:
-                if res.get("pillar_impacts"):
-                    st.plotly_chart(
-                        plot_impact_bar(pd.DataFrame(res["pillar_impacts"])),
-                        use_container_width=True,
-                        config={"displayModeBar": False}
-                    )
+            render_summary_plot_shell_panel(
+                panel_suffix="completion_prediction_left_top_block",
+                body_renderer=_render_gauge_panel
+            )
 
-            # 2. DRILL-DOWN TREEMAP
-            if res.get("subcat_impacts") and res.get("pillar_impacts"):
-                st.markdown("<div style='margin-top: 30px;'></div>", unsafe_allow_html=True)
+        def _render_bar_panel():
+            if not res or not res.get("pillar_impacts"):
+                render_box_spacer(left_box_h)
+                return
 
-                # Header with Title Only
-                st.markdown("<div class='highlight-title'>Driver Decomposition</div>", unsafe_allow_html=True)
+            st.plotly_chart(
+                plot_impact_bar(
+                    pd.DataFrame(res["pillar_impacts"]),
+                    height=bar_plot_h
+                ),
+                use_container_width=True,
+                config={"displayModeBar": False}
+            )
 
-                # Control Logic: Value extraction from the secret sidebar input
-                # Note: widget value is preserved even when sidebar is hidden via CSS
-                show_detailed = str(st.session_state.get("s_detail", "")).strip().lower() == "true"
+        render_summary_plot_shell_panel(
+            panel_suffix="completion_prediction_left_bottom_block",
+            body_renderer=_render_bar_panel
+        )
 
-                st.plotly_chart(
-                    plot_treemap(res["subcat_impacts"], res["pillar_impacts"], show_values=show_detailed),
-                    use_container_width=True,
-                    config={"displayModeBar": False}
-                )
+    with right_col:
 
+        def _render_treemap_panel():
+            if not res or not res.get("subcat_impacts") or not res.get("pillar_impacts"):
+                render_box_spacer(right_box_h)
+                return
+
+            show_detailed = str(st.session_state.get("s_detail", "")).strip().lower() == "true"
+
+            st.plotly_chart(
+                plot_treemap(
+                    res["subcat_impacts"],
+                    res["pillar_impacts"],
+                    show_values=show_detailed,
+                    height=treemap_plot_h
+                ),
+                use_container_width=True,
+                config={"displayModeBar": False}
+            )
+
+        render_summary_plot_shell_panel(
+            panel_suffix="completion_prediction_right_block",
+            body_renderer=_render_treemap_panel
+        )
 
 # ==========================
 # 5. MAIN UI FLOW
@@ -2194,7 +2264,7 @@ if not st.session_state.selected_nct_id:
             st.text_input("Register", key="s_registry")
             st.text_input("Analysis", key="s_mode")
             st.text_input("", key="s_detail")
-        
+
         render_header(is_landing=False)
 
         st.markdown(
@@ -2224,7 +2294,6 @@ else:
     else:
         row = selected_df.iloc[0]
         render_trial_detail_tabs_refined(row)
-        render_signal_analysis_section(row)
 
 # ==========================
 # 6. HIDDEN STATE KEEPER
