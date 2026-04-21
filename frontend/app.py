@@ -2012,7 +2012,7 @@ def render_trial_detail_tabs_refined(row):
         tab1, tab2, tab3 = st.tabs([
             "Trial Information",
             "Population Details",
-            "Completion Prediction"
+            "Completion Score"
         ])
 
         with tab1:
@@ -2148,7 +2148,7 @@ def render_completion_prediction_tab(row):
                 )
 
                 st.markdown(
-                    f"<div style='text-align:center; font-family:\"Inter\", sans-serif; font-size:1.1rem; font-weight:800; color:#52606d; margin-top:-35px;'>{tier}</div>",
+                    f"<div style='text-align:center; font-family:\"Inter\", sans-serif; font-size:1.0rem; font-weight:800; color:#334155; margin-top:-40px;'>{tier}</div>",
                     unsafe_allow_html=True
                 )
 

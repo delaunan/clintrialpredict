@@ -8,8 +8,8 @@ import textwrap
 # 0. STYLE CONFIG (NEUTRAL PRO)
 # ==========================
 STYLE_CONFIG = {
-    "font_family": "Helvetica, Arial, sans-serif",
-    "font_color": "#1f2a38",
+    "font_family": "'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
+    "font_color": "#334155",
     "colors": {
         "red_deep":   (168, 50, 50),
         "red_soft":   (240, 163, 163),
@@ -41,9 +41,20 @@ def mix_white(rgb, factor=0.7):
     new_b = int(b + (255 - b) * factor)
     return (new_r, new_g, new_b)
 
-def fmt_header(text, value, txt_color="black", split=False):
-    label = f"{text}<br>({value:+.1f} pts)" if split else f"{text} ({value:+.1f} pts)"
-    return f"<span style='font-size:14px; font-weight:bold; color:{txt_color}'>{label}</span>"
+def fmt_header(text, value, txt_color="#334155", split=False):
+    if split:
+        return (
+            f"<span style='font-family:{STYLE_CONFIG['font_family']}; "
+            f"font-size:18px; color:{txt_color}; line-height:1.0;'>"
+            f"<b>{text}</b><br><b>({value:+.1f} pts)</b>"
+            f"</span>"
+        )
+    return (
+        f"<span style='font-family:{STYLE_CONFIG['font_family']}; "
+        f"font-size:18px; color:{txt_color}; line-height:1.0;'>"
+        f"<b>{text}</b> <b>({value:+.1f} pts)</b>"
+        f"</span>"
+    )
 
 # ==========================
 # 1. GAUGE CHART
@@ -78,8 +89,8 @@ def plot_success_gauge(score_val, height=220):
                 "tickvals": [0, 25, 50, 75, 100],
                 "tickfont": {
                     "size": 14,
-                    "color": "#555555",
-                    "family": "Helvetica, Arial, sans-serif",
+                    "color": "#475569",
+                    "family": STYLE_CONFIG["font_family"],
                     "weight": "bold",
                 },
             },
@@ -97,15 +108,15 @@ def plot_success_gauge(score_val, height=220):
 
     fig.add_annotation(
         x=0.5,
-        y=0.25,
+        y=0.35,
         xref="paper",
         yref="paper",
         text=f"<b>{score_val:.1f}</b>",
         showarrow=False,
         font=dict(
-            size=30,
+            size=25,
             color=STYLE_CONFIG["font_color"],
-            family="Helvetica, Arial, sans-serif",
+            family=STYLE_CONFIG["font_family"],
         ),
         xanchor="center",
         yanchor="middle",
@@ -128,7 +139,9 @@ def plot_success_gauge(score_val, height=220):
 def plot_impact_bar(df_pillars, height=240):
     df_plot = df_pillars.copy()
 
-    df_plot['Pillar_Clean'] = df_plot['Pillar'].apply(lambda x: re.sub(r'^\d+\.\s*', '', x))
+    df_plot['Pillar_Clean'] = df_plot['Pillar'].apply(
+        lambda x: f"<b>{re.sub(r'^\\d+\\.\\s*', '', x)}</b>"
+    )
     df_plot = df_plot.sort_values(by='Impact', ascending=True)
 
     max_val = df_plot['Impact'].abs().max()
@@ -180,15 +193,15 @@ def plot_impact_bar(df_pillars, height=240):
             y=row["Pillar_Clean"],
             xref="x",
             yref="y",
-            text=f"{val:+.1f} pts",
+            text=f"<b>{val:+.1f} pts</b>",
             showarrow=False,
             xanchor="left" if val >= 0 else "right",
             yanchor="middle",
             align="left" if val >= 0 else "right",
             font=dict(
-                size=12,
-                color="black",
-                family="Helvetica, Arial, sans-serif"
+                size=13,
+                color="#334155",
+                family=STYLE_CONFIG["font_family"]
             )
         )
 
@@ -196,7 +209,14 @@ def plot_impact_bar(df_pillars, height=240):
     fig.update_layout(
         barmode='relative',
         xaxis=dict(showticklabels=False, range=[-axis_limit, axis_limit], zeroline=False, showgrid=False),
-        yaxis=dict(automargin=True, tickfont=dict(size=12, color="#1f2a38")),
+        yaxis=dict(
+            automargin=True,
+            tickfont=dict(
+                size=13,
+                color="#334155",
+                family=STYLE_CONFIG["font_family"]
+            )
+        ),
         margin=dict(l=10, r=10, t=10, b=10),
         height=height,
         paper_bgcolor="white",
@@ -251,9 +271,11 @@ def plot_treemap(subcat_impacts, pillar_impacts, show_values=True, height=600):
         feat_html = "• " + "<br>• ".join(feat_details) if feat_details else ""
 
         label_html = (
-            f"<span style='font-size:15px; font-weight:bold; color:white'>{subtopic}</span>"
-            f"<br><span style='font-size:14px; color:white'>{impact:+.1f} pts</span>"
-            f"<br><br><span style='font-size:11px; color:white'>{feat_html}</span>"
+            f"<span style='font-family:{STYLE_CONFIG['font_family']}; color:white; line-height:1.05;'>"
+            f"<b style='font-size:15px;'>{subtopic}</b>"
+            f"<br><b style='font-size:14px;'>{impact:+.1f} pts</b>"
+            f"<br><br><span style='font-size:11px; font-weight:500;'>{feat_html}</span>"
+            f"</span>"
         )
 
         leaf_id = f"{parent_id}_{subtopic}"
@@ -284,7 +306,7 @@ def plot_treemap(subcat_impacts, pillar_impacts, show_values=True, height=600):
     fig.update_layout(
         margin=dict(t=34, l=15, r=15, b=15),
         height=height,
-        font=dict(family="Helvetica, Arial, sans-serif"),
+        font=dict(family=STYLE_CONFIG["font_family"], color=STYLE_CONFIG["font_color"]),
         paper_bgcolor='white',
         hovermode=False
     )
