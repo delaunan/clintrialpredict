@@ -48,34 +48,79 @@ def fmt_header(text, value, txt_color="black", split=False):
 # ==========================
 # 1. GAUGE CHART
 # ==========================
+
 def plot_success_gauge(score_val, height=220):
     steps = []
     c = STYLE_CONFIG["colors"]
+
     for i in range(100):
-        if i < 25: color = interpolate_color(c["red_deep"], c["red_soft"], i / 25.0)
-        elif i < 50: color = interpolate_color(c["red_soft"], c["grey_warm"], (i - 25) / 25.0)
-        elif i < 75: color = interpolate_color(c["grey_warm"], c["blue_soft"], (i - 50) / 25.0)
-        else: color = interpolate_color(c["blue_soft"], c["blue_deep"], (i - 75) / 25.0)
-        steps.append({'range': [i, i + 1], 'color': get_rgb_str(color)})
-    for sep in [25, 50, 75]: steps.append({'range': [sep - 0.5, sep + 0.5], 'color': 'white'})
+        if i < 25:
+            color = interpolate_color(c["red_deep"], c["red_soft"], i / 25.0)
+        elif i < 50:
+            color = interpolate_color(c["red_soft"], c["grey_warm"], (i - 25) / 25.0)
+        elif i < 75:
+            color = interpolate_color(c["grey_warm"], c["blue_soft"], (i - 50) / 25.0)
+        else:
+            color = interpolate_color(c["blue_soft"], c["blue_deep"], (i - 75) / 25.0)
+        steps.append({"range": [i, i + 1], "color": get_rgb_str(color)})
+
+    for sep in [25, 50, 75]:
+        steps.append({"range": [sep - 0.5, sep + 0.5], "color": "white"})
 
     fig = go.Figure(go.Indicator(
-        mode="gauge+number", value=score_val,
-        number={"valueformat": ".1f", "font": {"size": 32, "color": STYLE_CONFIG["font_color"], "family": "Helvetica, Arial, sans-serif", "weight": "bold"}},
+        mode="gauge",
+        value=score_val,
         domain={"x": [0, 1], "y": [0, 1]},
         gauge={
-            "axis": {"range": [0, 100], "tickmode": "array", "tickvals": [0, 25, 50, 75, 100], "tickfont": {"size": 14, "color": "#555555", "family": "Helvetica, Arial, sans-serif", "weight": "bold"}},
-            "bar": {"color": "rgba(0,0,0,0)"}, "bgcolor": "white", "borderwidth": 0, "steps": steps,
-            "threshold": {"line": {"color": STYLE_CONFIG["font_color"], "width": 5}, "thickness": 0.75, "value": score_val},
+            "axis": {
+                "range": [0, 100],
+                "tickmode": "array",
+                "tickvals": [0, 25, 50, 75, 100],
+                "tickfont": {
+                    "size": 14,
+                    "color": "#555555",
+                    "family": "Helvetica, Arial, sans-serif",
+                    "weight": "bold",
+                },
+            },
+            "bar": {"color": "rgba(0,0,0,0)"},
+            "bgcolor": "white",
+            "borderwidth": 0,
+            "steps": steps,
+            "threshold": {
+                "line": {"color": STYLE_CONFIG["font_color"], "width": 5},
+                "thickness": 0.75,
+                "value": score_val,
+            },
         },
     ))
+
+    fig.add_annotation(
+        x=0.5,
+        y=0.25,
+        xref="paper",
+        yref="paper",
+        text=f"<b>{score_val:.1f}</b>",
+        showarrow=False,
+        font=dict(
+            size=30,
+            color=STYLE_CONFIG["font_color"],
+            family="Helvetica, Arial, sans-serif",
+        ),
+        xanchor="center",
+        yanchor="middle",
+        align="center",
+    )
+
     fig.update_layout(
         margin=dict(l=35, r=35, t=40, b=10),
         height=height,
         paper_bgcolor="white",
-        hovermode=False
+        hovermode=False,
     )
     return fig
+
+
 
 # ==========================
 # 2. IMPACT BAR CHART

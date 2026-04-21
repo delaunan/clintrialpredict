@@ -2148,7 +2148,7 @@ def render_completion_prediction_tab(row):
                 )
 
                 st.markdown(
-                    f"<div style='text-align:center; font-family:\"Inter\", sans-serif; font-size:1.2rem; font-weight:800; color:#52606d; margin-top:-12px;'>{tier}</div>",
+                    f"<div style='text-align:center; font-family:\"Inter\", sans-serif; font-size:1.1rem; font-weight:800; color:#52606d; margin-top:-35px;'>{tier}</div>",
                     unsafe_allow_html=True
                 )
 
