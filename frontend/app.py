@@ -32,6 +32,9 @@ DATA_PATH = CURRENT_DIR / "data" / "search_registry.csv"
 TAXONOMY_PATH = CURRENT_DIR.parent / "models" / "taxonomy_01.json"
 API_URL = os.getenv("API_URL", "http://localhost:8000/predict")
 ID_COL = "nct_id"
+DETAIL_TAB_INFO = "Trial Information"
+DETAIL_TAB_POPULATION = "Population Details"
+DETAIL_TAB_SCORE = "Completion Score"
 
 
 # --- BRANDING CONSTANTS ---
@@ -1091,6 +1094,11 @@ def init_session_state():
         "s_mode": "",
         "s_detail": "",
         "global_edit_mode": False,
+        "detail_completion_tab_visible": False,
+        "detail_prediction_notice": False,
+        "detail_active_tab": DETAIL_TAB_INFO,
+        "detail_last_nonscore_tab": DETAIL_TAB_INFO,
+        "detail_tab_default_request": None,
     }
     for key, val in defaults.items():
         if key not in st.session_state:
@@ -1125,6 +1133,41 @@ def clear_prediction_state():
     st.session_state.trigger_prediction = False
     st.session_state.analysis_result = None
     st.session_state.analysis_nct_id = None
+
+def hide_completion_score_tab():
+    current_tab = st.session_state.get("detail_active_tab", DETAIL_TAB_INFO)
+    fallback_tab = st.session_state.get("detail_last_nonscore_tab", DETAIL_TAB_INFO)
+
+    if fallback_tab not in {DETAIL_TAB_INFO, DETAIL_TAB_POPULATION}:
+        fallback_tab = DETAIL_TAB_INFO
+
+    st.session_state.detail_completion_tab_visible = False
+    st.session_state.detail_prediction_notice = False
+    st.session_state.detail_tab_default_request = None
+
+    if current_tab == DETAIL_TAB_SCORE:
+        st.session_state.detail_active_tab = fallback_tab
+    elif current_tab in {DETAIL_TAB_INFO, DETAIL_TAB_POPULATION}:
+        st.session_state.detail_active_tab = current_tab
+    else:
+        st.session_state.detail_active_tab = fallback_tab
+
+
+def show_completion_score_tab():
+    st.session_state.detail_completion_tab_visible = True
+    st.session_state.detail_prediction_notice = False
+    st.session_state.detail_active_tab = DETAIL_TAB_SCORE
+    st.session_state.detail_tab_default_request = DETAIL_TAB_SCORE
+
+def handle_predict_trial_completion():
+    if st.session_state.get("global_edit_mode", False):
+        hide_completion_score_tab()
+        st.session_state.detail_prediction_notice = True
+        st.session_state.trigger_prediction = False
+        return
+
+    show_completion_score_tab()
+    st.session_state.trigger_prediction = True
 
 
 def reset_trial_editor_state():
@@ -1184,6 +1227,8 @@ def reset_trial_editor_state():
 
 
 def handle_global_edit_toggle():
+    hide_completion_score_tab()
+
     if not st.session_state.get("global_edit_mode", False):
         reset_trial_editor_state()
 
@@ -1212,6 +1257,7 @@ def go_back_to_results():
     restore_search_state()
     st.session_state.selected_nct_id = None
     clear_prediction_state()
+    hide_completion_score_tab()
     st.session_state.global_edit_mode = False
 
 
@@ -1318,13 +1364,13 @@ def render_header(is_landing=True, show_predict_button=False, show_back_button=F
 
                 with c_predict:
                     if show_predict_button:
-                        if st.button(
+                        st.button(
                             "Predict Trial Completion",
                             use_container_width=True,
                             type="primary",
-                            key="header_predict_btn"
-                        ):
-                            st.session_state.trigger_prediction = True
+                            key="header_predict_btn",
+                            on_click=handle_predict_trial_completion
+                        )
 
 
 
@@ -1602,6 +1648,8 @@ def open_trial_third_ui(selected_id):
     snapshot_search_state()
     st.session_state.selected_nct_id = selected_id
     clear_prediction_state()
+    hide_completion_score_tab()
+    st.session_state.global_edit_mode = False
     st.rerun()
 
 
@@ -2008,14 +2056,41 @@ def render_trial_top_strip_refined(row):
 def render_trial_detail_tabs_refined(row):
     render_trial_top_strip_refined(row)
 
-    with st.container(key="trial_detail_tabs"):
-        tab1, tab2, tab3 = st.tabs([
-            "Trial Information",
-            "Population Details",
-            "Completion Score"
-        ])
+    tab_labels = [DETAIL_TAB_INFO, DETAIL_TAB_POPULATION]
+    if st.session_state.get("detail_completion_tab_visible", False):
+        tab_labels.append(DETAIL_TAB_SCORE)
 
-        with tab1:
+    if st.session_state.get("detail_active_tab") not in tab_labels:
+        st.session_state.detail_active_tab = st.session_state.get(
+            "detail_last_nonscore_tab",
+            DETAIL_TAB_INFO
+        )
+
+    if st.session_state.get("detail_prediction_notice", False):
+        st.warning("Contact owner to know more and try out simulation mode")
+
+    tabs_kwargs = {
+        "key": "detail_active_tab",
+        "on_change": "rerun",
+    }
+
+    forced_default = st.session_state.get("detail_tab_default_request")
+    if forced_default in tab_labels:
+        tabs_kwargs["default"] = forced_default
+
+    with st.container(key="trial_detail_tabs"):
+        tabs = st.tabs(tab_labels, **tabs_kwargs)
+        tab_map = dict(zip(tab_labels, tabs))
+
+        current_tab = st.session_state.get("detail_active_tab", DETAIL_TAB_INFO)
+        if current_tab in {DETAIL_TAB_INFO, DETAIL_TAB_POPULATION}:
+            st.session_state.detail_last_nonscore_tab = current_tab
+
+        if forced_default in tab_labels:
+            st.session_state.detail_tab_default_request = None
+            st.rerun()
+
+        with tab_map[DETAIL_TAB_INFO]:
 
             left_col, middle_col, right_col = st.columns([0.82, 2.88, 0.82], gap="xsmall")
 
@@ -2067,7 +2142,7 @@ def render_trial_detail_tabs_refined(row):
                     panel_suffix="design_block"
                 )
 
-        with tab2:
+        with tab_map[DETAIL_TAB_POPULATION]:
             left_col, right_col = st.columns([3.70, 0.82], gap="xsmall")
 
             with left_col:
@@ -2082,8 +2157,9 @@ def render_trial_detail_tabs_refined(row):
             with right_col:
                 render_population_side_panel(row)
 
-        with tab3:
-            render_completion_prediction_tab(row)
+        if DETAIL_TAB_SCORE in tab_map:
+            with tab_map[DETAIL_TAB_SCORE]:
+                render_completion_prediction_tab(row)
 
 
 def get_analysis_result_for_selected_trial(row):
@@ -2236,7 +2312,7 @@ if not st.session_state.selected_nct_id:
                 <div class="right-column-stack">
                     <div class="highlight-box">
                         <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-                            <div class="highlight-title">Industry-Scale Clinical Data</div>
+                            <div class="highlight-title">Industry-Scale Public Clinical Data</div>
                             <div style="font-size:0.65rem; font-weight:800; color:#94a3b8; text-transform:uppercase; letter-spacing:0.1em;">Intelligence Source</div>
                         </div>
                         <div class="highlight-text">Built on the publicly available <b>AACT registry</b>, this machine learning system leverages execution patterns from <b>30,000+ Phase II and III trials</b> since 2005. The analytical scope focuses on <b>late-stage studies</b>, where strategic and financial stakes are highest.</div>
