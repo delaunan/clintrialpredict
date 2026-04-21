@@ -140,7 +140,7 @@ def plot_impact_bar(df_pillars, height=240):
 
     for i in range(n_slices):
         pos = i * SLICE_STEP
-        widths, colors, texts = [], [], []
+        widths, colors = [], []
         for _, row in df_plot.iterrows():
             val = row['Impact']
             abs_v = abs(val)
@@ -149,7 +149,7 @@ def plot_impact_bar(df_pillars, height=240):
             else: w, is_tip = SLICE_STEP, False
 
             widths.append(-w if val < 0 else w)
-            texts.append(f"{val:+.1f} pts" if is_tip else None)
+
 
             ratio = min((pos + abs(w)/2) / GLOBAL_MAX_SCALE, 1.0) ** 0.5
             if val >= 0:
@@ -165,17 +165,37 @@ def plot_impact_bar(df_pillars, height=240):
             orientation='h',
             width=BAR_WIDTH,
             marker=dict(color=colors, line=dict(width=0)),
-            text=texts,
-            textposition='outside',
-            textfont=dict(size=12, color="black"),
+
             hoverinfo='skip',
             showlegend=False
         ))
 
+    label_offset = max(limit * 0.05, 0.35)
+    axis_limit = limit + label_offset + 0.35
+
+    for _, row in df_plot.iterrows():
+        val = row["Impact"]
+        fig.add_annotation(
+            x=val + label_offset if val >= 0 else val - label_offset,
+            y=row["Pillar_Clean"],
+            xref="x",
+            yref="y",
+            text=f"{val:+.1f} pts",
+            showarrow=False,
+            xanchor="left" if val >= 0 else "right",
+            yanchor="middle",
+            align="left" if val >= 0 else "right",
+            font=dict(
+                size=12,
+                color="black",
+                family="Helvetica, Arial, sans-serif"
+            )
+        )
+
     fig.add_vline(x=0, line_width=1, line_color="#333333")
     fig.update_layout(
         barmode='relative',
-        xaxis=dict(showticklabels=False, range=[-limit, limit], zeroline=False, showgrid=False),
+        xaxis=dict(showticklabels=False, range=[-axis_limit, axis_limit], zeroline=False, showgrid=False),
         yaxis=dict(automargin=True, tickfont=dict(size=12, color="#1f2a38")),
         margin=dict(l=10, r=10, t=10, b=10),
         height=height,
