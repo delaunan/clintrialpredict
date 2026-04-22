@@ -240,8 +240,7 @@ def inject_custom_styles():
             }}
 
             div[data-baseweb="select"] > div,
-            div[data-baseweb="input"] > div,
-            div[data-baseweb="base-input"] > div {{
+            div[data-baseweb="input"] > div {{
                 background-color: var(--ui-field-bg) !important;
                 border: var(--ui-control-border) !important;
                 border-radius: var(--ui-control-radius) !important;
@@ -312,8 +311,7 @@ def inject_custom_styles():
             }}
 
             [data-testid="stTextInputRootElement"]:has(input:disabled),
-            div[data-baseweb="input"]:has(input:disabled) > div,
-            div[data-baseweb="base-input"]:has(input:disabled) > div {{
+            div[data-baseweb="input"]:has(input:disabled) > div {{
                 background-color: var(--ui-field-bg) !important;
                 opacity: 1 !important;
                 cursor: default !important;
@@ -756,8 +754,7 @@ def inject_custom_styles():
 
 
             .st-key-trial_meta_inner div[data-baseweb="select"] > div,
-            .st-key-trial_meta_inner div[data-baseweb="input"] > div,
-            .st-key-trial_meta_inner div[data-baseweb="base-input"] > div {{
+            .st-key-trial_meta_inner div[data-baseweb="input"] > div {{
                 min-height: var(--ui-meta-inline-control-h) !important;
                 height: var(--ui-meta-inline-control-h) !important;
                 display: flex !important;
@@ -810,8 +807,7 @@ def inject_custom_styles():
             }}
 
             [class*="st-key-summary_side_inner_"] div[data-baseweb="select"] > div,
-            [class*="st-key-summary_side_inner_"] div[data-baseweb="input"] > div,
-            [class*="st-key-summary_side_inner_"] div[data-baseweb="base-input"] > div {{
+            [class*="st-key-summary_side_inner_"] div[data-baseweb="input"] > div {{
                 min-height: var(--ui-meta-inline-control-h) !important;
                 height: var(--ui-meta-inline-control-h) !important;
                 display: flex !important;
@@ -943,10 +939,8 @@ def inject_custom_styles():
             .st-key-trial_title_shell [data-testid="stTextArea"] [data-baseweb="textarea"],
             .st-key-trial_top_strip div[data-baseweb="select"] > div,
             .st-key-trial_top_strip div[data-baseweb="input"] > div,
-            .st-key-trial_top_strip div[data-baseweb="base-input"] > div,
             [class*="st-key-summary_side_inner_"] div[data-baseweb="select"] > div,
             [class*="st-key-summary_side_inner_"] div[data-baseweb="input"] > div,
-            [class*="st-key-summary_side_inner_"] div[data-baseweb="base-input"] > div,
             [class*="st-key-summary_side_inner_"] [data-testid="stTextArea"] [data-baseweb="textarea"] {{
                 box-shadow: 0 1px 4px rgba(0,0,0,0.05) !important;
             }}
