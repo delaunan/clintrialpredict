@@ -201,7 +201,7 @@ async def predict(request: Request):
             # Ensure -0.0 becomes 0.0 for clean UI
             if rounded_imp == -0.0: rounded_imp = 0.0
             
-            pillar_totals[p] += rounded_imp
+            pillar_totals[p] = round(pillar_totals[p] + rounded_imp, 1)
             
             # Narrative lookup
             narrative = ""
@@ -221,7 +221,7 @@ async def predict(request: Request):
 
         # STEP B: Robust Parity Alignment (Residual Absorption)
         # 1. Calculate the raw sum and clipped score
-        total_impact_points = sum(v for p, v in pillar_totals.items() if p != "Metadata")
+        total_impact_points = round(sum(v for p, v in pillar_totals.items() if p != "Metadata"), 1)
         final_score = round(np.clip(50.0 + total_impact_points, 1.0, 99.0), 1)
 
         # 2. Calculate the residual (the difference created by clipping)
@@ -240,13 +240,18 @@ async def predict(request: Request):
             for sub in final_subcats:
                 if sub["Pillar"] == anchor_pillar and sub["Subcategory"] == anchor_subcat:
                     sub["Impact"] = round(sub["Impact"] + residual, 1)
+                    if sub["Impact"] == -0.0: sub["Impact"] = 0.0
                     break
+
+        # Final cleanup for -0.0 across all pillars
+        for p in pillar_totals:
+            if pillar_totals[p] == -0.0: pillar_totals[p] = 0.0
         
         return {
             "score": final_score,
             "threshold": 50.0,
             "pillar_impacts": [
-                {"Pillar": p, "Impact": round(v, 1)} 
+                {"Pillar": p, "Impact": v} 
                 for p, v in pillar_totals.items() if p != "Metadata"
             ],
             "subcat_impacts": final_subcats,

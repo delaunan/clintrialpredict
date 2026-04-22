@@ -412,7 +412,7 @@ PIPELINE_REGISTRY = {
                 "label": "Sponsor Type",
                 "pillar": "Execution Framework",
                 "subgroup": "Trial Complexity Footprint",
-                "priority": 20.9,
+                "priority": 23.0,
                 "options": [
                     ["TIER 1", "Top-Tier Pharma"],
                     ["MID_CAP", "Mid-Cap Pharma"],
@@ -554,7 +554,7 @@ PIPELINE_REGISTRY = {
                 "label": "Maximum Primary Endpoint Duration",
                 "pillar": "Execution Framework",
                 "subgroup": "Trial Complexity Footprint",
-                "priority": 21
+                "priority": 24.0
             },
             "encoding": "numeric"
         },
@@ -563,7 +563,7 @@ PIPELINE_REGISTRY = {
                 "label": "Number of Arms",
                 "pillar": "Execution Framework",
                 "subgroup": "Trial Complexity Footprint",
-                "priority": 22
+                "priority": 22.0
             },
             "encoding": "numeric"
         },
@@ -572,7 +572,7 @@ PIPELINE_REGISTRY = {
                 "label": "Delivery Profile",
                 "pillar": "Execution Framework",
                 "subgroup": "Trial Complexity Footprint",
-                "priority": 23,
+                "priority": 21.0,
                 "options": [
                     ["SIMPLE_ORAL", "Simple Oral (Pill/Tablet)"],
                     ["ROUTINE_INFUSION", "Routine (Injection/IV)"],

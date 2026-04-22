@@ -110,21 +110,53 @@ def refresh_registry():
         threshold_logit = float(ta_threshold_logits.get(ta, global_threshold_logit))
         sub_sums_raw = {}
         
+        # Aggregate raw impacts
         for i, (p, s) in feat_to_subcat.items():
             sub_sums_raw[(p, s)] = sub_sums_raw.get((p, s), 0.0) + (-float(shap_vals[i]) * gain_factor)
 
+        # Unmapped Signals
         unmapped_indices = set(range(len(shap_vals))) - mapped_indices
         unmapped_impact = sum(-float(shap_vals[i]) * gain_factor for i in unmapped_indices)
-        sub_sums_raw[("Therapeutic Context", "Other Model Signals")] = sub_sums_raw.get(("Therapeutic Context", "Other Model Signals"), 0.0) + unmapped_impact
-        sub_sums_raw[("Therapeutic Context", "Therapeutic Area Profile")] = sub_sums_raw.get(("Therapeutic Context", "Therapeutic Area Profile"), 0.0) + (threshold_logit - intercept) * gain_factor
+        if unmapped_impact != 0:
+            key = ("Therapeutic Context", "Other Model Signals")
+            sub_sums_raw[key] = sub_sums_raw.get(key, 0.0) + unmapped_impact
         
+        # Calibration Offset
+        cal_key = ("Therapeutic Context", "Therapeutic Area Profile")
+        sub_sums_raw[cal_key] = sub_sums_raw.get(cal_key, 0.0) + (threshold_logit - intercept) * gain_factor
+        
+        # STEP A: Round subcategories to 1 decimal point
+        subcat_impacts_rounded = {k: round(v, 1) for k, v in sub_sums_raw.items()}
+        for k, v in subcat_impacts_rounded.items():
+            if v == -0.0: subcat_impacts_rounded[k] = 0.0
+            
+        # STEP B: Sum rounded subcategories to pillars
         p_totals = {p: 0.0 for p in pillars}
-        for (pk, sk), val in sub_sums_raw.items():
-            p_totals[pk] += round(val, 1)
+        for (pk, sk), val in subcat_impacts_rounded.items():
+            if pk in p_totals:
+                p_totals[pk] += val
         
-        score = round(50.0 + sum(p_totals.values()), 1)
-        all_scores.append(score)
-        all_zones.append("High Risk" if score < 25 else "Watchlist" if score < 50 else "Favorable" if score < 75 else "Low Risk")
+        # ROBUST PARITY ALIGNMENT
+        # 1. Calculate raw sum and clipped score
+        total_impact_points = sum(p_totals.values())
+        final_score = round(np.clip(50.0 + total_impact_points, 1.0, 99.0), 1)
+
+        # 2. Calculate the residual
+        residual = round((final_score - 50.0) - total_impact_points, 1)
+
+        # 3. Absorb residual into anchor pillar
+        anchor_pillar = "Therapeutic Context"
+        if anchor_pillar in p_totals:
+            p_totals[anchor_pillar] = round(p_totals[anchor_pillar] + residual, 1)
+            if p_totals[anchor_pillar] == -0.0: p_totals[anchor_pillar] = 0.0
+        
+        # Final cleanup for all pillars
+        for p in p_totals:
+            p_totals[p] = round(p_totals[p], 1)
+            if p_totals[p] == -0.0: p_totals[p] = 0.0
+
+        all_scores.append(final_score)
+        all_zones.append("High Risk" if final_score < 25 else "Watchlist" if final_score < 50 else "Favorable" if final_score < 75 else "Low Risk")
         for p in pillars: pillar_scores[p].append(p_totals[p])
 
     df_full['Clinical_Score'] = all_scores
@@ -144,7 +176,8 @@ def refresh_registry():
     registry_fields = list(PIPELINE_REGISTRY["FIELDS"].keys())
     calculated_artifacts = [
         'Clinical_Score', 'Zone', 'is_correct', 'ui_search_label', 'Internal_Score_Raw',
-        'Therapeutic Context', 'Scientific Challenge', 'Execution Framework', 'Patient Profile'
+        'Therapeutic Context', 'Scientific Challenge', 'Execution Framework', 'Patient Profile',
+        'therapeutic_context', 'therapeutic_area'
     ]
     ui_derived = [c for c in df_full.columns if c.endswith('_ui')]
     
