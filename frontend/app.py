@@ -65,6 +65,33 @@ TEXTAREA_HEIGHTS = {
     "completion_prediction_right": 430,
 }
 
+TRIAL_EDITOR_FIELD_IDS = [
+    "lead_sponsor_canonical",
+    "start_date",
+    "therapeutic_area_ml",
+    "phase_ml",
+    "allocation_ml",
+    "intervention_model_ml",
+    "number_of_arms_ml",
+    "masking_ml",
+    "has_placebo_ml",
+    "has_dmc_ml",
+    "healthy_volunteers_ml",
+    "minimum_age",
+    "maximum_age",
+    "gender_ml",
+]
+
+TRIAL_EDITOR_TEXT_FIELDS = {
+    "top_title": ("title",),
+    "study_summary": ("summary_ui",),
+    "conditions": ("conditions_ui",),
+    "interventions": ("interventions_ui",),
+    "primary_outcomes": ("primary_outcomes_ui",),
+    "eligibility_criteria": ("criteria_ui",),
+}
+
+AGGRID_WRAPPER_SHADOW = "-6px 6px 12px -3px rgba(0,0,0,0.12)"
 
 # ==========================
 # 2. STYLES (Consolidated)
@@ -90,19 +117,6 @@ def inject_custom_styles():
             }
         """
 
-    if is_landing or is_detail:
-        hide_sidebar_style = """
-            [data-testid="stSidebar"] {
-                display: none !important;
-            }
-            [data-testid="collapsedControl"] {
-                display: none !important;
-            }
-            .stApp [data-testid="stHeader"] {
-                left: 0 !important;
-                width: 100% !important;
-            }
-        """
 
     debug_overlay_css = """
             /* =========================
@@ -135,6 +149,11 @@ def inject_custom_styles():
     is_edit = st.session_state.get("global_edit_mode", False)
     field_bg = "#ffffff" if is_edit else "#f8fafc"
     field_text = "#334155" if is_edit else "#64748b"
+    shell_shadow = "0 1px 4px rgba(0,0,0,0.05)" if is_detail else "-6px 6px 12px -3px rgba(0,0,0,0.12)"
+    textarea_shadow = "0 1px 4px rgba(0,0,0,0.05)" if is_detail else "-4px 4px 10px -4px rgba(0,0,0,0.10)"
+    button_primary_shadow = "-4px 4px 10px -3px rgba(0,0,0,0.18)"
+    button_hover_shadow = "0 8px 20px rgba(0,0,0,0.2)"
+    selected_tab_shadow = "-4px 4px 10px -4px rgba(0,0,0,0.10)"
 
 
 
@@ -187,6 +206,12 @@ def inject_custom_styles():
                 --ui-summary-tab-top-pad: 8px;
                 --ui-summary-row-overlap: -8px;
                 --ui-population-bottom-extension: 148px;
+
+                --ui-shell-shadow: {shell_shadow};
+                --ui-textarea-shadow: {textarea_shadow};
+                --ui-button-primary-shadow: {button_primary_shadow};
+                --ui-button-hover-shadow: {button_hover_shadow};
+                --ui-selected-tab-shadow: {selected_tab_shadow};
 
             }}
 
@@ -333,7 +358,7 @@ def inject_custom_styles():
                 border: 1px solid var(--panel-border) !important;
                 border-radius: 14px !important;
                 padding: 22px 24px 28px 24px !important;
-                box-shadow: -6px 6px 12px -3px rgba(0,0,0,0.12) !important;
+                box-shadow: var(--ui-shell-shadow) !important;
                 margin-bottom: 0rem !important;
             }}
 
@@ -346,7 +371,7 @@ def inject_custom_styles():
                 border: 1px solid var(--panel-border) !important;
                 border-radius: 14px !important;
                 padding: 12px 25px 18px 25px !important;
-                box-shadow: -6px 6px 12px -3px rgba(0,0,0,0.12) !important;
+                box-shadow: var(--ui-shell-shadow) !important;
                 margin-top: 0 !important;
                 margin-bottom: 4px !important;
             }}
@@ -503,7 +528,7 @@ def inject_custom_styles():
                 border: 1px solid #cbd5e1 !important;
                 border-radius: 10px !important;
                 background-color: var(--ui-field-bg) !important;
-                box-shadow: -4px 4px 10px -4px rgba(0,0,0,0.10) !important;
+                box-shadow: var(--ui-textarea-shadow) !important;
                 overflow: hidden !important;
             }}
 
@@ -550,7 +575,7 @@ def inject_custom_styles():
             /* Boxes & Highlights */
             .highlight-box {{
                 background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 14px;
-                padding: 24px; box-shadow: -6px 6px 12px -3px rgba(0,0,0,0.12) !important;
+                padding: 24px; box-shadow: var(--ui-shell-shadow) !important;
                 height: 100%;
             }}
 
@@ -567,12 +592,12 @@ def inject_custom_styles():
             .title-box-container {{
                 background: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px;
                 padding: 15px 18px; margin-top: 15px; margin-bottom: 25px; line-height: 1.6;
-                font-weight: 500; box-shadow: -6px 6px 12px -3px rgba(0,0,0,0.12) !important;
+                font-weight: 500; box-shadow: var(--ui-shell-shadow) !important;
             }}
             .pillar-val-box {{
                 background:#ffffff; padding:10px; border:1px solid #cbd5e1; border-radius:6px;
                 font-size:0.9rem; color:#334155 !important; min-height:40px; margin-bottom:15px;
-                box-shadow: -6px 6px 12px -3px rgba(0,0,0,0.12) !important;
+                box-shadow: var(--ui-shell-shadow) !important;
             }}
 
             /* HEADER RIGHT COLUMN TIGHT WRAPPERS */
@@ -676,13 +701,13 @@ def inject_custom_styles():
                 border: 1.5px solid #52606d !important;
                 background-color: #52606d !important;
                 color: #ffffff !important;
-                box-shadow: -4px 4px 10px -3px rgba(0,0,0,0.18) !important;
+                box-shadow: var(--ui-button-primary-shadow) !important;
             }}
 
             .stButton > button:hover {{
                 background-color: #334155 !important;
                 border-color: #1e293b !important;
-                box-shadow: 0 8px 20px rgba(0,0,0,0.2) !important;
+                box-shadow: var(--ui-button-hover-shadow) !important;
                 transform: scale(1.02) translateY(-2px) !important;
             }}
 
@@ -719,7 +744,7 @@ def inject_custom_styles():
                 background-color: #e2e8f0 !important;
                 border: 1px solid #cbd5e1 !important;
                 border-radius: 14px !important;
-                box-shadow: -6px 6px 12px -3px rgba(0,0,0,0.12) !important;
+                box-shadow: var(--ui-shell-shadow) !important;
                 margin: 0 !important;
                 padding: 0 !important;
             }}
@@ -773,7 +798,7 @@ def inject_custom_styles():
                 background-color: #ffffff !important;
                 border: 1px solid #e2e8f0 !important;
                 border-radius: 14px !important;
-                box-shadow: -6px 6px 12px -3px rgba(0,0,0,0.12) !important;
+                box-shadow: var(--ui-shell-shadow) !important;
                 margin: 0 !important;
                 padding: 0 !important;
             }}
@@ -886,7 +911,7 @@ def inject_custom_styles():
                 background-color: #e2e8f0 !important;
                 border: 1px solid #cbd5e1 !important;
                 border-radius: 14px !important;
-                box-shadow: -6px 6px 12px -3px rgba(0,0,0,0.12) !important;
+                box-shadow: var(--ui-shell-shadow) !important;
                 margin: 0 !important;
                 padding:
                     var(--ui-meta-shell-pad-top)
@@ -932,18 +957,7 @@ def inject_custom_styles():
             }}
 
 
-            /* PREDICT TRIAL COMPLETION — REMOVE ALL BOX SHADOWS */
-            .st-key-trial_title_shell,
-            .st-key-trial_meta_shell,
-            [class*="st-key-summary_side_shell_"],
-            .st-key-trial_title_shell [data-testid="stTextArea"] [data-baseweb="textarea"],
-            .st-key-trial_top_strip div[data-baseweb="select"] > div,
-            .st-key-trial_top_strip div[data-baseweb="input"] > div,
-            [class*="st-key-summary_side_inner_"] div[data-baseweb="select"] > div,
-            [class*="st-key-summary_side_inner_"] div[data-baseweb="input"] > div,
-            [class*="st-key-summary_side_inner_"] [data-testid="stTextArea"] [data-baseweb="textarea"] {{
-                box-shadow: 0 1px 4px rgba(0,0,0,0.05) !important;
-            }}
+
 
             /* DETAIL TABS */
             .st-key-trial_detail_tabs {{
@@ -994,7 +1008,7 @@ def inject_custom_styles():
                 color: #ffffff !important;
                 font-weight: 400 !important;
                 line-height: 1 !important;
-                box-shadow: -4px 4px 10px -4px rgba(0,0,0,0.10) !important;
+                box-shadow: var(--ui-selected-tab-shadow) !important;
             }}
 
             .st-key-trial_detail_tabs .stTabs [aria-selected="true"] p,
@@ -1219,15 +1233,13 @@ def start_search():
     st.session_state.selected_nct_id = None
 
 
-def clear_prediction_state():
+def reset_detail_prediction_state():
     st.session_state.trigger_prediction = False
     st.session_state.analysis_result = None
     st.session_state.analysis_nct_id = None
-
-def hide_completion_score_tab():
     st.session_state.detail_completion_tab_visible = False
     st.session_state.detail_prediction_notice = False
-    st.session_state.trigger_prediction = False
+
 
 
 def show_completion_score_tab():
@@ -1238,9 +1250,8 @@ def handle_predict_trial_completion():
     start_ui_busy("Updating completion score view...")
 
     if st.session_state.get("global_edit_mode", False):
-        hide_completion_score_tab()
+        reset_detail_prediction_state()
         st.session_state.detail_prediction_notice = True
-        st.session_state.trigger_prediction = False
         return
 
     show_completion_score_tab()
@@ -1259,24 +1270,8 @@ def reset_trial_editor_state():
     row = selected_df.iloc[0]
     trial_key = selected_id
 
-    field_ids = [
-        "lead_sponsor_canonical",
-        "start_date",
-        "therapeutic_area_ml",
-        "phase_ml",
-        "allocation_ml",
-        "intervention_model_ml",
-        "number_of_arms_ml",
-        "masking_ml",
-        "has_placebo_ml",
-        "has_dmc_ml",
-        "healthy_volunteers_ml",
-        "minimum_age",
-        "maximum_age",
-        "gender_ml",
-    ]
 
-    for field_id in field_ids:
+    for field_id in TRIAL_EDITOR_FIELD_IDS:
         state_key = f"input_{trial_key}_{field_id}"
 
         if field_id in {"has_placebo_ml", "has_dmc_ml"}:
@@ -1289,23 +1284,14 @@ def reset_trial_editor_state():
 
         st.session_state[state_key] = initial_val
 
-    text_map = {
-        "top_title": trial_val(row, "title"),
-        "study_summary": trial_val(row, "summary_ui"),
-        "conditions": trial_val(row, "conditions_ui"),
-        "interventions": trial_val(row, "interventions_ui"),
-        "primary_outcomes": trial_val(row, "primary_outcomes_ui"),
-        "eligibility_criteria": trial_val(row, "criteria_ui"),
-    }
-
-    for suffix, value in text_map.items():
+    for suffix, candidates in TRIAL_EDITOR_TEXT_FIELDS.items():
         state_key = f"text_{trial_key}_{suffix}"
+        value = trial_val(row, *candidates)
         st.session_state[state_key] = "" if value == "N/A" else str(value)
-
 
 def handle_global_edit_toggle():
     start_ui_busy("Updating view...")
-    hide_completion_score_tab()
+    reset_detail_prediction_state()
 
     if not st.session_state.get("global_edit_mode", False):
         reset_trial_editor_state()
@@ -1335,8 +1321,7 @@ def go_back_to_results():
     start_ui_busy("Returning to results...")
     restore_search_state()
     st.session_state.selected_nct_id = None
-    clear_prediction_state()
-    hide_completion_score_tab()
+    reset_detail_prediction_state()
     st.session_state.global_edit_mode = False
 
 
@@ -1613,7 +1598,7 @@ def render_trials_grid(df):
             ".ag-root-wrapper": {
                 "border": "1px solid #cbd5e1",
                 "border-radius": "12px",
-                "box-shadow": "-6px 6px 12px -3px rgba(0,0,0,0.12)"
+                "box-shadow": AGGRID_WRAPPER_SHADOW
             },
             ".ag-header": {
                 "background-color": "#e2e8f0 !important"
@@ -1728,8 +1713,7 @@ def open_trial_third_ui(selected_id):
     start_ui_busy("Opening trial...")
     snapshot_search_state()
     st.session_state.selected_nct_id = selected_id
-    clear_prediction_state()
-    hide_completion_score_tab()
+    reset_detail_prediction_state()
     st.session_state.global_edit_mode = False
     st.rerun()
 
@@ -1790,6 +1774,19 @@ def _init_trial_field_state(field_id, row):
     return state_key, initial_val, options
 
 
+def _resolve_field_labels(state_key, initial_val, options):
+    labels = [opt[1] for opt in options]
+    current_value = st.session_state.get(state_key, initial_val)
+
+    if current_value not in labels and current_value not in (None, "", "N/A"):
+        labels = [current_value] + labels
+
+    selected_index = labels.index(current_value) if current_value in labels else 0
+    return labels, selected_index
+
+
+
+
 def _render_labeled_trial_field(label, field_id, row, layout="stack", key_suffix=""):
     state_key, initial_val, options = _init_trial_field_state(field_id, row)
     token = _field_token(field_id, key_suffix=key_suffix)
@@ -1837,13 +1834,7 @@ def _render_two_state_field_control(label, state_key, initial_val, options, cont
 
     with st.container(key=control_key):
         if options:
-            labels = [opt[1] for opt in options]
-            current_value = st.session_state.get(state_key, initial_val)
-
-            if current_value not in labels and current_value not in (None, "", "N/A"):
-                labels = [current_value] + labels
-
-            selected_index = labels.index(current_value) if current_value in labels else 0
+            labels, selected_index = _resolve_field_labels(state_key, initial_val, options)
 
             if is_edit:
                 st.selectbox(
@@ -1904,13 +1895,7 @@ def _render_native_meta_field(label, field_id, row, key_suffix=""):
         is_edit = st.session_state.get("global_edit_mode", False)
 
         if options:
-            labels = [opt[1] for opt in options]
-            current_value = st.session_state.get(state_key, initial_val)
-
-            if current_value not in labels and current_value not in (None, "", "N/A"):
-                labels = [current_value] + labels
-
-            selected_index = labels.index(current_value) if current_value in labels else 0
+            labels, selected_index = _resolve_field_labels(state_key, initial_val, options)
 
             if is_edit:
                 st.selectbox(
