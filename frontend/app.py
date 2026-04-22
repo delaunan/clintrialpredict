@@ -135,6 +135,13 @@ def inject_custom_styles():
     is_edit = st.session_state.get("global_edit_mode", False)
     field_bg = "#ffffff" if is_edit else "#f8fafc"
     field_text = "#334155" if is_edit else "#64748b"
+    completion_tab_hide_css = ""
+    if not st.session_state.get("detail_completion_tab_visible", False):
+        completion_tab_hide_css = """
+            .st-key-trial_detail_tabs .stTabs [data-baseweb="tab-list"] [data-baseweb="tab"]:nth-of-type(3) {
+                display: none !important;
+            }
+        """
 
 
     st.markdown(f"""
@@ -1026,7 +1033,7 @@ def inject_custom_styles():
             .st-key-trial_detail_tabs .st-key-completion_prediction_top_row {{
                 margin-bottom: var(--ui-summary-row-overlap) !important;
             }}
-
+            {completion_tab_hide_css}
             {debug_overlay_css}
 
 
@@ -1098,11 +1105,105 @@ def init_session_state():
         "detail_prediction_notice": False,
         "detail_active_tab": DETAIL_TAB_INFO,
         "detail_last_nonscore_tab": DETAIL_TAB_INFO,
-        "detail_tab_default_request": None,
+        "ui_busy": False,
+        "ui_busy_message": "Loading...",
     }
     for key, val in defaults.items():
         if key not in st.session_state:
             st.session_state[key] = val
+
+
+
+def start_ui_busy(message="Updating view..."):
+    st.session_state.ui_busy = True
+    st.session_state.ui_busy_message = message
+
+
+def render_ui_busy_overlay():
+    if not st.session_state.get("ui_busy", False):
+        return
+
+    safe_message = html.escape(st.session_state.get("ui_busy_message", "Updating view..."))
+
+    st.markdown(
+        """
+        <style>
+            .app-busy-overlay {
+                position: fixed;
+                inset: 0;
+                z-index: 999999;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                background: rgba(241, 245, 249, 0.74);
+                backdrop-filter: blur(6px) saturate(115%);
+                -webkit-backdrop-filter: blur(6px) saturate(115%);
+                pointer-events: all;
+                opacity: 1;
+                visibility: visible;
+                animation: appBusyFadeOut 0.24s ease-out 0.62s forwards;
+            }
+
+            .app-busy-card {
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                padding: 12px 16px;
+                min-width: 220px;
+                max-width: 360px;
+                border-radius: 16px;
+                background: rgba(255, 255, 255, 0.88);
+                border: 1px solid rgba(203, 213, 225, 0.95);
+                box-shadow:
+                    0 10px 30px rgba(15, 23, 42, 0.08),
+                    0 2px 8px rgba(15, 23, 42, 0.04);
+                color: #334155;
+                font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+                font-size: 0.88rem;
+                font-weight: 600;
+                letter-spacing: -0.01em;
+            }
+
+            .app-busy-spinner {
+                width: 16px;
+                height: 16px;
+                border-radius: 999px;
+                border: 2px solid rgba(148, 163, 184, 0.30);
+                border-top-color: #52606d;
+                animation: appBusySpin 0.8s linear infinite;
+                flex-shrink: 0;
+            }
+
+            .app-busy-text {
+                color: #475569;
+                white-space: nowrap;
+            }
+
+            @keyframes appBusySpin {
+                to { transform: rotate(360deg); }
+            }
+
+            @keyframes appBusyFadeOut {
+                to {
+                    opacity: 0;
+                    visibility: hidden;
+                }
+            }
+        </style>
+        <div class="app-busy-overlay">
+            <div class="app-busy-card">
+                <div class="app-busy-spinner"></div>
+                <div class="app-busy-text">"""
+        + safe_message
+        + """</div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    st.session_state.ui_busy = False
+    st.session_state.ui_busy_message = "Loading..."
 
 FILTER_COL_MAP = {
     "f_sponsor": "lead_sponsor_canonical",
@@ -1125,6 +1226,7 @@ def reset_filters():
 
 
 def start_search():
+    start_ui_busy("Loading trials...")
     st.session_state.search_initiated = True
     st.session_state.selected_nct_id = None
 
@@ -1143,7 +1245,6 @@ def hide_completion_score_tab():
 
     st.session_state.detail_completion_tab_visible = False
     st.session_state.detail_prediction_notice = False
-    st.session_state.detail_tab_default_request = None
 
     if current_tab == DETAIL_TAB_SCORE:
         st.session_state.detail_active_tab = fallback_tab
@@ -1152,14 +1253,14 @@ def hide_completion_score_tab():
     else:
         st.session_state.detail_active_tab = fallback_tab
 
-
 def show_completion_score_tab():
     st.session_state.detail_completion_tab_visible = True
     st.session_state.detail_prediction_notice = False
     st.session_state.detail_active_tab = DETAIL_TAB_SCORE
-    st.session_state.detail_tab_default_request = DETAIL_TAB_SCORE
 
 def handle_predict_trial_completion():
+    start_ui_busy("Updating completion score view...")
+
     if st.session_state.get("global_edit_mode", False):
         hide_completion_score_tab()
         st.session_state.detail_prediction_notice = True
@@ -1227,6 +1328,7 @@ def reset_trial_editor_state():
 
 
 def handle_global_edit_toggle():
+    start_ui_busy("Updating view...")
     hide_completion_score_tab()
 
     if not st.session_state.get("global_edit_mode", False):
@@ -1254,6 +1356,7 @@ def restore_search_state():
         st.session_state[key] = value
 
 def go_back_to_results():
+    start_ui_busy("Returning to results...")
     restore_search_state()
     st.session_state.selected_nct_id = None
     clear_prediction_state()
@@ -1644,7 +1747,9 @@ def render_pillar_expander(title, pillar_name, data, key_suffix=""):
                     with cols[j]:
                         render_smart_info_box(label, f_id, data, key_suffix=key_suffix)
 
+
 def open_trial_third_ui(selected_id):
+    start_ui_busy("Opening trial...")
     snapshot_search_state()
     st.session_state.selected_nct_id = selected_id
     clear_prediction_state()
@@ -2056,42 +2161,36 @@ def render_trial_top_strip_refined(row):
 def render_trial_detail_tabs_refined(row):
     render_trial_top_strip_refined(row)
 
-    tab_labels = [DETAIL_TAB_INFO, DETAIL_TAB_POPULATION]
-    if st.session_state.get("detail_completion_tab_visible", False):
-        tab_labels.append(DETAIL_TAB_SCORE)
+    # Keep a stable 3-tab structure.
+    tab_labels = [DETAIL_TAB_INFO, DETAIL_TAB_POPULATION, DETAIL_TAB_SCORE]
 
-    if st.session_state.get("detail_active_tab") not in tab_labels:
-        st.session_state.detail_active_tab = st.session_state.get(
-            "detail_last_nonscore_tab",
-            DETAIL_TAB_INFO
-        )
+    current_tab = st.session_state.get("detail_active_tab", DETAIL_TAB_INFO)
+
+    # If score tab is hidden, never keep it as the active logical tab.
+    if (
+        not st.session_state.get("detail_completion_tab_visible", False)
+        and current_tab == DETAIL_TAB_SCORE
+    ):
+        current_tab = st.session_state.get("detail_last_nonscore_tab", DETAIL_TAB_INFO)
+        if current_tab not in {DETAIL_TAB_INFO, DETAIL_TAB_POPULATION}:
+            current_tab = DETAIL_TAB_INFO
+        st.session_state.detail_active_tab = current_tab
+
+    if current_tab not in tab_labels:
+        st.session_state.detail_active_tab = DETAIL_TAB_INFO
+        current_tab = DETAIL_TAB_INFO
 
     if st.session_state.get("detail_prediction_notice", False):
         st.warning("Contact owner to know more and try out simulation mode")
 
-    tabs_kwargs = {
-        "key": "detail_active_tab",
-        "on_change": "rerun",
-    }
-
-    forced_default = st.session_state.get("detail_tab_default_request")
-    if forced_default in tab_labels:
-        tabs_kwargs["default"] = forced_default
-
     with st.container(key="trial_detail_tabs"):
-        tabs = st.tabs(tab_labels, **tabs_kwargs)
-        tab_map = dict(zip(tab_labels, tabs))
+        tab1, tab2, tab3 = st.tabs(
+            tab_labels,
+            key="detail_active_tab",
+            on_change="rerun"
+        )
 
-        current_tab = st.session_state.get("detail_active_tab", DETAIL_TAB_INFO)
-        if current_tab in {DETAIL_TAB_INFO, DETAIL_TAB_POPULATION}:
-            st.session_state.detail_last_nonscore_tab = current_tab
-
-        if forced_default in tab_labels:
-            st.session_state.detail_tab_default_request = None
-            st.rerun()
-
-        with tab_map[DETAIL_TAB_INFO]:
-
+        with tab1:
             left_col, middle_col, right_col = st.columns([0.82, 2.88, 0.82], gap="xsmall")
 
             with left_col:
@@ -2142,7 +2241,7 @@ def render_trial_detail_tabs_refined(row):
                     panel_suffix="design_block"
                 )
 
-        with tab_map[DETAIL_TAB_POPULATION]:
+        with tab2:
             left_col, right_col = st.columns([3.70, 0.82], gap="xsmall")
 
             with left_col:
@@ -2157,9 +2256,21 @@ def render_trial_detail_tabs_refined(row):
             with right_col:
                 render_population_side_panel(row)
 
-        if DETAIL_TAB_SCORE in tab_map:
-            with tab_map[DETAIL_TAB_SCORE]:
+        # Track last valid non-score tab for later fallback when score tab hides again.
+        active_after_tabs = st.session_state.get("detail_active_tab", DETAIL_TAB_INFO)
+        if active_after_tabs in {DETAIL_TAB_INFO, DETAIL_TAB_POPULATION}:
+            st.session_state.detail_last_nonscore_tab = active_after_tabs
+
+        with tab3:
+            if (
+                st.session_state.get("detail_completion_tab_visible", False)
+                and st.session_state.get("detail_active_tab") == DETAIL_TAB_SCORE
+            ):
                 render_completion_prediction_tab(row)
+            else:
+                render_box_spacer(1)
+
+
 
 
 def get_analysis_result_for_selected_trial(row):
@@ -2282,7 +2393,7 @@ def render_completion_prediction_tab(row):
 # ==========================
 init_session_state()
 inject_custom_styles()
-
+render_ui_busy_overlay()
 
 # Main Content Logic
 if not st.session_state.selected_nct_id:
@@ -2331,8 +2442,8 @@ if not st.session_state.selected_nct_id:
         with st.sidebar:
             with st.container(key="sidebar_reset_wrap"):
                 if st.button("Reset Filter", use_container_width=True):
+                    start_ui_busy("Resetting filters...")
                     reset_filters()
-                    st.rerun()
 
             with st.container(key="sidebar_filters"):
                 filtered_df = render_filters(x_base, is_sidebar=True)
