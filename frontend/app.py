@@ -135,13 +135,7 @@ def inject_custom_styles():
     is_edit = st.session_state.get("global_edit_mode", False)
     field_bg = "#ffffff" if is_edit else "#f8fafc"
     field_text = "#334155" if is_edit else "#64748b"
-    completion_tab_hide_css = ""
-    if not st.session_state.get("detail_completion_tab_visible", False):
-        completion_tab_hide_css = """
-            .st-key-trial_detail_tabs .stTabs [data-baseweb="tab-list"] [data-baseweb="tab"]:nth-of-type(3) {
-                display: none !important;
-            }
-        """
+
 
 
     st.markdown(f"""
@@ -1033,7 +1027,7 @@ def inject_custom_styles():
             .st-key-trial_detail_tabs .st-key-completion_prediction_top_row {{
                 margin-bottom: var(--ui-summary-row-overlap) !important;
             }}
-            {completion_tab_hide_css}
+
             {debug_overlay_css}
 
 
@@ -1103,8 +1097,6 @@ def init_session_state():
         "global_edit_mode": False,
         "detail_completion_tab_visible": False,
         "detail_prediction_notice": False,
-        "detail_active_tab": DETAIL_TAB_INFO,
-        "detail_last_nonscore_tab": DETAIL_TAB_INFO,
         "ui_busy": False,
         "ui_busy_message": "Loading...",
     }
@@ -1223,7 +1215,9 @@ def reset_filters():
     st.session_state.search_initiated = False
     st.session_state.last_search_state = None
 
-
+def handle_sidebar_reset_filters():
+    start_ui_busy("Resetting filters...")
+    reset_filters()
 
 def start_search():
     start_ui_busy("Loading trials...")
@@ -1237,26 +1231,14 @@ def clear_prediction_state():
     st.session_state.analysis_nct_id = None
 
 def hide_completion_score_tab():
-    current_tab = st.session_state.get("detail_active_tab", DETAIL_TAB_INFO)
-    fallback_tab = st.session_state.get("detail_last_nonscore_tab", DETAIL_TAB_INFO)
-
-    if fallback_tab not in {DETAIL_TAB_INFO, DETAIL_TAB_POPULATION}:
-        fallback_tab = DETAIL_TAB_INFO
-
     st.session_state.detail_completion_tab_visible = False
     st.session_state.detail_prediction_notice = False
+    st.session_state.trigger_prediction = False
 
-    if current_tab == DETAIL_TAB_SCORE:
-        st.session_state.detail_active_tab = fallback_tab
-    elif current_tab in {DETAIL_TAB_INFO, DETAIL_TAB_POPULATION}:
-        st.session_state.detail_active_tab = current_tab
-    else:
-        st.session_state.detail_active_tab = fallback_tab
 
 def show_completion_score_tab():
     st.session_state.detail_completion_tab_visible = True
     st.session_state.detail_prediction_notice = False
-    st.session_state.detail_active_tab = DETAIL_TAB_SCORE
 
 def handle_predict_trial_completion():
     start_ui_busy("Updating completion score view...")
@@ -2161,34 +2143,31 @@ def render_trial_top_strip_refined(row):
 def render_trial_detail_tabs_refined(row):
     render_trial_top_strip_refined(row)
 
-    # Keep a stable 3-tab structure.
-    tab_labels = [DETAIL_TAB_INFO, DETAIL_TAB_POPULATION, DETAIL_TAB_SCORE]
-
-    current_tab = st.session_state.get("detail_active_tab", DETAIL_TAB_INFO)
-
-    # If score tab is hidden, never keep it as the active logical tab.
-    if (
-        not st.session_state.get("detail_completion_tab_visible", False)
-        and current_tab == DETAIL_TAB_SCORE
-    ):
-        current_tab = st.session_state.get("detail_last_nonscore_tab", DETAIL_TAB_INFO)
-        if current_tab not in {DETAIL_TAB_INFO, DETAIL_TAB_POPULATION}:
-            current_tab = DETAIL_TAB_INFO
-        st.session_state.detail_active_tab = current_tab
-
-    if current_tab not in tab_labels:
-        st.session_state.detail_active_tab = DETAIL_TAB_INFO
-        current_tab = DETAIL_TAB_INFO
-
     if st.session_state.get("detail_prediction_notice", False):
         st.warning("Contact owner to know more and try out simulation mode")
 
+    score_visible = st.session_state.get("detail_completion_tab_visible", False)
+    score_requested = score_visible and st.session_state.get("trigger_prediction", False)
+
     with st.container(key="trial_detail_tabs"):
-        tab1, tab2, tab3 = st.tabs(
-            tab_labels,
-            key="detail_active_tab",
-            on_change="rerun"
-        )
+        if score_visible:
+            tabs_key = (
+                "trial_detail_tabs_predict_jump"
+                if score_requested
+                else "trial_detail_tabs_with_score"
+            )
+
+            tab1, tab2, tab3 = st.tabs(
+                [DETAIL_TAB_INFO, DETAIL_TAB_POPULATION, DETAIL_TAB_SCORE],
+                default=DETAIL_TAB_SCORE if score_requested else DETAIL_TAB_INFO,
+                key=tabs_key
+            )
+        else:
+            tab1, tab2 = st.tabs(
+                [DETAIL_TAB_INFO, DETAIL_TAB_POPULATION],
+                default=DETAIL_TAB_INFO,
+                key="trial_detail_tabs_base"
+            )
 
         with tab1:
             left_col, middle_col, right_col = st.columns([0.82, 2.88, 0.82], gap="xsmall")
@@ -2256,21 +2235,9 @@ def render_trial_detail_tabs_refined(row):
             with right_col:
                 render_population_side_panel(row)
 
-        # Track last valid non-score tab for later fallback when score tab hides again.
-        active_after_tabs = st.session_state.get("detail_active_tab", DETAIL_TAB_INFO)
-        if active_after_tabs in {DETAIL_TAB_INFO, DETAIL_TAB_POPULATION}:
-            st.session_state.detail_last_nonscore_tab = active_after_tabs
-
-        with tab3:
-            if (
-                st.session_state.get("detail_completion_tab_visible", False)
-                and st.session_state.get("detail_active_tab") == DETAIL_TAB_SCORE
-            ):
+        if score_visible:
+            with tab3:
                 render_completion_prediction_tab(row)
-            else:
-                render_box_spacer(1)
-
-
 
 
 def get_analysis_result_for_selected_trial(row):
@@ -2301,6 +2268,9 @@ def get_analysis_result_for_selected_trial(row):
             except Exception as e:
                 st.error(f"System Error: {e}")
                 return None
+
+    if st.session_state.get("trigger_prediction", False):
+        st.session_state.trigger_prediction = False
 
     return st.session_state.get("analysis_result")
 
@@ -2441,9 +2411,11 @@ if not st.session_state.selected_nct_id:
         # RESULTS VIEW: Sidebar filters + Grid
         with st.sidebar:
             with st.container(key="sidebar_reset_wrap"):
-                if st.button("Reset Filter", use_container_width=True):
-                    start_ui_busy("Resetting filters...")
-                    reset_filters()
+                st.button(
+                    "Reset Filter",
+                    use_container_width=True,
+                    on_click=handle_sidebar_reset_filters
+                )
 
             with st.container(key="sidebar_filters"):
                 filtered_df = render_filters(x_base, is_sidebar=True)
