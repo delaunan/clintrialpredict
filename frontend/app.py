@@ -1274,13 +1274,7 @@ def reset_trial_editor_state():
     for field_id in TRIAL_EDITOR_FIELD_IDS:
         state_key = f"input_{trial_key}_{field_id}"
 
-        if field_id in {"has_placebo_ml", "has_dmc_ml"}:
-            initial_val = _coerce_checkbox_value(
-                trial_val(row, field_id.replace("_ml", "_ui"), field_id, default=False)
-            )
-        else:
-            display_col = field_id.replace("_ml", "_ui") if "_ml" in field_id else f"{field_id}_ui"
-            initial_val = trial_val(row, display_col, field_id)
+        initial_val = _get_initial_field_value(field_id, row)
 
         st.session_state[state_key] = initial_val
 
@@ -1421,7 +1415,7 @@ def render_header(is_landing=True, show_predict_button=False, show_back_button=F
                     if show_back_button:
                         st.button(
                             "Back to Results",
-                            use_container_width=True,
+                            width="stretch",
                             key="header_back_btn",
                             on_click=go_back_to_results
                         )
@@ -1430,7 +1424,7 @@ def render_header(is_landing=True, show_predict_button=False, show_back_button=F
                     if show_predict_button:
                         st.button(
                             "Predict Trial Completion",
-                            use_container_width=True,
+                            width="stretch",
                             type="primary",
                             key="header_predict_btn",
                             on_click=handle_predict_trial_completion
@@ -1488,11 +1482,11 @@ def render_filters(df, is_sidebar=False):
         with r3_c1:
             render_select("Clinical trial number (AACT)", "f_nct_id", "All NCT IDs")
         with r3_c2:
-            st.button("Reset", use_container_width=True, on_click=reset_filters)
+            st.button("Reset", width="stretch", on_click=reset_filters)
         with r3_c3:
             st.button(
                 "Search Trials",
-                use_container_width=True,
+                width="stretch",
                 type="primary",
                 on_click=start_search
             )
@@ -1677,18 +1671,12 @@ def get_edited_row(row):
                 edited_row[field_id] = val
 
     # 2. Update from Scroll Panels (text areas)
-    panel_map = {
-        "top_title": "title",
-        "study_summary": "summary_ui",
-        "conditions": "conditions_ui",
-        "interventions": "interventions_ui",
-        "primary_outcomes": "primary_outcomes_ui",
-        "eligibility_criteria": "criteria_ui"
-    }
-    for panel_key, col in panel_map.items():
+    for panel_key, candidates in TRIAL_EDITOR_TEXT_FIELDS.items():
         text_key = f"text_{trial_key}_{panel_key}"
+        target_col = candidates[0]
+
         if text_key in st.session_state:
-            edited_row[col] = st.session_state[text_key]
+            edited_row[target_col] = st.session_state[text_key]
 
     return edited_row
 
@@ -1755,12 +1743,22 @@ def _coerce_checkbox_value(value):
     text = str(value).strip().lower()
     return text in {"1", "true", "yes", "y", "oui"}
 
+
+def _get_initial_field_value(field_id, row):
+    if field_id in {"has_placebo_ml", "has_dmc_ml"}:
+        return _coerce_checkbox_value(
+            trial_val(row, field_id.replace("_ml", "_ui"), field_id, default=False)
+        )
+
+    display_col = field_id.replace("_ml", "_ui") if "_ml" in field_id else f"{field_id}_ui"
+    return trial_val(row, display_col, field_id)
+
+
 def _init_trial_field_state(field_id, row):
     trial_key = st.session_state.get("selected_nct_id", "no_trial")
     state_key = f"input_{trial_key}_{field_id}"
 
-    display_col = field_id.replace("_ml", "_ui") if "_ml" in field_id else f"{field_id}_ui"
-    initial_val = trial_val(row, display_col, field_id)
+    initial_val = _get_initial_field_value(field_id, row)
 
     if state_key not in st.session_state:
         st.session_state[state_key] = initial_val
@@ -1784,7 +1782,16 @@ def _resolve_field_labels(state_key, initial_val, options):
     selected_index = labels.index(current_value) if current_value in labels else 0
     return labels, selected_index
 
+def _readonly_widget_key(state_key, key_suffix=""):
+    return f"{state_key}__readonly_{key_suffix}" if key_suffix else f"{state_key}__readonly"
 
+
+def _safe_set_session_value(key, value):
+    try:
+        if st.session_state.get(key) != value:
+            st.session_state[key] = value
+    except st.errors.StreamlitAPIException:
+        pass
 
 
 def _render_labeled_trial_field(label, field_id, row, layout="stack", key_suffix=""):
@@ -1845,15 +1852,10 @@ def _render_two_state_field_control(label, state_key, initial_val, options, cont
                     label_visibility="collapsed"
                 )
             else:
-                readonly_key = f"{state_key}__readonly_{key_suffix}" if key_suffix else f"{state_key}__readonly"
+                readonly_key = _readonly_widget_key(state_key, key_suffix)
                 readonly_value = labels[selected_index] if labels else ""
 
-                # SAFE UPDATE: Avoid StreamlitAPIException if rendered multiple times
-                try:
-                    if st.session_state.get(readonly_key) != readonly_value:
-                        st.session_state[readonly_key] = readonly_value
-                except st.errors.StreamlitAPIException:
-                    pass
+                _safe_set_session_value(readonly_key, readonly_value)
 
                 st.text_input(
                     label,
@@ -1905,15 +1907,10 @@ def _render_native_meta_field(label, field_id, row, key_suffix=""):
                     key=f"{state_key}_{key_suffix}" if key_suffix else state_key
                 )
             else:
-                readonly_key = f"{state_key}__readonly_{key_suffix}" if key_suffix else f"{state_key}__readonly"
+                readonly_key = _readonly_widget_key(state_key, key_suffix)
                 readonly_value = labels[selected_index] if labels else ""
 
-                # SAFE UPDATE: Avoid StreamlitAPIException if rendered multiple times
-                try:
-                    if st.session_state.get(readonly_key) != readonly_value:
-                        st.session_state[readonly_key] = readonly_value
-                except st.errors.StreamlitAPIException:
-                    pass
+                _safe_set_session_value(readonly_key, readonly_value)
 
                 st.text_input(
                     label,
@@ -2279,7 +2276,7 @@ def render_completion_prediction_tab(row):
 
                 st.plotly_chart(
                     plot_success_gauge(score, height=gauge_plot_h),
-                    use_container_width=True,
+                    width="stretch",
                     config={"displayModeBar": False}
                 )
 
@@ -2303,7 +2300,7 @@ def render_completion_prediction_tab(row):
                     pd.DataFrame(res["pillar_impacts"]),
                     height=bar_plot_h
                 ),
-                use_container_width=True,
+                width="stretch",
                 config={"displayModeBar": False}
             )
 
@@ -2328,7 +2325,7 @@ def render_completion_prediction_tab(row):
                     show_values=show_detailed,
                     height=treemap_plot_h
                 ),
-                use_container_width=True,
+                width="stretch",
                 config={"displayModeBar": False}
             )
 
@@ -2392,7 +2389,7 @@ if not st.session_state.selected_nct_id:
             with st.container(key="sidebar_reset_wrap"):
                 st.button(
                     "Reset Filter",
-                    use_container_width=True,
+                    width="stretch",
                     on_click=handle_sidebar_reset_filters
                 )
 
@@ -2401,7 +2398,7 @@ if not st.session_state.selected_nct_id:
 
             st.text_input("Register", key="s_registry")
             st.text_input("Analysis", key="s_mode")
-            st.text_input("", key="s_detail")
+            st.text_input("Values", key="s_detail")
 
         render_header(is_landing=False)
 
@@ -2442,7 +2439,7 @@ if st.session_state.selected_nct_id:
     with st.sidebar:
         st.text_input("Register", key="s_registry_keeper", value=st.session_state.get("s_registry", ""), label_visibility="collapsed")
         st.text_input("Analysis", key="s_mode_keeper", value=st.session_state.get("s_mode", ""), label_visibility="collapsed")
-        st.text_input("", key="s_detail_keeper", value=st.session_state.get("s_detail", ""), label_visibility="collapsed")
+        st.text_input("Values keeper", key="s_detail_keeper", value=st.session_state.get("s_detail", ""), label_visibility="collapsed")
 
         # Sync back to primary keys if keeper changes (unlikely in hidden state)
         st.session_state["s_registry"] = st.session_state["s_registry_keeper"]
