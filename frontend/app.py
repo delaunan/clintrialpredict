@@ -65,6 +65,33 @@ TEXTAREA_HEIGHTS = {
     "completion_prediction_right": 430,
 }
 
+
+
+COMPLETION_GAUGE_HELP_TOOLTIP = """
+<p class="tooltip-section">
+  <span><b>RESULTS</b> : <b>Completion likelihood score generated at clinical trial design stage</b>.</span><br>
+  <span>Preliminary operational read, based on <b>30,000 precedent trials</b>.</span><br>
+</p>
+
+<p class="tooltip-section">
+  <span><b>Full trial completion</b> does not always imply scientific success.</span><br>
+  <span><b>Early termination</b>, however, may reflect operational strain or emerging signs of scientific underperformance, justifying <b>capital reallocation</b>.</span><br>
+</p>
+
+<p class="tooltip-section">
+  <span><b><span style="color:rgb(168,50,50);">RED ZONE / RED DRIVERS.</span></b> Not inherently negative operationally.</span><br>
+  <span>Can reflect higher scientific rigor, more ambitious innovation, greater complexity.</span><br>
+  <span>Often: higher early-stop risk, but potentially higher value.</span>
+</p>
+
+<p class="tooltip-section">
+  <span><b><span style="color:rgb(28,86,153);">BLUE ZONE / BLUE DRIVERS.</span></b> Can reflect strong, well-structured execution.</span><br>
+  <span>Can also reflect simpler, more conventional design.</span><br>
+  <span>Example: fixed design, no adaptive stopping, lower-risk signal.</span>
+</p>
+"""
+
+
 TRIAL_EDITOR_FIELD_IDS = [
     "lead_sponsor_canonical",
     "start_date",
@@ -810,6 +837,99 @@ def inject_custom_styles():
                 padding: 0 !important;
                 gap: 0 !important;
             }}
+
+
+            .st-key-summary_side_shell_completion_prediction_left_top_block {{
+                position: relative !important;
+            }}
+
+            .st-key-summary_side_shell_completion_prediction_left_top_block .completion-gauge-help-wrap {{
+                position: absolute !important;
+                top: 8px !important;
+                right: 8px !important;
+                z-index: 30 !important;
+            }}
+
+            .st-key-summary_side_shell_completion_prediction_left_top_block .completion-gauge-help-anchor {{
+                width: 19px !important;
+                height: 19px !important;
+                display: flex !important;
+                align-items: center !important;
+                justify-content: center !important;
+                border: 1px solid #cbd5e1 !important;
+                border-radius: 999px !important;
+                background: #f8fafc !important;
+                color: #64748b !important;
+                font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
+                font-size: 0.76rem !important;
+                font-weight: 800 !important;
+                line-height: 1 !important;
+                text-decoration: none !important;
+                cursor: help !important;
+                user-select: none !important;
+                box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08) !important;
+            }}
+
+            .st-key-summary_side_shell_completion_prediction_left_top_block .completion-gauge-help-wrap:hover .completion-gauge-help-anchor,
+            .st-key-summary_side_shell_completion_prediction_left_top_block .completion-gauge-help-wrap:focus-within .completion-gauge-help-anchor {{
+                background: #ffffff !important;
+                border-color: #94a3b8 !important;
+                color: #475569 !important;
+                outline: none !important;
+            }}
+
+            .st-key-summary_side_shell_completion_prediction_left_top_block .completion-gauge-help-tooltip {{
+                position: absolute !important;
+                top: 26px !important;
+                right: 0 !important;
+                width: 520px !important;
+                max-width: min(520px, calc(100vw - 48px)) !important;
+                padding: 13px 15px !important;
+                border: 1px solid #cbd5e1 !important;
+                border-radius: 10px !important;
+                background: #ffffff !important;
+                color: #334155 !important;
+                font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
+                font-size: 0.8rem !important;
+                font-weight: 500 !important;
+                line-height: 1.38 !important;
+                letter-spacing: 0 !important;
+                text-align: left !important;
+                box-shadow: 0 10px 24px rgba(15, 23, 42, 0.10) !important;
+                opacity: 0 !important;
+                visibility: hidden !important;
+                transform: translateY(2px) !important;
+                transition:
+                    opacity 0.08s ease-out,
+                    transform 0.08s ease-out,
+                    visibility 0s linear 0.08s !important;
+                pointer-events: none !important;
+            }}
+
+            .st-key-summary_side_shell_completion_prediction_left_top_block .completion-gauge-help-tooltip .tooltip-section {{
+                margin: 0 0 10px 0 !important;
+            }}
+
+            .st-key-summary_side_shell_completion_prediction_left_top_block .completion-gauge-help-tooltip .tooltip-section:last-child {{
+                margin-bottom: 0 !important;
+            }}
+
+            .st-key-summary_side_shell_completion_prediction_left_top_block .completion-gauge-help-tooltip p {{
+                margin: 0 !important;
+            }}
+
+            .st-key-summary_side_shell_completion_prediction_left_top_block .completion-gauge-help-wrap:hover .completion-gauge-help-tooltip,
+            .st-key-summary_side_shell_completion_prediction_left_top_block .completion-gauge-help-wrap:focus-within .completion-gauge-help-tooltip {{
+                opacity: 1 !important;
+                visibility: visible !important;
+                transform: translateY(0) !important;
+                transition:
+                    opacity 0.08s ease-out,
+                    transform 0.08s ease-out,
+                    visibility 0s linear 0s !important;
+            }}
+
+
 
             [class*="st-key-summary_side_inner_"] {{
                 margin: 0 !important;
@@ -2273,6 +2393,19 @@ def render_completion_prediction_tab(row):
 
                 score = res.get("score", 0)
                 tier = get_risk_tier(score)
+
+                st.markdown(
+                    (
+                        '<div class="completion-gauge-help-wrap">'
+                        '<div class="completion-gauge-help-anchor" '
+                        'aria-label="Completion score help" tabindex="0">?</div>'
+                        '<div class="completion-gauge-help-tooltip">'
+                        f'{COMPLETION_GAUGE_HELP_TOOLTIP}'
+                        '</div>'
+                        '</div>'
+                    ),
+                    unsafe_allow_html=True
+                )
 
                 st.plotly_chart(
                     plot_success_gauge(score, height=gauge_plot_h),
