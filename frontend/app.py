@@ -875,9 +875,10 @@ def inject_custom_styles():
 
             .st-key-summary_side_shell_completion_prediction_left_top_block .completion-gauge-help-wrap:hover .completion-gauge-help-anchor,
             .st-key-summary_side_shell_completion_prediction_left_top_block .completion-gauge-help-wrap:focus-within .completion-gauge-help-anchor {{
-                background: #ffffff !important;
-                border-color: #94a3b8 !important;
-                color: #475569 !important;
+                background: #334155 !important;
+                border-color: #1e293b !important;
+                color: #ffffff !important;
+                transform: scale(1.02) translateY(-2px) !important;
                 outline: none !important;
             }}
 
