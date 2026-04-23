@@ -42,8 +42,16 @@ HUE = 180
 INTENSITY = 0.8
 DARKNESS = 0.85
 THICKNESS = 0
+
 UI_ACCENT_BLUE = "#89A7C9"
 GRID_HOVER_BLUE = "#A1BCDB"
+
+# Plot / completion palette mirrors utils.plot STYLE_CONFIG["colors"]
+PLOT_BLUE_SOFT_RGB = "rgb(162,198,228)"
+PLOT_BLUE_DEEP_RGB = "rgb(47,98,166)"
+PLOT_GREY_WARM_RGB = "rgb(242,244,248)"
+PLOT_RED_SOFT_RGB = "rgb(236,162,162)"
+PLOT_RED_DEEP_RGB = "rgb(176,63,63)"
 
 
 BRAND_FILTER = (
@@ -69,7 +77,7 @@ TEXTAREA_HEIGHTS = {
 
 
 
-COMPLETION_GAUGE_HELP_TOOLTIP = """
+COMPLETION_GAUGE_HELP_TOOLTIP = f"""
 <p class="tooltip-section">
   <span><b>COMPLETION LIKELIHOOD SCORE</b> generated at trial design stage.</span><br>
   <span><b>Above 50:</b> higher likelihood of full completion.</span><br>
@@ -83,40 +91,40 @@ COMPLETION_GAUGE_HELP_TOOLTIP = """
 </p>
 
 <p class="tooltip-section">
-  <span><b><span style="color:rgb(168,50,50);">RED ZONE / RED DRIVERS.</span></b> Not inherently negative operationally.</span><br>
+  <span><b><span style="color:{PLOT_RED_DEEP_RGB};">RED ZONE / RED DRIVERS.</span></b> Not inherently negative operationally.</span><br>
   <span>Can reflect higher scientific rigor, more ambitious innovation, greater complexity.</span><br>
   <span>Often: higher early-stop risk, but potentially higher value.</span>
 </p>
 
 <p class="tooltip-section">
-  <span><b><span style="color:rgb(28,86,153);">BLUE ZONE / BLUE DRIVERS.</span></b> Can reflect strong, well-structured execution.</span><br>
+  <span><b><span style="color:{PLOT_BLUE_DEEP_RGB};">BLUE ZONE / BLUE DRIVERS.</span></b> Can reflect strong, well-structured execution.</span><br>
   <span>Can also reflect simpler, more conventional design.</span><br>
   <span>Example: fixed design, no adaptive stopping, lower-risk signal.</span>
 </p>
 """
 
-COMPLETION_TIER_SCALE_TOOLTIP = """
+COMPLETION_TIER_SCALE_TOOLTIP = f"""
 <p class="tooltip-section">
   <span style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
-    <span style="width:10px; height:10px; background:linear-gradient(90deg, rgb(154,203,232) 0%, rgb(28,86,153) 100%); border-radius:2px; display:inline-block; flex:0 0 10px;"></span>
+    <span style="width:10px; height:10px; background:linear-gradient(90deg, {PLOT_BLUE_SOFT_RGB} 0%, {PLOT_BLUE_DEEP_RGB} 100%); border-radius:2px; display:inline-block; flex:0 0 10px;"></span>
     <span style="display:inline-block; width:72px;"><b>Low Risk</b></span>
     <span style="display:inline-block; min-width:52px; text-align:left;">75–100</span>
   </span>
 
   <span style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
-    <span style="width:10px; height:10px; background:linear-gradient(90deg, rgb(242,244,248) 0%, rgb(154,203,232) 100%); border-radius:2px; display:inline-block; flex:0 0 10px;"></span>
+    <span style="width:10px; height:10px; background:linear-gradient(90deg, {PLOT_GREY_WARM_RGB} 0%, {PLOT_BLUE_SOFT_RGB} 100%); border-radius:2px; display:inline-block; flex:0 0 10px;"></span>
     <span style="display:inline-block; width:72px;"><b>Favorable</b></span>
     <span style="display:inline-block; min-width:52px; text-align:left;">50–75</span>
   </span>
 
   <span style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
-    <span style="width:10px; height:10px; background:linear-gradient(90deg, rgb(240,163,163) 0%, rgb(242,244,248) 100%); border-radius:2px; display:inline-block; flex:0 0 10px;"></span>
+    <span style="width:10px; height:10px; background:linear-gradient(90deg, {PLOT_RED_SOFT_RGB} 0%, {PLOT_GREY_WARM_RGB} 100%); border-radius:2px; display:inline-block; flex:0 0 10px;"></span>
     <span style="display:inline-block; width:72px;"><b>Watchlist</b></span>
     <span style="display:inline-block; min-width:52px; text-align:left;">25–50</span>
   </span>
 
   <span style="display:flex; align-items:center; gap:8px;">
-    <span style="width:10px; height:10px; background:linear-gradient(90deg, rgb(168,50,50) 0%, rgb(240,163,163) 100%); border-radius:2px; display:inline-block; flex:0 0 10px;"></span>
+    <span style="width:10px; height:10px; background:linear-gradient(90deg, {PLOT_RED_DEEP_RGB} 0%, {PLOT_RED_SOFT_RGB} 100%); border-radius:2px; display:inline-block; flex:0 0 10px;"></span>
     <span style="display:inline-block; width:72px;"><b>High Risk</b></span>
     <span style="display:inline-block; min-width:52px; text-align:left;">0–25</span>
   </span>

@@ -11,11 +11,11 @@ STYLE_CONFIG = {
     "font_family": "'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
     "font_color": "#334155",
     "colors": {
-        "red_deep":   (168, 50, 50),
-        "red_soft":   (240, 163, 163),
+        "red_deep":   (176, 63, 63),
+        "red_soft":   (236, 162, 162),
         "grey_warm":  (242, 244, 248),
-        "blue_soft":  (154, 203, 232),
-        "blue_deep":  (28, 86, 153),
+        "blue_soft":  (162, 198, 228),
+        "blue_deep":  (47, 98, 166),
         "therapeutic_grey": "#CFD8DC",
         # Pastel Zones
         "pastel_red": "#fde8e8",
