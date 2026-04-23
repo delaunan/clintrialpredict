@@ -69,13 +69,15 @@ TEXTAREA_HEIGHTS = {
 
 COMPLETION_GAUGE_HELP_TOOLTIP = """
 <p class="tooltip-section">
-  <span><b>RESULTS</b> : <b>Completion likelihood score generated at clinical trial design stage</b>.</span><br>
+  <span><b>COMPLETION LIKELIHOOD SCORE</b> generated at trial design stage.</span><br>
+  <span><b>Above 50:</b> higher likelihood of full completion.</span><br>
+  <span><b>Below 50:</b> higher likelihood of early termination.</span><br>
   <span>Preliminary operational read, based on <b>30,000 precedent trials</b>.</span><br>
 </p>
 
 <p class="tooltip-section">
   <span><b>Full trial completion</b> does not always imply scientific success.</span><br>
-  <span><b>Early termination</b>, however, may reflect operational strain or emerging signs of scientific underperformance, justifying <b>capital reallocation</b>.</span><br>
+  <span><b>Early termination</b>, however, may reflect operational strain or emerging signs of scientific underperformance, which can lead to investment reallocation.</span><br>
 </p>
 
 <p class="tooltip-section">
@@ -851,23 +853,24 @@ def inject_custom_styles():
             }}
 
             .st-key-summary_side_shell_completion_prediction_left_top_block .completion-gauge-help-anchor {{
-                width: 19px !important;
-                height: 19px !important;
+                width: 22px !important;
+                height: 22px !important;
                 display: flex !important;
                 align-items: center !important;
                 justify-content: center !important;
                 border: 1px solid #cbd5e1 !important;
-                border-radius: 999px !important;
-                background: #f8fafc !important;
+                border-radius: 10px !important;
+                background: #e2e8f0 !important;
                 color: #64748b !important;
                 font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
-                font-size: 0.76rem !important;
-                font-weight: 800 !important;
+                font-size: 0.86rem !important;
+                font-weight: 700 !important;
                 line-height: 1 !important;
                 text-decoration: none !important;
                 cursor: help !important;
                 user-select: none !important;
-                box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08) !important;
+                box-shadow: none !important;
+                transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
             }}
 
             .st-key-summary_side_shell_completion_prediction_left_top_block .completion-gauge-help-wrap:hover .completion-gauge-help-anchor,
