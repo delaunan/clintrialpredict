@@ -42,8 +42,8 @@ HUE = 180
 INTENSITY = 0.8
 DARKNESS = 0.85
 THICKNESS = 0
-UI_ACCENT_BLUE = "#6B99CE"
-GRID_HOVER_BLUE = "#8FADD0"
+UI_ACCENT_BLUE = "#89A7C9"
+GRID_HOVER_BLUE = "#A1BCDB"
 
 
 BRAND_FILTER = (
@@ -134,6 +134,7 @@ COMPLETION_WORKFLOW_INFO_HTML = """
 
   <ul class="completion-workflow-note-list">
     <li>This pilot tool can also extend to broader perspectives, including:</li>
+    <li>additional and more detailed explanation layers</li>
     <li>company portfolio view</li>
     <li>therapeutic area views across the industry</li>
   </ul>
@@ -1450,6 +1451,7 @@ def init_session_state():
         "s_registry": "",
         "s_mode": "",
         "s_detail": "",
+        "s_scores": "",
         "global_edit_mode": False,
         "detail_completion_tab_visible": False,
         "detail_prediction_notice": False,
@@ -1565,7 +1567,7 @@ FILTER_COL_MAP = {
 def reset_filters():
     for key in FILTER_COL_MAP:
         st.session_state[key] = None
-    for key in ["s_registry", "s_mode", "s_detail"]:
+    for key in ["s_registry", "s_mode", "s_detail", "s_scores"]:
         st.session_state[key] = ""
     st.session_state.selected_nct_id = None
     st.session_state.search_initiated = False
@@ -1648,6 +1650,7 @@ def snapshot_search_state():
         "s_registry": st.session_state.get("s_registry", ""),
         "s_mode": st.session_state.get("s_mode", ""),
         "s_detail": st.session_state.get("s_detail", ""),
+        "s_scores": st.session_state.get("s_scores", ""),
         "search_initiated": st.session_state.get("search_initiated", False),
     }
 
@@ -1749,7 +1752,7 @@ def render_header(is_landing=True, show_predict_button=False, show_back_button=F
         if show_back_button or show_predict_button or show_global_edit_toggle:
 
             with st.container(key="header_action_buttons"):
-                c_toggle, c_back, c_predict = st.columns([0.75, 1.1, 1.25], gap="small", vertical_alignment="top")
+                c_toggle, c_back, c_predict = st.columns([0.75, 1.1, 1.32], gap="small", vertical_alignment="top")
 
                 with c_toggle:
                     if show_global_edit_toggle:
@@ -1770,10 +1773,16 @@ def render_header(is_landing=True, show_predict_button=False, show_back_button=F
 
                 with c_predict:
                     if show_predict_button:
+                        predict_btn_type = (
+                            "secondary"
+                            if st.session_state.get("detail_completion_tab_visible", False)
+                            else "primary"
+                        )
+
                         st.button(
                             "Predict Trial Completion",
                             width="stretch",
-                            type="primary",
+                            type=predict_btn_type,
                             key="header_predict_btn",
                             on_click=handle_predict_trial_completion
                         )
@@ -1849,11 +1858,28 @@ def render_filters(df, is_sidebar=False):
     return curr_df
 
 def render_trials_grid(df):
-    grid_df = df[["nct_id", "ui_search_label", "lead_sponsor_canonical", "therapeutic_area_ui", "phase_ui", "start_year", "Clinical_Score"]].copy()
-    grid_df.columns = ["NCT ID", "Identity", "Sponsor", "Area", "Phase", "Start Year", "Score"]
+    show_score = str(st.session_state.get("s_scores", "")).strip().lower() == "true"
+
+    grid_cols = [
+        "nct_id",
+        "ui_search_label",
+        "lead_sponsor_canonical",
+        "therapeutic_area_ui",
+        "phase_ui",
+        "start_year",
+    ]
+    grid_labels = ["NCT ID", "Identity", "Sponsor", "Area", "Phase", "Start Year"]
+
+    if show_score:
+        grid_cols.append("Clinical_Score")
+        grid_labels.append("Score")
+
+    grid_df = df[grid_cols].copy()
+    grid_df.columns = grid_labels
     grid_df = grid_df.sort_values("NCT ID", ascending=True, kind="stable").reset_index(drop=True)
 
     gb = GridOptionsBuilder.from_dataframe(grid_df)
+
     gb.configure_default_column(
         sortable=True,
         filter=False,
@@ -1906,17 +1932,18 @@ def render_trials_grid(df):
         headerClass="ag-center-header",
         filter=False
     )
-    gb.configure_column(
-        "Score",
-        maxWidth=82,
-        flex=0.52,
-        cellClass="ag-tight-center-cell",
-        headerClass="ag-center-header",
-        filter=False,
-        valueFormatter=JsCode(
-            "function(params) { return params.value != null ? Number(params.value).toFixed(1).replace('.', ',') : ''; }"
+    if show_score:
+        gb.configure_column(
+            "Score",
+            maxWidth=82,
+            flex=0.52,
+            cellClass="ag-tight-center-cell",
+            headerClass="ag-center-header",
+            filter=False,
+            valueFormatter=JsCode(
+                "function(params) { return params.value != null ? Number(params.value).toFixed(1).replace('.', ',') : ''; }"
+            )
         )
-    )
 
     gb.configure_selection(selection_mode="single", use_checkbox=False)
     gb.configure_grid_options(
@@ -2794,6 +2821,7 @@ if not st.session_state.selected_nct_id:
             st.text_input("Register", key="s_registry")
             st.text_input("Analysis", key="s_mode")
             st.text_input("Values", key="s_detail")
+            st.text_input("Scores", key="s_scores")
 
         render_header(is_landing=False)
 
@@ -2835,8 +2863,10 @@ if st.session_state.selected_nct_id:
         st.text_input("Register", key="s_registry_keeper", value=st.session_state.get("s_registry", ""), label_visibility="collapsed")
         st.text_input("Analysis", key="s_mode_keeper", value=st.session_state.get("s_mode", ""), label_visibility="collapsed")
         st.text_input("Values keeper", key="s_detail_keeper", value=st.session_state.get("s_detail", ""), label_visibility="collapsed")
+        st.text_input("Scores keeper", key="s_scores_keeper", value=st.session_state.get("s_scores", ""), label_visibility="collapsed")
 
         # Sync back to primary keys if keeper changes (unlikely in hidden state)
         st.session_state["s_registry"] = st.session_state["s_registry_keeper"]
         st.session_state["s_mode"] = st.session_state["s_mode_keeper"]
         st.session_state["s_detail"] = st.session_state["s_detail_keeper"]
+        st.session_state["s_scores"] = st.session_state["s_scores_keeper"]
