@@ -25,6 +25,23 @@ STYLE_CONFIG = {
     }
 }
 
+GAUGE_MIN = 0.0
+GAUGE_MAX = 100.0
+
+# Shared segmentation control for both gauge bands and impact-bar slices.
+# Increase for finer / more numerous segments.
+# Decrease for chunkier / fewer segments.
+SEGMENT_COUNT = 50
+BAR_SEGMENT_COUNT_DIVISOR = 2
+
+# Keep these separate from segmentation.
+GAUGE_MARKER_LINE_WIDTH = 4
+GAUGE_MARKER_THICKNESS = 0.7
+BAR_WIDTH = 0.7
+
+
+
+
 def get_rgb_str(rgb_tuple):
     return f"rgb({rgb_tuple[0]},{rgb_tuple[1]},{rgb_tuple[2]})"
 
@@ -64,19 +81,32 @@ def plot_success_gauge(score_val, height=220):
     steps = []
     c = STYLE_CONFIG["colors"]
 
-    for i in range(100):
-        if i < 25:
-            color = interpolate_color(c["red_deep"], c["red_soft"], i / 25.0)
-        elif i < 50:
-            color = interpolate_color(c["red_soft"], c["grey_warm"], (i - 25) / 25.0)
-        elif i < 75:
-            color = interpolate_color(c["grey_warm"], c["blue_soft"], (i - 50) / 25.0)
+    gauge_segment_step = (GAUGE_MAX - GAUGE_MIN) / SEGMENT_COUNT
+    gauge_separator_width = gauge_segment_step
+
+    for start in np.arange(GAUGE_MIN, GAUGE_MAX, gauge_segment_step):
+        end = min(start + gauge_segment_step, GAUGE_MAX)
+        mid = (start + end) / 2
+
+        if mid < 25:
+            color = interpolate_color(c["red_deep"], c["red_soft"], mid / 25.0)
+        elif mid < 50:
+            color = interpolate_color(c["red_soft"], c["grey_warm"], (mid - 25) / 25.0)
+        elif mid < 75:
+            color = interpolate_color(c["grey_warm"], c["blue_soft"], (mid - 50) / 25.0)
         else:
-            color = interpolate_color(c["blue_soft"], c["blue_deep"], (i - 75) / 25.0)
-        steps.append({"range": [i, i + 1], "color": get_rgb_str(color)})
+            color = interpolate_color(c["blue_soft"], c["blue_deep"], (mid - 75) / 25.0)
+
+        steps.append({"range": [start, end], "color": get_rgb_str(color)})
 
     for sep in [25, 50, 75]:
-        steps.append({"range": [sep - 0.5, sep + 0.5], "color": "white"})
+        steps.append({
+            "range": [
+                max(GAUGE_MIN, sep - gauge_separator_width / 2),
+                min(GAUGE_MAX, sep + gauge_separator_width / 2),
+            ],
+            "color": "white",
+        })
 
     fig = go.Figure(go.Indicator(
         mode="gauge",
@@ -84,7 +114,7 @@ def plot_success_gauge(score_val, height=220):
         domain={"x": [0, 1], "y": [0, 1]},
         gauge={
             "axis": {
-                "range": [0, 100],
+                "range": [GAUGE_MIN, GAUGE_MAX],
                 "tickmode": "array",
                 "tickvals": [0, 25, 50, 75, 100],
                 "tickfont": {
@@ -99,8 +129,11 @@ def plot_success_gauge(score_val, height=220):
             "borderwidth": 0,
             "steps": steps,
             "threshold": {
-                "line": {"color": STYLE_CONFIG["font_color"], "width": 5},
-                "thickness": 0.75,
+                "line": {
+                    "color": STYLE_CONFIG["font_color"],
+                    "width": GAUGE_MARKER_LINE_WIDTH,
+                },
+                "thickness": GAUGE_MARKER_THICKNESS,
                 "value": score_val,
             },
         },
@@ -111,10 +144,10 @@ def plot_success_gauge(score_val, height=220):
         y=0.35,
         xref="paper",
         yref="paper",
-        text=f"<b>{score_val:.1f}</b>",
+        text=f"<span style='font-weight:700'>{score_val:.1f}</span>",
         showarrow=False,
         font=dict(
-            size=25,
+            size=23,
             color=STYLE_CONFIG["font_color"],
             family=STYLE_CONFIG["font_family"],
         ),
@@ -131,11 +164,10 @@ def plot_success_gauge(score_val, height=220):
     )
     return fig
 
-
-
 # ==========================
 # 2. IMPACT BAR CHART
 # ==========================
+
 def plot_impact_bar(df_pillars, height=240):
     df_plot = df_pillars.copy()
 
@@ -145,31 +177,47 @@ def plot_impact_bar(df_pillars, height=240):
     df_plot = df_plot.sort_values(by='Impact', ascending=True)
 
     max_val = df_plot['Impact'].abs().max()
-    limit, BAR_WIDTH, SLICE_STEP, GLOBAL_MAX_SCALE = max(max_val * 1.35, 6.0), 0.75, 0.08, 4.0
+    limit = max(max_val * 1.35, 6.0)
+    effective_bar_segment_count = max(1, SEGMENT_COUNT / BAR_SEGMENT_COUNT_DIVISOR)
+    bar_scale_reference = max_val if max_val > 0 else 1.0
+    bar_segment_step = bar_scale_reference / effective_bar_segment_count
+
     c = STYLE_CONFIG["colors"]
     fig = go.Figure()
 
-    n_slices = int(np.ceil(max_val / SLICE_STEP)) if max_val > 0 else 1
+    n_slices = int(np.ceil(max_val / bar_segment_step)) if max_val > 0 else 1
 
     for i in range(n_slices):
-        pos = i * SLICE_STEP
+        pos = i * bar_segment_step
         widths, colors = [], []
+
         for _, row in df_plot.iterrows():
             val = row['Impact']
             abs_v = abs(val)
-            if pos >= abs_v: w, is_tip = 0, False
-            elif pos + SLICE_STEP > abs_v: w, is_tip = abs_v - pos, True
-            else: w, is_tip = SLICE_STEP, False
+
+            if pos >= abs_v:
+                w = 0
+            elif pos + bar_segment_step > abs_v:
+                w = abs_v - pos
+            else:
+                w = bar_segment_step
 
             widths.append(-w if val < 0 else w)
 
-
-            ratio = min((pos + abs(w)/2) / GLOBAL_MAX_SCALE, 1.0) ** 0.5
+            ratio = min((pos + abs(w) / 2) / bar_scale_reference, 1.0) ** 0.5
             if val >= 0:
-                final_rgb = interpolate_color(c["grey_warm"], c["blue_soft"], ratio*2) if ratio < 0.5 else interpolate_color(c["blue_soft"], c["blue_deep"], (ratio-0.5)*2)
+                final_rgb = (
+                    interpolate_color(c["grey_warm"], c["blue_soft"], ratio * 2)
+                    if ratio < 0.5
+                    else interpolate_color(c["blue_soft"], c["blue_deep"], (ratio - 0.5) * 2)
+                )
                 colors.append(get_rgb_str(final_rgb))
             else:
-                final_rgb = interpolate_color(c["grey_warm"], c["red_soft"], ratio*2) if ratio < 0.5 else interpolate_color(c["red_soft"], c["red_deep"], (ratio-0.5)*2)
+                final_rgb = (
+                    interpolate_color(c["grey_warm"], c["red_soft"], ratio * 2)
+                    if ratio < 0.5
+                    else interpolate_color(c["red_soft"], c["red_deep"], (ratio - 0.5) * 2)
+                )
                 colors.append(get_rgb_str(final_rgb))
 
         fig.add_trace(go.Bar(
@@ -178,7 +226,6 @@ def plot_impact_bar(df_pillars, height=240):
             orientation='h',
             width=BAR_WIDTH,
             marker=dict(color=colors, line=dict(width=0)),
-
             hoverinfo='skip',
             showlegend=False
         ))
@@ -208,7 +255,12 @@ def plot_impact_bar(df_pillars, height=240):
     fig.add_vline(x=0, line_width=1, line_color="#333333")
     fig.update_layout(
         barmode='relative',
-        xaxis=dict(showticklabels=False, range=[-axis_limit, axis_limit], zeroline=False, showgrid=False),
+        xaxis=dict(
+            showticklabels=False,
+            range=[-axis_limit, axis_limit],
+            zeroline=False,
+            showgrid=False
+        ),
         yaxis=dict(
             automargin=True,
             tickfont=dict(
@@ -224,6 +276,7 @@ def plot_impact_bar(df_pillars, height=240):
         showlegend=False
     )
     return fig
+
 
 # ==========================
 # 3. TREEMAP

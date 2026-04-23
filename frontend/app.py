@@ -993,7 +993,7 @@ def inject_custom_styles():
                 display: inline-block !important;
                 font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
                 font-size: 1.0rem !important;
-                font-weight: 800 !important;
+                font-weight: 750 !important;
                 color: #334155 !important;
                 line-height: 1 !important;
             }}
