@@ -93,6 +93,34 @@ COMPLETION_GAUGE_HELP_TOOLTIP = """
 </p>
 """
 
+COMPLETION_TIER_SCALE_TOOLTIP = """
+<p class="tooltip-section">
+  <span style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
+    <span style="width:10px; height:10px; background:linear-gradient(90deg, rgb(154,203,232) 0%, rgb(28,86,153) 100%); border-radius:2px; display:inline-block; flex:0 0 10px;"></span>
+    <span style="display:inline-block; width:72px;"><b>Low Risk</b></span>
+    <span style="display:inline-block; min-width:52px; text-align:left;">75–100</span>
+  </span>
+
+  <span style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
+    <span style="width:10px; height:10px; background:linear-gradient(90deg, rgb(242,244,248) 0%, rgb(154,203,232) 100%); border-radius:2px; display:inline-block; flex:0 0 10px;"></span>
+    <span style="display:inline-block; width:72px;"><b>Favorable</b></span>
+    <span style="display:inline-block; min-width:52px; text-align:left;">50–75</span>
+  </span>
+
+  <span style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
+    <span style="width:10px; height:10px; background:linear-gradient(90deg, rgb(240,163,163) 0%, rgb(242,244,248) 100%); border-radius:2px; display:inline-block; flex:0 0 10px;"></span>
+    <span style="display:inline-block; width:72px;"><b>Watchlist</b></span>
+    <span style="display:inline-block; min-width:52px; text-align:left;">25–50</span>
+  </span>
+
+  <span style="display:flex; align-items:center; gap:8px;">
+    <span style="width:10px; height:10px; background:linear-gradient(90deg, rgb(168,50,50) 0%, rgb(240,163,163) 100%); border-radius:2px; display:inline-block; flex:0 0 10px;"></span>
+    <span style="display:inline-block; width:72px;"><b>High Risk</b></span>
+    <span style="display:inline-block; min-width:52px; text-align:left;">0–25</span>
+  </span>
+</p>
+"""
+
 
 TRIAL_EDITOR_FIELD_IDS = [
     "lead_sponsor_canonical",
@@ -932,6 +960,115 @@ def inject_custom_styles():
                     transform 0.08s ease-out,
                     visibility 0s linear 0s !important;
             }}
+
+
+            .st-key-summary_side_shell_completion_prediction_left_top_block .completion-tier-row {{
+                text-align: center !important;
+                margin-top: -40px !important;
+            }}
+
+            .st-key-summary_side_shell_completion_prediction_left_top_block .completion-tier-inline-wrap {{
+                position: relative !important;
+                display: inline-block !important;
+                font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
+                font-size: 1.0rem !important;
+                font-weight: 800 !important;
+                color: #334155 !important;
+                line-height: 1 !important;
+            }}
+
+            .st-key-summary_side_shell_completion_prediction_left_top_block .completion-tier-text {{
+                display: inline-block !important;
+            }}
+
+            .st-key-summary_side_shell_completion_prediction_left_top_block .completion-tier-info-wrap {{
+                position: absolute !important;
+                left: calc(100% + 5px) !important;
+                top: 50% !important;
+                transform: translateY(-50%) !important;
+                z-index: 25 !important;
+            }}
+
+            .st-key-summary_side_shell_completion_prediction_left_top_block .completion-tier-info-anchor {{
+                width: 13px !important;
+                height: 13px !important;
+                display: flex !important;
+                align-items: center !important;
+                justify-content: center !important;
+                border: 1px solid #cbd5e1 !important;
+                border-radius: 999px !important;
+                background: #eef2f7 !important;
+                color: #607083 !important;
+                font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
+                font-size: 0.52rem !important;
+                font-weight: 800 !important;
+                line-height: 1 !important;
+                text-decoration: none !important;
+                cursor: help !important;
+                user-select: none !important;
+                box-shadow: none !important;
+                transition:
+                    background 0.18s ease,
+                    border-color 0.18s ease,
+                    color 0.18s ease,
+                    opacity 0.18s ease !important;
+            }}
+
+            .st-key-summary_side_shell_completion_prediction_left_top_block .completion-tier-info-wrap:hover .completion-tier-info-anchor,
+            .st-key-summary_side_shell_completion_prediction_left_top_block .completion-tier-info-wrap:focus-within .completion-tier-info-anchor {{
+                background: #334155 !important;
+                border-color: #1e293b !important;
+                color: #ffffff !important;
+                outline: none !important;
+            }}
+
+            .st-key-summary_side_shell_completion_prediction_left_top_block .completion-tier-info-tooltip {{
+                position: absolute !important;
+                top: calc(100% + 8px) !important;
+                left: 50% !important;
+                width: 180px !important;
+                max-width: min(180px, calc(100vw - 48px)) !important;
+                padding: 10px 12px !important;
+                border: 1px solid #cbd5e1 !important;
+                border-radius: 10px !important;
+                background: #ffffff !important;
+                color: #334155 !important;
+                font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
+                font-size: 0.75rem !important;
+                font-weight: 500 !important;
+                line-height: 1.34 !important;
+                letter-spacing: 0 !important;
+                text-align: left !important;
+                box-shadow: 0 10px 24px rgba(15, 23, 42, 0.10) !important;
+                opacity: 0 !important;
+                visibility: hidden !important;
+                transform: translateX(-50%) translateY(2px) !important;
+                transition:
+                    opacity 0.08s ease-out,
+                    transform 0.08s ease-out,
+                    visibility 0s linear 0.08s !important;
+                pointer-events: none !important;
+            }}
+
+            .st-key-summary_side_shell_completion_prediction_left_top_block .completion-tier-info-tooltip .tooltip-section {{
+                margin: 0 !important;
+            }}
+
+            .st-key-summary_side_shell_completion_prediction_left_top_block .completion-tier-info-tooltip p {{
+                margin: 0 !important;
+            }}
+
+            .st-key-summary_side_shell_completion_prediction_left_top_block .completion-tier-info-wrap:hover .completion-tier-info-tooltip,
+            .st-key-summary_side_shell_completion_prediction_left_top_block .completion-tier-info-wrap:focus-within .completion-tier-info-tooltip {{
+                opacity: 1 !important;
+                visibility: visible !important;
+                transform: translateX(-50%) translateY(0) !important;
+                transition:
+                    opacity 0.08s ease-out,
+                    transform 0.08s ease-out,
+                    visibility 0s linear 0s !important;
+            }}
+
 
 
 
@@ -2418,7 +2555,20 @@ def render_completion_prediction_tab(row):
                 )
 
                 st.markdown(
-                    f"<div style='text-align:center; font-family:\"Inter\", sans-serif; font-size:1.0rem; font-weight:800; color:#334155; margin-top:-40px;'>{tier}</div>",
+                    (
+                        '<div class="completion-tier-row">'
+                            '<div class="completion-tier-inline-wrap">'
+                                f'<span class="completion-tier-text">{tier}</span>'
+                                '<span class="completion-tier-info-wrap">'
+                                    '<span class="completion-tier-info-anchor" '
+                                    'aria-label="Completion score scale" tabindex="0">i</span>'
+                                    '<span class="completion-tier-info-tooltip">'
+                                        f'{COMPLETION_TIER_SCALE_TOOLTIP}'
+                                    '</span>'
+                                '</span>'
+                            '</div>'
+                        '</div>'
+                    ),
                     unsafe_allow_html=True
                 )
 
