@@ -120,6 +120,23 @@ COMPLETION_TIER_SCALE_TOOLTIP = """
   </span>
 </p>
 """
+COMPLETION_WORKFLOW_INFO_HTML = """
+<div class="completion-workflow-note">
+  <div class="completion-workflow-note-label">Explore & Learn More</div>
+
+  <div class="completion-workflow-note-text">
+  To explore <strong>Simulation mode</strong> or learn more about the
+  <strong>prediction tool</strong>, contact
+  <strong>Nicolas (delaunay80@gmail.com)</strong>.
+  </div>
+
+  <ul class="completion-workflow-note-list">
+    <li>This pilot tool can also extend to broader perspectives, including:</li>
+    <li>company portfolio view</li>
+    <li>therapeutic area views across the industry</li>
+  </ul>
+</div>
+"""
 
 
 TRIAL_EDITOR_FIELD_IDS = [
@@ -1217,8 +1234,75 @@ def inject_custom_styles():
                 padding: 4px 12px 10px 12px !important;
             }}
 
+            .completion-workflow-note {{
+                margin: 10px 0 12px 0;
+                padding: 15px 18px;
+                background: #fff6cc;
+                border: 1px solid #ead98a;
+                border-radius: 14px;
+                box-shadow: var(--ui-shell-shadow) !important;
+            }}
 
+            .completion-workflow-note-label {{
+                margin-bottom: 8px;
+                color: #8a6b14;
+                font-size: 0.78rem;
+                font-weight: 700;
+                letter-spacing: 0.08em;
+                text-transform: uppercase;
+                line-height: 1.1;
+            }}
 
+            .completion-workflow-note-text {{
+                color: #334155;
+                font-size: 0.96rem;
+                line-height: 1.55;
+                font-weight: 500;
+                margin: 0;
+            }}
+
+            .completion-workflow-note-list {{
+                margin: 10px 0 0 0;
+                padding-left: 1.15rem;
+                color: #334155;
+                font-size: 0.96rem;
+                line-height: 1.55;
+                font-weight: 500;
+            }}
+
+            .completion-workflow-note-list li {{
+                margin: 0 0 4px 0;
+            }}
+
+            .completion-workflow-note-list li:first-child {{
+                list-style: none;
+                margin-left: -1.15rem;
+                margin-bottom: 6px;
+            }}
+
+            .completion-workflow-note strong,
+            .completion-workflow-note a,
+            .completion-workflow-note a:visited {{
+                font-size: inherit !important;
+                line-height: inherit !important;
+            }}
+
+            .completion-workflow-note strong {{
+                color: #1e293b !important;
+                font-weight: 800 !important;
+            }}
+
+            .completion-workflow-note a,
+            .completion-workflow-note a:visited {{
+                color: #8b5e00 !important;
+                font-weight: 800 !important;
+                text-decoration: none;
+            }}
+
+            .completion-workflow-note a:hover {{
+                color: #5f4600 !important;
+                text-decoration: underline;
+            }}
 
             /* DETAIL TABS */
             .st-key-trial_detail_tabs {{
@@ -1667,7 +1751,7 @@ def render_header(is_landing=True, show_predict_button=False, show_back_button=F
                 with c_toggle:
                     if show_global_edit_toggle:
                         st.toggle(
-                            "Edit trial fields",
+                            "Simulation Mode",
                             key="global_edit_mode",
                             on_change=handle_global_edit_toggle
                         )
@@ -2376,15 +2460,22 @@ def render_trial_top_strip_refined(row):
         with right:
             render_top_meta_panel(row)
 
+def render_completion_workflow_note():
+    st.markdown(COMPLETION_WORKFLOW_INFO_HTML, unsafe_allow_html=True)
 
 def render_trial_detail_tabs_refined(row):
     render_trial_top_strip_refined(row)
 
-    if st.session_state.get("detail_prediction_notice", False):
-        st.warning("Contact owner to know more and try out simulation mode")
-
     score_visible = st.session_state.get("detail_completion_tab_visible", False)
     score_requested = score_visible and st.session_state.get("trigger_prediction", False)
+
+    show_completion_workflow_note = (
+        st.session_state.get("global_edit_mode", False)
+        and st.session_state.get("detail_prediction_notice", False)
+    )
+
+    if show_completion_workflow_note:
+        render_completion_workflow_note()
 
     with st.container(key="trial_detail_tabs"):
         if score_visible:
@@ -2588,7 +2679,11 @@ def render_completion_prediction_tab(row):
                     height=bar_plot_h
                 ),
                 width="stretch",
-                config={"displayModeBar": False}
+                config={
+                    "displayModeBar": False,
+                    "staticPlot": True
+                }
+
             )
 
         render_summary_plot_shell_panel(
