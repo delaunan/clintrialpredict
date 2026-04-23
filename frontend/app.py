@@ -42,6 +42,8 @@ HUE = 180
 INTENSITY = 0.8
 DARKNESS = 0.85
 THICKNESS = 0
+UI_ACCENT_BLUE = "#6B99CE"
+GRID_HOVER_BLUE = "#8FADD0"
 
 
 BRAND_FILTER = (
@@ -239,6 +241,7 @@ def inject_custom_styles():
 
             :root {{
                 --app-bg: #f1f5f9;
+                --ui-accent-blue: {UI_ACCENT_BLUE};
 
                 --ui-field-bg: {field_bg};
                 --ui-field-text: {field_text};
@@ -772,8 +775,8 @@ def inject_custom_styles():
             }}
 
             .stButton > button[kind="primary"] {{
-                border: 1.5px solid #52606d !important;
-                background-color: #52606d !important;
+                border: 1.5px solid var(--ui-accent-blue) !important;
+                background-color: var(--ui-accent-blue) !important;
                 color: #ffffff !important;
                 box-shadow: var(--ui-button-primary-shadow) !important;
             }}
@@ -1736,7 +1739,7 @@ def render_header(is_landing=True, show_predict_button=False, show_back_button=F
                     <div style='display: {"block" if is_landing else "flex"}; align-items: {"stretch" if is_landing else "flex-end"}; gap: {title_demo_gap};'>
                         <div style='font-size: {title_size}; font-weight: 800; color: #52606d; line-height: 1; {"margin-top: 0px;" if is_landing else ""}'>CTPredict</div>
                         {"<div style='color: #52606d; font-size: 1.5rem; font-weight: 800; display: flex; align-items: baseline; gap: 15px; margin-top: 0px;'><span style='line-height: 1;'>Late-Stage Clinical Trial Predictive Engine</span><span style='font-size: 0.7rem; color: #94a3b8; text-transform: uppercase;'>demo version</span></div>" if is_landing else "<span style='font-size: 0.7rem; font-weight: 800; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.1em; line-height: 1; margin-bottom: 0px;'>Demo Version</span>"}
-                    </div>
+
                 </div>
             """
             st.markdown(html, unsafe_allow_html=True)
@@ -1947,9 +1950,19 @@ def render_trials_grid(df):
                 "color": "#334155 !important",
                 "font-size": "0.80rem !important"
             },
+            ".ag-row-hover": {
+                "background-color": f"{GRID_HOVER_BLUE} !important",
+                "color": "#ffffff !important"
+            },
+            ".ag-row-hover .ag-cell": {
+                "color": "#ffffff !important"
+            },
             ".ag-cell": {
                 "display": "flex !important",
                 "align-items": "center !important"
+            },
+            ".ag-row-hover .ag-cell-value": {
+                "color": "#ffffff !important"
             },
             ".ag-tight-center-cell": {
                 "justify-content": "center !important",
