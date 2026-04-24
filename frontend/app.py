@@ -132,19 +132,21 @@ COMPLETION_TIER_SCALE_TOOLTIP = f"""
 """
 COMPLETION_WORKFLOW_INFO_HTML = """
 <div class="completion-workflow-note">
-  <div class="completion-workflow-note-label">Explore & Learn More</div>
+  <div class="completion-workflow-note-label">Explore Additional Capabilities</div>
 
   <div class="completion-workflow-note-text">
-  To explore <strong>Simulation mode</strong> or learn more about the
-  <strong>prediction tool</strong>, contact
-  <strong>Nicolas (delaunay80@gmail.com)</strong>.
+    To explore <strong>Simulation mode</strong>, enable <strong>Detailed View mode</strong>,
+    access additional trials, or learn more about the prediction tool, please contact
+    Nicolas Delaunay at <strong>delaunay80@gmail.com</strong> or via WhatsApp at
+    <strong>+33 7 86 72 21 43</strong>.
   </div>
 
   <ul class="completion-workflow-note-list">
-    <li>This pilot tool can also extend to broader perspectives, including:</li>
-    <li>additional and more detailed explanation layers</li>
-    <li>company portfolio view</li>
-    <li>therapeutic area views across the industry</li>
+    <li>This pilot tool can also support broader analytical perspectives, including:</li>
+    <li>company portfolio views,</li>
+    <li>therapeutic area views across the industry,</li>
+    <li>market potential views balancing trial risk profile and opportunity, currently under development,</li>
+    <li>custom views based on specific questions you would like to explore, open to and welcoming new ideas!</li>
   </ul>
 </div>
 """
@@ -1133,6 +1135,69 @@ def inject_custom_styles():
                 height: 0px !important;
             }}
 
+            /* TREEMAP TOP-RIGHT TOGGLE — INSIDE WHITE BOX ONLY */
+            .st-key-summary_side_shell_completion_prediction_right_block {{
+                position: relative !important;
+            }}
+
+            .st-key-summary_side_inner_completion_prediction_right_block > div {{
+                padding: 0px 10px 0 10px !important;
+            }}
+
+            .st-key-treemap_detailed_drivers_toggle {{
+                position: absolute !important;
+                top: 8px !important;
+                right: 35px !important;
+                z-index: 35 !important;
+                width: auto !important;
+                min-width: 0 !important;
+                margin: 0 !important;
+                padding: 0 !important;
+            }}
+
+            .st-key-treemap_detailed_drivers_toggle [data-testid="stToggle"] {{
+                margin: 0 !important;
+                padding: 0 !important;
+            }}
+
+            .st-key-treemap_detailed_drivers_toggle [data-testid="stWidgetLabel"] {{
+                min-height: 0 !important;
+                margin: 0 !important;
+                padding: 0 !important;
+            }}
+
+            .st-key-treemap_detailed_drivers_toggle [data-testid="stWidgetLabel"] p,
+            .st-key-treemap_detailed_drivers_toggle label p {{
+                font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
+                font-size: 0.72rem !important;
+                font-weight: 600 !important;
+                line-height: 1 !important;
+                color: #64748b !important;
+                white-space: nowrap !important;
+                margin: 0 !important;
+                padding: 0 !important;
+            }}
+
+            .st-key-treemap_detailed_drivers_toggle [data-baseweb="checkbox"] {{
+                display: inline-flex !important;
+                align-items: center !important;
+            }}
+
+            .st-key-treemap_detailed_drivers_toggle [data-baseweb="checkbox"] > div {{
+                display: inline-flex !important;
+                align-items: center !important;
+            }}
+
+            .st-key-treemap_detailed_drivers_toggle [data-baseweb="checkbox"] label,
+            .st-key-treemap_detailed_drivers_toggle [data-baseweb="checkbox"] span,
+            .st-key-treemap_detailed_drivers_toggle [data-baseweb="checkbox"] p {{
+                display: inline-flex !important;
+                align-items: center !important;
+                line-height: 1.1 !important;
+                margin: 0 !important;
+                padding: 0 !important;
+            }}
+
             .st-key-summary_side_inner_completion_prediction_right_block [data-testid="stPlotlyChart"] {{
                 margin: 0 !important;
             }}
@@ -1481,6 +1546,7 @@ def init_session_state():
         "s_detail": "",
         "s_scores": "",
         "global_edit_mode": False,
+        "show_detailed_drivers": False,
         "detail_completion_tab_visible": False,
         "detail_prediction_notice": False,
         "ui_busy": False,
@@ -2766,7 +2832,13 @@ def render_completion_prediction_tab(row):
                 render_box_spacer(right_box_h)
                 return
 
-            show_detailed = str(st.session_state.get("s_detail", "")).strip().lower() == "true"
+            with st.container(key="treemap_detailed_drivers_toggle"):
+                st.toggle(
+                    "Detailed View Mode",
+                    key="show_detailed_drivers"
+                )
+
+            show_detailed = st.session_state.get("show_detailed_drivers", False)
 
             st.plotly_chart(
                 plot_treemap(
