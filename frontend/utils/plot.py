@@ -24,7 +24,6 @@ STYLE_CONFIG = {
         "pastel_green": "#f0fdf4"
     }
 }
-
 GAUGE_MIN = 0.0
 GAUGE_MAX = 100.0
 
@@ -324,10 +323,10 @@ def plot_treemap(subcat_impacts, pillar_impacts, show_values=True, height=600):
         feat_html = "• " + "<br>• ".join(feat_details) if feat_details else ""
 
         label_html = (
-            f"<span style='font-family:{STYLE_CONFIG['font_family']}; color:white; line-height:1.05;'>"
-            f"<b style='font-size:15px;'>{subtopic}</b>"
-            f"<br><b style='font-size:14px;'>{impact:+.1f} pts</b>"
-            f"<br><br><span style='font-size:11px; font-weight:500;'>{feat_html}</span>"
+            f"<span style='font-family:{STYLE_CONFIG['font_family']}; line-height:1.05;'>"
+            f"<b style='font-size:15px; color:#F4F7FB;'>{subtopic}</b>"
+            f"<br><b style='font-size:14px; color:#F4F7FB;'>{impact:+.1f} pts</b>"
+            f"<br><br><span style='font-size:11px; font-weight:500; color:#F4F7FB;'>{feat_html}</span>"
             f"</span>"
         )
 

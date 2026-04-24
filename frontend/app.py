@@ -1121,6 +1121,26 @@ def inject_custom_styles():
                 gap: 0 !important;
             }}
 
+            .st-key-summary_side_inner_completion_prediction_right_block > div {{
+                padding: 0 10px 0 10px !important;
+            }}
+
+            .st-key-summary_side_shell_completion_prediction_right_block .trial-meta-top-gap {{
+                height: 6px !important;
+            }}
+
+            .st-key-summary_side_shell_completion_prediction_right_block .trial-meta-bottom-gap {{
+                height: 0px !important;
+            }}
+
+            .st-key-summary_side_inner_completion_prediction_right_block [data-testid="stPlotlyChart"] {{
+                margin: 0 !important;
+            }}
+
+            .st-key-summary_side_inner_completion_prediction_right_block [data-testid="stPlotlyChart"] > div {{
+                padding: 0 !important;
+            }}
+
             [class*="st-key-summary_side_inner_"] div[data-baseweb="select"] > div,
             [class*="st-key-summary_side_inner_"] div[data-baseweb="input"] > div {{
                 min-height: var(--ui-meta-inline-control-h) !important;
@@ -2659,7 +2679,7 @@ def render_completion_prediction_tab(row):
 
     gauge_plot_h = max(110, left_box_h - 60)
     bar_plot_h = max(120, left_box_h - 20)
-    treemap_plot_h = max(260, right_box_h - 40)
+    treemap_plot_h = max(260, right_box_h - 25)
 
     left_col, right_col = st.columns([3, 4], gap="xsmall")
 
