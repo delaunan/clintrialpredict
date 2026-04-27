@@ -1,4 +1,4 @@
-# **Clinical Trial Prediction: Project Status & Architecture (v53.0)**
+# **Clinical Trial Prediction: Project Status & Architecture (v54.0)**
 
 ## **1. The Enrichment Engine Manifest (Production v22.0)**
 | Run | Stage Name | Instruction (Ground Truth) | Input Context | Output Data | Runner Script |
@@ -91,7 +91,7 @@
 
 ---
 
-## **7. Streamlit Application Architecture (v53.0)**
+## **7. Streamlit Application Architecture (v54.0)**
 
 ### **A. View Hierarchy & Navigation**
 The application implements a multi-view state machine driven by `st.session_state`:
@@ -101,25 +101,24 @@ The application implements a multi-view state machine driven by `st.session_stat
 4.  **View 4: Signal Analysis (Strategic Audit)**: Integrates vibrant visualizations. Clicking **"Back to Results"** restores the sidebar and its previous filter states.
 
 ### **B. State Management & Interaction Logic**
-- **Unified Global Edit Mode**: Every metadata field and scientific text area now supports a dual-state `render_smart_info_box` architecture. A single toggle transforms high-fidelity read-only displays into interactive selectboxes and text areas.
+- **Simulation Mode (Global Edit Mode)**: Finalized a comprehensive `global_edit_mode` architecture. A single header toggle seamlessly transitions the Trial Detail view between high-fidelity "Read-Only" summaries and interactive "Edit" states for all 40+ metadata and scientific text fields.
 - **High-Fidelity Feedback (Busy Overlay)**: Deployed a `render_ui_busy_overlay` with backdrop blur, CSS spinners, and animated fade-outs to manage heavy state transitions (e.g., loading search results or switching views) with professional polish.
 - **Dynamic CSS Injection**: Refactored `inject_custom_styles` to dynamically manage sidebar visibility, application backgrounds, and viewport spacing based on the active view state.
 - **Hidden State Keeper**: Implemented at the end of `app.py` to ensure secret variables (`Register`, `Analysis`, `Detail`) persist when switching to the Detail view where primary sidebar widgets are not rendered.
 - **Cross-Filtering Consistency**: The secret mode fields are fully integrated into the central `apply_trial_filters` loop, ensuring dropdown options are always synchronized with the active mode.
 
 ### **C. Visual Intelligence Suite (`utils/plot.py`)**
-- **Clinical Success Gauge**: 0-100 normalized score where 50.0 is the TA-specific boundary. Color-coded risk tiers (High Risk to Robust).
+- **Clinical Success Gauge**: 0-100 normalized score with smooth segmentation and refined tooltips for risk tiers.
 - **Strategic Impact Bar**: Relative importance of the four clinical pillars (Therapeutic Context, Scientific Challenge, Execution Framework, Patient Profile).
 - **Driver Decomposition (Treemap)**: 
-    - **Secret Granularity**: Values (e.g., "Phase 3") are hidden by default to preserve a clean professional aesthetic. 
-    - **Toggle**: Manually typing **"true"** (case-insensitive) into the secret sidebar input reveals full `Label: Value` strings.
+    - **Visual Density Toggle**: Added a **"Detailed Drivers"** toggle to selectively reveal feature-level values, maintaining a clean aesthetic for high-level summaries.
 - **Branding Engine**: Custom CSS injection for "Inter" typography, precise spacing, and the "grey-on-white" professional aesthetic.
 
 ---
 
-## **8. Latest Session Achievements (v53.0)**
-- **Global Edit Mode & Two-State Controls**: Implemented a comprehensive `global_edit_mode` across the trial detail view. Every metadata field and scientific text area now supports a seamless transition between a high-fidelity "Read-Only" state and an interactive "Edit" state using modular `_render_two_state_field_control` logic.
-- **Advanced State Management & UI Feedback**: Introduced a `render_ui_busy_overlay` system with backdrop blur and CSS animations to provide visual feedback during heavy UI transitions.
-- **Refined Filtering Intelligence**: Upgraded `apply_trial_filters` to handle "Secret Modes" (`s_registry`, `s_mode`) more robustly, including sensitive handling of **Ongoing** trials (treating null accuracy as "Pending").
-- **Componentized Metadata Rendering**: Standardized the rendering of 40+ trial features through a unified "Smart Info Box" architecture, ensuring mathematical parity and stylistic consistency between the ML pipeline and the UI.
-- **Mathematical Parity Victory**: Achieved 100% parity between Gauge and Treemap across all ~30,000 trials via Robust Residual Absorption in the **"Therapeutic Context"** pillar.
+## **8. Latest Session Achievements (v54.0)**
+- **Simulation Mode & Protocol Editing**: Successfully implemented the full **Simulation Mode** cycle, allowing users to edit any trial feature and re-trigger predictions. This enables "What-If" analysis for trial design optimization directly in the UI.
+- **Advanced State Management & UI Feedback**: Deployed the `render_ui_busy_overlay` system, significantly improving the user experience during heavy computation or view switching.
+- **Visualization Granularity Victory**: Refactored `utils/plot.py` to use a consistent `SEGMENT_COUNT` logic, resulting in professional-grade color gradients across all gauge and bar charts.
+- **Enhanced Guidance System**: Integrated deep-dive HTML tooltips and workflow notes (e.g., the **Contact & Capabilities** panel) to guide users through the predictive engine's capabilities.
+- **Mathematical Parity Victory**: Maintained 100% parity between Gauge and Treemap across all ~30,000 trials via Robust Residual Absorption in the **"Therapeutic Context"** pillar.

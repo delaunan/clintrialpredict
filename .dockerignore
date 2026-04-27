@@ -1,31 +1,4 @@
-# 1. Ignore everything by default
-*
-
-# 2. Allow only specific folders/files required by Dockerfile
-!api/
-!models/
-!src/
-!requirements.txt
-
-# 3. Aggressively prune inside allowed folders
-# We only want main.py and the pipeline. No notebooks or training data.
-api/*
-!api/main.py
-!api/__init__.py
-
-src/*
-!src/__init__.py
-src/prep/*
-!src/prep/__init__.py
-!src/prep/pipeline.py
-
-models/*
-!models/model_prod_01.joblib
-!models/shap_values_01.joblib
-!models/thresholds_01.json
-!models/taxonomy_01.json
-
-# 4. Prune Python junk even if folders are allowed
+# Ignore Python junk
 **/__pycache__
 **/*.pyc
 **/*.pyo
@@ -35,5 +8,19 @@ env
 venv
 .env
 .git
-.dockerignore
-Dockerfile
+
+# Ignore notebooks and research data (Keep the image light)
+notebooks/
+data/
+docs/
+*.tmp
+*.xlsm
+*.txt
+!requirements.txt
+!menu_indications_refined.txt
+
+# Keep the production folders
+!api/
+!frontend/
+!models/
+!src/

@@ -1,9 +1,9 @@
 [theme]
 base="light"
-primaryColor="#1f2a38"
-backgroundColor="#ffffff"
-secondaryBackgroundColor="#f8fafc"
-textColor="#1f2a38"
+primaryColor="#89A7C9"
+backgroundColor="#f1f5f9"
+secondaryBackgroundColor="#ffffff"
+textColor="#334155"
 font="sans serif"
 dataframeHeaderBackgroundColor = "#e2e8f0"
 dataframeBorderColor = "#cbd5e1"
