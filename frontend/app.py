@@ -135,9 +135,9 @@ COMPLETION_WORKFLOW_INFO_HTML = """
   <div class="completion-workflow-note-label">Explore Additional Capabilities</div>
 
   <div class="completion-workflow-note-text">
-    To explore <strong>Simulation mode</strong>, enable <strong>Detailed View mode</strong>,
-    access additional trials, or learn more about the prediction tool, please contact
-    Nicolas Delaunay at <strong>delaunay80@gmail.com</strong> or via WhatsApp at
+    To explore <strong>Simulation mode</strong>, access additional trials, or learn more
+    about the prediction tool, please contact Nicolas at
+    <strong>delaunay80@gmail.com</strong> or via WhatsApp at
     <strong>+33 7 86 72 21 43</strong>.
   </div>
 
@@ -146,10 +146,11 @@ COMPLETION_WORKFLOW_INFO_HTML = """
     <li>company portfolio views,</li>
     <li>therapeutic area views across the industry,</li>
     <li>market potential views balancing trial risk profile and opportunity, currently under development,</li>
-    <li>custom views based on specific questions you would like to explore, open to and welcoming new ideas!</li>
+    <li>custom views based on specific questions you would like to explore, <strong>open to and welcoming new ideas!</strong></li>
   </ul>
 </div>
 """
+
 
 
 TRIAL_EDITOR_FIELD_IDS = [
@@ -294,6 +295,9 @@ def inject_custom_styles():
                 --ui-summary-tab-top-pad: 8px;
                 --ui-summary-row-overlap: -8px;
                 --ui-population-bottom-extension: 148px;
+
+                --ui-treemap-toggle-top: -42px;
+                --ui-treemap-toggle-right: 30px;
 
                 --ui-shell-shadow: {shell_shadow};
                 --ui-textarea-shadow: {textarea_shadow};
@@ -507,10 +511,11 @@ def inject_custom_styles():
             .st-key-sidebar_reset_wrap {{
                 margin-top: -12px !important;
                 margin-bottom: 0px !important;
+                transform: translateY(15px) !important;
             }}
 
             .st-key-sidebar_filters {{
-                margin-top: 46px !important;
+                margin-top: 55px !important;
             }}
 
 
@@ -1135,9 +1140,14 @@ def inject_custom_styles():
                 height: 0px !important;
             }}
 
-            /* TREEMAP TOP-RIGHT TOGGLE — INSIDE WHITE BOX ONLY */
+            /* TREEMAP TOGGLE — FLOATING ABOVE TREEMAP BOX, INSIDE TAB 3 ONLY */
+            .st-key-trial_detail_tabs .stTabs [data-baseweb="tab-panel"] {{
+                overflow: visible !important;
+            }}
+
             .st-key-summary_side_shell_completion_prediction_right_block {{
                 position: relative !important;
+                overflow: visible !important;
             }}
 
             .st-key-summary_side_inner_completion_prediction_right_block > div {{
@@ -1146,9 +1156,9 @@ def inject_custom_styles():
 
             .st-key-treemap_detailed_drivers_toggle {{
                 position: absolute !important;
-                top: 8px !important;
-                right: 35px !important;
-                z-index: 35 !important;
+                top: var(--ui-treemap-toggle-top) !important;
+                right: var(--ui-treemap-toggle-right) !important;
+                z-index: 60 !important;
                 width: auto !important;
                 min-width: 0 !important;
                 margin: 0 !important;
@@ -1410,10 +1420,15 @@ def inject_custom_styles():
                 gap: 8px !important;
                 background: transparent !important;
                 border: none !important;
+                border-bottom: none !important;
                 border-radius: 0 !important;
                 padding: 3px 0 0 0 !important;
                 margin: -3px 0 0px 0 !important;
                 box-shadow: none !important;
+            }}
+
+            .st-key-trial_detail_tabs .stTabs [data-baseweb="tab-border"] {{
+                display: none !important;
             }}
 
             .st-key-trial_detail_tabs .stTabs [data-baseweb="tab"] {{
@@ -1544,11 +1559,13 @@ def init_session_state():
         "s_registry": "",
         "s_mode": "",
         "s_detail": "",
+        "s_detail_memory": "",
         "s_scores": "",
         "global_edit_mode": False,
-        "show_detailed_drivers": False,
+
         "detail_completion_tab_visible": False,
         "detail_prediction_notice": False,
+        "completion_score_tab_jump_nonce": 0,
         "ui_busy": False,
         "ui_busy_message": "Loading...",
     }
@@ -1659,10 +1676,15 @@ FILTER_COL_MAP = {
 
 
 def reset_filters():
+    current_s_detail = get_s_detail_value()
+
     for key in FILTER_COL_MAP:
         st.session_state[key] = None
-    for key in ["s_registry", "s_mode", "s_detail", "s_scores"]:
+    for key in ["s_registry", "s_mode", "s_scores"]:
         st.session_state[key] = ""
+
+    persist_s_detail_value(current_s_detail)
+
     st.session_state.selected_nct_id = None
     st.session_state.search_initiated = False
     st.session_state.last_search_state = None
@@ -1673,6 +1695,11 @@ def handle_sidebar_reset_filters():
 
 def start_search():
     start_ui_busy("Loading trials...")
+
+    persist_s_detail_value(
+        st.session_state.get("s_detail_memory", st.session_state.get("s_detail", ""))
+    )
+
     st.session_state.search_initiated = True
     st.session_state.selected_nct_id = None
 
@@ -1683,6 +1710,46 @@ def reset_detail_prediction_state():
     st.session_state.analysis_nct_id = None
     st.session_state.detail_completion_tab_visible = False
     st.session_state.detail_prediction_notice = False
+
+
+def get_s_detail_value():
+    return str(
+        st.session_state.get(
+            "s_detail",
+            st.session_state.get("s_detail_memory", "")
+        ) or ""
+    )
+
+
+def persist_s_detail_value(value=None):
+    detail_value = get_s_detail_value() if value is None else str(value or "")
+
+    st.session_state["s_detail"] = detail_value
+    st.session_state["s_detail_memory"] = detail_value
+
+    if st.session_state.get("last_search_state") is not None:
+        st.session_state.last_search_state["s_detail"] = detail_value
+
+
+def is_detailed_values_enabled():
+    return get_s_detail_value().strip().lower() == "true"
+
+
+def sync_detail_toggle_from_values():
+    persist_s_detail_value()
+    st.session_state["show_detailed_drivers"] = is_detailed_values_enabled()
+
+
+def sync_values_from_detail_toggle():
+    persist_s_detail_value(
+        "True"
+        if st.session_state.get("show_detailed_drivers", False)
+        else ""
+    )
+
+
+def sync_s_detail_text_input_to_memory():
+    persist_s_detail_value()
 
 
 
@@ -1700,6 +1767,7 @@ def handle_predict_trial_completion():
 
     show_completion_score_tab()
     st.session_state.trigger_prediction = True
+    st.session_state.completion_score_tab_jump_nonce += 1
 
 
 def reset_trial_editor_state():
@@ -1743,7 +1811,7 @@ def snapshot_search_state():
         "f_nct_id": st.session_state.get("f_nct_id"),
         "s_registry": st.session_state.get("s_registry", ""),
         "s_mode": st.session_state.get("s_mode", ""),
-        "s_detail": st.session_state.get("s_detail", ""),
+        "s_detail": get_s_detail_value(),
         "s_scores": st.session_state.get("s_scores", ""),
         "search_initiated": st.session_state.get("search_initiated", False),
     }
@@ -1756,9 +1824,19 @@ def restore_search_state():
     for key, value in saved.items():
         st.session_state[key] = value
 
+    persist_s_detail_value(saved.get("s_detail", st.session_state.get("s_detail_memory", "")))
+
 def go_back_to_results():
     start_ui_busy("Returning to results...")
+
+    current_s_detail = get_s_detail_value()
+
     restore_search_state()
+
+    st.session_state["s_detail"] = current_s_detail
+    if st.session_state.get("last_search_state") is not None:
+        st.session_state.last_search_state["s_detail"] = current_s_detail
+
     st.session_state.selected_nct_id = None
     reset_detail_prediction_state()
     st.session_state.global_edit_mode = False
@@ -2613,16 +2691,10 @@ def render_trial_detail_tabs_refined(row):
 
     with st.container(key="trial_detail_tabs"):
         if score_visible:
-            tabs_key = (
-                "trial_detail_tabs_predict_jump"
-                if score_requested
-                else "trial_detail_tabs_with_score"
-            )
-
             tab1, tab2, tab3 = st.tabs(
                 [DETAIL_TAB_INFO, DETAIL_TAB_POPULATION, DETAIL_TAB_SCORE],
-                default=DETAIL_TAB_SCORE if score_requested else DETAIL_TAB_INFO,
-                key=tabs_key
+                default=DETAIL_TAB_SCORE,
+                key=f"trial_detail_tabs_with_score_{st.session_state.get('completion_score_tab_jump_nonce', 0)}"
             )
         else:
             tab1, tab2 = st.tabs(
@@ -2832,13 +2904,16 @@ def render_completion_prediction_tab(row):
                 render_box_spacer(right_box_h)
                 return
 
+            sync_detail_toggle_from_values()
+
             with st.container(key="treemap_detailed_drivers_toggle"):
                 st.toggle(
                     "Detailed View Mode",
-                    key="show_detailed_drivers"
+                    key="show_detailed_drivers",
+                    on_change=sync_values_from_detail_toggle
                 )
 
-            show_detailed = st.session_state.get("show_detailed_drivers", False)
+            show_detailed = is_detailed_values_enabled()
 
             st.plotly_chart(
                 plot_treemap(
@@ -2920,7 +2995,11 @@ if not st.session_state.selected_nct_id:
 
             st.text_input("Register", key="s_registry")
             st.text_input("Analysis", key="s_mode")
-            st.text_input("Values", key="s_detail")
+            st.text_input(
+                "Values",
+                key="s_detail",
+                on_change=sync_s_detail_text_input_to_memory
+            )
             st.text_input("Scores", key="s_scores")
 
         render_header(is_landing=False)
@@ -2956,17 +3035,15 @@ else:
 # ==========================
 # 6. HIDDEN STATE KEEPER
 # ==========================
-# This ensures that secret mode variables persist when switching to Detail View
-# where the primary sidebar widgets are not rendered.
+# Keeps sidebar text-input widget keys alive while the sidebar is hidden in Detail View.
 if st.session_state.selected_nct_id:
     with st.sidebar:
-        st.text_input("Register", key="s_registry_keeper", value=st.session_state.get("s_registry", ""), label_visibility="collapsed")
-        st.text_input("Analysis", key="s_mode_keeper", value=st.session_state.get("s_mode", ""), label_visibility="collapsed")
-        st.text_input("Values keeper", key="s_detail_keeper", value=st.session_state.get("s_detail", ""), label_visibility="collapsed")
-        st.text_input("Scores keeper", key="s_scores_keeper", value=st.session_state.get("s_scores", ""), label_visibility="collapsed")
-
-        # Sync back to primary keys if keeper changes (unlikely in hidden state)
-        st.session_state["s_registry"] = st.session_state["s_registry_keeper"]
-        st.session_state["s_mode"] = st.session_state["s_mode_keeper"]
-        st.session_state["s_detail"] = st.session_state["s_detail_keeper"]
-        st.session_state["s_scores"] = st.session_state["s_scores_keeper"]
+        st.text_input("Register", key="s_registry", label_visibility="collapsed")
+        st.text_input("Analysis", key="s_mode", label_visibility="collapsed")
+        st.text_input(
+            "Values",
+            key="s_detail",
+            label_visibility="collapsed",
+            on_change=sync_s_detail_text_input_to_memory
+        )
+        st.text_input("Scores", key="s_scores", label_visibility="collapsed")
