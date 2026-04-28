@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 import requests
-from st_aggrid import AgGrid, GridOptionsBuilder, JsCode
+from st_aggrid import AgGrid, GridOptionsBuilder
 
 # IMPORT PLOTTING UTILS
 from utils.plot import plot_success_gauge, plot_impact_bar, plot_treemap
@@ -63,6 +63,7 @@ BRAND_FILTER = (
 
 
 DEBUG_OVERLAY = False
+ENABLE_UI_BUSY_OVERLAY = False
 
 TEXTAREA_HEIGHTS = {
     "top_title": 70,
@@ -234,7 +235,7 @@ def inject_custom_styles():
             }
     """ if DEBUG_OVERLAY else ""
 
-    is_edit = st.session_state.get("global_edit_mode", False)
+    is_edit = is_detail and st.session_state.get("global_edit_mode", False)
     field_bg = "#ffffff" if is_edit else "#f8fafc"
     field_text = "#334155" if is_edit else "#64748b"
     shell_shadow = "0 1px 4px rgba(0,0,0,0.05)" if is_detail else "-6px 6px 12px -3px rgba(0,0,0,0.12)"
@@ -1546,7 +1547,6 @@ def load_logo_base64():
 def init_session_state():
     defaults = {
         "search_initiated": False,
-        "last_search_state": None,
         "selected_nct_id": None,
         "trigger_prediction": False,
         "analysis_result": None,
@@ -1562,6 +1562,7 @@ def init_session_state():
         "s_detail_memory": "",
         "s_scores": "",
         "global_edit_mode": False,
+        "show_detailed_drivers": False,
 
         "detail_completion_tab_visible": False,
         "detail_prediction_notice": False,
@@ -1574,13 +1575,18 @@ def init_session_state():
             st.session_state[key] = val
 
 
-
 def start_ui_busy(message="Updating view..."):
+    if not ENABLE_UI_BUSY_OVERLAY:
+        return
+
     st.session_state.ui_busy = True
     st.session_state.ui_busy_message = message
 
 
 def render_ui_busy_overlay():
+    if not ENABLE_UI_BUSY_OVERLAY:
+        return
+
     if not st.session_state.get("ui_busy", False):
         return
 
@@ -1674,8 +1680,23 @@ FILTER_COL_MAP = {
     "f_nct_id": "nct_id",
 }
 
+FILTER_STATE_KEYS = list(FILTER_COL_MAP.keys()) + [
+    "s_registry",
+    "s_mode",
+    "s_detail",
+    "s_detail_memory",
+    "s_scores",
+]
 
-def reset_filters():
+
+def keep_filter_state_alive():
+    """Keep filter values stable when their widgets are not rendered on the detail page."""
+    for key in FILTER_STATE_KEYS:
+        if key in st.session_state:
+            st.session_state[key] = st.session_state[key]
+
+
+def reset_filters(return_to_landing=True):
     current_s_detail = get_s_detail_value()
 
     for key in FILTER_COL_MAP:
@@ -1686,16 +1707,15 @@ def reset_filters():
     persist_s_detail_value(current_s_detail)
 
     st.session_state.selected_nct_id = None
-    st.session_state.search_initiated = False
-    st.session_state.last_search_state = None
+    if return_to_landing:
+        st.session_state.search_initiated = False
+
 
 def handle_sidebar_reset_filters():
-    start_ui_busy("Resetting filters...")
-    reset_filters()
+    reset_filters(return_to_landing=False)
+
 
 def start_search():
-    start_ui_busy("Loading trials...")
-
     persist_s_detail_value(
         st.session_state.get("s_detail_memory", st.session_state.get("s_detail", ""))
     )
@@ -1727,8 +1747,7 @@ def persist_s_detail_value(value=None):
     st.session_state["s_detail"] = detail_value
     st.session_state["s_detail_memory"] = detail_value
 
-    if st.session_state.get("last_search_state") is not None:
-        st.session_state.last_search_state["s_detail"] = detail_value
+
 
 
 def is_detailed_values_enabled():
@@ -1758,8 +1777,6 @@ def show_completion_score_tab():
     st.session_state.detail_prediction_notice = False
 
 def handle_predict_trial_completion():
-    start_ui_busy("Updating completion score view...")
-
     if st.session_state.get("global_edit_mode", False):
         reset_detail_prediction_state()
         st.session_state.detail_prediction_notice = True
@@ -1796,50 +1813,15 @@ def reset_trial_editor_state():
         st.session_state[state_key] = "" if value == "N/A" else str(value)
 
 def handle_global_edit_toggle():
-    start_ui_busy("Updating view...")
     reset_detail_prediction_state()
 
     if not st.session_state.get("global_edit_mode", False):
         reset_trial_editor_state()
 
-def snapshot_search_state():
-    st.session_state.last_search_state = {
-        "f_sponsor": st.session_state.get("f_sponsor"),
-        "f_ta": st.session_state.get("f_ta"),
-        "f_phase": st.session_state.get("f_phase"),
-        "f_year": st.session_state.get("f_year"),
-        "f_nct_id": st.session_state.get("f_nct_id"),
-        "s_registry": st.session_state.get("s_registry", ""),
-        "s_mode": st.session_state.get("s_mode", ""),
-        "s_detail": get_s_detail_value(),
-        "s_scores": st.session_state.get("s_scores", ""),
-        "search_initiated": st.session_state.get("search_initiated", False),
-    }
-
-def restore_search_state():
-    saved = st.session_state.get("last_search_state")
-    if not saved:
-        return
-
-    for key, value in saved.items():
-        st.session_state[key] = value
-
-    persist_s_detail_value(saved.get("s_detail", st.session_state.get("s_detail_memory", "")))
-
 def go_back_to_results():
-    start_ui_busy("Returning to results...")
-
-    current_s_detail = get_s_detail_value()
-
-    restore_search_state()
-
-    st.session_state["s_detail"] = current_s_detail
-    if st.session_state.get("last_search_state") is not None:
-        st.session_state.last_search_state["s_detail"] = current_s_detail
-
     st.session_state.selected_nct_id = None
-    reset_detail_prediction_state()
     st.session_state.global_edit_mode = False
+    reset_detail_prediction_state()
 
 
 def apply_trial_filters(base_df, skip_key=None):
@@ -2048,6 +2030,12 @@ def render_trials_grid(df):
 
     grid_df = df[grid_cols].copy()
     grid_df.columns = grid_labels
+
+    if show_score and "Score" in grid_df.columns:
+        grid_df["Score"] = pd.to_numeric(grid_df["Score"], errors="coerce").map(
+            lambda x: "" if pd.isna(x) else f"{x:.1f}".replace(".", ",")
+        )
+
     grid_df = grid_df.sort_values("NCT ID", ascending=True, kind="stable").reset_index(drop=True)
 
     gb = GridOptionsBuilder.from_dataframe(grid_df)
@@ -2111,10 +2099,7 @@ def render_trials_grid(df):
             flex=0.52,
             cellClass="ag-tight-center-cell",
             headerClass="ag-center-header",
-            filter=False,
-            valueFormatter=JsCode(
-                "function(params) { return params.value != null ? Number(params.value).toFixed(1).replace('.', ',') : ''; }"
-            )
+            filter=False
         )
 
     gb.configure_selection(selection_mode="single", use_checkbox=False)
@@ -2122,8 +2107,8 @@ def render_trials_grid(df):
         rowHeight=30,
         headerHeight=28,
         suppressCellFocus=True,
-        animateRows=True,
-        onRowClicked=JsCode("function(e) { e.api.deselectAll(); e.node.setSelected(true, true); }")
+        animateRows=False,
+        suppressRowClickSelection=False
     )
 
     dynamic_height = min(505, 28 + (len(grid_df) * 30) + 2)
@@ -2131,10 +2116,11 @@ def render_trials_grid(df):
         grid_df,
         gridOptions=gb.build(),
         height=dynamic_height,
-        fit_columns_on_grid_load=True,
-        allow_unsafe_jscode=True,
+        fit_columns_on_grid_load=False,
+        allow_unsafe_jscode=False,
         update_on=["selectionChanged"],
         theme="streamlit",
+        key=f"trials_grid_{'scores' if show_score else 'base'}",
         custom_css={
             ".ag-root-wrapper": {
                 "border": "1px solid #cbd5e1",
@@ -2255,8 +2241,13 @@ def render_pillar_expander(title, pillar_name, data, key_suffix=""):
 
 
 def open_trial_third_ui(selected_id):
-    start_ui_busy("Opening trial...")
-    snapshot_search_state()
+    if not selected_id:
+        return
+
+    selected_id = str(selected_id)
+    if st.session_state.get("selected_nct_id") == selected_id:
+        return
+
     st.session_state.selected_nct_id = selected_id
     reset_detail_prediction_state()
     st.session_state.global_edit_mode = False
@@ -2932,90 +2923,114 @@ def render_completion_prediction_tab(row):
         )
 
 # ==========================
-# 5. MAIN UI FLOW
+# 5. PAGE RENDERERS
 # ==========================
-init_session_state()
-inject_custom_styles()
-render_ui_busy_overlay()
 
-# Main Content Logic
-if not st.session_state.selected_nct_id:
-    # Use raw data as base; apply_trial_filters handles modes internally
-    x_base = X_ALL.copy()
-
-    if not st.session_state.search_initiated:
-        render_header(is_landing=True)
-        st.markdown('''
-            <div class="highlight-box mission-box" style="margin-top: 1.2rem; margin-bottom: 1rem;">
-                <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-                    <div class="highlight-title">Operational Success & Risk Stratification</div>
-                    <div style="font-size:0.65rem; font-weight:800; color:#94a3b8; text-transform:uppercase; letter-spacing:0.1em;">Core Mission</div>
-                </div>
-                <div class="highlight-text">This predictive engine estimates the <b>likelihood of operational completion</b> and the <b>risk of early termination</b> using only data available at clinical trial initiation. Each trial is systematically evaluated and classified into <b>four distinct tiers</b> - High Risk, Watchlist, Favorable, and Low Risk - providing a clear and actionable risk profile.</div>
+def render_empty_results_message():
+    st.markdown(
+        """
+        <div class="highlight-box" style="margin-top: 0.4rem;">
+            <div class="highlight-title" style="margin-bottom: 6px;">No trials match these filters</div>
+            <div class="highlight-text">
+                Adjust the sidebar filters or use <b>Reset Filters</b> to return to the full result set.
             </div>
-        ''', unsafe_allow_html=True)
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
 
-        cl, cr = st.columns(2)
-        with cl:
-            with st.container(key="filter_header"):
-                st.markdown('<div class="highlight-title" style="margin:0;">Clinical Trial Selection</div>', unsafe_allow_html=True)
-            with st.container(key="filter_body"):
-                render_filters(x_base)
-        with cr:
-            st.markdown('''
-                <div class="right-column-stack">
-                    <div class="highlight-box">
-                        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-                            <div class="highlight-title">Industry-Scale Public Clinical Data</div>
-                            <div style="font-size:0.65rem; font-weight:800; color:#94a3b8; text-transform:uppercase; letter-spacing:0.1em;">Intelligence Source</div>
-                        </div>
-                        <div class="highlight-text">Built on the publicly available <b>AACT registry</b>, this machine learning system leverages execution patterns from <b>30,000+ Phase II and III trials</b> since 2005. The analytical scope focuses on <b>late-stage studies</b>, where strategic and financial stakes are highest.</div>
-                    </div>
-                    <div class="highlight-box">
-                        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-                            <div class="highlight-title">Predictive Power & Benchmarking</div>
-                            <div style="font-size:0.65rem; font-weight:800; color:#94a3b8; text-transform:uppercase; letter-spacing:0.1em;">Engine Accuracy</div>
-                        </div>
-                        <div class="highlight-text">When comparing a completed trial with one that terminated early, the system assigns a <b>higher risk score</b> to the failed trial in <b>75% of cases</b>. It outperforms the 50% random baseline and traditional approaches built on publicly available data (<b>ROC AUC ≈ 0.75</b> vs. 0.50 baseline).</div>
-                    </div>
-                </div>
-            ''', unsafe_allow_html=True)
-    else:
-        # RESULTS VIEW: Sidebar filters + Grid
-        with st.sidebar:
-            with st.container(key="sidebar_reset_wrap"):
-                st.button(
-                    "Reset Filter",
-                    width="stretch",
-                    on_click=handle_sidebar_reset_filters
-                )
 
-            with st.container(key="sidebar_filters"):
-                filtered_df = render_filters(x_base, is_sidebar=True)
+def render_landing_page(x_base):
+    render_header(is_landing=True)
 
-            st.text_input("Register", key="s_registry")
-            st.text_input("Analysis", key="s_mode")
-            st.text_input(
-                "Values",
-                key="s_detail",
-                on_change=sync_s_detail_text_input_to_memory
+    st.markdown(
+        '''
+        <div class="highlight-box mission-box" style="margin-top: 1.2rem; margin-bottom: 1rem;">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                <div class="highlight-title">Operational Success & Risk Stratification</div>
+                <div style="font-size:0.65rem; font-weight:800; color:#94a3b8; text-transform:uppercase; letter-spacing:0.1em;">Core Mission</div>
+            </div>
+            <div class="highlight-text">This predictive engine estimates the <b>likelihood of operational completion</b> and the <b>risk of early termination</b> using only data available at clinical trial initiation. Each trial is systematically evaluated and classified into <b>four distinct tiers</b> - High Risk, Watchlist, Favorable, and Low Risk - providing a clear and actionable risk profile.</div>
+        </div>
+        ''',
+        unsafe_allow_html=True
+    )
+
+    cl, cr = st.columns(2)
+
+    with cl:
+        with st.container(key="filter_header"):
+            st.markdown(
+                '<div class="highlight-title" style="margin:0;">Clinical Trial Selection</div>',
+                unsafe_allow_html=True
             )
-            st.text_input("Scores", key="s_scores")
 
-        render_header(is_landing=False)
+        with st.container(key="filter_body"):
+            render_filters(x_base)
 
+    with cr:
         st.markdown(
-            f"<div style='text-align:left; margin:var(--ui-nonlanding-body-gap) 0 6px 0; color:#94a3b8; font-weight:600; font-size:0.7rem; line-height:1;'>{len(filtered_df):,} trials matching criteria</div>",
+            '''
+            <div class="right-column-stack">
+                <div class="highlight-box">
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                        <div class="highlight-title">Industry-Scale Public Clinical Data</div>
+                        <div style="font-size:0.65rem; font-weight:800; color:#94a3b8; text-transform:uppercase; letter-spacing:0.1em;">Intelligence Source</div>
+                    </div>
+                    <div class="highlight-text">Built on the publicly available <b>AACT registry</b>, this machine learning system leverages execution patterns from <b>30,000+ Phase II and III trials</b> since 2005. The analytical scope focuses on <b>late-stage studies</b>, where strategic and financial stakes are highest.</div>
+                </div>
+                <div class="highlight-box">
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                        <div class="highlight-title">Predictive Power & Benchmarking</div>
+                        <div style="font-size:0.65rem; font-weight:800; color:#94a3b8; text-transform:uppercase; letter-spacing:0.1em;">Engine Accuracy</div>
+                    </div>
+                    <div class="highlight-text">When comparing a completed trial with one that terminated early, the system assigns a <b>higher risk score</b> to the failed trial in <b>75% of cases</b>. It outperforms the 50% random baseline and traditional approaches built on publicly available data (<b>ROC AUC ≈ 0.75</b> vs. 0.50 baseline).</div>
+                </div>
+            </div>
+            ''',
             unsafe_allow_html=True
         )
 
-        selected_id = render_trials_grid(filtered_df)
 
-        if selected_id:
-            open_trial_third_ui(selected_id)
-else:
+def render_results_page(x_base):
+    with st.sidebar:
+        with st.container(key="sidebar_reset_wrap"):
+            st.button(
+                "Reset Filters",
+                width="stretch",
+                on_click=handle_sidebar_reset_filters
+            )
+
+        with st.container(key="sidebar_filters"):
+            filtered_df = render_filters(x_base, is_sidebar=True)
+
+        st.text_input("Register", key="s_registry")
+        st.text_input("Analysis", key="s_mode")
+        st.text_input(
+            "Values",
+            key="s_detail",
+            on_change=sync_s_detail_text_input_to_memory
+        )
+        st.text_input("Scores", key="s_scores")
+
+    render_header(is_landing=False)
+
+    st.markdown(
+        f"<div style='text-align:left; margin:var(--ui-nonlanding-body-gap) 0 6px 0; color:#94a3b8; font-weight:600; font-size:0.7rem; line-height:1;'>{len(filtered_df):,} trials matching criteria</div>",
+        unsafe_allow_html=True
+    )
+
+    if filtered_df.empty:
+        render_empty_results_message()
+        return
+
+    selected_id = render_trials_grid(filtered_df)
+
+    if selected_id:
+        open_trial_third_ui(selected_id)
 
 
+def render_detail_page():
     selected_df = X_ALL[X_ALL[ID_COL] == st.session_state.selected_nct_id]
 
     render_header(
@@ -3025,25 +3040,34 @@ else:
         show_global_edit_toggle=True
     )
 
-
     if selected_df.empty:
         st.warning("Selected trial not found.")
-    else:
-        row = selected_df.iloc[0]
-        render_trial_detail_tabs_refined(row)
+        return
+
+    row = selected_df.iloc[0]
+    render_trial_detail_tabs_refined(row)
+
+
+def route_app():
+    x_base = X_ALL
+
+    if st.session_state.selected_nct_id:
+        render_detail_page()
+        return
+
+    if st.session_state.search_initiated:
+        render_results_page(x_base)
+        return
+
+    render_landing_page(x_base)
+
 
 # ==========================
-# 6. HIDDEN STATE KEEPER
+# 6. MAIN UI FLOW
 # ==========================
-# Keeps sidebar text-input widget keys alive while the sidebar is hidden in Detail View.
-if st.session_state.selected_nct_id:
-    with st.sidebar:
-        st.text_input("Register", key="s_registry", label_visibility="collapsed")
-        st.text_input("Analysis", key="s_mode", label_visibility="collapsed")
-        st.text_input(
-            "Values",
-            key="s_detail",
-            label_visibility="collapsed",
-            on_change=sync_s_detail_text_input_to_memory
-        )
-        st.text_input("Scores", key="s_scores", label_visibility="collapsed")
+
+init_session_state()
+keep_filter_state_alive()
+inject_custom_styles()
+render_ui_busy_overlay()
+route_app()
