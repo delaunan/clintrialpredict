@@ -289,10 +289,31 @@ def inject_custom_styles():
                 padding-top: 2rem !important;
             }}
 
+
+            /* STREAMLIT TOP HEADER
+               Keep Streamlit's native top bar visually transparent.
+               Do not try to disable/re-enable its internal click layers. */
             [data-testid="stHeader"] {{
                 background-color: rgba(0,0,0,0) !important;
                 color: #334155 !important;
             }}
+
+            /* OUR HEADER ACTION BUTTONS
+               When the page scrolls and these buttons pass under the transparent
+               Streamlit top band, keep them above that band and clickable. */
+            .st-key-header_action_buttons {{
+                position: relative !important;
+                z-index: 1000001 !important;
+                pointer-events: auto !important;
+            }}
+
+            .st-key-header_action_buttons *,
+            .st-key-header_action_buttons button,
+            .st-key-header_action_buttons [role="button"],
+            .st-key-header_action_buttons [data-baseweb="checkbox"] {{
+                pointer-events: auto !important;
+            }}
+
 
             section[data-testid="stSidebar"],
             section[data-testid="stSidebar"] > div,
