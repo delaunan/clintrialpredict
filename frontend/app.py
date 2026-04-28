@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 import requests
-from st_aggrid import AgGrid, GridOptionsBuilder
+
 
 # IMPORT PLOTTING UTILS
 from utils.plot import plot_success_gauge, plot_impact_bar, plot_treemap
@@ -44,7 +44,7 @@ DARKNESS = 0.85
 THICKNESS = 0
 
 UI_ACCENT_BLUE = "#89A7C9"
-GRID_HOVER_BLUE = "#A1BCDB"
+
 
 # Plot / completion palette mirrors utils.plot STYLE_CONFIG["colors"]
 PLOT_BLUE_SOFT_RGB = "rgb(162,198,228)"
@@ -62,8 +62,7 @@ BRAND_FILTER = (
 )
 
 
-DEBUG_OVERLAY = False
-ENABLE_UI_BUSY_OVERLAY = False
+
 
 TEXTAREA_HEIGHTS = {
     "top_title": 70,
@@ -180,7 +179,6 @@ TRIAL_EDITOR_TEXT_FIELDS = {
     "eligibility_criteria": ("criteria_ui",),
 }
 
-AGGRID_WRAPPER_SHADOW = "-6px 6px 12px -3px rgba(0,0,0,0.12)"
 
 # ==========================
 # 2. STYLES (Consolidated)
@@ -207,33 +205,6 @@ def inject_custom_styles():
         """
 
 
-    debug_overlay_css = """
-            /* =========================
-               DEBUG OVERLAP VISUALIZER
-               ========================= */
-            [data-testid="stVerticalBlock"] {
-                outline: 1px dashed magenta !important;
-            }
-
-            [data-testid="stElementContainer"] {
-                outline: 1px dashed cyan !important;
-                background: rgba(0, 255, 255, 0.05) !important;
-            }
-
-            .st-key-header_action_buttons {
-                outline: 3px solid lime !important;
-                background: rgba(0, 255, 0, 0.08) !important;
-            }
-
-            .st-key-header_action_buttons .stButton {
-                outline: 2px solid blue !important;
-                background: rgba(0, 0, 255, 0.05) !important;
-            }
-
-            .st-key-header_action_buttons .stButton > button {
-                outline: 2px solid black !important;
-            }
-    """ if DEBUG_OVERLAY else ""
 
     is_edit = is_detail and st.session_state.get("global_edit_mode", False)
     field_bg = "#ffffff" if is_edit else "#f8fafc"
@@ -766,7 +737,18 @@ def inject_custom_styles():
             }}
 
 
+            /* NATIVE RESULTS TABLE — SAFE OUTER WRAPPER ONLY */
+            [data-testid="stDataFrame"] {{
+                border: 1px solid #e2e8f0 !important;
+                border-radius: 14px !important;
+                box-shadow: 0 1px 4px rgba(0,0,0,0.05) !important;
+                overflow: hidden !important;
+                background: #ffffff !important;
+            }}
 
+            [data-testid="stDataFrame"] div {{
+                font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
+            }}
 
             /* Buttons */
             .stButton > button {{
@@ -1494,7 +1476,7 @@ def inject_custom_styles():
                 margin-bottom: var(--ui-summary-row-overlap) !important;
             }}
 
-            {debug_overlay_css}
+
 
 
         </style>
@@ -1567,110 +1549,14 @@ def init_session_state():
         "detail_completion_tab_visible": False,
         "detail_prediction_notice": False,
         "completion_score_tab_jump_nonce": 0,
-        "ui_busy": False,
-        "ui_busy_message": "Loading...",
+
     }
     for key, val in defaults.items():
         if key not in st.session_state:
             st.session_state[key] = val
 
 
-def start_ui_busy(message="Updating view..."):
-    if not ENABLE_UI_BUSY_OVERLAY:
-        return
 
-    st.session_state.ui_busy = True
-    st.session_state.ui_busy_message = message
-
-
-def render_ui_busy_overlay():
-    if not ENABLE_UI_BUSY_OVERLAY:
-        return
-
-    if not st.session_state.get("ui_busy", False):
-        return
-
-    safe_message = html.escape(st.session_state.get("ui_busy_message", "Updating view..."))
-
-    st.markdown(
-        """
-        <style>
-            .app-busy-overlay {
-                position: fixed;
-                inset: 0;
-                z-index: 999999;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                background: rgba(241, 245, 249, 0.74);
-                backdrop-filter: blur(6px) saturate(115%);
-                -webkit-backdrop-filter: blur(6px) saturate(115%);
-                pointer-events: all;
-                opacity: 1;
-                visibility: visible;
-                animation: appBusyFadeOut 0.24s ease-out 0.62s forwards;
-            }
-
-            .app-busy-card {
-                display: flex;
-                align-items: center;
-                gap: 12px;
-                padding: 12px 16px;
-                min-width: 220px;
-                max-width: 360px;
-                border-radius: 16px;
-                background: rgba(255, 255, 255, 0.88);
-                border: 1px solid rgba(203, 213, 225, 0.95);
-                box-shadow:
-                    0 10px 30px rgba(15, 23, 42, 0.08),
-                    0 2px 8px rgba(15, 23, 42, 0.04);
-                color: #334155;
-                font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-                font-size: 0.88rem;
-                font-weight: 600;
-                letter-spacing: -0.01em;
-            }
-
-            .app-busy-spinner {
-                width: 16px;
-                height: 16px;
-                border-radius: 999px;
-                border: 2px solid rgba(148, 163, 184, 0.30);
-                border-top-color: #52606d;
-                animation: appBusySpin 0.8s linear infinite;
-                flex-shrink: 0;
-            }
-
-            .app-busy-text {
-                color: #475569;
-                white-space: nowrap;
-            }
-
-            @keyframes appBusySpin {
-                to { transform: rotate(360deg); }
-            }
-
-            @keyframes appBusyFadeOut {
-                to {
-                    opacity: 0;
-                    visibility: hidden;
-                }
-            }
-        </style>
-        <div class="app-busy-overlay">
-            <div class="app-busy-card">
-                <div class="app-busy-spinner"></div>
-                <div class="app-busy-text">"""
-        + safe_message
-        + """</div>
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    st.session_state.ui_busy = False
-    st.session_state.ui_busy_message = "Loading..."
 
 FILTER_COL_MAP = {
     "f_sponsor": "lead_sponsor_canonical",
@@ -1697,14 +1583,18 @@ def keep_filter_state_alive():
 
 
 def reset_filters(return_to_landing=True):
-    current_s_detail = get_s_detail_value()
+    preserved_registry = str(st.session_state.get("s_registry", "") or "")
+    preserved_mode = str(st.session_state.get("s_mode", "") or "")
+    preserved_detail = get_s_detail_value()
+    preserved_scores = str(st.session_state.get("s_scores", "") or "")
 
     for key in FILTER_COL_MAP:
         st.session_state[key] = None
-    for key in ["s_registry", "s_mode", "s_scores"]:
-        st.session_state[key] = ""
 
-    persist_s_detail_value(current_s_detail)
+    st.session_state["s_registry"] = preserved_registry
+    st.session_state["s_mode"] = preserved_mode
+    st.session_state["s_scores"] = preserved_scores
+    persist_s_detail_value(preserved_detail)
 
     st.session_state.selected_nct_id = None
     if return_to_landing:
@@ -1712,7 +1602,7 @@ def reset_filters(return_to_landing=True):
 
 
 def handle_sidebar_reset_filters():
-    reset_filters(return_to_landing=False)
+    reset_filters(return_to_landing=True)
 
 
 def start_search():
@@ -1871,8 +1761,137 @@ def get_risk_tier(score: float):
 # 4. COMPONENTS
 # ==========================
 
+def render_transition_overlay_hook():
+    st.iframe(
+        """
+        <script>
+        (function() {
+            const doc = parent.document;
+            const win = parent.window;
+            const OVERLAY_ID = "ctp-transition-overlay";
 
+            function removeOverlay() {
+                const existing = doc.getElementById(OVERLAY_ID);
+                if (existing) existing.remove();
 
+                if (win.__ctpOverlayTimer) {
+                    win.clearTimeout(win.__ctpOverlayTimer);
+                    win.__ctpOverlayTimer = null;
+                }
+            }
+
+            function showOverlay(message, timeoutMs) {
+                removeOverlay();
+
+                const overlay = doc.createElement("div");
+                overlay.id = OVERLAY_ID;
+                overlay.innerHTML = `
+                    <style>
+                        @keyframes ctpSpin { to { transform: rotate(360deg); } }
+                        @keyframes ctpOverlayIn { from { opacity: 0; } to { opacity: 1; } }
+
+                        #${OVERLAY_ID} {
+                            position: fixed;
+                            inset: 0;
+                            z-index: 999999;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            background: rgba(241, 245, 249, 0.72);
+                            backdrop-filter: blur(1.5px);
+                            -webkit-backdrop-filter: blur(1.5px);
+                            animation: ctpOverlayIn 0.08s ease-out both;
+                            cursor: progress;
+                        }
+
+                        #${OVERLAY_ID} .ctp-card {
+                            display: flex;
+                            align-items: center;
+                            gap: 10px;
+                            padding: 10px 14px;
+                            border-radius: 12px;
+                            border: 1px solid #e2e8f0;
+                            background: rgba(255, 255, 255, 0.92);
+                            box-shadow: 0 10px 24px rgba(15, 23, 42, 0.10);
+                            font-family: Inter, -apple-system, BlinkMacSystemFont, sans-serif;
+                            color: #475569;
+                            font-size: 0.82rem;
+                            font-weight: 700;
+                            letter-spacing: -0.01em;
+                        }
+
+                        #${OVERLAY_ID} .ctp-spinner {
+                            width: 15px;
+                            height: 15px;
+                            border-radius: 999px;
+                            border: 2px solid rgba(148, 163, 184, 0.30);
+                            border-top-color: #52606d;
+                            animation: ctpSpin 0.75s linear infinite;
+                        }
+                    </style>
+
+                    <div class="ctp-card">
+                        <div class="ctp-spinner"></div>
+                        <div>${message}</div>
+                    </div>
+                `;
+
+                overlay.addEventListener("click", removeOverlay);
+                doc.body.appendChild(overlay);
+
+                win.__ctpOverlayTimer = win.setTimeout(removeOverlay, timeoutMs);
+            }
+
+            function getButtonText(button) {
+                return (button.innerText || button.textContent || "").trim();
+            }
+
+            function getOverlayConfig(text) {
+                if (text === "Search Trials") return ["Loading trials...", 1200];
+                if (text === "Back to Results") return ["Returning to results...", 900];
+                if (text === "Reset Filters") return ["Resetting filters...", 900];
+                if (text === "Predict Trial Completion") return ["Generating completion score...", 2500];
+                return null;
+            }
+
+            removeOverlay();
+
+            if (!win.__ctpOverlayListenerInstalled) {
+                doc.addEventListener("click", function(event) {
+                    const button = event.target.closest("button");
+
+                    if (button) {
+                        const config = getOverlayConfig(getButtonText(button));
+                        if (!config) return;
+
+                        showOverlay(config[0], config[1]);
+                        return;
+                    }
+
+                    const dataframe = event.target.closest('[data-testid="stDataFrame"]');
+
+                    if (dataframe) {
+                        const rect = dataframe.getBoundingClientRect();
+                        const clickX = event.clientX - rect.left;
+
+                        // Native st.dataframe row selection is triggered from the left
+                        // selection / checkbox band. Avoid showing a false overlay
+                        // when the user clicks normal row cells.
+                        const CHECKBOX_BAND_WIDTH = 52;
+
+                        if (clickX >= 0 && clickX <= CHECKBOX_BAND_WIDTH) {
+                            showOverlay("Opening trial...", 700);
+                        }
+                    }
+                }, true);
+
+                win.__ctpOverlayListenerInstalled = true;
+            }
+        })();
+        </script>
+        """,
+        height=1,
+    )
 
 def render_header(is_landing=True, show_predict_button=False, show_back_button=False, show_global_edit_toggle=False):
     img_base64 = load_logo_base64()
@@ -2038,207 +2057,48 @@ def render_trials_grid(df):
 
     grid_df = grid_df.sort_values("NCT ID", ascending=True, kind="stable").reset_index(drop=True)
 
-    gb = GridOptionsBuilder.from_dataframe(grid_df)
+    dynamic_height = min(520, 36 + (len(grid_df) * 31) + 2)
 
-    gb.configure_default_column(
-        sortable=True,
-        filter=False,
-        resizable=True,
-        suppressMenu=True,
-        minWidth=95,
-        flex=1
-    )
-
-    gb.configure_column(
-        "NCT ID",
-        maxWidth=110,
-        flex=0.68,
-        cellClass="ag-tight-center-cell",
-        headerClass="ag-center-header"
-    )
-    gb.configure_column(
-        "Identity",
-        minWidth=300,
-        flex=3.15,
-        cellClass="ag-identity-cell",
-        headerClass="ag-identity-header"
-    )
-    gb.configure_column(
-        "Sponsor",
-        maxWidth=175,
-        flex=1.20,
-        cellClass="ag-tight-center-cell",
-        headerClass="ag-center-header"
-    )
-    gb.configure_column(
-        "Area",
-        maxWidth=160,
-        flex=1.00,
-        cellClass="ag-tight-center-cell",
-        headerClass="ag-center-header"
-    )
-    gb.configure_column(
-        "Phase",
-        maxWidth=105,
-        flex=0.65,
-        cellClass="ag-tight-center-cell",
-        headerClass="ag-center-header"
-    )
-    gb.configure_column(
-        "Start Year",
-        maxWidth=90,
-        flex=0.58,
-        cellClass="ag-tight-center-cell",
-        headerClass="ag-center-header",
-        filter=False
-    )
     if show_score:
-        gb.configure_column(
-            "Score",
-            maxWidth=82,
-            flex=0.52,
-            cellClass="ag-tight-center-cell",
-            headerClass="ag-center-header",
-            filter=False
-        )
-
-    gb.configure_selection(selection_mode="single", use_checkbox=False)
-    gb.configure_grid_options(
-        rowHeight=30,
-        headerHeight=28,
-        suppressCellFocus=True,
-        animateRows=False,
-        suppressRowClickSelection=False
-    )
-
-    dynamic_height = min(505, 28 + (len(grid_df) * 30) + 2)
-    response = AgGrid(
-        grid_df,
-        gridOptions=gb.build(),
-        height=dynamic_height,
-        fit_columns_on_grid_load=False,
-        allow_unsafe_jscode=False,
-        update_on=["selectionChanged"],
-        theme="streamlit",
-        key=f"trials_grid_{'scores' if show_score else 'base'}",
-        custom_css={
-            ".ag-root-wrapper": {
-                "border": "1px solid #cbd5e1",
-                "border-radius": "12px",
-                "box-shadow": AGGRID_WRAPPER_SHADOW
-            },
-            ".ag-header": {
-                "background-color": "#e2e8f0 !important"
-            },
-            ".ag-row": {
-                "cursor": "pointer !important",
-                "color": "#334155 !important",
-                "font-size": "0.80rem !important"
-            },
-            ".ag-row-hover": {
-                "background-color": f"{GRID_HOVER_BLUE} !important",
-                "color": "#ffffff !important"
-            },
-            ".ag-row-hover .ag-cell": {
-                "color": "#ffffff !important"
-            },
-            ".ag-cell": {
-                "display": "flex !important",
-                "align-items": "center !important"
-            },
-            ".ag-row-hover .ag-cell-value": {
-                "color": "#ffffff !important"
-            },
-            ".ag-tight-center-cell": {
-                "justify-content": "center !important",
-                "text-align": "center !important"
-            },
-            ".ag-identity-cell": {
-                "justify-content": "flex-start !important",
-                "padding-left": "6px !important"
-            },
-            ".ag-header-cell-label": {
-                "width": "100% !important"
-            },
-            ".ag-center-header .ag-header-cell-label": {
-                "justify-content": "center !important"
-            },
-            ".ag-center-header .ag-header-cell-text": {
-                "width": "100% !important",
-                "text-align": "center !important"
-            },
-            ".ag-identity-header .ag-header-cell-label": {
-                "justify-content": "flex-start !important"
-            },
-            ".ag-identity-header .ag-header-cell-text": {
-                "text-align": "left !important"
-            }
+        column_config = {
+            "NCT ID": st.column_config.TextColumn("NCT ID", width=88),
+            "Identity": st.column_config.TextColumn("Identity", width=480),
+            "Sponsor": st.column_config.TextColumn("Sponsor", width=170),
+            "Area": st.column_config.TextColumn("Area", width=100),
+            "Phase": st.column_config.TextColumn("Phase", width=60),
+            "Start Year": st.column_config.NumberColumn("Start Year", width=60, format="%d"),
+            "Score": st.column_config.TextColumn("Score", width=40),
         }
+    else:
+        column_config = {
+            "NCT ID": st.column_config.TextColumn("NCT ID", width=85),
+            "Identity": st.column_config.TextColumn("Identity", width=500),
+            "Sponsor": st.column_config.TextColumn("Sponsor", width=170),
+            "Area": st.column_config.TextColumn("Area", width=100),
+            "Phase": st.column_config.TextColumn("Phase", width=60),
+            "Start Year": st.column_config.NumberColumn("Start Year", width=60, format="%d"),
+        }
+
+    table_event = st.dataframe(
+        grid_df,
+        hide_index=True,
+        width="stretch",
+        height=dynamic_height,
+        column_config=column_config,
+        selection_mode="single-row",
+        on_select="rerun",
+        row_height=31,
+        key=f"trials_table_{'scores' if show_score else 'base'}",
     )
 
-    selected = response.get("selected_rows", [])
-    if isinstance(selected, pd.DataFrame):
-        if not selected.empty: return selected.iloc[0]["NCT ID"]
-    elif selected:
-        return selected[0]["NCT ID"]
+    selected_rows = table_event.selection.rows
+
+    if selected_rows:
+        selected_idx = selected_rows[0]
+        if 0 <= selected_idx < len(grid_df):
+            return grid_df.iloc[selected_idx]["NCT ID"]
+
     return None
-
-def get_edited_row(row):
-    edited_row = row.copy()
-    trial_key = st.session_state.get("selected_nct_id", "no_trial")
-
-    # 1. Update from Smart Info Boxes (inputs and selectboxes)
-    for key in st.session_state:
-        if key.startswith(f"input_{trial_key}_"):
-            field_id = key.replace(f"input_{trial_key}_", "")
-            val = st.session_state[key]
-
-            if field_id in {"has_placebo_ml", "has_dmc_ml"} and isinstance(val, bool):
-                edited_row[field_id] = int(val)
-                continue
-
-            meta = TAXONOMY.get(field_id, {})
-            options = meta.get("ui", {}).get("options")
-            if options:
-                # Map label back to code for ML compatibility
-                for opt in options:
-                    if opt[1] == val:
-                        # If field_id ends with _ml, we store the code
-                        # If it's a UI field, we store the label
-                        if field_id.endswith("_ml"):
-                            edited_row[field_id] = opt[0]
-                        else:
-                            edited_row[field_id] = opt[1]
-                        break
-            else:
-                edited_row[field_id] = val
-
-    # 2. Update from Scroll Panels (text areas)
-    for panel_key, candidates in TRIAL_EDITOR_TEXT_FIELDS.items():
-        text_key = f"text_{trial_key}_{panel_key}"
-        target_col = candidates[0]
-
-        if text_key in st.session_state:
-            edited_row[target_col] = st.session_state[text_key]
-
-    return edited_row
-
-
-
-
-def render_pillar_expander(title, pillar_name, data, key_suffix=""):
-    feats = sorted([(f_id, f_m) for f_id, f_m in TAXONOMY.items() if f_m.get("ui", {}).get("pillar") == pillar_name],
-                   key=lambda x: (x[1].get("ui", {}).get("subgroup", ""), x[1].get("ui", {}).get("priority", 99)))
-    with st.expander(title, expanded=False):
-        for i in range(0, len(feats), 2):
-            cols = st.columns(2)
-            for j in range(2):
-                if i+j < len(feats):
-                    f_id, f_m = feats[i+j]
-                    label = f_m.get("ui", {}).get("label", f_id)
-                    with cols[j]:
-                        render_smart_info_box(label, f_id, data, key_suffix=key_suffix)
-
 
 def open_trial_third_ui(selected_id):
     if not selected_id:
@@ -2490,14 +2350,7 @@ def _render_native_meta_textarea_field(label, value, state_suffix, height):
             disabled=not st.session_state.get("global_edit_mode", False)
         )
 
-def render_smart_info_box(label, field_id, row, key_suffix=""):
-    _render_labeled_trial_field(
-        label=label,
-        field_id=field_id,
-        row=row,
-        layout="stack",
-        key_suffix=key_suffix
-    )
+
 
 
 def render_top_title_panel(row):
@@ -2627,15 +2480,6 @@ def render_summary_text_shell_panel(label, value, state_suffix, panel_suffix, he
 
             st.markdown("<div class='trial-meta-bottom-gap'></div>", unsafe_allow_html=True)
 
-def render_summary_placeholder_panel(panel_suffix, height):
-    with st.container(key=f"summary_side_shell_{panel_suffix}"):
-        with st.container(key=f"summary_side_inner_{panel_suffix}"):
-            st.markdown("<div class='trial-meta-top-gap'></div>", unsafe_allow_html=True)
-            st.markdown(
-                f"<div style='height: {height}px;'></div>",
-                unsafe_allow_html=True
-            )
-            st.markdown("<div class='trial-meta-bottom-gap'></div>", unsafe_allow_html=True)
 
 
 def render_box_spacer(height):
@@ -2764,6 +2608,44 @@ def render_trial_detail_tabs_refined(row):
             with tab3:
                 render_completion_prediction_tab(row)
 
+def get_edited_row(row: pd.Series) -> pd.Series:
+    edited_row = row.copy()
+    trial_key = st.session_state.get("selected_nct_id", "no_trial")
+
+    # 1. Update from Smart Info Boxes: inputs, selectboxes, toggles
+    for key in st.session_state:
+        if key.startswith(f"input_{trial_key}_"):
+            field_id = key.replace(f"input_{trial_key}_", "")
+            val = st.session_state[key]
+
+            if field_id in {"has_placebo_ml", "has_dmc_ml"} and isinstance(val, bool):
+                edited_row[field_id] = int(val)
+                continue
+
+            meta = TAXONOMY.get(field_id, {})
+            options = meta.get("ui", {}).get("options")
+
+            if options:
+                # Map UI label back to ML code when needed
+                for opt in options:
+                    if opt[1] == val:
+                        if field_id.endswith("_ml"):
+                            edited_row[field_id] = opt[0]
+                        else:
+                            edited_row[field_id] = opt[1]
+                        break
+            else:
+                edited_row[field_id] = val
+
+    # 2. Update from large text areas
+    for panel_key, candidates in TRIAL_EDITOR_TEXT_FIELDS.items():
+        text_key = f"text_{trial_key}_{panel_key}"
+        target_col = candidates[0]
+
+        if text_key in st.session_state:
+            edited_row[target_col] = st.session_state[text_key]
+
+    return edited_row
 
 def get_analysis_result_for_selected_trial(row):
     if not (st.session_state.trigger_prediction or st.session_state.get("analysis_result")):
@@ -2775,10 +2657,12 @@ def get_analysis_result_for_selected_trial(row):
     ):
         with st.spinner("Analyzing signals..."):
             try:
-                row_to_predict = get_edited_row(row)
+                row_to_predict: pd.Series = get_edited_row(row)
+                prediction_payload = row_to_predict.replace({np.nan: None}).to_dict()
+
                 res = requests.post(
                     API_URL,
-                    json=row_to_predict.replace({np.nan: None}).to_dict(),
+                    json=prediction_payload,
                     timeout=60
                 )
 
@@ -3069,5 +2953,5 @@ def route_app():
 init_session_state()
 keep_filter_state_alive()
 inject_custom_styles()
-render_ui_busy_overlay()
+render_transition_overlay_hook()
 route_app()
