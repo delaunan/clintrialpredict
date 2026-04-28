@@ -508,7 +508,7 @@ def inject_custom_styles():
             }}
 
             .st-key-sidebar_filters {{
-                margin-top: 55px !important;
+                margin-top: 65px !important;
             }}
 
 
@@ -1868,10 +1868,10 @@ def render_transition_overlay_hook():
             }
 
             function getOverlayConfig(text) {
-                if (text === "Search Trials") return ["Loading trials...", 1200];
-                if (text === "Back to Results") return ["Returning to results...", 900];
-                if (text === "Reset Filters") return ["Resetting filters...", 900];
-                if (text === "Predict Trial Completion") return ["Generating completion score...", 2500];
+                if (text === "Search Trials") return ["Loading trials...", 1600];
+                if (text === "Back to Results") return ["Returning to results...", 1600];
+                if (text === "Reset Filters") return ["Resetting filters...", 1600];
+                if (text === "Predict Trial Completion") return ["Generating completion score...", 3330];
                 return null;
             }
 
