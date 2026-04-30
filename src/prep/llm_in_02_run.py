@@ -27,8 +27,8 @@ LOG_FILE = os.path.join(PROJECT_ROOT, 'data/logs/enrichment_run2_errors.log')
 # [STEP 3] Global Helpers
 NL = chr(10)
 MODEL_NAME = "gemini-2.5-flash-lite"
-CONCURRENCY_LIMIT = 20
-BATCH_SIZE = 5         # Increased batch size to save money on input tokens
+CONCURRENCY_LIMIT = 15
+BATCH_SIZE = 1         # Ultimate precision mode for rescuing 9,800 trials
 BUDGET_LIMIT_USD = 100.00
 CONSECUTIVE_FAIL_LIMIT = 5
 
