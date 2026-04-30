@@ -17,7 +17,7 @@ V0_FILE = os.path.join(PROJECT_ROOT, 'data/processed/llm_out_00.csv')
 REF_CONTEXT = os.path.join(PROJECT_ROOT, 'data/llm_in_01_2.csv')
 HIER_FILE = os.path.join(PROJECT_ROOT, 'data/reference/hier_gbd.csv')
 STATS_FILE = os.path.join(PROJECT_ROOT, 'data/reference/gbd_stats.csv')
-MODEL_NAME = "gemini-2.0-flash"
+MODEL_NAME = "gemini-3-flash-preview"
 
 client = genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))
 

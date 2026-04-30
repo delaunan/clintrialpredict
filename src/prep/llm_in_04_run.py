@@ -24,7 +24,7 @@ LOG_FILE = os.path.join(PROJECT_ROOT, 'data/logs/enrichment_v4_run4_errors.log')
 
 # [STEP 3] Global Helpers
 NL = chr(10)
-MODEL_NAME = "gemini-2.0-flash"
+MODEL_NAME = "gemini-3-flash-preview"
 CONCURRENCY_LIMIT = 30
 BATCH_SIZE = 3
 BUDGET_LIMIT_USD = 50.00

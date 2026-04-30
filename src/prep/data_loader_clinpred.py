@@ -112,7 +112,7 @@ class ClinicalTrialLoader:
         print(f"    [Filter] Kept {len(df)} Interventional trials.")
 
         # 4. Status Filter
-        allowed_statuses = ['COMPLETED', 'TERMINATED', 'WITHDRAWN', 'RECRUITING', 'ACTIVE, NOT RECRUITING', 'NOT YET RECRUITING', 'ENROLLING BY INVITATION']
+        allowed_statuses = ['COMPLETED', 'TERMINATED', 'WITHDRAWN', 'RECRUITING', 'ACTIVE_NOT_RECRUITING', 'NOT_YET_RECRUITING', 'ENROLLING_BY_INVITATION']
         df = df[df['overall_status'].str.upper().isin(allowed_statuses)]
         print(f"    [Filter] Kept {len(df)} trials with allowed statuses: {', '.join(allowed_statuses)}")
 

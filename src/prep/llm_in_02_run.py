@@ -26,9 +26,9 @@ LOG_FILE = os.path.join(PROJECT_ROOT, 'data/logs/enrichment_run2_errors.log')
 
 # [STEP 3] Global Helpers
 NL = chr(10)
-MODEL_NAME = "gemini-2.0-flash"
-CONCURRENCY_LIMIT = 40
-BATCH_SIZE = 1         # Run 2 is more complex than Run 1, but still parallelizable
+MODEL_NAME = "gemini-2.5-flash-lite"
+CONCURRENCY_LIMIT = 20
+BATCH_SIZE = 5         # Increased batch size to save money on input tokens
 BUDGET_LIMIT_USD = 100.00
 CONSECUTIVE_FAIL_LIMIT = 5
 
@@ -216,12 +216,12 @@ def apply_logic_patch(file_path):
     if not os.path.exists(file_path): return
     print(f"> Applying logic-lock patch to {file_path}...")
     df = pd.read_csv(file_path)
-    
+
     io_anchors = {'PD-1', 'PD-L1', 'CTLA-4'}
     mab_mods = {'BIOLOGIC_MAB', 'BIOLOGIC_ADC'}
     leaky_pat = re.compile(r'^(Inhibitor|Agonist|Antagonist|Modulator|Targeting|Antibody against|Small molecule inhibitor) of\s+|'
                            r'\s+(Inhibitor|Agonist|Antagonist|Modulator|Protein|Enzyme)$', re.IGNORECASE)
-    
+
     # Greek & Trademark normalization map
     special_map = {'\u03b1': 'A', '\u0391': 'A', '\u03b2': 'B', '\u0392': 'B', '\u03b3': 'G', '\u0393': 'G', '\u03b4': 'D', '\u0394': 'D', '\u03ba': 'K', '\u039a': 'K', '\u00ae': '', '\u2122': ''}
 
@@ -231,7 +231,7 @@ def apply_logic_patch(file_path):
         for char, replacement in special_map.items():
             targets_raw = targets_raw.replace(char, replacement)
             row['alpha_drug_name'] = str(row['alpha_drug_name']).replace(char, replacement)
-        
+
         targets = [t.strip() for t in targets_raw.split('|')]
         mod = row['therapeutic_modality']
         path = row['target_pathway_class']
@@ -242,7 +242,7 @@ def apply_logic_patch(file_path):
             row['target_pathway_class'] = 'IMMUNO_ONCOLOGY'
         elif mod in mab_mods and path == 'KINASE_INHIBITOR':
             row['target_pathway_class'] = 'OTHER_PATHWAY'
-        
+
         # 3. SMALL MOLECULE INTERLEUKIN GUARDRAIL
         # Small molecules target enzymes/kinases in the pathway, not cytokines themselves.
         if mod == 'SMALL_MOLECULE' and path == 'INTERLEUKIN_CYTOKINE':
@@ -250,7 +250,7 @@ def apply_logic_patch(file_path):
                 row['target_pathway_class'] = 'KINASE_INHIBITOR'
             else:
                 row['target_pathway_class'] = 'ENZYME_MODULATOR'
-        
+
         # 4. SYMBOL WASH & CASING LOCK
         new_targets = []
         for t in targets:
@@ -259,7 +259,7 @@ def apply_logic_patch(file_path):
             if len(clean_t) <= 10 and " " not in clean_t:
                 clean_t = clean_t.upper()
             new_targets.append(clean_t)
-            
+
         row['molecular_targets'] = " | ".join(new_targets)
         return row
 
@@ -393,9 +393,9 @@ def run_master_audit(input_file, output_file):
 
 if __name__ == "__main__":
     asyncio.run(main())
-    
+
     # Ensure post-processing and logic-patch are ALWAYS applied to the final file
     post_process_targets(OUTPUT_FILE)
     apply_logic_patch(OUTPUT_FILE)
-    
+
     run_master_audit(INPUT_FILE, OUTPUT_FILE)

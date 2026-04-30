@@ -25,7 +25,7 @@ OUTPUT_FILE = os.path.join(OUTPUT_PATH, 'llm_out_00.csv')
 LOG_FILE = os.path.join(PROJECT_ROOT, 'data/logs/enrichment_v1_errors.log')
 
 # Config
-MODEL_NAME = "gemini-2.0-flash"
+MODEL_NAME = "gemini-3-flash-preview"
 CONCURRENCY_LIMIT = 40
 BATCH_SIZE = 1 
 FIELDNAMES = [
