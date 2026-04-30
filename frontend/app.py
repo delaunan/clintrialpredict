@@ -227,6 +227,49 @@ def inject_custom_styles():
                 --app-bg: #f1f5f9;
                 --ui-accent-blue: {UI_ACCENT_BLUE};
 
+                /* RESPONSIVE DESIGN SYSTEM
+                   Baseline = current laptop design.
+                   Large screens scale moderately.
+                   Very large screens are capped. */
+                --ui-page-max-w: 1760px;
+                --ui-page-pad-x: clamp(2.5rem, 5vw, 6.5rem);
+                --ui-page-pad-top: 2rem;
+
+                --ui-card-radius: 14px;
+                --ui-card-pad: 24px;
+                --ui-filter-header-pad: 22px 24px 28px 24px;
+                --ui-filter-body-pad: 12px 25px 18px 25px;
+                --ui-card-gap: 1rem;
+
+                --ui-highlight-title-size: 1.15rem;
+                --ui-highlight-text-size: 0.95rem;
+                --ui-label-font-size: 0.85rem;
+                --ui-kicker-font-size: 0.65rem;
+
+                --ui-button-h: 37px;
+                --ui-button-radius: 8px;
+                --ui-button-pad-x: 1rem;
+                --ui-button-font-size: 0.85rem;
+
+                --ui-logo-size-landing: 72px;
+                --ui-logo-size-nonlanding: 44px;
+                --ui-logo-border-landing: 4px;
+                --ui-logo-border-nonlanding: 2px;
+                --ui-logo-radius-landing: 18px;
+                --ui-logo-radius-nonlanding: 7px;
+                --ui-logo-gap-landing: 12px;
+                --ui-logo-gap-nonlanding: 10px;
+                --ui-logo-pad: 2px;
+
+                --ui-title-size-landing: 2.8rem;
+                --ui-title-size-nonlanding: 2.5rem;
+                --ui-subtitle-size-landing: 1.5rem;
+                --ui-demo-size: 0.7rem;
+
+                --ui-landing-header-pad-top: 10px;
+                --ui-mission-top: 1.2rem;
+                --ui-mission-bottom: 1rem;
+
                 --ui-field-bg: {field_bg};
                 --ui-field-text: {field_text};
 
@@ -279,6 +322,96 @@ def inject_custom_styles():
 
             }}
 
+            /* Large laptop / desktop */
+            @media (min-width: 1800px) and (min-height: 950px) {{
+                :root {{
+                    --ui-page-max-w: 1960px;
+                    --ui-page-pad-top: 2.3rem;
+                    --ui-page-pad-x: clamp(3rem, 5vw, 7.5rem);
+
+                    --ui-control-h: 41px;
+                    --ui-control-radius: 11px;
+                    --ui-control-font-size: 0.83rem;
+                    --ui-field-gap: 11px;
+
+                    --ui-card-radius: 15px;
+                    --ui-card-pad: 27px;
+                    --ui-filter-header-pad: 25px 27px 31px 27px;
+                    --ui-filter-body-pad: 14px 28px 21px 28px;
+                    --ui-card-gap: 1.1rem;
+
+                    --ui-highlight-title-size: 1.22rem;
+                    --ui-highlight-text-size: 1.00rem;
+                    --ui-label-font-size: 0.88rem;
+                    --ui-kicker-font-size: 0.68rem;
+
+                    --ui-button-h: 40px;
+                    --ui-button-radius: 9px;
+                    --ui-button-pad-x: 1.1rem;
+                    --ui-button-font-size: 0.88rem;
+
+                    --ui-logo-size-landing: 78px;
+                    --ui-logo-size-nonlanding: 48px;
+                    --ui-logo-radius-landing: 19px;
+                    --ui-logo-radius-nonlanding: 8px;
+                    --ui-logo-gap-landing: 13px;
+
+                    --ui-title-size-landing: 3.0rem;
+                    --ui-title-size-nonlanding: 2.65rem;
+                    --ui-subtitle-size-landing: 1.6rem;
+                    --ui-demo-size: 0.73rem;
+
+                    --ui-landing-header-pad-top: 14px;
+                    --ui-mission-top: 1.4rem;
+                    --ui-mission-bottom: 1.15rem;
+                }}
+            }}
+
+            /* Very large screen, capped */
+            @media (min-width: 2250px) and (min-height: 1050px) {{
+                :root {{
+                    --ui-page-max-w: 2260px;
+                    --ui-page-pad-top: 2.7rem;
+                    --ui-page-pad-x: clamp(4rem, 5vw, 9rem);
+
+                    --ui-control-h: 45px;
+                    --ui-control-radius: 12px;
+                    --ui-control-font-size: 0.88rem;
+                    --ui-field-gap: 13px;
+
+                    --ui-card-radius: 17px;
+                    --ui-card-pad: 32px;
+                    --ui-filter-header-pad: 18px 33px 25px 33px;
+                    --ui-filter-body-pad: 18px 33px 25px 33px;
+                    --ui-card-gap: 1.25rem;
+
+                    --ui-highlight-title-size: 1.32rem;
+                    --ui-highlight-text-size: 1.06rem;
+                    --ui-label-font-size: 0.92rem;
+                    --ui-kicker-font-size: 0.72rem;
+
+                    --ui-button-h: 44px;
+                    --ui-button-radius: 10px;
+                    --ui-button-pad-x: 1.2rem;
+                    --ui-button-font-size: 0.92rem;
+
+                    --ui-logo-size-landing: 88px;
+                    --ui-logo-size-nonlanding: 52px;
+                    --ui-logo-radius-landing: 22px;
+                    --ui-logo-radius-nonlanding: 9px;
+                    --ui-logo-gap-landing: 15px;
+
+                    --ui-title-size-landing: 3.35rem;
+                    --ui-title-size-nonlanding: 2.85rem;
+                    --ui-subtitle-size-landing: 1.78rem;
+                    --ui-demo-size: 0.78rem;
+
+                    --ui-landing-header-pad-top: 18px;
+                    --ui-mission-top: 1.7rem;
+                    --ui-mission-bottom: 1.35rem;
+                }}
+            }}
+
             html, body, [data-testid="stApp"], [data-testid="stAppViewContainer"] {{
                 background-color: var(--app-bg) !important;
                 color: #334155 !important;
@@ -286,7 +419,12 @@ def inject_custom_styles():
 
             .block-container {{
                 background: transparent !important;
-                padding-top: 2rem !important;
+                padding-top: var(--ui-page-pad-top) !important;
+                padding-left: var(--ui-page-pad-x) !important;
+                padding-right: var(--ui-page-pad-x) !important;
+                max-width: var(--ui-page-max-w) !important;
+                margin-left: auto !important;
+                margin-right: auto !important;
             }}
 
 
@@ -441,8 +579,8 @@ def inject_custom_styles():
             .st-key-filter_header {{
                 background-color: var(--panel-bg) !important;
                 border: 1px solid var(--panel-border) !important;
-                border-radius: 14px !important;
-                padding: 22px 24px 28px 24px !important;
+                border-radius: var(--ui-card-radius) !important;
+                padding: var(--ui-filter-header-pad) !important;
                 box-shadow: var(--ui-shell-shadow) !important;
                 margin-bottom: 0rem !important;
             }}
@@ -454,8 +592,8 @@ def inject_custom_styles():
             .st-key-filter_body {{
                 background-color: var(--panel-bg) !important;
                 border: 1px solid var(--panel-border) !important;
-                border-radius: 14px !important;
-                padding: 12px 25px 18px 25px !important;
+                border-radius: var(--ui-card-radius) !important;
+                padding: var(--ui-filter-body-pad) !important;
                 box-shadow: var(--ui-shell-shadow) !important;
                 margin-top: 0 !important;
                 margin-bottom: 4px !important;
@@ -464,7 +602,7 @@ def inject_custom_styles():
             .right-column-stack {{
                 display: flex !important;
                 flex-direction: column !important;
-                gap: 1rem !important;
+                gap: var(--ui-card-gap) !important;
             }}
 
             .right-column-stack .highlight-box {{
@@ -494,7 +632,7 @@ def inject_custom_styles():
             .st-key-filter_body [data-testid="stWidgetLabel"] p {{
                 color: #ffffff !important;
                 font-weight: 600 !important;
-                font-size: 0.85rem !important;
+                font-size: var(--ui-label-font-size) !important;
                 letter-spacing: -0.01em !important;
                 margin-bottom: -3px !important;
             }}
@@ -533,7 +671,7 @@ def inject_custom_styles():
             .st-key-sidebar_filters [data-testid="stWidgetLabel"] p {{
                 color: #ffffff !important;
                 font-weight: 600 !important;
-                font-size: 0.85rem !important;
+                font-size: var(--ui-label-font-size) !important;
                 letter-spacing: -0.01em !important;
                 margin-bottom: -3px !important;
             }}
@@ -660,18 +798,57 @@ def inject_custom_styles():
 
             /* Boxes & Highlights */
             .highlight-box {{
-                background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 14px;
-                padding: 24px; box-shadow: var(--ui-shell-shadow) !important;
+                background-color: #ffffff;
+                border: 1px solid #e2e8f0;
+                border-radius: var(--ui-card-radius);
+                padding: var(--ui-card-pad);
+                box-shadow: var(--ui-shell-shadow) !important;
                 height: 100%;
             }}
 
-            .mission-box {{ background-color: #e2e8f0 !important; border: 1px solid #cbd5e1 !important; }}
-            .highlight-title {{ font-weight: 800; color: #52606d !important; font-size: 1.15rem; margin-bottom: 8px; letter-spacing: -0.02em; }}
-            .highlight-text {{ color: #64748b; font-size: 0.95rem; line-height: 1.55; font-weight: 450; }}
+            .mission-box {{
+                background-color: #e2e8f0 !important;
+                border: 1px solid #cbd5e1 !important;
+            }}
+
+            .landing-mission-box {{
+                margin-top: var(--ui-mission-top) !important;
+                margin-bottom: var(--ui-mission-bottom) !important;
+            }}
+
+            .highlight-title {{
+                font-weight: 800;
+                color: #52606d !important;
+                font-size: var(--ui-highlight-title-size);
+                margin-bottom: 8px;
+                letter-spacing: -0.02em;
+            }}
+
+            .highlight-text {{
+                color: #64748b;
+                font-size: var(--ui-highlight-text-size);
+                line-height: 1.55;
+                font-weight: 450;
+            }}
+
+            .highlight-kicker {{
+                font-size: var(--ui-kicker-font-size);
+                font-weight: 800;
+                color: #94a3b8;
+                text-transform: uppercase;
+                letter-spacing: 0.1em;
+                line-height: 1.1;
+                white-space: nowrap;
+            }}
             .highlight-text b, .highlight-text strong {{ font-weight: 700 !important; color: inherit !important; }}
 
             /* Tags & Labels */
-            label, strong {{ color: #475569 !important; font-weight: 600 !important; font-size: 0.85rem !important; letter-spacing: -0.01em; }}
+            label, strong {{
+                color: #475569 !important;
+                font-weight: 600 !important;
+                font-size: var(--ui-label-font-size) !important;
+                letter-spacing: -0.01em;
+            }}
 
             /* Detail View */
             .identity-header-text {{ font-size: 1.2rem; font-weight: 600; color: #334155 !important; margin-right: 15px; }}
@@ -692,7 +869,7 @@ def inject_custom_styles():
                 display: flex !important;
                 align-items: flex-start !important;
                 margin: 0 !important;
-                padding: 10px 0 0 0 !important;
+                padding: var(--ui-landing-header-pad-top) 0 0 0 !important;
             }}
 
             .st-key-app_header_nonlanding {{
@@ -773,14 +950,14 @@ def inject_custom_styles():
 
             /* Buttons */
             .stButton > button {{
-                border-radius: 8px !important;
+                border-radius: var(--ui-button-radius) !important;
                 font-weight: 400 !important;
-                font-size: 0.85rem !important;
+                font-size: var(--ui-button-font-size) !important;
                 line-height: 1 !important;
-                padding: 0px 1rem !important;
+                padding: 0px var(--ui-button-pad-x) !important;
                 transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
-                min-height: 37px !important;
-                height: 37px !important;
+                min-height: var(--ui-button-h) !important;
+                height: var(--ui-button-h) !important;
                 display: flex !important;
                 align-items: center !important;
                 justify-content: center !important;
@@ -812,7 +989,7 @@ def inject_custom_styles():
             .stButton > button span,
             .stButton > button p,
             .stButton > button div {{
-                font-size: 0.85rem !important;
+                font-size: var(--ui-button-font-size) !important;
                 font-weight: 400 !important;
                 line-height: 1 !important;
                 letter-spacing: 0 !important;
@@ -1921,24 +2098,45 @@ def render_header(is_landing=True, show_predict_button=False, show_back_button=F
     with t1:
         shell_key = "app_header_landing" if is_landing else "app_header_nonlanding"
         with st.container(key=shell_key):
-            size = 72 if is_landing else 44
-            border = 4 if is_landing else 2
-            radius = 18 if is_landing else 7
-            title_size = "2.8rem" if is_landing else "2.5rem"
-            logo_gap = "12px" if is_landing else "10px"
-            title_demo_gap = "0px" if is_landing else "8px"
+            if is_landing:
+                logo_size = "var(--ui-logo-size-landing)"
+                logo_img_size = "calc(var(--ui-logo-size-landing) - 2px)"
+                logo_border = "var(--ui-logo-border-landing)"
+                logo_radius = "var(--ui-logo-radius-landing)"
+                title_size = "var(--ui-title-size-landing)"
+                logo_gap = "var(--ui-logo-gap-landing)"
+                title_demo_gap = "0px"
+            else:
+                logo_size = "var(--ui-logo-size-nonlanding)"
+                logo_img_size = "calc(var(--ui-logo-size-nonlanding) - 2px)"
+                logo_border = "var(--ui-logo-border-nonlanding)"
+                logo_radius = "var(--ui-logo-radius-nonlanding)"
+                title_size = "var(--ui-title-size-nonlanding)"
+                logo_gap = "var(--ui-logo-gap-nonlanding)"
+                title_demo_gap = "8px"
 
-            html = f"""
-                <div style='display: flex; align-items: center; gap: {logo_gap};'>
-                    <div style='background-color: white; border: {border}px solid #52606d; padding: 2px; border-radius: {radius}px; display: flex; align-items: center; justify-content: center; height: {size}px; width: {size}px; flex-shrink: 0; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-top: 0px;'>
-                        <img src='data:image/png;base64,{img_base64}' style='height: {size-2}px; filter: {BRAND_FILTER};'>
-                    </div>
-                    <div style='display: {"block" if is_landing else "flex"}; align-items: {"stretch" if is_landing else "flex-end"}; gap: {title_demo_gap};'>
-                        <div style='font-size: {title_size}; font-weight: 800; color: #52606d; line-height: 1; {"margin-top: 0px;" if is_landing else ""}'>CTPredict</div>
-                        {"<div style='color: #52606d; font-size: 1.5rem; font-weight: 800; display: flex; align-items: baseline; gap: 15px; margin-top: 0px;'><span style='line-height: 1;'>Late-Stage Clinical Trial Predictive Engine</span><span style='font-size: 0.7rem; color: #94a3b8; text-transform: uppercase;'>demo version</span></div>" if is_landing else "<span style='font-size: 0.7rem; font-weight: 800; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.1em; line-height: 1; margin-bottom: 0px;'>Demo Version</span>"}
+            subtitle_html = (
+                "<div style='color: #52606d; font-size: var(--ui-subtitle-size-landing); font-weight: 800; display: flex; align-items: baseline; gap: 15px; margin-top: 0px;'>"
+                "<span style='line-height: 1;'>Late-Stage Clinical Trial Predictive Engine</span>"
+                "<span style='font-size: var(--ui-demo-size); color: #94a3b8; text-transform: uppercase;'>demo version</span>"
+                "</div>"
+                if is_landing
+                else
+                "<span style='font-size: var(--ui-demo-size); font-weight: 800; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.1em; line-height: 1; margin-bottom: 0px;'>Demo Version</span>"
+            )
 
-                </div>
-            """
+            html = (
+                f"<div style='display: flex; align-items: center; gap: {logo_gap};'>"
+                f"<div style='background-color: white; border: {logo_border} solid #52606d; padding: var(--ui-logo-pad); border-radius: {logo_radius}; display: flex; align-items: center; justify-content: center; height: {logo_size}; width: {logo_size}; flex-shrink: 0; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-top: 0px;'>"
+                f"<img src='data:image/png;base64,{img_base64}' style='height: {logo_img_size}; filter: {BRAND_FILTER};'>"
+                f"</div>"
+                f"<div style='display: {'block' if is_landing else 'flex'}; align-items: {'stretch' if is_landing else 'flex-end'}; gap: {title_demo_gap};'>"
+                f"<div style='font-size: {title_size}; font-weight: 800; color: #52606d; line-height: 1; {'margin-top: 0px;' if is_landing else ''}'>CTPredict</div>"
+                f"{subtitle_html}"
+                f"</div>"
+                f"</div>"
+            )
+
             st.markdown(html, unsafe_allow_html=True)
 
     with t2:
@@ -2850,10 +3048,10 @@ def render_landing_page(x_base):
 
     st.markdown(
         '''
-        <div class="highlight-box mission-box" style="margin-top: 1.2rem; margin-bottom: 1rem;">
+        <div class="highlight-box mission-box landing-mission-box">
             <div style="display: flex; justify-content: space-between; align-items: flex-start;">
                 <div class="highlight-title">Operational Success & Risk Stratification</div>
-                <div style="font-size:0.65rem; font-weight:800; color:#94a3b8; text-transform:uppercase; letter-spacing:0.1em;">Core Mission</div>
+                <div class="highlight-kicker">Core Mission</div>
             </div>
             <div class="highlight-text">This predictive engine estimates the <b>likelihood of operational completion</b> and the <b>risk of early termination</b> using only data available at clinical trial initiation. Each trial is systematically evaluated and classified into <b>four distinct tiers</b> - High Risk, Watchlist, Favorable, and Low Risk - providing a clear and actionable risk profile.</div>
         </div>
@@ -2880,14 +3078,14 @@ def render_landing_page(x_base):
                 <div class="highlight-box">
                     <div style="display: flex; justify-content: space-between; align-items: flex-start;">
                         <div class="highlight-title">Industry-Scale Public Clinical Data</div>
-                        <div style="font-size:0.65rem; font-weight:800; color:#94a3b8; text-transform:uppercase; letter-spacing:0.1em;">Intelligence Source</div>
+                        <div class="highlight-kicker">Intelligence Source</div>
                     </div>
                     <div class="highlight-text">Built on the publicly available <b>AACT registry</b>, this machine learning system leverages execution patterns from <b>30,000+ Phase II and III trials</b> since 2005. The analytical scope focuses on <b>late-stage studies</b>, where strategic and financial stakes are highest.</div>
                 </div>
                 <div class="highlight-box">
                     <div style="display: flex; justify-content: space-between; align-items: flex-start;">
                         <div class="highlight-title">Predictive Power & Benchmarking</div>
-                        <div style="font-size:0.65rem; font-weight:800; color:#94a3b8; text-transform:uppercase; letter-spacing:0.1em;">Engine Accuracy</div>
+                        <div class="highlight-kicker">Engine Accuracy</div>
                     </div>
                     <div class="highlight-text">When comparing a completed trial with one that terminated early, the system assigns a <b>higher risk score</b> to the failed trial in <b>75% of cases</b>. It outperforms the 50% random baseline and traditional approaches built on publicly available data (<b>ROC AUC ≈ 0.75</b> vs. 0.50 baseline).</div>
                 </div>

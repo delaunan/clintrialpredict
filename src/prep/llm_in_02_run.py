@@ -88,18 +88,48 @@ os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
 logging.basicConfig(filename=LOG_FILE, level=logging.INFO, format='%(asctime)s - %(message)s')
 
 def safe_json_loads(text):
-    try: return json.loads(text)
+    try: 
+        res = json.loads(text)
+        if isinstance(res, dict): return [res] # Auto-wrap single object
+        return res
     except:
         match = re.search(r'```(?:json)?\s*(.*?)\s*```', text, re.DOTALL)
         if match:
-            try: return json.loads(match.group(1))
+            try: 
+                res = json.loads(match.group(1))
+                if isinstance(res, dict): return [res]
+                return res
             except: pass
         try:
             start = text.find('[')
             end = text.rfind(']')
             if start != -1 and end != -1: return json.loads(text[start:end+1])
+            
+            # Final fallback: Try to find a single object if list markers are missing
+            start_obj = text.find('{')
+            end_obj = text.rfind('}')
+            if start_obj != -1 and end_obj != -1:
+                res = json.loads(text[start_obj:end_obj+1])
+                return [res] # Auto-wrap
         except: pass
     return None
+
+def wash_input_text(text):
+    """Normalizes Greek and special characters in input to prevent JSON corruption."""
+    if not isinstance(text, str): return text
+    # Map common scientific Greek characters to Latin equivalents
+    charmap = {
+        '\u03b1': 'alpha', '\u0391': 'Alpha',
+        '\u03b2': 'beta',  '\u0392': 'Beta',
+        '\u03b3': 'gamma', '\u0393': 'Gamma',
+        '\u03b4': 'delta', '\u0394': 'Delta',
+        '\u03ba': 'kappa', '\u039a': 'Kappa',
+        '\u00ae': '', '\u2122': '', # Drop trademark/reg
+        '\u2264': '<=', '\u2265': '>=' # Math symbols
+    }
+    for char, replacement in charmap.items():
+        text = text.replace(char, replacement)
+    return text
 
 async def process_batch(semaphore, batch_df, cache_name, writer, f_handle):
     async with semaphore:
@@ -108,7 +138,8 @@ async def process_batch(semaphore, batch_df, cache_name, writer, f_handle):
 
         contexts_payload = ""
         for i, (_, row) in enumerate(batch_df.iterrows()):
-            contexts_payload += f"--- TRIAL {i+1} ---{NL}{row['context']}{NL}{NL}"
+            clean_ctx = wash_input_text(row['context'])
+            contexts_payload += f"--- TRIAL {i+1} ---{NL}{clean_ctx}{NL}{NL}"
 
         for attempt in range(3):
             try:
@@ -135,6 +166,7 @@ async def process_batch(semaphore, batch_df, cache_name, writer, f_handle):
 
                 results = safe_json_loads(response.text)
                 if results is None or not isinstance(results, list):
+                    logging.error(f"PARSING FAILURE for {batch_df['nct_id'].tolist()}. Raw Text: {response.text[:2000]}")
                     raise ValueError("Batch JSON Parsing Failed")
 
                 requested_ids = batch_df['nct_id'].tolist()

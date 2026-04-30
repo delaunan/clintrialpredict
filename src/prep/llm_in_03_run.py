@@ -25,9 +25,9 @@ LOG_FILE = os.path.join(PROJECT_ROOT, 'data/logs/enrichment_v3_run3_errors.log')
 
 # [STEP 3] Global Helpers
 NL = chr(10)
-MODEL_NAME = "gemini-3-flash-preview"
-CONCURRENCY_LIMIT = 40
-BATCH_SIZE = 3
+MODEL_NAME = "gemini-2.5-flash-lite"
+CONCURRENCY_LIMIT = 20
+BATCH_SIZE = 1         # One-by-one for maximum Strategist precision
 BUDGET_LIMIT_USD = 100.00
 CONSECUTIVE_FAIL_LIMIT = 5
 
@@ -64,33 +64,59 @@ os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
 logging.basicConfig(filename=LOG_FILE, level=logging.INFO, format='%(asctime)s - %(message)s')
 
 def safe_json_loads(text):
-    try: return json.loads(text)
+    try: 
+        res = json.loads(text)
+        if isinstance(res, dict): return [res] # Auto-wrap
+        return res
     except:
         match = re.search(r'```(?:json)?\s*(.*?)\s*```', text, re.DOTALL)
         if match:
-            try: return json.loads(match.group(1))
+            try: 
+                res = json.loads(match.group(1))
+                if isinstance(res, dict): return [res]
+                return res
             except: pass
+        try:
+            start = text.find('[')
+            end = text.rfind(']')
+            if start != -1 and end != -1: return json.loads(text[start:end+1])
+            start_obj = text.find('{')
+            end_obj = text.rfind('}')
+            if start_obj != -1 and end_obj != -1:
+                res = json.loads(text[start_obj:end_obj+1])
+                return [res]
+        except: pass
     return None
+
+def wash_input_text(text):
+    """Normalizes Greek and special characters in input to prevent JSON corruption."""
+    if not isinstance(text, str): return text
+    charmap = {'\u03b1': 'alpha', '\u0391': 'Alpha', '\u03b2': 'beta', '\u0392': 'Beta', '\u03b3': 'gamma', '\u0393': 'Gamma', '\u03b4': 'delta', '\u0394': 'Delta', '\u03ba': 'kappa', '\u039a': 'Kappa', '\u00ae': '', '\u2122': '', '\u2264': '<=', '\u2265': '>='}
+    for char, replacement in charmap.items(): text = text.replace(char, replacement)
+    return text
 
 async def process_batch(semaphore, batch_df, cache_name, writer, f_handle):
     async with semaphore:
         if stats["total_cost"] > BUDGET_LIMIT_USD: return "BUDGET_EXCEEDED"
         if stats["fail_streak"] >= CONSECUTIVE_FAIL_LIMIT: return "CRITICAL_FAILURE_STREAK"
 
+        # [ISOLATION] Use a very clear, unique separator for each trial
         contexts_payload = ""
         for _, row in batch_df.iterrows():
-            contexts_payload += f"[NCT_ID]: {row['nct_id']}{NL}{row['context']}{NL}{NL}"
+            clean_ctx = wash_input_text(row['context'])
+            contexts_payload += f"### DATA_START_FOR_{row['nct_id']} ###{NL}{clean_ctx}{NL}### DATA_END_FOR_{row['nct_id']} ###{NL}{NL}"
 
         for attempt in range(3):
             try:
                 response = await client.aio.models.generate_content(
                     model=MODEL_NAME,
-                    contents=f"EXTRACT DATA FOR THESE {len(batch_df)} TRIALS. FOLLOW THE V17.5 LOGIC FOR EVERY TRIAL.{NL}{contexts_payload}",
+                    contents=f"EXTRACT DATA FOR THESE {len(batch_df)} TRIALS. RETURN A VALID JSON ARRAY OF OBJECTS.{NL}{contexts_payload}",
                     config=types.GenerateContentConfig(
                         cached_content=cache_name,
                         response_mime_type="application/json",
                         response_schema=RESPONSE_SCHEMA,
-                        temperature=0.0
+                        temperature=0.0,
+                        max_output_tokens=2048 # Ensure plenty of room for long logic strings
                     )
                 )
 
@@ -105,7 +131,9 @@ async def process_batch(semaphore, batch_df, cache_name, writer, f_handle):
                     stats["total_cost"] += (new_input / 1e6 * 0.10) + (cached / 1e6 * 0.025) + (output / 1e6 * 0.40)
 
                 results = safe_json_loads(response.text)
-                if results is None: raise ValueError("JSON Parse Error")
+                if results is None: 
+                    logging.error(f"STRATEGIST PARSING FAILURE for {batch_df['nct_id'].tolist()}. Raw Text: {response.text[:2000]}")
+                    raise ValueError("JSON Parse Error")
 
                 requested_ids = batch_df['nct_id'].tolist()
                 result_map = {r.get('nct_id'): r for r in results if r.get('nct_id')}
@@ -135,12 +163,12 @@ async def main():
     with open(os.path.join(PROJECT_ROOT, 'docs/prompts/llm_prompt_in_03_ex.md'), 'r') as f: few_shots = f.read()
 
     batch_refinement = [
-        f"{NL}### [BATCH_STRATEGY_V17.5_RULES] ###",
-        "1. ID-ANCHOR MANDATE: Every trial result MUST be indexed by its exact NCT_ID from the context. DO NOT use generic labels like 'TRIAL 1'.",
-        "2. LOGIC-LOCK: Use result markers [STEP-X-RESULT: ...] in strategist_logic monologue.",
-        "3. THE PILL RULE: Oral = SIMPLE_ORAL. Hospital monitoring NEVER upgrades complexity.",
+        f"{NL}### [STRICT_PROCESSING_RULES] ###",
+        "1. ID-ANCHOR MANDATE: You MUST index results by the exact NCT_ID found in the '### DATA_START_FOR_...' tag.",
+        "2. FIELD_ISOLATION: Never use 'SAFETY_DOSING' for the 'endpoint_rigor' field. Endpoint rigor must be HARD_CLINICAL, SURROGATE, or SUBJECTIVE_PRO.",
+        "3. LOGIC_LOCK: Use result markers [STEP-X-RESULT: ...] in strategist_logic. Monologue should be thorough but precise (max 800 characters).",
         "4. ONCOLOGY RIGOR: PFS/ORR are SURROGATE. OS is HARD_CLINICAL.",
-        "5. FORBIDDEN UNKNOWN: Resolve all fields using Title/Strategy Clues. No UNKNOWN allowed."
+        "5. FORBIDDEN UNKNOWN: No UNKNOWN values allowed. Infer from title and endpoints."
     ]
 
     system_instr = NL.join([prompt_instr, NL.join(batch_refinement), f"{NL}### [EXAMPLES] ###{NL}", few_shots])

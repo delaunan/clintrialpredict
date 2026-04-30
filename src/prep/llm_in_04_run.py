@@ -24,9 +24,9 @@ LOG_FILE = os.path.join(PROJECT_ROOT, 'data/logs/enrichment_v4_run4_errors.log')
 
 # [STEP 3] Global Helpers
 NL = chr(10)
-MODEL_NAME = "gemini-3-flash-preview"
-CONCURRENCY_LIMIT = 30
-BATCH_SIZE = 3
+MODEL_NAME = "gemini-2.5-flash-lite"
+CONCURRENCY_LIMIT = 20
+BATCH_SIZE = 1         # One-by-one for maximum structural precision
 BUDGET_LIMIT_USD = 50.00
 CONSECUTIVE_FAIL_LIMIT = 5
 
@@ -77,22 +77,47 @@ os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
 logging.basicConfig(filename=LOG_FILE, level=logging.INFO, format='%(asctime)s - %(message)s')
 
 def safe_json_loads(text):
-    try: return json.loads(text)
+    try: 
+        res = json.loads(text)
+        if isinstance(res, dict): return [res] # Auto-wrap
+        return res
     except:
         match = re.search(r'```(?:json)?\s*(.*?)\s*```', text, re.DOTALL)
         if match:
-            try: return json.loads(match.group(1))
+            try: 
+                res = json.loads(match.group(1))
+                if isinstance(res, dict): return [res]
+                return res
             except: pass
+        try:
+            start = text.find('[')
+            end = text.rfind(']')
+            if start != -1 and end != -1: return json.loads(text[start:end+1])
+            start_obj = text.find('{')
+            end_obj = text.rfind('}')
+            if start_obj != -1 and end_obj != -1:
+                res = json.loads(text[start_obj:end_obj+1])
+                return [res]
+        except: pass
     return None
+
+def wash_input_text(text):
+    """Normalizes Greek and special characters in input to prevent JSON corruption."""
+    if not isinstance(text, str): return text
+    charmap = {'\u03b1': 'alpha', '\u0391': 'Alpha', '\u03b2': 'beta', '\u0392': 'Beta', '\u03b3': 'gamma', '\u0393': 'Gamma', '\u03b4': 'delta', '\u0394': 'Delta', '\u03ba': 'kappa', '\u039a': 'Kappa', '\u00ae': '', '\u2122': '', '\u2264': '<=', '\u2265': '>='}
+    for char, replacement in charmap.items(): text = text.replace(char, replacement)
+    return text
 
 async def process_batch(semaphore, batch_df, cache_name, writer, f_handle):
     async with semaphore:
         if stats["total_cost"] > BUDGET_LIMIT_USD: return "BUDGET_EXCEEDED"
         if stats["fail_streak"] >= CONSECUTIVE_FAIL_LIMIT: return "CRITICAL_FAILURE_STREAK"
 
+        # [ISOLATION] Use clear markers for each trial
         contexts_payload = ""
         for _, row in batch_df.iterrows():
-            contexts_payload += f"{row['context']}{NL}{NL}"
+            clean_ctx = wash_input_text(row['context'])
+            contexts_payload += f"### DATA_START_FOR_{row['nct_id']} ###{NL}{clean_ctx}{NL}### DATA_END_FOR_{row['nct_id']} ###{NL}{NL}"
 
         for attempt in range(3):
             try:
@@ -103,7 +128,8 @@ async def process_batch(semaphore, batch_df, cache_name, writer, f_handle):
                         cached_content=cache_name,
                         response_mime_type="application/json",
                         response_schema=RESPONSE_SCHEMA,
-                        temperature=0.0
+                        temperature=0.0,
+                        max_output_tokens=1024
                     )
                 )
 
@@ -190,11 +216,14 @@ async def main():
             with open(OUTPUT_FILE, 'a', newline='') as f:
                 # [IRON GATE] Apply strict quoting for data integrity
                 writer = csv.DictWriter(f, fieldnames=FIELDNAMES, quoting=csv.QUOTE_ALL)
-                if not os.path.exists(OUTPUT_FILE) or os.stat(OUTPUT_FILE).st_size == 0: writer.writeheader()
-            semaphore = asyncio.Semaphore(CONCURRENCY_LIMIT)
-            tasks = [process_batch(semaphore, df_todo.iloc[i:i+BATCH_SIZE], cache.name, writer, f) for i in range(0, len(df_todo), BATCH_SIZE)]
-            await tqdm.gather(*tasks)
-        client.caches.delete(name=cache.name)
+                if f.tell() == 0: writer.writeheader()
+                
+                semaphore = asyncio.Semaphore(CONCURRENCY_LIMIT)
+                tasks = [process_batch(semaphore, df_todo.iloc[i:i+BATCH_SIZE], cache.name, writer, f) for i in range(0, len(df_todo), BATCH_SIZE)]
+                await tqdm.gather(*tasks)
+        finally:
+            print(f"> Deleting Cache: {cache.name}")
+            client.caches.delete(name=cache.name)
     except Exception as e:
         print(f"[!] ERROR: {e}")
 
