@@ -25,8 +25,8 @@ LOG_FILE = os.path.join(PROJECT_ROOT, 'data/logs/enrichment_v4_run4_errors.log')
 # [STEP 3] Global Helpers
 NL = chr(10)
 MODEL_NAME = "gemini-2.5-flash-lite"
-CONCURRENCY_LIMIT = 20
-BATCH_SIZE = 1         # One-by-one for maximum structural precision
+CONCURRENCY_LIMIT = 2
+BATCH_SIZE = 1         # Precise one-by-one for the final rescue
 BUDGET_LIMIT_USD = 50.00
 CONSECUTIVE_FAIL_LIMIT = 5
 
@@ -144,7 +144,9 @@ async def process_batch(semaphore, batch_df, cache_name, writer, f_handle):
                     stats["total_cost"] += (new_input / 1e6 * 0.10) + (cached / 1e6 * 0.025) + (output / 1e6 * 0.40)
 
                 results = safe_json_loads(response.text)
-                if results is None: raise ValueError("JSON Parse Error")
+                if results is None: 
+                    logging.error(f"RUN 4 PARSING FAILURE for {batch_df['nct_id'].tolist()}. Raw Text: {response.text[:2000]}")
+                    raise ValueError("JSON Parse Error")
 
                 requested_ids = batch_df['nct_id'].tolist()
                 result_map = {r.get('nct_id'): r for r in results if r.get('nct_id')}
@@ -169,7 +171,8 @@ async def process_batch(semaphore, batch_df, cache_name, writer, f_handle):
                 stats["fail_streak"] = 0
                 return True
             except Exception as e:
-                if "429" in str(e): await asyncio.sleep(15 * (attempt + 1))
+                if "503" in str(e) or "429" in str(e): 
+                    await asyncio.sleep(20 * (attempt + 1)) # Aggressive backoff for server overload
                 else:
                     stats["fail_streak"] += 1
                     logging.error(f"Batch Error: {e}")
@@ -182,12 +185,14 @@ async def main():
     with open(os.path.join(PROJECT_ROOT, 'docs/prompts/llm_prompt_in_04_ex.md'), 'r') as f: few_shots = f.read()
 
     batch_refinement = [
-        f"{NL}### [BATCH_STRATEGY_V18.3_RULES] ###",
+        f"{NL}### [STRICT_PROCESSING_RULES] ###",
         "1. ID-ANCHOR MANDATE: Every trial result MUST be indexed by its exact NCT_ID.",
-        "2. LOGIC-LOCK: Use [STEP-X-...] result markers in structural_forensic_monologue.",
-        "3. BIT-PERFECT CAPS: Sponsor names must be ALL CAPS with no suffixes.",
-        "4. LONGEST DURATION: Mathematically compare all units (90 Days < 6 Months).",
-        "5. TIER STRICTNESS: Only use TIER 1, MID_CAP, or BIOTECH labels."
+        "2. CONCISE LOGIC: Use only one sentence per [STEP]. DO NOT repeat mathematical calculations. Max 500 characters total for monologue.",
+        "3. LOGIC-LOCK: Use [STEP-X-...] result markers in structural_forensic_monologue.",
+        "4. BIT-PERFECT CAPS: Sponsor names must be ALL CAPS with no suffixes.",
+        "5. LONGEST DURATION: Mathematically compare all units (90 Days < 6 Months).",
+        "6. TIER STRICTNESS: Only use TIER 1, MID_CAP, or BIOTECH labels.",
+        "7. THE LONG-HORIZON RULE: Differentiate between 'Dosing Duration' and 'Study Duration'. You MUST capture the total longitudinal follow-up (e.g., 12 months) even if the drug is only given on Day 1. Never return < 7 days unless the trial EXPLICITLY ends all primary assessments by Day 7."
     ]
 
     system_instr = NL.join([prompt_instr, NL.join(batch_refinement), f"{NL}### [EXAMPLES] ###{NL}", few_shots])
