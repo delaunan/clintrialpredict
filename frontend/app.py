@@ -31,10 +31,24 @@ CURRENT_DIR = Path(__file__).resolve().parent
 DATA_PATH = CURRENT_DIR / "data" / "search_registry.csv"
 TAXONOMY_PATH = CURRENT_DIR.parent / "models" / "taxonomy_01.json"
 API_URL = os.getenv("API_URL", "http://localhost:8000/predict")
+API_TIMEOUT_SECONDS = 60
 ID_COL = "nct_id"
 DETAIL_TAB_INFO = "Trial Information"
 DETAIL_TAB_POPULATION = "Population Details"
 DETAIL_TAB_SCORE = "Completion Score"
+
+
+REQUIRED_DATA_COLUMNS = [
+    ID_COL,
+    "ui_search_label",
+    "lead_sponsor_canonical",
+    "therapeutic_area_ui",
+    "phase_ui",
+    "start_year",
+    "trial_segment",
+    "is_correct",
+    "Clinical_Score",
+]
 
 
 # --- BRANDING CONSTANTS ---
@@ -1020,18 +1034,7 @@ def inject_custom_styles():
                 letter-spacing: -0.01em;
             }}
 
-            /* Detail View */
-            .identity-header-text {{ font-size: 1.2rem; font-weight: 600; color: #334155 !important; margin-right: 15px; }}
-            .title-box-container {{
-                background: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px;
-                padding: 15px 18px; margin-top: 15px; margin-bottom: 25px; line-height: 1.6;
-                font-weight: 500; box-shadow: var(--ui-shell-shadow) !important;
-            }}
-            .pillar-val-box {{
-                background:#ffffff; padding:10px; border:1px solid #cbd5e1; border-radius:6px;
-                font-size:0.9rem; color:#334155 !important; min-height:40px; margin-bottom:15px;
-                box-shadow: var(--ui-shell-shadow) !important;
-            }}
+
 
             /* HEADER RIGHT COLUMN TIGHT WRAPPERS */
 
@@ -3586,14 +3589,17 @@ def load_data():
     if DATA_PATH.exists():
         df = pd.read_csv(DATA_PATH)
     else:
-        df = pd.DataFrame()
+        df = pd.DataFrame(columns=REQUIRED_DATA_COLUMNS)
 
-    if "start_year" in df.columns:
-        df["start_year"] = (
-            pd.to_numeric(df["start_year"], errors="coerce")
-            .fillna(0)
-            .astype(int)
-        )
+    for col in REQUIRED_DATA_COLUMNS:
+        if col not in df.columns:
+            df[col] = pd.NA
+
+    df["start_year"] = (
+        pd.to_numeric(df["start_year"], errors="coerce")
+        .fillna(0)
+        .astype(int)
+    )
 
     if TAXONOMY_PATH.exists():
         with TAXONOMY_PATH.open("r", encoding="utf-8") as f:
@@ -3738,8 +3744,11 @@ def persist_s_detail_value(value=None):
     elif detail_value.lower() in ("false", "0", "no", "off"):
         detail_value = "False"
 
-    st.session_state["s_detail"] = detail_value
-    st.session_state["s_detail_memory"] = detail_value
+    if st.session_state.get("s_detail") != detail_value:
+        st.session_state["s_detail"] = detail_value
+
+    if st.session_state.get("s_detail_memory") != detail_value:
+        st.session_state["s_detail_memory"] = detail_value
 
 
 
@@ -3750,7 +3759,10 @@ def is_detailed_values_enabled():
 
 def sync_detail_toggle_from_values():
     persist_s_detail_value()
-    st.session_state["show_detailed_drivers"] = is_detailed_values_enabled()
+    detailed_enabled = is_detailed_values_enabled()
+
+    if st.session_state.get("show_detailed_drivers") != detailed_enabled:
+        st.session_state["show_detailed_drivers"] = detailed_enabled
 
 
 def sync_values_from_detail_toggle():
@@ -3821,7 +3833,7 @@ def go_back_to_results():
 
 
 def apply_trial_filters(base_df, skip_key=None):
-    tdf = base_df.copy()
+    tdf = base_df
 
     # 1. APPLY SECRET "MODE" FILTERS FIRST (Global Constraints)
     registry_mode = str(st.session_state.get("s_registry", "")).strip().lower()
@@ -4104,8 +4116,9 @@ def render_filters(df, is_sidebar=False):
 
     def render_select(label, col_key, placeholder):
         opts = list(get_opts(col_key))
+        current_value = st.session_state.get(col_key)
 
-        if st.session_state.get(col_key) not in opts:
+        if current_value is not None and current_value not in opts:
             st.session_state[col_key] = None
 
         st.selectbox(
@@ -4334,82 +4347,6 @@ def _safe_set_session_value(key, value):
         pass
 
 
-def _render_labeled_trial_field(label, field_id, row, layout="stack", key_suffix=""):
-    state_key, initial_val, options = _init_trial_field_state(field_id, row)
-    token = _field_token(field_id, key_suffix=key_suffix)
-    safe_label = html.escape(label)
-
-    if layout == "inline":
-        with st.container(key=f"ui_meta_row_{token}"):
-            c_label, c_value = st.columns([0.72, 1.48], gap=None, vertical_alignment="center")
-
-            with c_label:
-                with st.container(key=f"ui_meta_label_{token}"):
-                    st.markdown(
-                        f"<div class='ui-field-label ui-field-label--meta'>{safe_label}</div>",
-                        unsafe_allow_html=True
-                    )
-
-            with c_value:
-                _render_two_state_field_control(
-                    label=label,
-                    state_key=state_key,
-                    initial_val=initial_val,
-                    options=options,
-                    control_key=f"ui_meta_control_{token}",
-                    key_suffix=key_suffix
-                )
-    else:
-        with st.container(key=f"ui_field_box_{token}"):
-            st.markdown(
-                f"<div class='ui-field-label ui-field-label--stack'>{safe_label}</div>",
-                unsafe_allow_html=True
-            )
-
-            _render_two_state_field_control(
-                label=label,
-                state_key=state_key,
-                initial_val=initial_val,
-                options=options,
-                control_key=f"ui_field_control_{token}",
-                key_suffix=key_suffix
-            )
-
-
-def _render_two_state_field_control(label, state_key, initial_val, options, control_key, key_suffix=""):
-    is_edit = st.session_state.get("global_edit_mode", False)
-
-    with st.container(key=control_key):
-        if options:
-            labels, selected_index = _resolve_field_labels(state_key, initial_val, options)
-
-            if is_edit:
-                st.selectbox(
-                    label,
-                    options=labels,
-                    index=selected_index,
-                    key=f"{state_key}_{key_suffix}" if key_suffix else state_key,
-                    label_visibility="collapsed"
-                )
-            else:
-                readonly_key = _readonly_widget_key(state_key, key_suffix)
-                readonly_value = labels[selected_index] if labels else ""
-
-                _safe_set_session_value(readonly_key, readonly_value)
-
-                st.text_input(
-                    label,
-                    key=readonly_key,
-                    label_visibility="collapsed",
-                    disabled=True
-                )
-        else:
-            st.text_input(
-                label,
-                key=f"{state_key}_{key_suffix}" if key_suffix else state_key,
-                label_visibility="collapsed",
-                disabled=not is_edit
-            )
 
 
 def _render_native_meta_field(label, field_id, row, key_suffix=""):
@@ -4646,7 +4583,6 @@ def render_trial_detail_tabs_refined(row):
     render_trial_top_strip_refined(row)
 
     score_visible = st.session_state.get("detail_completion_tab_visible", False)
-    score_requested = score_visible and st.session_state.get("trigger_prediction", False)
 
     show_completion_workflow_note = (
         st.session_state.get("global_edit_mode", False)
@@ -4745,9 +4681,14 @@ def get_edited_row(row: pd.Series) -> pd.Series:
     trial_key = st.session_state.get("selected_nct_id", "no_trial")
 
     # 1. Update from Smart Info Boxes: inputs, selectboxes, toggles
-    for key in st.session_state:
-        if key.startswith(f"input_{trial_key}_"):
-            field_id = key.replace(f"input_{trial_key}_", "")
+    field_prefix = f"input_{trial_key}_"
+
+    for key in list(st.session_state.keys()):
+        if "__readonly" in key:
+            continue
+
+        if key.startswith(field_prefix):
+            field_id = key[len(field_prefix):]
             val = st.session_state[key]
 
             if field_id in {"has_placebo_ml", "has_dmc_ml"} and isinstance(val, bool):
@@ -4795,7 +4736,7 @@ def get_analysis_result_for_selected_trial(row):
                 res = requests.post(
                     API_URL,
                     json=prediction_payload,
-                    timeout=60
+                    timeout=API_TIMEOUT_SECONDS
                 )
 
                 if res.status_code == 200:
@@ -4806,6 +4747,15 @@ def get_analysis_result_for_selected_trial(row):
                     st.error(f"API Error: {res.status_code}")
                     return None
 
+            except requests.exceptions.Timeout:
+                st.error("API Error: request timed out.")
+                return None
+            except requests.exceptions.RequestException as e:
+                st.error(f"API Error: {e}")
+                return None
+            except ValueError as e:
+                st.error(f"API response error: {e}")
+                return None
             except Exception as e:
                 st.error(f"System Error: {e}")
                 return None
@@ -5010,7 +4960,7 @@ def render_landing_page(x_base):
                             <div class="highlight-title">Predictive Power & Benchmarking</div>
                             <div class="highlight-kicker">Engine Accuracy</div>
                         </div>
-                        <div class="highlight-text">When comparing a completed trial with one that terminated early, the system assigns a <b>higher risk score</b> to the failed trial in <b>75% of cases</b>. It outperforms the 50% random baseline and traditional approaches built on publicly available data (<b>ROC AUC ≈ 0.75</b> vs. 0.50 baseline).</div>
+                        <div class="highlight-text">When comparing a completed trial with one that terminated early, the system assigns a <b>higher risk score</b> to the failed trial in <b>78% of cases</b>. It outperforms the 50% random baseline and traditional approaches built on publicly available data (<b>ROC AUC ≈ 0.78</b> vs. 0.50 baseline).</div>
                     </div>
                 </div>
                 ''',
