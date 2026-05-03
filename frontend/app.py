@@ -1286,10 +1286,10 @@ def inject_custom_styles():
                 display: flex !important;
                 align-items: center !important;
                 justify-content: center !important;
-                border: 1px solid #cbd5e1 !important;
+                border: 1px solid #1e293b !important;
                 border-radius: 10px !important;
-                background: #e2e8f0 !important;
-                color: #64748b !important;
+                background: #334155 !important;
+                color: #ffffff !important;
                 font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
                 font-size: 0.86rem !important;
                 font-weight: 700 !important;
@@ -1303,9 +1303,9 @@ def inject_custom_styles():
 
             .st-key-summary_side_shell_completion_prediction_left_top_block .completion-gauge-help-wrap:hover .completion-gauge-help-anchor,
             .st-key-summary_side_shell_completion_prediction_left_top_block .completion-gauge-help-wrap:focus-within .completion-gauge-help-anchor {{
-                background: #334155 !important;
-                border-color: #1e293b !important;
-                color: #ffffff !important;
+                background: #e2e8f0 !important;
+                border-color: #cbd5e1 !important;
+                color: #64748b !important;
                 transform: scale(1.02) translateY(-2px) !important;
                 outline: none !important;
             }}
@@ -1395,10 +1395,10 @@ def inject_custom_styles():
                 display: flex !important;
                 align-items: center !important;
                 justify-content: center !important;
-                border: 1px solid #cbd5e1 !important;
+                border: 1px solid #1e293b !important;
                 border-radius: 999px !important;
-                background: #eef2f7 !important;
-                color: #607083 !important;
+                background: #334155 !important;
+                color: #ffffff !important;
                 font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
                 font-size: 0.52rem !important;
                 font-weight: 800 !important;
@@ -1416,9 +1416,9 @@ def inject_custom_styles():
 
             .st-key-summary_side_shell_completion_prediction_left_top_block .completion-tier-info-wrap:hover .completion-tier-info-anchor,
             .st-key-summary_side_shell_completion_prediction_left_top_block .completion-tier-info-wrap:focus-within .completion-tier-info-anchor {{
-                background: #334155 !important;
-                border-color: #1e293b !important;
-                color: #ffffff !important;
+                background: #eef2f7 !important;
+                border-color: #cbd5e1 !important;
+                color: #607083 !important;
                 outline: none !important;
             }}
 
@@ -3529,6 +3529,42 @@ def inject_custom_styles():
                     --ui-simulation-toggle-label-size: 1.08rem;
                     --ui-simulation-toggle-label-y-shift: 2px;
                 }}
+            }}
+
+
+            /* =========================================================
+               FINAL OVERRIDE — COMPLETION INFO ICON COLORS
+               Reverses normal / hover colors for:
+               - top-right gauge question mark
+               - small "i" next to the score/tier label
+               ========================================================= */
+
+            html body .completion-gauge-help-anchor {{
+                background: #334155 !important;
+                color: #ffffff !important;
+                border-color: #1e293b !important;
+            }}
+
+            html body .completion-gauge-help-anchor:hover,
+            html body .completion-gauge-help-wrap:hover .completion-gauge-help-anchor,
+            html body .completion-gauge-help-wrap:focus-within .completion-gauge-help-anchor {{
+                background: #e2e8f0 !important;
+                color: #64748b !important;
+                border-color: #cbd5e1 !important;
+            }}
+
+            html body .completion-tier-info-anchor {{
+                background: #334155 !important;
+                color: #ffffff !important;
+                border-color: #1e293b !important;
+            }}
+
+            html body .completion-tier-info-anchor:hover,
+            html body .completion-tier-info-wrap:hover .completion-tier-info-anchor,
+            html body .completion-tier-info-wrap:focus-within .completion-tier-info-anchor {{
+                background: #eef2f7 !important;
+                color: #607083 !important;
+                border-color: #cbd5e1 !important;
             }}
 
 
