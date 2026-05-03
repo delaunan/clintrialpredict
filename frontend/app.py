@@ -2959,36 +2959,109 @@ def inject_custom_styles():
             }}
 
 
-            /* Landing: preserve external bottom alignment, improve internal distribution. */
+            /* =========================================================
+               LANDING PAGE FINAL CONTRACT
+               Scope: landing page only.
+               Goal:
+               - align "Clinical Trial Selection" with the first right-card title
+               - keep the search controls grouped and centered
+               - prevent large screens from stretching the form rhythm too much
+               ========================================================= */
+
+            :root {{
+                --ui-landing-lower-section-min-h: 355px;
+                --ui-landing-filter-header-min-h: 74px;
+                --ui-landing-card-min-h: calc((var(--ui-landing-lower-section-min-h) - var(--ui-card-gap)) / 2);
+                --ui-landing-filter-body-h: calc(
+                    var(--ui-landing-lower-section-min-h)
+                    - var(--ui-landing-filter-header-min-h)
+                    - var(--ui-card-gap)
+                );
+
+                --ui-landing-form-gap: 0.45rem;
+                --ui-landing-form-max-w: 100%;
+                --ui-landing-label-control-gap: 5px;
+            }}
+
+            @media (min-width: 1800px) and (min-height: 950px) {{
+                :root {{
+                    --ui-landing-lower-section-min-h: 420px;
+                    --ui-landing-filter-header-min-h: 82px;
+                    --ui-landing-form-gap: 0.50rem;
+                    --ui-landing-form-max-w: 96%;
+                    --ui-landing-label-control-gap: 5px;
+                }}
+            }}
+
+            @media (min-width: 2400px) and (min-height: 1200px) {{
+                :root {{
+                    --ui-landing-lower-section-min-h: 455px;
+                    --ui-landing-filter-header-min-h: 90px;
+                    --ui-landing-form-gap: 0.54rem;
+                    --ui-landing-form-max-w: 94%;
+                    --ui-landing-label-control-gap: 6px;
+                }}
+            }}
+
+            @media (min-width: 2700px) and (min-height: 1250px) {{
+                :root {{
+                    --ui-landing-lower-section-min-h: 485px;
+                    --ui-landing-filter-header-min-h: 96px;
+                    --ui-landing-form-gap: 0.58rem;
+                    --ui-landing-form-max-w: 92%;
+                    --ui-landing-label-control-gap: 6px;
+                }}
+            }}
+
+            .st-key-landing_shell [data-testid="column"] > div > [data-testid="stVerticalBlock"] {{
+                gap: var(--ui-card-gap) !important;
+            }}
+
+            /* Title alignment:
+               The grey header title now starts at the same vertical inset
+               as the right white-card titles: var(--ui-card-pad). */
             .st-key-landing_shell .st-key-filter_header {{
                 min-height: var(--ui-landing-filter-header-min-h) !important;
                 height: var(--ui-landing-filter-header-min-h) !important;
                 box-sizing: border-box !important;
+                display: flex !important;
+                align-items: flex-start !important;
+                padding:
+                    var(--ui-card-pad)
+                    var(--ui-card-pad)
+                    0
+                    var(--ui-card-pad) !important;
+            }}
+
+            .st-key-landing_shell .st-key-filter_header .highlight-title {{
+                margin: 0 !important;
+                line-height: 1.15 !important;
+            }}
+
+            .st-key-landing_shell .right-column-stack .highlight-title {{
+                margin: 0 0 10px 0 !important;
+                line-height: 1.15 !important;
             }}
 
             .st-key-landing_shell .st-key-filter_body {{
-                min-height: calc(
-                    var(--ui-landing-lower-section-min-h)
-                    - var(--ui-landing-filter-header-min-h)
-                    - var(--ui-card-gap)
-                ) !important;
-                height: calc(
-                    var(--ui-landing-lower-section-min-h)
-                    - var(--ui-landing-filter-header-min-h)
-                    - var(--ui-card-gap)
-                ) !important;
+                min-height: var(--ui-landing-filter-body-h) !important;
+                height: var(--ui-landing-filter-body-h) !important;
                 box-sizing: border-box !important;
                 display: flex !important;
-                flex-direction: column !important;
+                align-items: center !important;
                 justify-content: center !important;
             }}
 
             .st-key-landing_shell .st-key-filter_body > div {{
-                height: 100% !important;
+                width: var(--ui-landing-form-max-w) !important;
+                max-width: var(--ui-landing-form-max-w) !important;
+                height: auto !important;
+                margin: auto !important;
             }}
 
             .st-key-landing_shell .st-key-filter_body > div > [data-testid="stVerticalBlock"] {{
-                height: 100% !important;
+                height: auto !important;
+                min-height: 0 !important;
                 display: flex !important;
                 flex-direction: column !important;
                 justify-content: center !important;
@@ -3000,9 +3073,30 @@ def inject_custom_styles():
                 padding-bottom: 0 !important;
             }}
 
+            .st-key-landing_shell .st-key-filter_body [data-testid="stHorizontalBlock"] {{
+                margin: 0 !important;
+            }}
+
+            .st-key-landing_shell .st-key-filter_body [data-testid="stWidgetLabel"] {{
+                min-height: 0 !important;
+                margin-bottom: 0 !important;
+                padding-bottom: 0 !important;
+            }}
+
+            .st-key-landing_shell .st-key-filter_body label,
+            .st-key-landing_shell .st-key-filter_body [data-testid="stWidgetLabel"] p {{
+                margin-bottom: 0 !important;
+                line-height: 1.12 !important;
+            }}
+
+            .st-key-landing_shell .st-key-filter_body div[data-baseweb="select"] {{
+                margin-top: var(--ui-landing-label-control-gap) !important;
+            }}
+
             .st-key-landing_shell .right-column-stack {{
                 min-height: var(--ui-landing-lower-section-min-h) !important;
                 height: var(--ui-landing-lower-section-min-h) !important;
+                gap: var(--ui-card-gap) !important;
             }}
 
             .st-key-landing_shell .right-column-stack .highlight-box {{
