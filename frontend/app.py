@@ -1042,10 +1042,17 @@ def inject_custom_styles():
             }}
 
             .st-key-header_action_buttons [data-testid="stWidgetLabel"] p,
-            .st-key-header_action_buttons label p {{
-                font-size: 0.72rem !important;
-                line-height: 1 !important;
+            .st-key-header_action_buttons label,
+            .st-key-header_action_buttons label span,
+            .st-key-header_action_buttons label p,
+            .st-key-header_action_buttons [data-baseweb="checkbox"] label,
+            .st-key-header_action_buttons [data-baseweb="checkbox"] span,
+            .st-key-header_action_buttons [data-baseweb="checkbox"] p {{
+                font-size: var(--ui-simulation-toggle-label-size) !important;
+                font-weight: 700 !important;
+                line-height: 1.05 !important;
                 white-space: nowrap !important;
+                color: #64748b !important;
             }}
 
 
@@ -1067,6 +1074,10 @@ def inject_custom_styles():
                 line-height: 1.1 !important;
                 margin: 0 !important;
                 padding: 0 !important;
+            }}
+
+            .st-key-header_action_buttons [data-baseweb="checkbox"] p {{
+                transform: translateY(var(--ui-simulation-toggle-label-y-shift)) !important;
             }}
 
 
@@ -2016,8 +2027,13 @@ def inject_custom_styles():
                 }}
 
                 .st-key-header_action_buttons [data-testid="stWidgetLabel"] p,
-                .st-key-header_action_buttons label p {{
-                    font-size: 0.80rem !important;
+                .st-key-header_action_buttons label,
+                .st-key-header_action_buttons label span,
+                .st-key-header_action_buttons label p,
+                .st-key-header_action_buttons [data-baseweb="checkbox"] label,
+                .st-key-header_action_buttons [data-baseweb="checkbox"] span,
+                .st-key-header_action_buttons [data-baseweb="checkbox"] p {{
+                    font-size: var(--ui-simulation-toggle-label-size) !important;
                 }}
 
                 .top-strip-title-label {{
@@ -3376,12 +3392,12 @@ def inject_custom_styles():
                ========================================================= */
 
             :root {{
-                --ui-sidebar-secret-fields-top-gap: 300px;
+                --ui-sidebar-secret-fields-top-gap: 800px;
             }}
 
             @media (min-width: 1700px) and (min-height: 900px) {{
                 :root {{
-                    --ui-sidebar-secret-fields-top-gap: 800px;
+                    --ui-sidebar-secret-fields-top-gap: 1000px;
                 }}
             }}
 
@@ -3403,7 +3419,48 @@ def inject_custom_styles():
                 }}
             }}
 
+            /* =========================================================
+               HEADER SIMULATION MODE LABEL SIZE
+               Responsive control for "Simulation Mode (Editing Content)".
+
+               1440 x 900 must stay compact.
+               Larger screens progressively increase the label size.
+
+               Higher label-size = larger text.
+               Positive y-shift = label lower.
+               ========================================================= */
+
+            :root {{
+                --ui-simulation-toggle-label-size: 0.7rem;
+                --ui-simulation-toggle-label-y-shift: 1px;
+            }}
+
+            @media (min-width: 1700px) and (min-height: 900px) {{
+                :root {{
+                    --ui-simulation-toggle-label-size: 1.0rem;
+                    --ui-simulation-toggle-label-y-shift: 3px;
+                }}
+            }}
+
+            @media (min-width: 2200px) and (min-height: 1050px) {{
+                :root {{
+                    --ui-simulation-toggle-label-size: 1.05rem;
+                    --ui-simulation-toggle-label-y-shift: 2px;
+                }}
+            }}
+
+            @media (min-width: 2700px) and (min-height: 1250px) {{
+                :root {{
+                    --ui-simulation-toggle-label-size: 1.08rem;
+                    --ui-simulation-toggle-label-y-shift: 2px;
+                }}
+            }}
+
+
+
         </style>
+
+
     """, unsafe_allow_html=True)
 
 
@@ -3870,12 +3927,12 @@ def render_header(is_landing=True, show_predict_button=False, show_back_button=F
         if show_back_button or show_predict_button or show_global_edit_toggle:
 
             with st.container(key="header_action_buttons"):
-                c_toggle, c_back, c_predict = st.columns([0.75, 1.1, 1.32], gap="small", vertical_alignment="top")
+                c_toggle, c_back, c_predict = st.columns([1.55, 1.05, 1.55], gap="small", vertical_alignment="top")
 
                 with c_toggle:
                     if show_global_edit_toggle:
                         st.toggle(
-                            "Simulation Mode",
+                            "Simulation Mode (Editing Content)",
                             key="global_edit_mode",
                             on_change=handle_global_edit_toggle
                         )
