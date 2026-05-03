@@ -23,7 +23,7 @@ load_dotenv()
 st.set_page_config(
     page_title="ClinTrialPredict | Predictive Engine",
     layout="wide",
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="expanded"
 )
 
 # --- PATHS & URLS ---
@@ -3521,11 +3521,12 @@ def init_session_state():
         "f_nct_id": None,
         "s_registry": "",
         "s_mode": "",
-        "s_detail": "",
-        "s_detail_memory": "",
+        "s_detail": "True",
+        "s_detail_memory": "True",
         "s_scores": "",
         "global_edit_mode": False,
-        "show_detailed_drivers": False,
+        "show_detailed_drivers": True,
+        "show_detailed_drivers_user_set": False,
 
         "detail_completion_tab_visible": False,
         "detail_prediction_notice": False,
@@ -3533,8 +3534,7 @@ def init_session_state():
 
     }
     for key, val in defaults.items():
-        if key not in st.session_state:
-            st.session_state[key] = val
+        st.session_state.setdefault(key, val)
 
 
 
@@ -3604,16 +3604,28 @@ def reset_detail_prediction_state():
 
 
 def get_s_detail_value():
-    return str(
-        st.session_state.get(
-            "s_detail",
-            st.session_state.get("s_detail_memory", "")
-        ) or ""
-    )
+    detail_value = str(st.session_state.get("s_detail", "") or "").strip()
+    memory_value = str(st.session_state.get("s_detail_memory", "") or "").strip()
+
+    if detail_value:
+        return detail_value
+
+    if memory_value:
+        return memory_value
+
+    if st.session_state.get("show_detailed_drivers_user_set", False):
+        return "False"
+
+    return "True"
 
 
 def persist_s_detail_value(value=None):
-    detail_value = get_s_detail_value() if value is None else str(value or "")
+    detail_value = get_s_detail_value() if value is None else str(value or "").strip()
+
+    if detail_value.lower() == "true":
+        detail_value = "True"
+    elif detail_value.lower() in ("false", "0", "no", "off"):
+        detail_value = "False"
 
     st.session_state["s_detail"] = detail_value
     st.session_state["s_detail_memory"] = detail_value
@@ -3631,14 +3643,16 @@ def sync_detail_toggle_from_values():
 
 
 def sync_values_from_detail_toggle():
+    st.session_state["show_detailed_drivers_user_set"] = True
     persist_s_detail_value(
         "True"
         if st.session_state.get("show_detailed_drivers", False)
-        else ""
+        else "False"
     )
 
 
 def sync_s_detail_text_input_to_memory():
+    st.session_state["show_detailed_drivers_user_set"] = True
     persist_s_detail_value()
 
 
