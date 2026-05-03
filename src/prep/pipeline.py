@@ -254,7 +254,7 @@ PIPELINE_REGISTRY = {
                 "subgroup": "Biological Profile",
                 "priority": 8,
                 "options": [
-                    ["ESTABLISHED_COPY", "Established / Copy"],
+                    ["ESTABLISHED_COPY", "Established"],
                     ["NEXT_GEN_OPTIMIZED", "Next-Gen / Optimized"],
                     ["FIRST_IN_CLASS", "First-in-Class (Novel)"],
                     ["UNKNOWN", "Not Specified"]
@@ -262,7 +262,7 @@ PIPELINE_REGISTRY = {
             },
             "encoding": "ordinal",
             "mapping": {
-                "ESTABLISHED_COPY": [0, "Established / Copy"],
+                "ESTABLISHED_COPY": [0, "Established"],
                 "NEXT_GEN_OPTIMIZED": [1, "Next-Gen / Optimized"],
                 "FIRST_IN_CLASS": [2, "First-in-Class (Novel)"],
                 "UNKNOWN": [0, "Not Specified"]
@@ -1156,7 +1156,7 @@ def preprocessor():
 
 def export_pipeline_taxonomy(output_path):
     """
-    Exports the PIPELINE_REGISTRY as a JSON file to serve as the source of truth 
+    Exports the PIPELINE_REGISTRY as a JSON file to serve as the source of truth
     for the API and UI layers.
     Ensures all keys are strings and handles np.nan for JSON compliance.
     """
@@ -1192,7 +1192,7 @@ def export_pipeline_taxonomy(output_path):
 
     with open(out_p, 'w') as f:
         f.write(json_str)
-    
+
     print(f"✅ Integrated Taxonomy exported to {out_p}")
 
 # ==============================================================================
@@ -1209,16 +1209,16 @@ def create_search_label(row):
     # 1. Identity Anchors
     acro = str(row.get('acronym', '')).strip()
     if not acro or acro.lower() == 'nan': acro = ""
-    
+
     drug_raw = str(row.get('alpha_drug_name', 'Unknown Drug')).strip()
     drugs = [d.strip() for d in drug_raw.split('|')]
-    
+
     sponsor = str(row.get('lead_sponsor_canonical', 'Unknown Sponsor')).strip()
     ta = str(row.get('therapeutic_area_ui', row.get('therapeutic_area', 'Unclassified'))).strip()
-    
+
     import pandas as pd
     year = str(int(row['start_year'])) if pd.notna(row.get('start_year')) else "YYYY"
-    
+
     # 2. Hybrid Identity Logic (v1.2)
     if acro:
         # If many drugs, show agent count to keep the acronym prominent
@@ -1229,9 +1229,9 @@ def create_search_label(row):
             drug_display = f"{drugs[0]} | {drugs[1]} (+{len(drugs)-2})"
         else:
             drug_display = " | ".join(drugs)
-            
+
     prefix = f"[{acro}] " if acro else ""
-    
+
     # 3. Final Assembly
     label = f"{prefix}{drug_display} ({sponsor})".replace("  ", " ").strip()
     return f"{label} | {ta} ({year})"

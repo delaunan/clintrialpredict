@@ -25,7 +25,7 @@ OUTPUT_FILE = os.path.join(OUTPUT_PATH, 'llm_out_00.csv')
 LOG_FILE = os.path.join(PROJECT_ROOT, 'data/logs/enrichment_v1_errors.log')
 
 # Config
-MODEL_NAME = "gemini-3-flash-preview"
+MODEL_NAME = "gemini-2.5-flash-lite"
 CONCURRENCY_LIMIT = 40
 BATCH_SIZE = 1 
 FIELDNAMES = [
@@ -64,9 +64,45 @@ client = genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))
 os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
 logging.basicConfig(filename=LOG_FILE, level=logging.INFO, format='%(asctime)s - %(message)s')
 
+def safe_json_loads(text):
+    try: 
+        res = json.loads(text)
+        if isinstance(res, dict): return [res] # Auto-wrap single object
+        return res
+    except:
+        match = re.search(r'```(?:json)?\s*(.*?)\s*```', text, re.DOTALL)
+        if match:
+            try: 
+                res = json.loads(match.group(1))
+                if isinstance(res, dict): return [res]
+                return res
+            except: pass
+        try:
+            start = text.find('[')
+            end = text.rfind(']')
+            if start != -1 and end != -1: return json.loads(text[start:end+1])
+            start_obj = text.find('{')
+            end_obj = text.rfind('}')
+            if start_obj != -1 and end_obj != -1:
+                res = json.loads(text[start_obj:end_obj+1])
+                return [res] # Auto-wrap
+        except: pass
+    return None
+
+def wash_input_text(text):
+    """Normalizes Greek and special characters in input to prevent JSON corruption."""
+    if not isinstance(text, str): return text
+    charmap = {'\u03b1': 'alpha', '\u0391': 'Alpha', '\u03b2': 'beta', '\u0392': 'Beta', '\u03b3': 'gamma', '\u0393': 'Gamma', '\u03b4': 'delta', '\u0394': 'Delta', '\u03ba': 'kappa', '\u039a': 'Kappa', '\u00ae': '', '\u2122': '', '\u2264': '<=', '\u2265': '>='}
+    for char, replacement in charmap.items(): text = text.replace(char, replacement)
+    return text
+
 async def process_batch(semaphore, batch_df, cache_name, writer, f_handle):
     async with semaphore:
-        contexts_payload = "".join([f"--- {row['nct_id']} ---\n{row['context']}\n\n" for _, row in batch_df.iterrows()])
+        contexts_payload = ""
+        for _, row in batch_df.iterrows():
+            clean_ctx = wash_input_text(row['context'])
+            contexts_payload += f"--- {row['nct_id']} ---\n{clean_ctx}\n\n"
+        
         for attempt in range(3):
             try:
                 response = await client.aio.models.generate_content(
@@ -74,7 +110,9 @@ async def process_batch(semaphore, batch_df, cache_name, writer, f_handle):
                     contents=f"EXTRACT DATA FOR THESE {len(batch_df)} TRIALS:\n{contexts_payload}",
                     config=types.GenerateContentConfig(cached_content=cache_name, response_mime_type="application/json", response_schema=RESPONSE_SCHEMA, temperature=0.0)
                 )
-                results = json.loads(response.text)
+                results = safe_json_loads(response.text)
+                if results is None: raise ValueError("JSON Parse Error")
+                
                 for res in results:
                     writer.writerow({f: str(res.get(f)).replace("\n", " ") if f != "is_rare_disease" else res.get(f) for f in FIELDNAMES})
                 f_handle.flush()

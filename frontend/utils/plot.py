@@ -110,7 +110,7 @@ def plot_success_gauge(score_val, height=220):
     fig = go.Figure(go.Indicator(
         mode="gauge",
         value=score_val,
-        domain={"x": [0, 1], "y": [0, 1]},
+        domain={"x": [0.0, 1], "y": [0.0, 0.78]},
         gauge={
             "axis": {
                 "range": [GAUGE_MIN, GAUGE_MAX],
@@ -140,13 +140,13 @@ def plot_success_gauge(score_val, height=220):
 
     fig.add_annotation(
         x=0.5,
-        y=0.35,
+        y=0.25,
         xref="paper",
         yref="paper",
         text=f"<span style='font-weight:700'>{score_val:.1f}</span>",
         showarrow=False,
         font=dict(
-            size=23,
+            size=max(42, int(height * 0.20)),
             color=STYLE_CONFIG["font_color"],
             family=STYLE_CONFIG["font_family"],
         ),
@@ -156,7 +156,7 @@ def plot_success_gauge(score_val, height=220):
     )
 
     fig.update_layout(
-        margin=dict(l=35, r=35, t=40, b=10),
+        margin=dict(l=26, r=26, t=30, b=5),
         height=height,
         paper_bgcolor="white",
         hovermode=False,
@@ -356,7 +356,7 @@ def plot_treemap(subcat_impacts, pillar_impacts, show_values=True, height=600):
     ))
 
     fig.update_layout(
-        margin=dict(t=34, l=15, r=15, b=15),
+        margin=dict(t=10, l=8, r=8, b=2),
         height=height,
         font=dict(family=STYLE_CONFIG["font_family"], color=STYLE_CONFIG["font_color"]),
         paper_bgcolor='white',

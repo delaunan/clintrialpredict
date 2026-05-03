@@ -17,7 +17,7 @@ V0_FILE = os.path.join(PROJECT_ROOT, 'data/processed/llm_out_00.csv')
 REF_CONTEXT = os.path.join(PROJECT_ROOT, 'data/llm_in_01_2.csv')
 HIER_FILE = os.path.join(PROJECT_ROOT, 'data/reference/hier_gbd.csv')
 STATS_FILE = os.path.join(PROJECT_ROOT, 'data/reference/gbd_stats.csv')
-MODEL_NAME = "gemini-3-flash-preview"
+MODEL_NAME = "gemini-2.5-flash-lite"
 
 client = genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))
 
@@ -44,9 +44,48 @@ RESPONSE_SCHEMA = {
     }
 }
 
+os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
+logging.basicConfig(filename=LOG_FILE, level=logging.INFO, format='%(asctime)s - %(message)s')
+
+def safe_json_loads(text):
+    try: 
+        res = json.loads(text)
+        if isinstance(res, dict): return [res] # Auto-wrap single object
+        return res
+    except:
+        match = re.search(r'```(?:json)?\s*(.*?)\s*```', text, re.DOTALL)
+        if match:
+            try: 
+                res = json.loads(match.group(1))
+                if isinstance(res, dict): return [res]
+                return res
+            except: pass
+        try:
+            start = text.find('[')
+            end = text.rfind(']')
+            if start != -1 and end != -1: return json.loads(text[start:end+1])
+            start_obj = text.find('{')
+            end_obj = text.rfind('}')
+            if start_obj != -1 and end_obj != -1:
+                res = json.loads(text[start_obj:end_obj+1])
+                return [res] # Auto-wrap
+        except: pass
+    return None
+
+def wash_input_text(text):
+    """Normalizes Greek and special characters in input to prevent JSON corruption."""
+    if not isinstance(text, str): return text
+    charmap = {'\u03b1': 'alpha', '\u0391': 'Alpha', '\u03b2': 'beta', '\u0392': 'Beta', '\u03b3': 'gamma', '\u0393': 'Gamma', '\u03b4': 'delta', '\u0394': 'Delta', '\u03ba': 'kappa', '\u039a': 'Kappa', '\u00ae': '', '\u2122': '', '\u2264': '<=', '\u2265': '>='}
+    for char, replacement in charmap.items(): text = text.replace(char, replacement)
+    return text
+
 async def process_batch(semaphore, batch_df, cache_name, refined_results, prev_map):
     async with semaphore:
-        contexts = "".join([f"--- {row['nct_id']} ---\n[PREV]: {prev_map.get(row['nct_id'])}\n[CTX]: {row['context']}\n\n" for _, row in batch_df.iterrows()])
+        contexts = ""
+        for _, row in batch_df.iterrows():
+            clean_ctx = wash_input_text(row['context'])
+            contexts += f"--- {row['nct_id']} ---\n[PREV]: {prev_map.get(row['nct_id'])}\n[CTX]: {clean_ctx}\n\n"
+        
         for _ in range(3):
             try:
                 response = await client.aio.models.generate_content(
@@ -54,8 +93,9 @@ async def process_batch(semaphore, batch_df, cache_name, refined_results, prev_m
                     contents=f"REFINE THESE TRIALS:\n{contexts}",
                     config=types.GenerateContentConfig(cached_content=cache_name, response_mime_type="application/json", response_schema=RESPONSE_SCHEMA, temperature=0.0)
                 )
-                results = json.loads(response.text)
-                for res in results: refined_results[res['nct_id']] = res
+                results = safe_json_loads(response.text)
+                if results:
+                    for res in results: refined_results[res['nct_id']] = res
                 return True
             except: await asyncio.sleep(5); continue
         return False
@@ -84,7 +124,7 @@ async def main():
     try:
         print(f"> Run 1.2: Refining {len(df_todo)} trials...")
         semaphore = asyncio.Semaphore(20)
-        tasks = [process_batch(semaphore, df_todo.iloc[i:i+5], cache.name, refined_results, prev_map) for i in range(0, len(df_todo), 5)]
+        tasks = [process_batch(semaphore, df_todo.iloc[i:i+3], cache.name, refined_results, prev_map) for i in range(0, len(df_todo), 3)]
         await tqdm.gather(*tasks)
     finally:
         if cache_name := cache.name:

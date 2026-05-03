@@ -65,14 +65,17 @@ BRAND_FILTER = (
 
 
 TEXTAREA_HEIGHTS = {
+    # Compact Python defaults.
+    # The final visual heights are then harmonized by the late CSS
+    # responsive height-contract block.
     "top_title": 70,
-    "conditions": 286,
-    "study_summary": 160,
-    "interventions": 160,
-    "primary_outcomes": 160,
-    "eligibility_criteria": 337,
-    "completion_prediction_left": 220,
-    "completion_prediction_right": 430,
+    "conditions": 245,
+    "study_summary": 150,
+    "interventions": 140,
+    "primary_outcomes": 140,
+    "eligibility_criteria": 330,
+    "completion_prediction_left": 265,
+    "completion_prediction_right": 560,
 }
 
 
@@ -230,16 +233,25 @@ def inject_custom_styles():
                 /* RESPONSIVE DESIGN SYSTEM
                    Baseline = current laptop design.
                    Large screens scale moderately.
-                   Very large screens are capped. */
+                   Very large screens are capped.
+                   Do not use global zoom: scale the composition tokens instead. */
                 --ui-page-max-w: 1760px;
                 --ui-page-pad-x: clamp(2.5rem, 5vw, 6.5rem);
                 --ui-page-pad-top: 2rem;
+                --ui-page-pad-bottom: 2rem;
 
                 --ui-card-radius: 14px;
                 --ui-card-pad: 24px;
                 --ui-filter-header-pad: 22px 24px 28px 24px;
                 --ui-filter-body-pad: 12px 25px 18px 25px;
                 --ui-card-gap: 1rem;
+
+                /* Landing composition heights.
+                   These prevent text wrapping from deciding visual card height. */
+                --ui-landing-shell-min-h: calc(100vh - var(--ui-page-pad-top) - var(--ui-page-pad-bottom));
+                --ui-landing-lower-section-min-h: clamp(355px, 39vh, 470px);
+                --ui-landing-filter-header-min-h: 74px;
+                --ui-landing-right-card-min-h: 170px;
 
                 --ui-highlight-title-size: 1.15rem;
                 --ui-highlight-text-size: 0.95rem;
@@ -325,8 +337,9 @@ def inject_custom_styles():
             /* Large laptop / desktop */
             @media (min-width: 1800px) and (min-height: 950px) {{
                 :root {{
-                    --ui-page-max-w: 1960px;
+                    --ui-page-max-w: 2060px;
                     --ui-page-pad-top: 2.3rem;
+                    --ui-page-pad-bottom: 2.3rem;
                     --ui-page-pad-x: clamp(3rem, 5vw, 7.5rem);
 
                     --ui-control-h: 41px;
@@ -364,14 +377,19 @@ def inject_custom_styles():
                     --ui-landing-header-pad-top: 14px;
                     --ui-mission-top: 1.4rem;
                     --ui-mission-bottom: 1.15rem;
+
+                    --ui-landing-lower-section-min-h: clamp(420px, 42vh, 560px);
+                    --ui-landing-filter-header-min-h: 84px;
+                    --ui-landing-right-card-min-h: 205px;
                 }}
             }}
 
             /* Very large screen, capped */
             @media (min-width: 2250px) and (min-height: 1050px) {{
                 :root {{
-                    --ui-page-max-w: 2260px;
+                    --ui-page-max-w: 2360px;
                     --ui-page-pad-top: 2.7rem;
+                    --ui-page-pad-bottom: 2.7rem;
                     --ui-page-pad-x: clamp(4rem, 5vw, 9rem);
 
                     --ui-control-h: 45px;
@@ -409,6 +427,62 @@ def inject_custom_styles():
                     --ui-landing-header-pad-top: 18px;
                     --ui-mission-top: 1.7rem;
                     --ui-mission-bottom: 1.35rem;
+
+                    --ui-landing-lower-section-min-h: clamp(500px, 44vh, 660px);
+                    --ui-landing-filter-header-min-h: 96px;
+                    --ui-landing-right-card-min-h: 240px;
+                }}
+            }}
+
+
+                        /* Ultra-wide / very high resolution screens.
+               This keeps the app visibly larger without infinite stretching. */
+            @media (min-width: 2700px) and (min-height: 1250px) {{
+                :root {{
+                    --ui-page-max-w: 2520px;
+                    --ui-page-pad-top: 3rem;
+                    --ui-page-pad-bottom: 3rem;
+                    --ui-page-pad-x: clamp(5rem, 5vw, 10rem);
+
+                    --ui-control-h: 48px;
+                    --ui-control-radius: 13px;
+                    --ui-control-font-size: 0.92rem;
+                    --ui-field-gap: 14px;
+
+                    --ui-card-radius: 18px;
+                    --ui-card-pad: 36px;
+                    --ui-filter-header-pad: 22px 36px 29px 36px;
+                    --ui-filter-body-pad: 22px 36px 29px 36px;
+                    --ui-card-gap: 1.35rem;
+
+                    --ui-highlight-title-size: 1.40rem;
+                    --ui-highlight-text-size: 1.12rem;
+                    --ui-label-font-size: 0.96rem;
+                    --ui-kicker-font-size: 0.76rem;
+
+                    --ui-button-h: 47px;
+                    --ui-button-radius: 11px;
+                    --ui-button-pad-x: 1.3rem;
+                    --ui-button-font-size: 0.96rem;
+
+                    --ui-logo-size-landing: 96px;
+                    --ui-logo-size-nonlanding: 56px;
+                    --ui-logo-radius-landing: 24px;
+                    --ui-logo-radius-nonlanding: 10px;
+                    --ui-logo-gap-landing: 16px;
+
+                    --ui-title-size-landing: 3.65rem;
+                    --ui-title-size-nonlanding: 3.0rem;
+                    --ui-subtitle-size-landing: 1.92rem;
+                    --ui-demo-size: 0.82rem;
+
+                    --ui-landing-header-pad-top: 20px;
+                    --ui-mission-top: 1.9rem;
+                    --ui-mission-bottom: 1.5rem;
+
+                    --ui-landing-lower-section-min-h: clamp(570px, 45vh, 740px);
+                    --ui-landing-filter-header-min-h: 108px;
+                    --ui-landing-right-card-min-h: 270px;
                 }}
             }}
 
@@ -419,12 +493,35 @@ def inject_custom_styles():
 
             .block-container {{
                 background: transparent !important;
+                width: 100% !important;
                 padding-top: var(--ui-page-pad-top) !important;
+                padding-bottom: var(--ui-page-pad-bottom) !important;
                 padding-left: var(--ui-page-pad-x) !important;
                 padding-right: var(--ui-page-pad-x) !important;
                 max-width: var(--ui-page-max-w) !important;
                 margin-left: auto !important;
                 margin-right: auto !important;
+            }}
+
+            /* LANDING PAGE SHELL
+               Centers the landing composition vertically on tall screens.
+               Other views remain normal application screens. */
+            .st-key-landing_shell {{
+                min-height: var(--ui-landing-shell-min-h) !important;
+                display: flex !important;
+                align-items: center !important;
+                width: 100% !important;
+            }}
+
+            .st-key-landing_shell > div {{
+                width: 100% !important;
+            }}
+
+            @media (max-height: 780px) {{
+                .st-key-landing_shell {{
+                    min-height: auto !important;
+                    align-items: flex-start !important;
+                }}
             }}
 
 
@@ -597,16 +694,42 @@ def inject_custom_styles():
                 box-shadow: var(--ui-shell-shadow) !important;
                 margin-top: 0 !important;
                 margin-bottom: 4px !important;
+                box-sizing: border-box !important;
+            }}
+
+            /* LANDING EQUAL-HEIGHT COMPOSITION
+               The grey filter block and the two right cards now follow
+               the same visual height system instead of depending on text wrapping. */
+            .st-key-landing_shell .st-key-filter_header {{
+                min-height: var(--ui-landing-filter-header-min-h) !important;
+                display: flex !important;
+                align-items: center !important;
+                box-sizing: border-box !important;
+            }}
+
+            .st-key-landing_shell .st-key-filter_body {{
+                min-height: calc(
+                    var(--ui-landing-lower-section-min-h)
+                    - var(--ui-landing-filter-header-min-h)
+                ) !important;
             }}
 
             .right-column-stack {{
                 display: flex !important;
                 flex-direction: column !important;
                 gap: var(--ui-card-gap) !important;
+                min-height: var(--ui-landing-lower-section-min-h) !important;
+                height: 100% !important;
             }}
 
             .right-column-stack .highlight-box {{
                 margin: 0 !important;
+                height: auto !important;
+                min-height: var(--ui-landing-right-card-min-h) !important;
+                flex: 1 1 0 !important;
+                box-sizing: border-box !important;
+                display: flex !important;
+                flex-direction: column !important;
             }}
 
             /* LANDING PAGE FILTERS */
@@ -1312,13 +1435,77 @@ def inject_custom_styles():
             .st-key-summary_side_inner_completion_prediction_right_block > div {{
                 padding: 0 10px 0 10px !important;
             }}
+            /* Completion Score — gauge vertical alignment
+               Single manual control for the gauge chart + score + tier label.
 
+               Increase --ui-completion-gauge-up-shift = move the whole gauge group UP.
+               Decrease --ui-completion-gauge-up-shift = move the whole gauge group DOWN.
+
+               This is intentionally applied to the Plotly chart and tier label directly,
+               because spacer-only controls can be overridden by Streamlit layout wrappers.
+            */
+            :root {{
+                --ui-completion-gauge-up-shift: 22px;
+            }}
+
+            .st-key-summary_side_shell_completion_prediction_left_top_block .trial-meta-top-gap {{
+                height: 0px !important;
+            }}
+
+            .st-key-summary_side_shell_completion_prediction_left_top_block .trial-meta-bottom-gap {{
+                height: 0px !important;
+            }}
+
+            .st-key-summary_side_inner_completion_prediction_left_top_block [data-testid="stPlotlyChart"],
+            .st-key-summary_side_shell_completion_prediction_left_top_block .completion-tier-row {{
+                transform: translateY(calc(-1 * var(--ui-completion-gauge-up-shift))) !important;
+            }}
+
+            @media (min-width: 1800px) and (min-height: 950px) {{
+                :root {{
+                    --ui-completion-gauge-up-shift: 15px;
+                }}
+            }}
+
+            @media (min-width: 2400px) and (min-height: 1200px) {{
+                :root {{
+                    --ui-completion-gauge-up-shift: 10px;
+                }}
+            }}
+
+            @media (min-width: 2700px) and (min-height: 1250px) {{
+                :root {{
+                    --ui-completion-gauge-up-shift: 5px;
+                }}
+            }}
+
+            /* Completion Score — treemap vertical alignment
+               1440: preserve compact alignment.
+               1920 / 2560 / 2880: progressively move treemap down. */
             .st-key-summary_side_shell_completion_prediction_right_block .trial-meta-top-gap {{
                 height: 6px !important;
             }}
 
             .st-key-summary_side_shell_completion_prediction_right_block .trial-meta-bottom-gap {{
                 height: 0px !important;
+            }}
+
+            @media (min-width: 1800px) and (min-height: 950px) {{
+                .st-key-summary_side_shell_completion_prediction_right_block .trial-meta-top-gap {{
+                    height: 30px !important;
+                }}
+            }}
+
+            @media (min-width: 2400px) and (min-height: 1200px) {{
+                .st-key-summary_side_shell_completion_prediction_right_block .trial-meta-top-gap {{
+                    height: 40px !important;
+                }}
+            }}
+
+            @media (min-width: 2700px) and (min-height: 1250px) {{
+                .st-key-summary_side_shell_completion_prediction_right_block .trial-meta-top-gap {{
+                    height: 50px !important;
+                }}
             }}
 
             /* TREEMAP TOGGLE — FLOATING ABOVE TREEMAP BOX, INSIDE TAB 3 ONLY */
@@ -1675,8 +1862,1309 @@ def inject_custom_styles():
             }}
 
 
+            /* =========================================================
+               RESPONSIVE VIEW-SPECIFIC REFINEMENT PASS
+               This block deliberately comes late in the CSS so it can
+               override the earlier generic responsive profile cleanly.
+               ========================================================= */
+
+            @media (min-width: 1800px) and (min-height: 950px) {{
+                :root {{
+                    --ui-page-max-w: 2160px;
+                    --ui-page-pad-top: 2.4rem;
+                    --ui-page-pad-bottom: 2.4rem;
+                    --ui-page-pad-x: clamp(3rem, 4.6vw, 7.2rem);
+
+                    --ui-results-top-offset: 18px;
+                    --ui-detail-top-offset: 18px;
+                    --ui-results-count-size: 0.76rem;
+
+                    --ui-sidebar-w: 18.25rem;
+
+                    --ui-landing-lower-section-min-h: clamp(405px, 39vh, 530px);
+                    --ui-landing-filter-header-min-h: 84px;
+                    --ui-landing-right-card-min-h: 195px;
+
+                    --ui-treemap-toggle-top: -34px;
+                    --ui-treemap-toggle-right: 26px;
+                }}
+
+                .st-key-results_shell {{
+                    margin-top: var(--ui-results-top-offset) !important;
+                }}
+
+                .st-key-detail_shell {{
+                    margin-top: var(--ui-detail-top-offset) !important;
+                }}
+
+                section[data-testid="stSidebar"],
+                section[data-testid="stSidebar"] > div:first-child {{
+                    width: var(--ui-sidebar-w) !important;
+                    min-width: var(--ui-sidebar-w) !important;
+                }}
+
+                .st-key-trial_detail_tabs .stTabs [data-baseweb="tab"] {{
+                    height: 40px !important;
+                    font-size: 0.90rem !important;
+                    padding: 0 17px !important;
+                }}
+
+                .top-strip-title-label {{
+                    font-size: 0.94rem !important;
+                }}
+
+                .st-key-trial_title_shell .stTextArea textarea {{
+                    font-size: 0.90rem !important;
+                    line-height: 1.36 !important;
+                }}
+
+                [class*="st-key-summary_side_inner_"] .stTextArea textarea {{
+                    font-size: 0.88rem !important;
+                    line-height: 1.46 !important;
+                }}
+            }}
 
 
+            @media (min-width: 2250px) and (min-height: 1050px) {{
+                :root {{
+                    --ui-page-max-w: 2420px;
+                    --ui-page-pad-top: 2.8rem;
+                    --ui-page-pad-bottom: 2.8rem;
+                    --ui-page-pad-x: clamp(4rem, 4.6vw, 8.5rem);
+
+                    --ui-results-top-offset: 28px;
+                    --ui-detail-top-offset: 30px;
+                    --ui-results-count-size: 0.82rem;
+
+                    --ui-sidebar-w: 19.75rem;
+
+                    --ui-control-h: 46px;
+                    --ui-control-font-size: 0.91rem;
+                    --ui-field-gap: 14px;
+
+                    --ui-button-h: 46px;
+                    --ui-button-font-size: 0.94rem;
+
+                    --ui-logo-size-nonlanding: 58px;
+                    --ui-title-size-nonlanding: 3.05rem;
+                    --ui-demo-size: 0.82rem;
+
+                    --ui-landing-lower-section-min-h: clamp(465px, 40vh, 610px);
+                    --ui-landing-filter-header-min-h: 98px;
+                    --ui-landing-right-card-min-h: 220px;
+
+                    --ui-highlight-title-size: 1.36rem;
+                    --ui-highlight-text-size: 1.10rem;
+                    --ui-label-font-size: 0.96rem;
+                    --ui-kicker-font-size: 0.76rem;
+
+                    --ui-summary-tab-top-pad: 10px;
+                    --ui-detail-tabs-offset-y: 2px;
+                    --ui-summary-row-overlap: -6px;
+                    --ui-population-bottom-extension: 172px;
+
+                    --ui-treemap-toggle-top: -32px;
+                    --ui-treemap-toggle-right: 28px;
+                }}
+
+                .st-key-results_shell {{
+                    margin-top: var(--ui-results-top-offset) !important;
+                }}
+
+                .st-key-detail_shell {{
+                    margin-top: var(--ui-detail-top-offset) !important;
+                }}
+
+                section[data-testid="stSidebar"],
+                section[data-testid="stSidebar"] > div:first-child {{
+                    width: var(--ui-sidebar-w) !important;
+                    min-width: var(--ui-sidebar-w) !important;
+                }}
+
+                .st-key-sidebar_reset_wrap {{
+                    padding-left: 0.35rem !important;
+                    padding-right: 0.35rem !important;
+                }}
+
+                .st-key-sidebar_filters {{
+                    margin-top: 78px !important;
+                    padding-left: 0.35rem !important;
+                    padding-right: 0.35rem !important;
+                }}
+
+                .st-key-sidebar_filters [data-testid="stElementContainer"] {{
+                    margin-bottom: 13px !important;
+                }}
+
+                .st-key-trial_detail_tabs .stTabs [data-baseweb="tab"] {{
+                    height: 43px !important;
+                    font-size: 0.96rem !important;
+                    padding: 0 19px !important;
+                    border-radius: 11px !important;
+                }}
+
+                .st-key-header_action_buttons [data-testid="stWidgetLabel"] p,
+                .st-key-header_action_buttons label p {{
+                    font-size: 0.80rem !important;
+                }}
+
+                .top-strip-title-label {{
+                    font-size: 0.98rem !important;
+                    margin: 9px 0 7px 0 !important;
+                }}
+
+                .st-key-trial_title_shell {{
+                    padding:
+                        var(--ui-meta-shell-pad-top)
+                        var(--ui-meta-shell-pad-right)
+                        14px
+                        var(--ui-meta-shell-pad-left) !important;
+                }}
+
+                .st-key-trial_title_shell [data-baseweb="textarea"],
+                .st-key-trial_title_shell .stTextArea textarea {{
+                    min-height: 92px !important;
+                }}
+
+                .st-key-trial_title_shell .stTextArea textarea {{
+                    font-size: 0.96rem !important;
+                    line-height: 1.38 !important;
+                }}
+
+                [class*="st-key-summary_side_inner_"] .stTextArea textarea {{
+                    font-size: 0.94rem !important;
+                    line-height: 1.48 !important;
+                }}
+
+                .st-key-summary_side_inner_study_summary_block [data-baseweb="textarea"],
+                .st-key-summary_side_inner_study_summary_block .stTextArea textarea {{
+                    min-height: 205px !important;
+                }}
+
+                .st-key-summary_side_inner_interventions_block [data-baseweb="textarea"],
+                .st-key-summary_side_inner_interventions_block .stTextArea textarea,
+                .st-key-summary_side_inner_primary_outcomes_block [data-baseweb="textarea"],
+                .st-key-summary_side_inner_primary_outcomes_block .stTextArea textarea {{
+                    min-height: 195px !important;
+                }}
+
+                .st-key-summary_side_inner_ta_conditions_block [data-baseweb="textarea"],
+                .st-key-summary_side_inner_ta_conditions_block .stTextArea textarea {{
+                    min-height: 340px !important;
+                }}
+
+                .st-key-summary_side_inner_eligibility_block [data-baseweb="textarea"],
+                .st-key-summary_side_inner_eligibility_block .stTextArea textarea {{
+                    min-height: 430px !important;
+                }}
+            }}
+
+
+            @media (min-width: 2700px) and (min-height: 1250px) {{
+                :root {{
+                    --ui-page-max-w: 2580px;
+                    --ui-page-pad-top: 3.0rem;
+                    --ui-page-pad-bottom: 3.0rem;
+                    --ui-page-pad-x: clamp(4.5rem, 4.4vw, 8.8rem);
+
+                    --ui-results-top-offset: 34px;
+                    --ui-detail-top-offset: 38px;
+                    --ui-results-count-size: 0.86rem;
+
+                    --ui-sidebar-w: 21rem;
+
+                    --ui-control-h: 48px;
+                    --ui-control-radius: 13px;
+                    --ui-control-font-size: 0.94rem;
+                    --ui-field-gap: 15px;
+
+                    --ui-card-radius: 18px;
+                    --ui-card-pad: 34px;
+                    --ui-filter-header-pad: 22px 34px 27px 34px;
+                    --ui-filter-body-pad: 22px 34px 27px 34px;
+                    --ui-card-gap: 1.28rem;
+
+                    --ui-highlight-title-size: 1.42rem;
+                    --ui-highlight-text-size: 1.14rem;
+                    --ui-label-font-size: 0.98rem;
+                    --ui-kicker-font-size: 0.78rem;
+
+                    --ui-button-h: 48px;
+                    --ui-button-radius: 11px;
+                    --ui-button-pad-x: 1.28rem;
+                    --ui-button-font-size: 0.98rem;
+
+                    --ui-logo-size-landing: 100px;
+                    --ui-logo-size-nonlanding: 62px;
+                    --ui-logo-radius-landing: 24px;
+                    --ui-logo-radius-nonlanding: 10px;
+                    --ui-logo-gap-landing: 17px;
+
+                    --ui-title-size-landing: 3.75rem;
+                    --ui-title-size-nonlanding: 3.18rem;
+                    --ui-subtitle-size-landing: 1.96rem;
+                    --ui-demo-size: 0.84rem;
+
+                    --ui-landing-header-pad-top: 18px;
+                    --ui-mission-top: 1.7rem;
+                    --ui-mission-bottom: 1.35rem;
+
+                    --ui-landing-lower-section-min-h: clamp(510px, 40vh, 650px);
+                    --ui-landing-filter-header-min-h: 104px;
+                    --ui-landing-right-card-min-h: 240px;
+
+                    --ui-detail-tabs-offset-y: 4px;
+                    --ui-summary-tab-top-pad: 12px;
+                    --ui-summary-row-overlap: -4px;
+                    --ui-population-bottom-extension: 190px;
+
+                    --ui-treemap-toggle-top: -30px;
+                    --ui-treemap-toggle-right: 30px;
+                }}
+
+                .st-key-summary_side_inner_study_summary_block [data-baseweb="textarea"],
+                .st-key-summary_side_inner_study_summary_block .stTextArea textarea {{
+                    min-height: 220px !important;
+                }}
+
+                .st-key-summary_side_inner_interventions_block [data-baseweb="textarea"],
+                .st-key-summary_side_inner_interventions_block .stTextArea textarea,
+                .st-key-summary_side_inner_primary_outcomes_block [data-baseweb="textarea"],
+                .st-key-summary_side_inner_primary_outcomes_block .stTextArea textarea {{
+                    min-height: 210px !important;
+                }}
+
+                .st-key-summary_side_inner_ta_conditions_block [data-baseweb="textarea"],
+                .st-key-summary_side_inner_ta_conditions_block .stTextArea textarea {{
+                    min-height: 360px !important;
+                }}
+
+                .st-key-summary_side_inner_eligibility_block [data-baseweb="textarea"],
+                .st-key-summary_side_inner_eligibility_block .stTextArea textarea {{
+                    min-height: 455px !important;
+                }}
+            }}
+            /* =========================================================
+               FINAL LARGE-SCREEN TYPOGRAPHY + ALIGNMENT PASS
+               Purpose:
+               - larger text on large screens
+               - less dead empty space
+               - stronger alignment between grey and white boxes
+               - works from large desktop through ultra-wide screens
+               ========================================================= */
+
+            @media (min-width: 1700px) and (min-height: 900px) {{
+                :root {{
+                    --ui-page-max-w: 2240px;
+                    --ui-page-pad-x: clamp(3.2rem, 4.2vw, 7rem);
+                    --ui-page-pad-top: 2.25rem;
+                    --ui-page-pad-bottom: 2.25rem;
+
+                    --ui-card-radius: 16px;
+                    --ui-card-pad: 30px;
+                    --ui-card-gap: 1rem;
+
+                    --ui-highlight-title-size: 1.34rem;
+                    --ui-highlight-text-size: 1.10rem;
+                    --ui-label-font-size: 0.98rem;
+                    --ui-kicker-font-size: 0.76rem;
+
+                    --ui-control-h: 45px;
+                    --ui-control-radius: 12px;
+                    --ui-control-font-size: 0.94rem;
+                    --ui-field-gap: 13px;
+
+                    --ui-button-h: 46px;
+                    --ui-button-font-size: 0.96rem;
+                    --ui-button-radius: 11px;
+
+                    --ui-logo-size-landing: 92px;
+                    --ui-logo-size-nonlanding: 58px;
+                    --ui-title-size-landing: 3.55rem;
+                    --ui-title-size-nonlanding: 3.05rem;
+                    --ui-subtitle-size-landing: 1.86rem;
+                    --ui-demo-size: 0.82rem;
+
+                    --ui-results-count-size: 0.90rem;
+                    --ui-results-table-font-size: 0.92rem;
+
+                    --ui-sidebar-w: 19rem;
+
+                    /* Landing: lower height than before, larger text.
+                       This reduces the empty grey/white card interiors. */
+                    --ui-landing-lower-section-min-h: clamp(390px, 32vh, 505px);
+                    --ui-landing-filter-header-min-h: 90px;
+                    --ui-landing-card-min-h: calc((var(--ui-landing-lower-section-min-h) - var(--ui-card-gap)) / 2);
+
+                    /* Detail: coordinated heights for box alignment. */
+                    --ui-detail-top-strip-h: 132px;
+                    --ui-detail-summary-h: 220px;
+                    --ui-detail-bottom-h: 215px;
+                    --ui-detail-conditions-h: 385px;
+                    --ui-detail-eligibility-h: 500px;
+                    --ui-detail-side-min-h: 522px;
+
+                    --ui-meta-top-gap: 28px;
+                    --ui-meta-row-gap: 28px;
+                    --ui-meta-bottom-gap: 28px;
+                    --ui-top-strip-control-h: 30px;
+
+                    --ui-summary-tab-top-pad: 12px;
+                    --ui-summary-row-overlap: -2px;
+                    --ui-population-bottom-extension: 210px;
+
+                    --ui-treemap-toggle-top: -28px;
+                    --ui-treemap-toggle-right: 30px;
+                }}
+
+                /* Results page positioning and table readability */
+                .st-key-results_shell {{
+                    margin-top: 28px !important;
+                }}
+
+                section[data-testid="stSidebar"],
+                section[data-testid="stSidebar"] > div:first-child {{
+                    width: var(--ui-sidebar-w) !important;
+                    min-width: var(--ui-sidebar-w) !important;
+                }}
+
+                [data-testid="stDataFrame"] div {{
+                    font-size: var(--ui-results-table-font-size) !important;
+                    line-height: 1.2 !important;
+                }}
+
+                .st-key-sidebar_filters {{
+                    margin-top: 82px !important;
+                    padding-left: 0.35rem !important;
+                    padding-right: 0.35rem !important;
+                }}
+
+                .st-key-sidebar_filters [data-testid="stElementContainer"] {{
+                    margin-bottom: 14px !important;
+                }}
+
+                /* Landing page: force a real equal-height visual system */
+                .st-key-landing_shell [data-testid="column"] > div > [data-testid="stVerticalBlock"] {{
+                    gap: var(--ui-card-gap) !important;
+                }}
+
+                .st-key-landing_shell .st-key-filter_header {{
+                    min-height: var(--ui-landing-filter-header-min-h) !important;
+                    display: flex !important;
+                    align-items: center !important;
+                }}
+
+                .st-key-landing_shell .st-key-filter_body {{
+                    min-height: calc(
+                        var(--ui-landing-lower-section-min-h)
+                        - var(--ui-landing-filter-header-min-h)
+                        - var(--ui-card-gap)
+                    ) !important;
+                }}
+
+                .st-key-landing_shell .right-column-stack {{
+                    min-height: var(--ui-landing-lower-section-min-h) !important;
+                    height: var(--ui-landing-lower-section-min-h) !important;
+                }}
+
+                .st-key-landing_shell .right-column-stack .highlight-box {{
+                    min-height: var(--ui-landing-card-min-h) !important;
+                    height: var(--ui-landing-card-min-h) !important;
+                    flex: 1 1 0 !important;
+                }}
+
+                .st-key-landing_shell .highlight-title {{
+                    margin-bottom: 10px !important;
+                }}
+
+                .st-key-landing_shell .highlight-text {{
+                    line-height: 1.58 !important;
+                }}
+
+                .st-key-filter_body label,
+                .st-key-filter_body [data-testid="stWidgetLabel"] p,
+                .st-key-sidebar_filters label,
+                .st-key-sidebar_filters [data-testid="stWidgetLabel"] p {{
+                    font-size: var(--ui-label-font-size) !important;
+                    line-height: 1.15 !important;
+                }}
+
+                /* Detail page: move down slightly and make text readable */
+                .st-key-detail_shell {{
+                    margin-top: 30px !important;
+                }}
+
+                .st-key-trial_top_strip [data-testid="column"] > div {{
+                    height: 100% !important;
+                }}
+
+                .st-key-trial_title_shell,
+                .st-key-trial_meta_shell {{
+                    min-height: var(--ui-detail-top-strip-h) !important;
+                    box-sizing: border-box !important;
+                }}
+
+                .top-strip-title-label {{
+                    font-size: 1.02rem !important;
+                    margin: 10px 0 8px 0 !important;
+                }}
+
+                .st-key-trial_title_shell .stTextArea textarea {{
+                    font-size: 1.02rem !important;
+                    line-height: 1.42 !important;
+                    min-height: 96px !important;
+                }}
+
+                .ui-field-label--stack,
+                [class*="st-key-meta_native_field_"] [data-testid="stWidgetLabel"] p,
+                [class*="st-key-meta_native_field_"] label p {{
+                    font-size: 0.92rem !important;
+                    line-height: 1.15 !important;
+                }}
+
+                [class*="st-key-summary_side_inner_"] .stTextArea textarea {{
+                    font-size: 0.98rem !important;
+                    line-height: 1.52 !important;
+                }}
+
+                .st-key-trial_detail_tabs .stTabs [data-baseweb="tab"] {{
+                    height: 44px !important;
+                    font-size: 0.98rem !important;
+                    padding: 0 20px !important;
+                    border-radius: 12px !important;
+                }}
+
+                /* Detail page: align the main grey/white boxes vertically */
+                .st-key-summary_side_shell_ta_conditions_block,
+                .st-key-summary_side_shell_design_block {{
+                    min-height: var(--ui-detail-side-min-h) !important;
+                    box-sizing: border-box !important;
+                }}
+
+                .st-key-summary_side_inner_study_summary_block [data-baseweb="textarea"],
+                .st-key-summary_side_inner_study_summary_block .stTextArea textarea {{
+                    min-height: var(--ui-detail-summary-h) !important;
+                    height: var(--ui-detail-summary-h) !important;
+                }}
+
+                .st-key-summary_side_inner_interventions_block [data-baseweb="textarea"],
+                .st-key-summary_side_inner_interventions_block .stTextArea textarea,
+                .st-key-summary_side_inner_primary_outcomes_block [data-baseweb="textarea"],
+                .st-key-summary_side_inner_primary_outcomes_block .stTextArea textarea {{
+                    min-height: var(--ui-detail-bottom-h) !important;
+                    height: var(--ui-detail-bottom-h) !important;
+                }}
+
+                .st-key-summary_side_inner_ta_conditions_block [data-baseweb="textarea"],
+                .st-key-summary_side_inner_ta_conditions_block .stTextArea textarea {{
+                    min-height: var(--ui-detail-conditions-h) !important;
+                    height: var(--ui-detail-conditions-h) !important;
+                }}
+
+                .st-key-summary_side_inner_eligibility_block [data-baseweb="textarea"],
+                .st-key-summary_side_inner_eligibility_block .stTextArea textarea {{
+                    min-height: var(--ui-detail-eligibility-h) !important;
+                    height: var(--ui-detail-eligibility-h) !important;
+                }}
+
+                .st-key-summary_side_shell_population_block {{
+                    min-height: var(--ui-detail-eligibility-h) !important;
+                    box-sizing: border-box !important;
+                }}
+
+                /* Completion tab: stronger labels and better box relationship */
+                .st-key-summary_side_shell_completion_prediction_left_top_block .completion-tier-inline-wrap {{
+                    font-size: 1.12rem !important;
+                }}
+
+                .st-key-treemap_detailed_drivers_toggle [data-testid="stWidgetLabel"] p,
+                .st-key-treemap_detailed_drivers_toggle label p {{
+                    font-size: 0.84rem !important;
+                }}
+            }}
+
+
+            @media (min-width: 2200px) and (min-height: 1050px) {{
+                :root {{
+                    --ui-page-max-w: 2460px;
+                    --ui-page-pad-x: clamp(4rem, 4.1vw, 8rem);
+
+                    --ui-card-pad: 32px;
+                    --ui-highlight-title-size: 1.44rem;
+                    --ui-highlight-text-size: 1.17rem;
+                    --ui-label-font-size: 1.02rem;
+                    --ui-control-font-size: 0.98rem;
+                    --ui-button-font-size: 1.00rem;
+
+                    --ui-logo-size-landing: 98px;
+                    --ui-logo-size-nonlanding: 62px;
+                    --ui-title-size-landing: 3.80rem;
+                    --ui-title-size-nonlanding: 3.20rem;
+                    --ui-subtitle-size-landing: 2.00rem;
+
+                    --ui-results-count-size: 0.96rem;
+                    --ui-results-table-font-size: 0.96rem;
+                    --ui-sidebar-w: 20.5rem;
+
+                    --ui-landing-lower-section-min-h: clamp(410px, 32vh, 530px);
+                    --ui-landing-filter-header-min-h: 96px;
+
+                    --ui-detail-top-strip-h: 144px;
+                    --ui-detail-summary-h: 240px;
+                    --ui-detail-bottom-h: 230px;
+                    --ui-detail-conditions-h: 420px;
+                    --ui-detail-eligibility-h: 540px;
+                    --ui-detail-side-min-h: 570px;
+
+                    --ui-meta-top-gap: 30px;
+                    --ui-meta-row-gap: 30px;
+                    --ui-meta-bottom-gap: 30px;
+                    --ui-top-strip-control-h: 32px;
+                    --ui-population-bottom-extension: 240px;
+                }}
+
+                .st-key-detail_shell {{
+                    margin-top: 38px !important;
+                }}
+
+                .stTextArea textarea,
+                .stTextArea textarea:disabled {{
+                    font-size: 0.98rem !important;
+                    line-height: 1.52 !important;
+                }}
+
+                [class*="st-key-summary_side_inner_"] .stTextArea textarea {{
+                    font-size: 1.02rem !important;
+                    line-height: 1.54 !important;
+                }}
+
+                [class*="st-key-meta_native_field_"] [data-testid="stWidgetLabel"] p,
+                [class*="st-key-meta_native_field_"] label p {{
+                    font-size: 0.96rem !important;
+                }}
+            }}
+
+
+            @media (min-width: 2700px) and (min-height: 1250px) {{
+                :root {{
+                    --ui-page-max-w: 2580px;
+                    --ui-page-pad-x: clamp(4.8rem, 4vw, 8.5rem);
+
+                    --ui-card-pad: 34px;
+                    --ui-highlight-title-size: 1.50rem;
+                    --ui-highlight-text-size: 1.22rem;
+                    --ui-label-font-size: 1.06rem;
+                    --ui-control-h: 50px;
+                    --ui-control-font-size: 1.02rem;
+                    --ui-button-h: 50px;
+                    --ui-button-font-size: 1.04rem;
+
+                    --ui-logo-size-landing: 104px;
+                    --ui-logo-size-nonlanding: 66px;
+                    --ui-title-size-landing: 3.95rem;
+                    --ui-title-size-nonlanding: 3.32rem;
+                    --ui-subtitle-size-landing: 2.08rem;
+
+                    --ui-results-count-size: 1.00rem;
+                    --ui-results-table-font-size: 1.00rem;
+                    --ui-sidebar-w: 21.5rem;
+
+                    --ui-landing-lower-section-min-h: clamp(430px, 31vh, 545px);
+                    --ui-landing-filter-header-min-h: 100px;
+
+                    --ui-detail-top-strip-h: 152px;
+                    --ui-detail-summary-h: 255px;
+                    --ui-detail-bottom-h: 245px;
+                    --ui-detail-conditions-h: 445px;
+                    --ui-detail-eligibility-h: 575px;
+                    --ui-detail-side-min-h: 605px;
+
+                    --ui-meta-top-gap: 32px;
+                    --ui-meta-row-gap: 32px;
+                    --ui-meta-bottom-gap: 32px;
+                    --ui-top-strip-control-h: 34px;
+                    --ui-population-bottom-extension: 270px;
+                }}
+
+                .st-key-results_shell {{
+                    margin-top: 36px !important;
+                }}
+
+                .st-key-detail_shell {{
+                    margin-top: 44px !important;
+                }}
+            }}
+
+            /* =========================================================
+               NON-GRID WIDTH CAP + VERTICAL ESTATE PASS
+               Goal:
+               - results/grid page can stay wide
+               - landing/detail/completion pages stop spreading too much
+               - more vertical use on high-resolution screens
+               - better grey/white card bottom alignment
+               ========================================================= */
+
+            @media (min-width: 1700px) and (min-height: 900px) {{
+
+                /* Default large-screen cap for non-grid views.
+                   This affects landing/detail/completion and makes text wrap
+                   more naturally instead of becoming long horizontal banners. */
+                .block-container {{
+                    max-width: 1960px !important;
+                }}
+
+                /* Exception: results grid page keeps a much wider canvas. */
+                .block-container:has(.st-key-results_shell) {{
+                    max-width: 2480px !important;
+                }}
+
+                /* Landing page: make the composition taller, not wider. */
+                :root {{
+                    --ui-landing-lower-section-min-h: clamp(470px, 42vh, 620px);
+                    --ui-landing-filter-header-min-h: 96px;
+                    --ui-landing-card-min-h: calc((var(--ui-landing-lower-section-min-h) - var(--ui-card-gap)) / 2);
+
+                    --ui-highlight-title-size: 1.40rem;
+                    --ui-highlight-text-size: 1.16rem;
+                    --ui-label-font-size: 1.00rem;
+                    --ui-control-font-size: 0.98rem;
+                    --ui-button-font-size: 1.00rem;
+                }}
+
+                .st-key-landing_shell {{
+                    align-items: center !important;
+                }}
+
+                .st-key-landing_shell .st-key-filter_header {{
+                    min-height: var(--ui-landing-filter-header-min-h) !important;
+                    height: var(--ui-landing-filter-header-min-h) !important;
+                    box-sizing: border-box !important;
+                    display: flex !important;
+                    align-items: center !important;
+                }}
+
+                .st-key-landing_shell .st-key-filter_body {{
+                    min-height: calc(
+                        var(--ui-landing-lower-section-min-h)
+                        - var(--ui-landing-filter-header-min-h)
+                        - var(--ui-card-gap)
+                    ) !important;
+                    height: calc(
+                        var(--ui-landing-lower-section-min-h)
+                        - var(--ui-landing-filter-header-min-h)
+                        - var(--ui-card-gap)
+                    ) !important;
+                    box-sizing: border-box !important;
+                }}
+
+                .st-key-landing_shell .right-column-stack {{
+                    min-height: var(--ui-landing-lower-section-min-h) !important;
+                    height: var(--ui-landing-lower-section-min-h) !important;
+                }}
+
+                .st-key-landing_shell .right-column-stack .highlight-box {{
+                    min-height: var(--ui-landing-card-min-h) !important;
+                    height: var(--ui-landing-card-min-h) !important;
+                    flex: 1 1 0 !important;
+                    box-sizing: border-box !important;
+                }}
+
+                /* Give the landing filter body a less top-heavy distribution. */
+                .st-key-landing_shell .st-key-filter_body > div > [data-testid="stVerticalBlock"] {{
+                    height: 100% !important;
+                    display: flex !important;
+                    flex-direction: column !important;
+                    justify-content: flex-start !important;
+                    gap: 0.35rem !important;
+                }}
+
+                .st-key-landing_shell .highlight-text {{
+                    line-height: 1.62 !important;
+                }}
+
+                .st-key-landing_shell .highlight-title {{
+                    margin-bottom: 11px !important;
+                }}
+
+                /* Detail/completion pages: lower the content and add vertical body. */
+                .st-key-detail_shell {{
+                    margin-top: 44px !important;
+                }}
+
+                .st-key-trial_title_shell,
+                .st-key-trial_meta_shell {{
+                    min-height: 152px !important;
+                    box-sizing: border-box !important;
+                }}
+
+                .st-key-trial_title_shell .stTextArea textarea {{
+                    min-height: 104px !important;
+                    font-size: 1.04rem !important;
+                    line-height: 1.44 !important;
+                }}
+
+                .top-strip-title-label {{
+                    font-size: 1.04rem !important;
+                    margin: 10px 0 8px 0 !important;
+                }}
+
+                .st-key-trial_detail_tabs .stTabs [data-baseweb="tab"] {{
+                    height: 46px !important;
+                    font-size: 1.00rem !important;
+                    padding: 0 21px !important;
+                    border-radius: 12px !important;
+                }}
+
+                [class*="st-key-summary_side_inner_"] .stTextArea textarea {{
+                    font-size: 1.02rem !important;
+                    line-height: 1.55 !important;
+                }}
+
+                /* Trial information tab: make the middle section genuinely taller. */
+                .st-key-summary_side_inner_study_summary_block [data-baseweb="textarea"],
+                .st-key-summary_side_inner_study_summary_block .stTextArea textarea {{
+                    min-height: 275px !important;
+                    height: 275px !important;
+                }}
+
+                .st-key-summary_side_inner_interventions_block [data-baseweb="textarea"],
+                .st-key-summary_side_inner_interventions_block .stTextArea textarea,
+                .st-key-summary_side_inner_primary_outcomes_block [data-baseweb="textarea"],
+                .st-key-summary_side_inner_primary_outcomes_block .stTextArea textarea {{
+                    min-height: 255px !important;
+                    height: 255px !important;
+                }}
+
+                .st-key-summary_side_inner_ta_conditions_block [data-baseweb="textarea"],
+                .st-key-summary_side_inner_ta_conditions_block .stTextArea textarea {{
+                    min-height: 560px !important;
+                    height: 560px !important;
+                }}
+
+                .st-key-summary_side_shell_ta_conditions_block,
+                .st-key-summary_side_shell_design_block {{
+                    min-height: 650px !important;
+                    box-sizing: border-box !important;
+                }}
+
+                .st-key-summary_side_inner_eligibility_block [data-baseweb="textarea"],
+                .st-key-summary_side_inner_eligibility_block .stTextArea textarea {{
+                    min-height: 620px !important;
+                    height: 620px !important;
+                }}
+
+                /* Completion tab: stronger vertical presence and cleaner alignment. */
+                .st-key-summary_side_shell_completion_prediction_left_top_block,
+                .st-key-summary_side_shell_completion_prediction_left_bottom_block {{
+                    box-sizing: border-box !important;
+                }}
+
+                .st-key-summary_side_shell_completion_prediction_left_top_block .completion-tier-inline-wrap {{
+                    font-size: 1.18rem !important;
+                }}
+
+                .st-key-treemap_detailed_drivers_toggle {{
+                    top: -40px !important;
+                    right: 32px !important;
+                }}
+
+                .st-key-treemap_detailed_drivers_toggle [data-testid="stWidgetLabel"] p,
+                .st-key-treemap_detailed_drivers_toggle label p {{
+                    font-size: 0.88rem !important;
+                }}
+            }}
+
+
+            @media (min-width: 2200px) and (min-height: 1050px) {{
+
+                /* Non-grid views stay readable and more vertical.
+                   Grid view remains wide. */
+                .block-container {{
+                    max-width: 2060px !important;
+                }}
+
+                .block-container:has(.st-key-results_shell) {{
+                    max-width: 2600px !important;
+                }}
+
+                :root {{
+                    --ui-landing-lower-section-min-h: clamp(500px, 43vh, 680px);
+                    --ui-landing-filter-header-min-h: 104px;
+
+                    --ui-highlight-title-size: 1.48rem;
+                    --ui-highlight-text-size: 1.23rem;
+                    --ui-label-font-size: 1.06rem;
+                    --ui-control-font-size: 1.03rem;
+                    --ui-button-font-size: 1.05rem;
+                }}
+
+                .st-key-detail_shell {{
+                    margin-top: 52px !important;
+                }}
+
+                .st-key-trial_title_shell,
+                .st-key-trial_meta_shell {{
+                    min-height: 164px !important;
+                }}
+
+                .st-key-trial_title_shell .stTextArea textarea {{
+                    min-height: 114px !important;
+                    font-size: 1.08rem !important;
+                }}
+
+                .st-key-summary_side_inner_study_summary_block [data-baseweb="textarea"],
+                .st-key-summary_side_inner_study_summary_block .stTextArea textarea {{
+                    min-height: 305px !important;
+                    height: 305px !important;
+                }}
+
+                .st-key-summary_side_inner_interventions_block [data-baseweb="textarea"],
+                .st-key-summary_side_inner_interventions_block .stTextArea textarea,
+                .st-key-summary_side_inner_primary_outcomes_block [data-baseweb="textarea"],
+                .st-key-summary_side_inner_primary_outcomes_block .stTextArea textarea {{
+                    min-height: 285px !important;
+                    height: 285px !important;
+                }}
+
+                .st-key-summary_side_inner_ta_conditions_block [data-baseweb="textarea"],
+                .st-key-summary_side_inner_ta_conditions_block .stTextArea textarea {{
+                    min-height: 620px !important;
+                    height: 620px !important;
+                }}
+
+                .st-key-summary_side_shell_ta_conditions_block,
+                .st-key-summary_side_shell_design_block {{
+                    min-height: 720px !important;
+                }}
+
+                .st-key-summary_side_inner_eligibility_block [data-baseweb="textarea"],
+                .st-key-summary_side_inner_eligibility_block .stTextArea textarea {{
+                    min-height: 700px !important;
+                    height: 700px !important;
+                }}
+            }}
+
+
+            @media (min-width: 2700px) and (min-height: 1250px) {{
+
+                /* At 2880-like screens, non-grid views should not become
+                   ultra-wide. Let height do more of the work. */
+                .block-container {{
+                    max-width: 2140px !important;
+                }}
+
+                .block-container:has(.st-key-results_shell) {{
+                    max-width: 2680px !important;
+                }}
+
+                :root {{
+                    --ui-page-pad-top: 3.0rem;
+                    --ui-page-pad-bottom: 3.0rem;
+
+                    --ui-landing-lower-section-min-h: clamp(540px, 44vh, 740px);
+                    --ui-landing-filter-header-min-h: 112px;
+
+                    --ui-highlight-title-size: 1.56rem;
+                    --ui-highlight-text-size: 1.30rem;
+                    --ui-label-font-size: 1.10rem;
+                    --ui-control-h: 52px;
+                    --ui-control-font-size: 1.07rem;
+                    --ui-button-h: 52px;
+                    --ui-button-font-size: 1.08rem;
+
+                    --ui-logo-size-landing: 106px;
+                    --ui-logo-size-nonlanding: 68px;
+                    --ui-title-size-landing: 4.00rem;
+                    --ui-title-size-nonlanding: 3.35rem;
+                    --ui-subtitle-size-landing: 2.10rem;
+                }}
+
+                .st-key-detail_shell {{
+                    margin-top: 60px !important;
+                }}
+
+                .st-key-trial_title_shell,
+                .st-key-trial_meta_shell {{
+                    min-height: 174px !important;
+                }}
+
+                .st-key-summary_side_inner_study_summary_block [data-baseweb="textarea"],
+                .st-key-summary_side_inner_study_summary_block .stTextArea textarea {{
+                    min-height: 330px !important;
+                    height: 330px !important;
+                }}
+
+                .st-key-summary_side_inner_interventions_block [data-baseweb="textarea"],
+                .st-key-summary_side_inner_interventions_block .stTextArea textarea,
+                .st-key-summary_side_inner_primary_outcomes_block [data-baseweb="textarea"],
+                .st-key-summary_side_inner_primary_outcomes_block .stTextArea textarea {{
+                    min-height: 310px !important;
+                    height: 310px !important;
+                }}
+
+                .st-key-summary_side_inner_ta_conditions_block [data-baseweb="textarea"],
+                .st-key-summary_side_inner_ta_conditions_block .stTextArea textarea {{
+                    min-height: 680px !important;
+                    height: 680px !important;
+                }}
+
+                .st-key-summary_side_shell_ta_conditions_block,
+                .st-key-summary_side_shell_design_block {{
+                    min-height: 790px !important;
+                }}
+
+                .st-key-summary_side_inner_eligibility_block [data-baseweb="textarea"],
+                .st-key-summary_side_inner_eligibility_block .stTextArea textarea {{
+                    min-height: 760px !important;
+                    height: 760px !important;
+                }}
+            }}
+            /* =========================================================
+               FINAL RESPONSIVE HEIGHT CONTRACTS
+               Purpose:
+               - one shared visual contract for landing, grid, detail,
+                 population, and completion views
+               - compact at 1440 x 900
+               - reference at 1920 x 1080
+               - modestly larger at 2560 / 2880 without infinite width
+               ========================================================= */
+
+            /* Completion Score — gauge vertical alignment
+               Single manual control for the gauge chart + score + tier label.
+
+               Increase --ui-completion-gauge-up-shift = move the whole gauge group UP.
+               Decrease --ui-completion-gauge-up-shift = move the whole gauge group DOWN.
+
+               This is intentionally applied to the Plotly chart and tier label directly,
+               because spacer-only controls can be overridden by Streamlit layout wrappers.
+            */
+            :root {{
+                --ui-completion-gauge-up-shift: 18px;
+            }}
+
+            .st-key-summary_side_shell_completion_prediction_left_top_block .trial-meta-top-gap {{
+                height: 0px !important;
+            }}
+
+            .st-key-summary_side_shell_completion_prediction_left_top_block .trial-meta-bottom-gap {{
+                height: 0px !important;
+            }}
+
+            .st-key-summary_side_inner_completion_prediction_left_top_block [data-testid="stPlotlyChart"],
+            .st-key-summary_side_shell_completion_prediction_left_top_block .completion-tier-row {{
+                transform: translateY(calc(-1 * var(--ui-completion-gauge-up-shift))) !important;
+            }}
+
+            @media (min-width: 1800px) and (min-height: 950px) {{
+                :root {{
+                    --ui-completion-gauge-up-shift: 10px;
+                }}
+            }}
+
+            @media (min-width: 2400px) and (min-height: 1200px) {{
+                :root {{
+                    --ui-completion-gauge-up-shift: 4px;
+                }}
+            }}
+
+            @media (min-width: 2700px) and (min-height: 1250px) {{
+                :root {{
+                    --ui-completion-gauge-up-shift: 0px;
+                }}
+            }}
+
+            :root {{
+                --ui-results-grid-h: 645px;
+
+                --ui-landing-form-gap: 0.55rem;
+
+                /* Trial Information tab height contract.
+                   Only --ui-detail-side-min-h controls the shared bottom line.
+                   The textarea heights below tune the internal white field fill. */
+                --ui-detail-summary-h: 165px;
+                --ui-detail-bottom-h: 165px;
+                --ui-detail-conditions-h: 325px;
+                --ui-detail-side-min-h: 412px;
+
+                --ui-population-card-h: var(--ui-detail-side-min-h);
+                --ui-population-eligibility-text-h: calc(var(--ui-detail-side-min-h) - 40px);
+
+                --ui-completion-left-card-h: 265px;
+                --ui-completion-right-card-h: 535px;
+                --ui-completion-tier-font-size: 1.36rem;
+                --ui-completion-tier-overlap: -18px;
+            }}
+
+            @media (min-width: 1800px) and (min-height: 950px) {{
+                :root {{
+                    --ui-results-grid-h: 725px;
+
+                    --ui-landing-form-gap: 0.75rem;
+
+                    --ui-detail-summary-h: 220px;
+                    --ui-detail-bottom-h: 215px;
+                    --ui-detail-conditions-h: 432px;
+                    --ui-detail-side-min-h: 539px;
+
+                    --ui-population-card-h: var(--ui-detail-side-min-h);
+                    --ui-population-eligibility-text-h: calc(var(--ui-detail-side-min-h) - 50px);
+
+                    --ui-completion-left-card-h: 275px;
+                    --ui-completion-right-card-h: 565px;
+                    --ui-completion-tier-font-size: 1.48rem;
+                    --ui-completion-tier-overlap: -20px;
+                }}
+            }}
+
+            @media (min-width: 2400px) and (min-height: 1200px) {{
+                :root {{
+                    --ui-results-grid-h: 810px;
+
+                    --ui-landing-form-gap: 0.9rem;
+
+                    --ui-detail-summary-h: 275px;
+                    --ui-detail-bottom-h: 255px;
+                    --ui-detail-conditions-h: 528px;
+                    --ui-detail-side-min-h: 644px;
+
+                    --ui-population-card-h: var(--ui-detail-side-min-h);
+                    --ui-population-eligibility-text-h: calc(var(--ui-detail-side-min-h) - 50px);
+
+                    --ui-completion-left-card-h: 285px;
+                    --ui-completion-right-card-h: 585px;
+                    --ui-completion-tier-font-size: 1.60rem;
+                    --ui-completion-tier-overlap: -22px;
+                }}
+            }}
+
+            @media (min-width: 2700px) and (min-height: 1250px) {{
+                :root {{
+                    --ui-results-grid-h: 875px;
+
+                    --ui-landing-form-gap: 1rem;
+
+                    --ui-detail-summary-h: 330px;
+                    --ui-detail-bottom-h: 310px;
+                    --ui-detail-conditions-h: 640px;
+                    --ui-detail-side-min-h: 761px;
+
+                    --ui-population-card-h: var(--ui-detail-side-min-h);
+                    --ui-population-eligibility-text-h: calc(var(--ui-detail-side-min-h) - 55px);
+
+                    --ui-completion-left-card-h: 290px;
+                    --ui-completion-right-card-h: 595px;
+                    --ui-completion-tier-font-size: 1.66rem;
+                    --ui-completion-tier-overlap: -24px;
+                }}
+            }}
+
+
+            /* Landing: preserve external bottom alignment, improve internal distribution. */
+            .st-key-landing_shell .st-key-filter_header {{
+                min-height: var(--ui-landing-filter-header-min-h) !important;
+                height: var(--ui-landing-filter-header-min-h) !important;
+                box-sizing: border-box !important;
+            }}
+
+            .st-key-landing_shell .st-key-filter_body {{
+                min-height: calc(
+                    var(--ui-landing-lower-section-min-h)
+                    - var(--ui-landing-filter-header-min-h)
+                    - var(--ui-card-gap)
+                ) !important;
+                height: calc(
+                    var(--ui-landing-lower-section-min-h)
+                    - var(--ui-landing-filter-header-min-h)
+                    - var(--ui-card-gap)
+                ) !important;
+                box-sizing: border-box !important;
+                display: flex !important;
+                flex-direction: column !important;
+                justify-content: center !important;
+            }}
+
+            .st-key-landing_shell .st-key-filter_body > div {{
+                height: 100% !important;
+            }}
+
+            .st-key-landing_shell .st-key-filter_body > div > [data-testid="stVerticalBlock"] {{
+                height: 100% !important;
+                display: flex !important;
+                flex-direction: column !important;
+                justify-content: center !important;
+                gap: var(--ui-landing-form-gap) !important;
+            }}
+
+            .st-key-landing_shell .st-key-filter_body [data-testid="stVerticalBlock"] > div {{
+                margin-bottom: 0 !important;
+                padding-bottom: 0 !important;
+            }}
+
+            .st-key-landing_shell .right-column-stack {{
+                min-height: var(--ui-landing-lower-section-min-h) !important;
+                height: var(--ui-landing-lower-section-min-h) !important;
+            }}
+
+            .st-key-landing_shell .right-column-stack .highlight-box {{
+                min-height: var(--ui-landing-card-min-h) !important;
+                height: var(--ui-landing-card-min-h) !important;
+                flex: 1 1 0 !important;
+                box-sizing: border-box !important;
+            }}
+
+            /* Results grid: shrink to row count, but never exceed the responsive maximum.
+               Python sets the actual row-based height through dynamic_height.
+               CSS only caps large result sets; it must not force a fixed height. */
+            .st-key-results_shell [data-testid="stDataFrame"] {{
+                max-height: var(--ui-results-grid-h) !important;
+            }}
+
+            .st-key-results_shell [data-testid="stDataFrame"] > div {{
+                max-height: var(--ui-results-grid-h) !important;
+            }}
+
+            /* Trial Information: shared outer-shell bottom-line contract. */
+            .st-key-summary_side_shell_ta_conditions_block,
+            .st-key-summary_side_shell_design_block {{
+                min-height: var(--ui-detail-side-min-h) !important;
+                height: var(--ui-detail-side-min-h) !important;
+                box-sizing: border-box !important;
+            }}
+
+            .st-key-summary_side_shell_ta_conditions_block > div,
+            .st-key-summary_side_shell_design_block > div {{
+                min-height: 100% !important;
+            }}
+
+            .st-key-summary_side_inner_study_summary_block [data-baseweb="textarea"],
+            .st-key-summary_side_inner_study_summary_block .stTextArea textarea {{
+                min-height: var(--ui-detail-summary-h) !important;
+                height: var(--ui-detail-summary-h) !important;
+            }}
+
+            .st-key-summary_side_inner_interventions_block [data-baseweb="textarea"],
+            .st-key-summary_side_inner_interventions_block .stTextArea textarea,
+            .st-key-summary_side_inner_primary_outcomes_block [data-baseweb="textarea"],
+            .st-key-summary_side_inner_primary_outcomes_block .stTextArea textarea {{
+                min-height: var(--ui-detail-bottom-h) !important;
+                height: var(--ui-detail-bottom-h) !important;
+            }}
+
+            .st-key-summary_side_inner_ta_conditions_block [data-baseweb="textarea"],
+            .st-key-summary_side_inner_ta_conditions_block .stTextArea textarea {{
+                min-height: var(--ui-detail-conditions-h) !important;
+                height: var(--ui-detail-conditions-h) !important;
+            }}
+
+            /* Population Details: both cards share one shell height. */
+            .st-key-summary_side_shell_eligibility_block,
+            .st-key-summary_side_shell_population_block {{
+                min-height: var(--ui-population-card-h) !important;
+                height: var(--ui-population-card-h) !important;
+                box-sizing: border-box !important;
+            }}
+
+            .st-key-summary_side_inner_eligibility_block [data-baseweb="textarea"],
+            .st-key-summary_side_inner_eligibility_block .stTextArea textarea {{
+                min-height: var(--ui-population-eligibility-text-h) !important;
+                height: var(--ui-population-eligibility-text-h) !important;
+            }}
+
+            /* Completion Score: aligned card shells and stronger score/tier text. */
+            .st-key-summary_side_shell_completion_prediction_left_top_block,
+            .st-key-summary_side_shell_completion_prediction_left_bottom_block {{
+                min-height: var(--ui-completion-left-card-h) !important;
+                height: var(--ui-completion-left-card-h) !important;
+                box-sizing: border-box !important;
+            }}
+
+            .st-key-summary_side_shell_completion_prediction_right_block {{
+                min-height: var(--ui-completion-right-card-h) !important;
+                height: var(--ui-completion-right-card-h) !important;
+                box-sizing: border-box !important;
+            }}
+
+            .st-key-summary_side_shell_completion_prediction_left_top_block .completion-tier-row {{
+                text-align: center !important;
+                margin-top: var(--ui-completion-tier-overlap) !important;
+                margin-bottom: 0 !important;
+            }}
+
+            .st-key-summary_side_shell_completion_prediction_left_top_block .completion-tier-inline-wrap {{
+                font-size: var(--ui-completion-tier-font-size) !important;
+                font-weight: 800 !important;
+                letter-spacing: -0.015em !important;
+                line-height: 1 !important;
+            }}
+
+            /* Completion Score — gauge vertical alignment
+               Single manual control for gauge + score + tier label.
+               More negative = move UP.
+               More positive = move DOWN. */
+            :root {{
+                --ui-completion-gauge-y-shift: -30px;
+            }}
+
+            .st-key-summary_side_shell_completion_prediction_left_top_block .trial-meta-top-gap {{
+                height: 0px !important;
+            }}
+
+            .st-key-summary_side_shell_completion_prediction_left_top_block .trial-meta-bottom-gap {{
+                height: 0px !important;
+            }}
+
+            @media (min-width: 1800px) and (min-height: 950px) {{
+                :root {{
+                    --ui-completion-gauge-y-shift: -10px;
+                }}
+            }}
+
+            @media (min-width: 2400px) and (min-height: 1200px) {{
+                :root {{
+                    --ui-completion-gauge-y-shift: -4px;
+                }}
+            }}
+
+            @media (min-width: 2700px) and (min-height: 1250px) {{
+                :root {{
+                    --ui-completion-gauge-y-shift: 0px;
+                }}
+            }}
+
+            .st-key-summary_side_inner_completion_prediction_left_top_block > div {{
+                padding: 0 10px 0 10px !important;
+                height: 100% !important;
+            }}
+
+            .st-key-summary_side_inner_completion_prediction_left_top_block > div > [data-testid="stVerticalBlock"] {{
+                min-height: 100% !important;
+                height: 100% !important;
+                display: flex !important;
+                flex-direction: column !important;
+                justify-content: center !important;
+                transform: translateY(var(--ui-completion-gauge-y-shift)) !important;
+            }}
+
+            .st-key-summary_side_inner_completion_prediction_right_block > div {{
+                padding: 0 10px 0 10px !important;
+                height: 100% !important;
+            }}
+
+            .st-key-summary_side_inner_completion_prediction_right_block > div > [data-testid="stVerticalBlock"] {{
+                min-height: 100% !important;
+                height: 100% !important;
+                display: block !important;
+            }}
+
+            .st-key-summary_side_inner_completion_prediction_left_top_block [data-testid="stPlotlyChart"],
+            .st-key-summary_side_inner_completion_prediction_right_block [data-testid="stPlotlyChart"] {{
+                margin: 0 !important;
+            }}
+
+            .st-key-summary_side_inner_completion_prediction_left_top_block [data-testid="stPlotlyChart"] > div,
+            .st-key-summary_side_inner_completion_prediction_right_block [data-testid="stPlotlyChart"] > div {{
+                padding: 0 !important;
+            }}
         </style>
     """, unsafe_allow_html=True)
 
@@ -2276,7 +3764,12 @@ def render_trials_grid(df):
 
     grid_df = grid_df.sort_values("NCT ID", ascending=True, kind="stable").reset_index(drop=True)
 
-    dynamic_height = min(520, 36 + (len(grid_df) * 31) + 2)
+    # Keep row mechanics Python-side, while the final CSS block clamps
+    # the visual dataframe height per viewport profile.
+    row_h = 34
+    header_h = 40
+    grid_max_h = 920
+    dynamic_height = min(grid_max_h, header_h + (len(grid_df) * row_h) + 2)
 
     if show_score:
         column_config = {
@@ -2306,7 +3799,7 @@ def render_trials_grid(df):
         column_config=column_config,
         selection_mode="single-row",
         on_select="rerun",
-        row_height=31,
+        row_height=row_h,
         key=f"trials_table_{'scores' if show_score else 'base'}",
     )
 
@@ -2906,14 +4399,17 @@ def get_analysis_result_for_selected_trial(row):
 def render_completion_prediction_tab(row):
     res = get_analysis_result_for_selected_trial(row)
 
+    # Completion tab visual profile.
+    # Keep the gauge visually lighter, give the tier label more room,
+    # and lift the treemap slightly inside its shell.
     left_box_h = TEXTAREA_HEIGHTS["completion_prediction_left"]
     right_box_h = TEXTAREA_HEIGHTS["completion_prediction_right"]
 
-    gauge_plot_h = max(110, left_box_h - 60)
-    bar_plot_h = max(120, left_box_h - 20)
-    treemap_plot_h = max(260, right_box_h - 25)
+    gauge_plot_h = 250
+    bar_plot_h = 238
+    treemap_plot_h = 530
 
-    left_col, right_col = st.columns([3, 4], gap="xsmall")
+    left_col, right_col = st.columns([3.25, 3.75], gap="xsmall")
 
     with left_col:
         with st.container(key="completion_prediction_top_row"):
@@ -3044,56 +4540,56 @@ def render_empty_results_message():
 
 
 def render_landing_page(x_base):
-    render_header(is_landing=True)
+    with st.container(key="landing_shell"):
+        render_header(is_landing=True)
 
-    st.markdown(
-        '''
-        <div class="highlight-box mission-box landing-mission-box">
-            <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-                <div class="highlight-title">Operational Success & Risk Stratification</div>
-                <div class="highlight-kicker">Core Mission</div>
-            </div>
-            <div class="highlight-text">This predictive engine estimates the <b>likelihood of operational completion</b> and the <b>risk of early termination</b> using only data available at clinical trial initiation. Each trial is systematically evaluated and classified into <b>four distinct tiers</b> - High Risk, Watchlist, Favorable, and Low Risk - providing a clear and actionable risk profile.</div>
-        </div>
-        ''',
-        unsafe_allow_html=True
-    )
-
-    cl, cr = st.columns(2)
-
-    with cl:
-        with st.container(key="filter_header"):
-            st.markdown(
-                '<div class="highlight-title" style="margin:0;">Clinical Trial Selection</div>',
-                unsafe_allow_html=True
-            )
-
-        with st.container(key="filter_body"):
-            render_filters(x_base)
-
-    with cr:
         st.markdown(
             '''
-            <div class="right-column-stack">
-                <div class="highlight-box">
-                    <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-                        <div class="highlight-title">Industry-Scale Public Clinical Data</div>
-                        <div class="highlight-kicker">Intelligence Source</div>
-                    </div>
-                    <div class="highlight-text">Built on the publicly available <b>AACT registry</b>, this machine learning system leverages execution patterns from <b>30,000+ Phase II and III trials</b> since 2005. The analytical scope focuses on <b>late-stage studies</b>, where strategic and financial stakes are highest.</div>
+            <div class="highlight-box mission-box landing-mission-box">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                    <div class="highlight-title">Operational Success & Risk Stratification</div>
+                    <div class="highlight-kicker">Core Mission</div>
                 </div>
-                <div class="highlight-box">
-                    <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-                        <div class="highlight-title">Predictive Power & Benchmarking</div>
-                        <div class="highlight-kicker">Engine Accuracy</div>
-                    </div>
-                    <div class="highlight-text">When comparing a completed trial with one that terminated early, the system assigns a <b>higher risk score</b> to the failed trial in <b>75% of cases</b>. It outperforms the 50% random baseline and traditional approaches built on publicly available data (<b>ROC AUC ≈ 0.75</b> vs. 0.50 baseline).</div>
-                </div>
+                <div class="highlight-text">This predictive engine estimates the <b>likelihood of operational completion</b> and the <b>risk of early termination</b> using only data available at clinical trial initiation. Each trial is systematically evaluated and classified into <b>four distinct tiers</b> - High Risk, Watchlist, Favorable, and Low Risk - providing a clear and actionable risk profile.</div>
             </div>
             ''',
             unsafe_allow_html=True
         )
 
+        cl, cr = st.columns([1, 1], gap="small")
+
+        with cl:
+            with st.container(key="filter_header"):
+                st.markdown(
+                    '<div class="highlight-title" style="margin:0;">Clinical Trial Selection</div>',
+                    unsafe_allow_html=True
+                )
+
+            with st.container(key="filter_body"):
+                render_filters(x_base)
+
+        with cr:
+            st.markdown(
+                '''
+                <div class="right-column-stack">
+                    <div class="highlight-box">
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                            <div class="highlight-title">Industry-Scale Public Clinical Data</div>
+                            <div class="highlight-kicker">Intelligence Source</div>
+                        </div>
+                        <div class="highlight-text">Built on the publicly available <b>AACT registry</b>, this machine learning system leverages execution patterns from <b>30,000+ Phase II and III trials</b> since 2005. The analytical scope focuses on <b>late-stage studies</b>, where strategic and financial stakes are highest.</div>
+                    </div>
+                    <div class="highlight-box">
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                            <div class="highlight-title">Predictive Power & Benchmarking</div>
+                            <div class="highlight-kicker">Engine Accuracy</div>
+                        </div>
+                        <div class="highlight-text">When comparing a completed trial with one that terminated early, the system assigns a <b>higher risk score</b> to the failed trial in <b>75% of cases</b>. It outperforms the 50% random baseline and traditional approaches built on publicly available data (<b>ROC AUC ≈ 0.75</b> vs. 0.50 baseline).</div>
+                    </div>
+                </div>
+                ''',
+                unsafe_allow_html=True
+            )
 
 def render_results_page(x_base):
     with st.sidebar:
@@ -3116,39 +4612,41 @@ def render_results_page(x_base):
         )
         st.text_input("Scores", key="s_scores")
 
-    render_header(is_landing=False)
+    with st.container(key="results_shell"):
+        render_header(is_landing=False)
 
-    st.markdown(
-        f"<div style='text-align:left; margin:var(--ui-nonlanding-body-gap) 0 6px 0; color:#94a3b8; font-weight:600; font-size:0.7rem; line-height:1;'>{len(filtered_df):,} trials matching criteria</div>",
-        unsafe_allow_html=True
-    )
+        st.markdown(
+            f"<div style='text-align:left; margin:var(--ui-nonlanding-body-gap) 0 8px 0; color:#94a3b8; font-weight:600; font-size:var(--ui-results-count-size); line-height:1;'>{len(filtered_df):,} trials matching criteria</div>",
+            unsafe_allow_html=True
+        )
 
-    if filtered_df.empty:
-        render_empty_results_message()
-        return
+        if filtered_df.empty:
+            render_empty_results_message()
+            return
 
-    selected_id = render_trials_grid(filtered_df)
+        selected_id = render_trials_grid(filtered_df)
 
-    if selected_id:
-        open_trial_third_ui(selected_id)
+        if selected_id:
+            open_trial_third_ui(selected_id)
 
 
 def render_detail_page():
     selected_df = X_ALL[X_ALL[ID_COL] == st.session_state.selected_nct_id]
 
-    render_header(
-        is_landing=False,
-        show_predict_button=True,
-        show_back_button=True,
-        show_global_edit_toggle=True
-    )
+    with st.container(key="detail_shell"):
+        render_header(
+            is_landing=False,
+            show_predict_button=True,
+            show_back_button=True,
+            show_global_edit_toggle=True
+        )
 
-    if selected_df.empty:
-        st.warning("Selected trial not found.")
-        return
+        if selected_df.empty:
+            st.warning("Selected trial not found.")
+            return
 
-    row = selected_df.iloc[0]
-    render_trial_detail_tabs_refined(row)
+        row = selected_df.iloc[0]
+        render_trial_detail_tabs_refined(row)
 
 
 def route_app():
