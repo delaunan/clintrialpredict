@@ -327,6 +327,13 @@ def inject_custom_styles():
 
                 --ui-treemap-toggle-top: -42px;
                 --ui-treemap-toggle-right: 30px;
+                --ui-treemap-hint-left: 25px;
+
+                /* Treemap hint only.
+                   Increase = move hint DOWN.
+                   Decrease = move hint UP.
+                   The toggle itself is not modified. */
+                --ui-treemap-hint-y-shift: 17px;
 
                 --ui-shell-shadow: {shell_shadow};
                 --ui-textarea-shadow: {textarea_shadow};
@@ -485,6 +492,36 @@ def inject_custom_styles():
                     --ui-landing-lower-section-min-h: clamp(570px, 45vh, 740px);
                     --ui-landing-filter-header-min-h: 108px;
                     --ui-landing-right-card-min-h: 270px;
+                }}
+            }}
+
+            /* Treemap hint vertical calibration by resolution.
+               These values affect only the "Click a block..." label.
+               They do not touch the Detailed View Mode toggle geometry. */
+
+            /* 1440 x 900 and smaller desktop baseline */
+            :root {{
+                --ui-treemap-hint-y-shift: 17px;
+            }}
+
+            /* Around 1920 x 1080 */
+            @media (min-width: 1800px) and (min-height: 950px) {{
+                :root {{
+                    --ui-treemap-hint-y-shift: 0px;
+                }}
+            }}
+
+            /* Around 2400 / 2560 wide screens */
+            @media (min-width: 2400px) and (min-height: 1200px) {{
+                :root {{
+                    --ui-treemap-hint-y-shift: 40px;
+                }}
+            }}
+
+            /* Around 2880 wide screens */
+            @media (min-width: 2700px) and (min-height: 1250px) {{
+                :root {{
+                    --ui-treemap-hint-y-shift: 40px;
                 }}
             }}
 
@@ -1543,6 +1580,32 @@ def inject_custom_styles():
 
             .st-key-summary_side_inner_completion_prediction_right_block > div {{
                 padding: 0px 10px 0 10px !important;
+            }}
+
+            .st-key-treemap_zoom_hint {{
+                position: absolute !important;
+                top: var(--ui-treemap-toggle-top) !important;
+                left: var(--ui-treemap-hint-left) !important;
+                right: auto !important;
+                z-index: 60 !important;
+                width: max-content !important;
+                max-width: max-content !important;
+                min-width: 0 !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                transform: translateY(var(--ui-treemap-hint-y-shift)) !important;
+                pointer-events: none !important;
+            }}
+
+            .st-key-treemap_zoom_hint p {{
+                font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
+                font-size: 0.72rem !important;
+                font-weight: 600 !important;
+                line-height: 1 !important;
+                color: #64748b !important;
+                white-space: nowrap !important;
+                margin: 0 !important;
+                padding: 0 !important;
             }}
 
             .st-key-treemap_detailed_drivers_toggle {{
@@ -4094,9 +4157,9 @@ def render_trials_grid(df):
 
     if show_score:
         column_config = {
-            "NCT ID": st.column_config.TextColumn("NCT ID", width=88),
-            "Identity": st.column_config.TextColumn("Identity", width=480),
-            "Sponsor": st.column_config.TextColumn("Sponsor", width=170),
+            "NCT ID": st.column_config.TextColumn("NCT ID", width=92),
+            "Identity": st.column_config.TextColumn("Identity", width=476),
+            "Sponsor": st.column_config.TextColumn("Sponsor", width=166),
             "Area": st.column_config.TextColumn("Area", width=100),
             "Phase": st.column_config.TextColumn("Phase", width=60),
             "Start Year": st.column_config.NumberColumn("Start Year", width=60, format="%d"),
@@ -4104,8 +4167,8 @@ def render_trials_grid(df):
         }
     else:
         column_config = {
-            "NCT ID": st.column_config.TextColumn("NCT ID", width=85),
-            "Identity": st.column_config.TextColumn("Identity", width=500),
+            "NCT ID": st.column_config.TextColumn("NCT ID", width=92),
+            "Identity": st.column_config.TextColumn("Identity", width=490),
             "Sponsor": st.column_config.TextColumn("Sponsor", width=170),
             "Area": st.column_config.TextColumn("Area", width=100),
             "Phase": st.column_config.TextColumn("Phase", width=60),
@@ -4816,6 +4879,12 @@ def render_completion_prediction_tab(row):
                 return
 
             sync_detail_toggle_from_values()
+
+            with st.container(key="treemap_zoom_hint"):
+                st.markdown(
+                    "Click to zoom in, click a title to zoom out",
+                    unsafe_allow_html=False
+                )
 
             with st.container(key="treemap_detailed_drivers_toggle"):
                 st.toggle(
