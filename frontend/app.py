@@ -302,6 +302,8 @@ def inject_custom_styles():
 
                 --ui-header-nonlanding-h: 56px;
                 --ui-nonlanding-header-top-pad: 10px;
+                --ui-nonlanding-header-y-shift: 0px;
+                --ui-sidebar-reset-y-shift: 0px;
                 --ui-nonlanding-body-gap: 0px;
                 --ui-meta-shell-pad-top: 0px;
                 --ui-meta-shell-pad-right: 10px;
@@ -765,7 +767,7 @@ def inject_custom_styles():
             .st-key-sidebar_reset_wrap {{
                 margin-top: -12px !important;
                 margin-bottom: 0px !important;
-                transform: translateY(15px) !important;
+                transform: translateY(calc(15px + var(--ui-sidebar-reset-y-shift))) !important;
             }}
 
             .st-key-sidebar_filters {{
@@ -782,7 +784,15 @@ def inject_custom_styles():
             }}
 
             .st-key-sidebar_filters [data-testid="stElementContainer"]:last-child {{
-                margin-bottom: 300px !important;
+                margin-bottom: 10px !important;
+            }}
+
+            .st-key-sidebar_secret_fields {{
+                margin-top: var(--ui-sidebar-secret-fields-top-gap) !important;
+            }}
+
+            .st-key-sidebar_secret_fields [data-testid="stElementContainer"] {{
+                margin-bottom: 10px !important;
             }}
 
             .st-key-sidebar_filters [data-testid="stWidgetLabel"] {{
@@ -1001,6 +1011,7 @@ def inject_custom_styles():
                 margin: 0 !important;
                 padding: var(--ui-nonlanding-header-top-pad) 0 0 0 !important;
                 min-height: var(--ui-header-nonlanding-h) !important;
+                transform: translateY(var(--ui-nonlanding-header-y-shift)) !important;
             }}
 
             .st-key-app_header_landing [data-testid="stVerticalBlock"],
@@ -1014,6 +1025,7 @@ def inject_custom_styles():
 
             .st-key-header_action_buttons {{
                 padding-top: var(--ui-nonlanding-header-top-pad) !important;
+                transform: translateY(var(--ui-nonlanding-header-y-shift)) !important;
             }}
 
             .st-key-header_action_buttons [data-testid="column"] > div {{
@@ -2819,6 +2831,67 @@ def inject_custom_styles():
                     height: 760px !important;
                 }}
             }}
+
+
+            /* =========================================================
+               NON-LANDING TOP ALIGNMENT PASS
+               Scope:
+               - Results / Grid page
+               - Trial Details shell
+               - all Trial Details tabs through the shared detail shell
+
+               1440 x 900 remains the untouched baseline.
+               Negative --ui-nonlanding-header-y-shift moves the shared
+               non-landing top cluster upward.
+               Positive --ui-sidebar-reset-y-shift moves Reset Filters downward.
+               ========================================================= */
+
+            @media (min-width: 1700px) and (min-height: 900px) {{
+                :root {{
+                    --ui-nonlanding-header-y-shift: -8px;
+                    --ui-sidebar-reset-y-shift: 14px;
+                }}
+
+                .st-key-results_shell {{
+                    margin-top: calc(28px + var(--ui-nonlanding-header-y-shift)) !important;
+                }}
+
+                .st-key-detail_shell {{
+                    margin-top: calc(44px + var(--ui-nonlanding-header-y-shift)) !important;
+                }}
+            }}
+
+            @media (min-width: 2200px) and (min-height: 1050px) {{
+                :root {{
+                    --ui-nonlanding-header-y-shift: -10px;
+                    --ui-sidebar-reset-y-shift: 18px;
+                }}
+
+                .st-key-results_shell {{
+                    margin-top: calc(28px + var(--ui-nonlanding-header-y-shift)) !important;
+                }}
+
+                .st-key-detail_shell {{
+                    margin-top: calc(52px + var(--ui-nonlanding-header-y-shift)) !important;
+                }}
+            }}
+
+            @media (min-width: 2700px) and (min-height: 1250px) {{
+                :root {{
+                    --ui-nonlanding-header-y-shift: -12px;
+                    --ui-sidebar-reset-y-shift: 22px;
+                }}
+
+                .st-key-results_shell {{
+                    margin-top: calc(36px + var(--ui-nonlanding-header-y-shift)) !important;
+                }}
+
+                .st-key-detail_shell {{
+                    margin-top: calc(60px + var(--ui-nonlanding-header-y-shift)) !important;
+                }}
+            }}
+
+
             /* =========================================================
                FINAL RESPONSIVE HEIGHT CONTRACTS
                Purpose:
@@ -3259,6 +3332,77 @@ def inject_custom_styles():
             .st-key-summary_side_inner_completion_prediction_right_block [data-testid="stPlotlyChart"] > div {{
                 padding: 0 !important;
             }}
+
+            /* =========================================================
+               FINAL NON-LANDING HEADER / SIDEBAR ALIGNMENT TUNING
+               1440 x 900 remains unchanged.
+               Negative header shift = move logo/title/buttons UP.
+               Positive reset shift = move Reset Filters DOWN.
+               ========================================================= */
+
+            :root {{
+                --ui-nonlanding-header-y-shift: 0px;
+                --ui-sidebar-reset-y-shift: 0px;
+            }}
+
+            @media (min-width: 1700px) and (min-height: 900px) {{
+                :root {{
+                    --ui-nonlanding-header-y-shift: -10px;
+                    --ui-sidebar-reset-y-shift: 10px;
+                }}
+            }}
+
+            @media (min-width: 2200px) and (min-height: 1050px) {{
+                :root {{
+                    --ui-nonlanding-header-y-shift: -12px;
+                    --ui-sidebar-reset-y-shift: 20px;
+                }}
+            }}
+
+            @media (min-width: 2700px) and (min-height: 1250px) {{
+                :root {{
+                    --ui-nonlanding-header-y-shift: -16px;
+                    --ui-sidebar-reset-y-shift: 30px;
+                }}
+            }}
+
+            /* =========================================================
+               SIDEBAR SECRET FIELDS POSITION
+               Controls how far below the visible filter dropdowns the
+               Register / Analysis / Values / Scores fields are pushed.
+
+               Higher value = secret fields lower.
+               They remain accessible by scrolling the sidebar.
+               ========================================================= */
+
+            :root {{
+                --ui-sidebar-secret-fields-top-gap: 300px;
+            }}
+
+            @media (min-width: 1700px) and (min-height: 900px) {{
+                :root {{
+                    --ui-sidebar-secret-fields-top-gap: 800px;
+                }}
+            }}
+
+            @media (min-width: 2200px) and (min-height: 1050px) {{
+                :root {{
+                    --ui-sidebar-secret-fields-top-gap: 1500px;
+                }}
+            }}
+
+            @media (min-width: 2700px) and (min-height: 1250px) {{
+                :root {{
+                    --ui-sidebar-secret-fields-top-gap: 1500px;
+                }}
+            }}
+
+            @media (min-width: 3200px) and (min-height: 1700px) {{
+                :root {{
+                    --ui-sidebar-secret-fields-top-gap: 2500px;
+                }}
+            }}
+
         </style>
     """, unsafe_allow_html=True)
 
@@ -4697,14 +4841,15 @@ def render_results_page(x_base):
         with st.container(key="sidebar_filters"):
             filtered_df = render_filters(x_base, is_sidebar=True)
 
-        st.text_input("Register", key="s_registry")
-        st.text_input("Analysis", key="s_mode")
-        st.text_input(
-            "Values",
-            key="s_detail",
-            on_change=sync_s_detail_text_input_to_memory
-        )
-        st.text_input("Scores", key="s_scores")
+        with st.container(key="sidebar_secret_fields"):
+            st.text_input("Register", key="s_registry")
+            st.text_input("Analysis", key="s_mode")
+            st.text_input(
+                "Values",
+                key="s_detail",
+                on_change=sync_s_detail_text_input_to_memory
+            )
+            st.text_input("Scores", key="s_scores")
 
     with st.container(key="results_shell"):
         render_header(is_landing=False)
