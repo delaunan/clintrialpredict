@@ -3571,6 +3571,60 @@ def inject_custom_styles():
             }}
 
 
+            /* =========================================================
+               FINAL OVERRIDE — COMPLETION INFO TOOLTIP STACKING
+               Do not style the Streamlit tab panel itself.
+               Only raise the tooltip layers above the lower chart card.
+               ========================================================= */
+
+            html body .st-key-summary_side_shell_completion_prediction_left_top_block,
+            html body .st-key-summary_side_inner_completion_prediction_left_top_block {{
+                position: relative !important;
+                overflow: visible !important;
+            }}
+
+            html body .st-key-summary_side_shell_completion_prediction_left_top_block > div,
+            html body .st-key-summary_side_inner_completion_prediction_left_top_block > div {{
+                overflow: visible !important;
+            }}
+
+            html body .st-key-summary_side_shell_completion_prediction_left_top_block:has(.completion-gauge-help-wrap:hover),
+            html body .st-key-summary_side_shell_completion_prediction_left_top_block:has(.completion-gauge-help-wrap:focus-within),
+            html body .st-key-summary_side_shell_completion_prediction_left_top_block:has(.completion-tier-info-wrap:hover),
+            html body .st-key-summary_side_shell_completion_prediction_left_top_block:has(.completion-tier-info-wrap:focus-within) {{
+                z-index: 1000002 !important;
+            }}
+
+            html body .completion-gauge-help-wrap,
+            html body .completion-tier-info-wrap {{
+                position: absolute !important;
+                z-index: 1000003 !important;
+            }}
+
+            html body .completion-gauge-help-tooltip,
+            html body .completion-tier-info-tooltip {{
+                z-index: 1000004 !important;
+            }}
+
+            /* =========================================================
+               FINAL OVERRIDE — HIDE GAUGE PLOT BACKGROUND OVERFLOW
+               The gauge chart is intentionally shifted upward.
+               Make only the Plotly background transparent so any overflow
+               above the rounded card does not appear as a white rectangle.
+               ========================================================= */
+
+            html body .st-key-summary_side_inner_completion_prediction_left_top_block [data-testid="stPlotlyChart"],
+            html body .st-key-summary_side_inner_completion_prediction_left_top_block [data-testid="stPlotlyChart"] > div,
+            html body .st-key-summary_side_inner_completion_prediction_left_top_block .js-plotly-plot,
+            html body .st-key-summary_side_inner_completion_prediction_left_top_block .plot-container,
+            html body .st-key-summary_side_inner_completion_prediction_left_top_block .svg-container,
+            html body .st-key-summary_side_inner_completion_prediction_left_top_block .main-svg {{
+                background: transparent !important;
+            }}
+
+            html body .st-key-summary_side_inner_completion_prediction_left_top_block .main-svg .bg {{
+                fill: transparent !important;
+            }}
 
         </style>
 
@@ -3610,6 +3664,8 @@ def load_data():
     return df, tax.get("FIELDS", tax)
 
 X_ALL, TAXONOMY = load_data()
+
+VALID_NCT_IDS = set(X_ALL[ID_COL].dropna().astype(str))
 
 
 @st.cache_data
@@ -3695,6 +3751,9 @@ def reset_filters(return_to_landing=True):
     persist_s_detail_value(preserved_detail)
 
     st.session_state.selected_nct_id = None
+    st.session_state.global_edit_mode = False
+    reset_detail_prediction_state()
+
     if return_to_landing:
         st.session_state.search_initiated = False
 
@@ -3705,11 +3764,10 @@ def handle_sidebar_reset_filters():
 
 def start_search():
     persist_s_detail_value(
-        st.session_state.get("s_detail_memory", st.session_state.get("s_detail", ""))
+        st.session_state.get("s_detail", st.session_state.get("s_detail_memory", ""))
     )
 
-    st.session_state.search_initiated = True
-    st.session_state.selected_nct_id = None
+    enter_results_view()
 
 
 def reset_detail_prediction_state():
@@ -3719,30 +3777,70 @@ def reset_detail_prediction_state():
     st.session_state.detail_completion_tab_visible = False
     st.session_state.detail_prediction_notice = False
 
+def is_valid_trial_id(selected_id):
+    return bool(selected_id) and str(selected_id).strip() in VALID_NCT_IDS
+
+
+def enter_results_view():
+    st.session_state.search_initiated = True
+    st.session_state.selected_nct_id = None
+    st.session_state.global_edit_mode = False
+    reset_detail_prediction_state()
+
+
+def enter_detail_view(selected_id):
+    if not is_valid_trial_id(selected_id):
+        return False
+
+    selected_id = str(selected_id).strip()
+
+    if st.session_state.get("selected_nct_id") == selected_id:
+        return False
+
+    st.session_state.search_initiated = True
+    st.session_state.selected_nct_id = selected_id
+    st.session_state.global_edit_mode = False
+    reset_detail_prediction_state()
+
+    return True
+
+
+def _normalize_s_detail_value(value, default="True"):
+    raw_value = str(value or "").strip()
+
+    if not raw_value:
+        return default
+
+    normalized = raw_value.lower()
+
+    if normalized in ("true", "1", "yes", "on"):
+        return "True"
+
+    if normalized in ("false", "0", "no", "off"):
+        return "False"
+
+    return raw_value
+
 
 def get_s_detail_value():
     detail_value = str(st.session_state.get("s_detail", "") or "").strip()
     memory_value = str(st.session_state.get("s_detail_memory", "") or "").strip()
 
     if detail_value:
-        return detail_value
+        return _normalize_s_detail_value(detail_value)
 
     if memory_value:
-        return memory_value
-
-    if st.session_state.get("show_detailed_drivers_user_set", False):
-        return "False"
+        return _normalize_s_detail_value(memory_value)
 
     return "True"
 
 
 def persist_s_detail_value(value=None):
-    detail_value = get_s_detail_value() if value is None else str(value or "").strip()
-
-    if detail_value.lower() == "true":
-        detail_value = "True"
-    elif detail_value.lower() in ("false", "0", "no", "off"):
-        detail_value = "False"
+    detail_value = (
+        get_s_detail_value()
+        if value is None
+        else _normalize_s_detail_value(value, default=get_s_detail_value())
+    )
 
     if st.session_state.get("s_detail") != detail_value:
         st.session_state["s_detail"] = detail_value
@@ -3759,14 +3857,10 @@ def is_detailed_values_enabled():
 
 def sync_detail_toggle_from_values():
     persist_s_detail_value()
-    detailed_enabled = is_detailed_values_enabled()
-
-    if st.session_state.get("show_detailed_drivers") != detailed_enabled:
-        st.session_state["show_detailed_drivers"] = detailed_enabled
+    st.session_state["show_detailed_drivers"] = is_detailed_values_enabled()
 
 
 def sync_values_from_detail_toggle():
-    st.session_state["show_detailed_drivers_user_set"] = True
     persist_s_detail_value(
         "True"
         if st.session_state.get("show_detailed_drivers", False)
@@ -3775,7 +3869,6 @@ def sync_values_from_detail_toggle():
 
 
 def sync_s_detail_text_input_to_memory():
-    st.session_state["show_detailed_drivers_user_set"] = True
     persist_s_detail_value()
 
 
@@ -3827,9 +3920,7 @@ def handle_global_edit_toggle():
         reset_trial_editor_state()
 
 def go_back_to_results():
-    st.session_state.selected_nct_id = None
-    st.session_state.global_edit_mode = False
-    reset_detail_prediction_state()
+    enter_results_view()
 
 
 def apply_trial_filters(base_df, skip_key=None):
@@ -4246,17 +4337,8 @@ def render_trials_grid(df):
     return None
 
 def open_trial_third_ui(selected_id):
-    if not selected_id:
-        return
-
-    selected_id = str(selected_id)
-    if st.session_state.get("selected_nct_id") == selected_id:
-        return
-
-    st.session_state.selected_nct_id = selected_id
-    reset_detail_prediction_state()
-    st.session_state.global_edit_mode = False
-    st.rerun()
+    if enter_detail_view(selected_id):
+        st.rerun()
 
 
 def trial_val(row, *candidates, default="N/A"):
@@ -5008,7 +5090,8 @@ def render_results_page(x_base):
 
 
 def render_detail_page():
-    selected_df = X_ALL[X_ALL[ID_COL] == st.session_state.selected_nct_id]
+    selected_id = str(st.session_state.get("selected_nct_id", "")).strip()
+    selected_df = X_ALL[X_ALL[ID_COL].astype(str) == selected_id]
 
     with st.container(key="detail_shell"):
         render_header(
@@ -5028,12 +5111,18 @@ def render_detail_page():
 
 def route_app():
     x_base = X_ALL
+    selected_id = st.session_state.get("selected_nct_id")
 
-    if st.session_state.selected_nct_id:
-        render_detail_page()
-        return
+    if selected_id:
+        if is_valid_trial_id(selected_id):
+            render_detail_page()
+            return
 
-    if st.session_state.search_initiated:
+        st.session_state.selected_nct_id = None
+        st.session_state.global_edit_mode = False
+        reset_detail_prediction_state()
+
+    if st.session_state.get("search_initiated", False):
         render_results_page(x_base)
         return
 
