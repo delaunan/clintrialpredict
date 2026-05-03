@@ -1549,16 +1549,28 @@ def inject_custom_styles():
                 position: absolute !important;
                 top: var(--ui-treemap-toggle-top) !important;
                 right: var(--ui-treemap-toggle-right) !important;
+                left: auto !important;
                 z-index: 60 !important;
-                width: auto !important;
+                width: max-content !important;
+                max-width: max-content !important;
                 min-width: 0 !important;
                 margin: 0 !important;
                 padding: 0 !important;
+                pointer-events: none !important;
+            }}
+
+            .st-key-treemap_detailed_drivers_toggle [data-testid="stToggle"],
+            .st-key-treemap_detailed_drivers_toggle [data-baseweb="checkbox"],
+            .st-key-treemap_detailed_drivers_toggle label,
+            .st-key-treemap_detailed_drivers_toggle input {{
+                pointer-events: auto !important;
             }}
 
             .st-key-treemap_detailed_drivers_toggle [data-testid="stToggle"] {{
                 margin: 0 !important;
                 padding: 0 !important;
+                width: max-content !important;
+                max-width: max-content !important;
             }}
 
             .st-key-treemap_detailed_drivers_toggle [data-testid="stWidgetLabel"] {{
