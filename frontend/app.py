@@ -1327,7 +1327,7 @@ def inject_custom_styles():
 
             .st-key-summary_side_shell_completion_prediction_left_top_block .completion-tier-row {{
                 text-align: center !important;
-                margin-top: -40px !important;
+                margin-top: -20px !important;
             }}
 
             .st-key-summary_side_shell_completion_prediction_left_top_block .completion-tier-inline-wrap {{
@@ -2980,8 +2980,8 @@ def inject_custom_styles():
 
                 --ui-completion-left-card-h: 265px;
                 --ui-completion-right-card-h: 535px;
-                --ui-completion-tier-font-size: 1.36rem;
-                --ui-completion-tier-overlap: -18px;
+                --ui-completion-tier-font-size: 1.5rem;
+                --ui-completion-tier-overlap: -35px;
             }}
 
             @media (min-width: 1800px) and (min-height: 950px) {{
@@ -3000,8 +3000,8 @@ def inject_custom_styles():
 
                     --ui-completion-left-card-h: 275px;
                     --ui-completion-right-card-h: 565px;
-                    --ui-completion-tier-font-size: 1.48rem;
-                    --ui-completion-tier-overlap: -20px;
+                    --ui-completion-tier-font-size: 1.6rem;
+                    --ui-completion-tier-overlap: -37px;
                 }}
             }}
 
@@ -3021,8 +3021,8 @@ def inject_custom_styles():
 
                     --ui-completion-left-card-h: 285px;
                     --ui-completion-right-card-h: 585px;
-                    --ui-completion-tier-font-size: 1.60rem;
-                    --ui-completion-tier-overlap: -22px;
+                    --ui-completion-tier-font-size: 1.70rem;
+                    --ui-completion-tier-overlap: -35px;
                 }}
             }}
 
@@ -3043,7 +3043,7 @@ def inject_custom_styles():
                     --ui-completion-left-card-h: 290px;
                     --ui-completion-right-card-h: 595px;
                     --ui-completion-tier-font-size: 1.66rem;
-                    --ui-completion-tier-overlap: -24px;
+                    --ui-completion-tier-overlap: -40px;
                 }}
             }}
 
@@ -3927,7 +3927,7 @@ def render_header(is_landing=True, show_predict_button=False, show_back_button=F
         if show_back_button or show_predict_button or show_global_edit_toggle:
 
             with st.container(key="header_action_buttons"):
-                c_toggle, c_back, c_predict = st.columns([1.55, 1.05, 1.55], gap="small", vertical_alignment="top")
+                c_toggle, c_back, c_predict = st.columns([1.55, 0.95, 1.75], gap="small", vertical_alignment="top")
 
                 with c_toggle:
                     if show_global_edit_toggle:

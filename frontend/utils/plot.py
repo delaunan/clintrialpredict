@@ -146,7 +146,7 @@ def plot_success_gauge(score_val, height=220):
         text=f"<span style='font-weight:700'>{score_val:.1f}</span>",
         showarrow=False,
         font=dict(
-            size=max(42, int(height * 0.20)),
+            size=max(38, int(height * 0.13)),
             color=STYLE_CONFIG["font_color"],
             family=STYLE_CONFIG["font_family"],
         ),
@@ -245,7 +245,7 @@ def plot_impact_bar(df_pillars, height=240):
             yanchor="middle",
             align="left" if val >= 0 else "right",
             font=dict(
-                size=13,
+                size=16,
                 color="#334155",
                 family=STYLE_CONFIG["font_family"]
             )
@@ -263,7 +263,7 @@ def plot_impact_bar(df_pillars, height=240):
         yaxis=dict(
             automargin=True,
             tickfont=dict(
-                size=13,
+                size=16,
                 color="#334155",
                 family=STYLE_CONFIG["font_family"]
             )
@@ -356,7 +356,7 @@ def plot_treemap(subcat_impacts, pillar_impacts, show_values=True, height=600):
     ))
 
     fig.update_layout(
-        margin=dict(t=10, l=8, r=8, b=2),
+        margin=dict(t=28, l=8, r=8, b=2),
         height=height,
         font=dict(family=STYLE_CONFIG["font_family"], color=STYLE_CONFIG["font_color"]),
         paper_bgcolor='white',
