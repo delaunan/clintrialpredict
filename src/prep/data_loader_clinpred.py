@@ -30,14 +30,14 @@ class ClinicalTrialLoader:
 
         # --- STRATEGY A: PERFECT ---
         self.params_perfect = {
-            "sep": "|", "dtype": str, "header": 0, "quotechar": None,
-            "quoting": csv.QUOTE_NONE, "low_memory": False, "on_bad_lines": "warn"
+            "sep": "|", "dtype": str, "header": 0, "quotechar": '"',
+            "quoting": csv.QUOTE_MINIMAL, "low_memory": False, "on_bad_lines": "warn"
         }
 
         # --- STRATEGY B: ROBUST ---
         self.params_robust = {
-            "sep": "|", "dtype": str, "header": 0, "quotechar": None,
-            "quoting": csv.QUOTE_NONE, "low_memory": False, "on_bad_lines": "warn"
+            "sep": "|", "dtype": str, "header": 0, "quotechar": '"',
+            "quoting": 3, "low_memory": False, "on_bad_lines": "warn"
         }
 
     def _load_llm_outputs(self):
