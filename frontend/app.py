@@ -3707,7 +3707,7 @@ def init_session_state():
         "s_scores": "True",
         "global_edit_mode": False,
         "show_detailed_drivers": True,
-        "show_detailed_drivers_user_set": False,
+
 
         "detail_completion_tab_visible": False,
         "detail_prediction_notice": False,
@@ -3765,9 +3765,6 @@ def reset_filters(return_to_landing=True):
     if return_to_landing:
         st.session_state.search_initiated = False
 
-
-def handle_sidebar_reset_filters():
-    reset_filters(return_to_landing=True)
 
 
 def consume_home_click_query_param():
@@ -3907,17 +3904,14 @@ def sync_s_detail_text_input_to_memory():
 
 
 
-def show_completion_score_tab():
-    st.session_state.detail_completion_tab_visible = True
-    st.session_state.detail_prediction_notice = False
-
 def handle_predict_trial_completion():
     if st.session_state.get("global_edit_mode", False):
         reset_detail_prediction_state()
         st.session_state.detail_prediction_notice = True
         return
 
-    show_completion_score_tab()
+    st.session_state.detail_completion_tab_visible = True
+    st.session_state.detail_prediction_notice = False
     st.session_state.trigger_prediction = True
     st.session_state.completion_score_tab_jump_nonce += 1
 
@@ -3953,8 +3947,6 @@ def handle_global_edit_toggle():
     if not st.session_state.get("global_edit_mode", False):
         reset_trial_editor_state()
 
-def go_back_to_results():
-    enter_results_view()
 
 
 def apply_trial_filters(base_df, skip_key=None):
@@ -4234,7 +4226,7 @@ def render_header(is_landing=True, show_predict_button=False, show_back_button=F
                             "Back to Results",
                             width="stretch",
                             key="header_back_btn",
-                            on_click=go_back_to_results
+                            on_click=enter_results_view
                         )
 
                 with c_predict:
@@ -4256,11 +4248,8 @@ def render_header(is_landing=True, show_predict_button=False, show_back_button=F
 
 
 def render_filters(df, is_sidebar=False):
-    def apply_filters(base_df, skip_key=None):
-        return apply_trial_filters(base_df, skip_key=skip_key)
-
     def get_opts(col_key):
-        tdf = apply_filters(df, skip_key=col_key)
+        tdf = apply_trial_filters(df, skip_key=col_key)
         col = FILTER_COL_MAP[col_key]
 
         if col == "start_year":
@@ -4315,7 +4304,7 @@ def render_filters(df, is_sidebar=False):
                 on_click=start_search
             )
 
-    curr_df = apply_filters(df)
+    curr_df = apply_trial_filters(df)
 
     if not is_sidebar:
         st.markdown(
@@ -4399,9 +4388,7 @@ def render_trials_grid(df):
 
     return None
 
-def open_trial_third_ui(selected_id):
-    if enter_detail_view(selected_id):
-        st.rerun()
+
 
 
 def trial_val(row, *candidates, default="N/A"):
@@ -4721,8 +4708,7 @@ def render_trial_top_strip_refined(row):
         with right:
             render_top_meta_panel(row)
 
-def render_completion_workflow_note():
-    st.markdown(COMPLETION_WORKFLOW_INFO_HTML, unsafe_allow_html=True)
+
 
 def render_trial_detail_tabs_refined(row):
     render_trial_top_strip_refined(row)
@@ -4735,7 +4721,7 @@ def render_trial_detail_tabs_refined(row):
     )
 
     if show_completion_workflow_note:
-        render_completion_workflow_note()
+        st.markdown(COMPLETION_WORKFLOW_INFO_HTML, unsafe_allow_html=True)
 
     with st.container(key="trial_detail_tabs"):
         if score_visible:
@@ -5125,7 +5111,7 @@ def render_results_page(x_base):
             st.button(
                 "Reset Filters",
                 width="stretch",
-                on_click=handle_sidebar_reset_filters
+                on_click=reset_filters
             )
 
         with st.container(key="sidebar_filters"):
@@ -5156,8 +5142,8 @@ def render_results_page(x_base):
         selected_id = render_trials_grid(filtered_df)
 
         if selected_id:
-            open_trial_third_ui(selected_id)
-
+            if enter_detail_view(selected_id):
+                st.rerun()
 
 def render_detail_page():
     selected_id = str(st.session_state.get("selected_nct_id", "")).strip()

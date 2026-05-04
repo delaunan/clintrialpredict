@@ -30,14 +30,14 @@ class ClinicalTrialLoader:
 
         # --- STRATEGY A: PERFECT ---
         self.params_perfect = {
-            "sep": "|", "dtype": str, "header": 0, "quotechar": '"',
-            "quoting": csv.QUOTE_MINIMAL, "low_memory": False, "on_bad_lines": "warn"
+            "sep": "|", "dtype": str, "header": 0, "quotechar": None,
+            "quoting": csv.QUOTE_NONE, "low_memory": False, "on_bad_lines": "warn"
         }
 
         # --- STRATEGY B: ROBUST ---
         self.params_robust = {
-            "sep": "|", "dtype": str, "header": 0, "quotechar": '"',
-            "quoting": 3, "low_memory": False, "on_bad_lines": "warn"
+            "sep": "|", "dtype": str, "header": 0, "quotechar": None,
+            "quoting": csv.QUOTE_NONE, "low_memory": False, "on_bad_lines": "warn"
         }
 
     def _load_llm_outputs(self):
@@ -252,7 +252,7 @@ class ClinicalTrialLoader:
         # 1. Conditions
         df_cond = self._safe_load('conditions.txt', cols=['nct_id', 'name'])
         if not df_cond.empty:
-            conds = df_cond.groupby('nct_id')['name'].apply(lambda x: " || ".join(x.dropna().unique())).reset_index(name='raw_conditions')
+            conds = df_cond.groupby('nct_id')['name'].apply(lambda x: "\n".join(x.dropna().unique())).reset_index(name='raw_conditions')
             df = df.merge(conds, on='nct_id', how='left')
 
         # 2. Interventions (Enhanced with Type, Description, and Synonyms)
@@ -340,9 +340,9 @@ class ClinicalTrialLoader:
         df['max_age_years'] = df['maximum_age'].apply(lambda x: parse_age(x, np.nan))
 
         # 1. CHILD: Included if Floor < 18 OR Ceiling <= 18 (captures pediatric-only trials)
-        # fillna(0) ensures trials with missing minimum age floors are caught as pediatric-inclusive
+        # Use explicit comparison to avoid flagging trials with missing age floors (Not Specified) as pediatric
         df['child'] = 0
-        df.loc[(df['min_age_years'].fillna(0) < 18) | (df['max_age_years'] <= 18), 'child'] = 1
+        df.loc[(df['min_age_years'] < 18) | (df['max_age_years'] <= 18), 'child'] = 1
 
         # 2. ADULT: Exclude if Ceiling < 18 (Strict Child) OR Floor >= 65 (Strict Geriatric). Default 1.
         df['adult'] = 1
@@ -392,9 +392,9 @@ class ClinicalTrialLoader:
 
         df["title"] = df["official_title"].fillna("").astype(str).apply(ui_clean_text).apply(ui_smart_title_case).apply(lambda x: ui_truncate(x, 1000))
         df["acronym_ui"] = df["acronym"].fillna("").astype(str).apply(ui_clean_text)
-        # [LINGUISTIC DIET] Match LLM Context Caps (Run 1 & 3)
-        df["summary_ui"] = df.get("ui_summary_raw", pd.Series([""]*len(df))).fillna("").astype(str).apply(ui_format_multiline).apply(ui_smart_sentence_case).apply(lambda x: ui_truncate(x, 8000))
-        df["criteria_ui"] = df.get("ui_criteria_raw", pd.Series([""]*len(df))).fillna("").astype(str).apply(ui_format_multiline).apply(ui_smart_sentence_case).apply(lambda x: ui_truncate(x, 15000))
+        # [LINGUISTIC DIET] Match LLM Context Caps (Run 1 & 3) per GEMINI.md v46.0
+        df["summary_ui"] = df.get("ui_summary_raw", pd.Series([""]*len(df))).fillna("").astype(str).apply(ui_format_multiline).apply(ui_smart_sentence_case).apply(lambda x: ui_truncate(x, 5000))
+        df["criteria_ui"] = df.get("ui_criteria_raw", pd.Series([""]*len(df))).fillna("").astype(str).apply(ui_format_multiline).apply(ui_smart_sentence_case).apply(lambda x: ui_truncate(x, 10000))
 
         # Raw Scientific Evidence Cleaning (Using Multiline Formatter)
         df["conditions_ui"] = df.get("raw_conditions", pd.Series([""]*len(df))).fillna("").astype(str).apply(ui_format_multiline).apply(ui_smart_sentence_case)
@@ -453,7 +453,9 @@ class ClinicalTrialLoader:
         if primary.empty:
             df['scientific_success'] = 0; df['min_p_value'] = np.nan; return df
 
-        primary['p_val_num'] = pd.to_numeric(primary['p_value'].astype(str).str.replace(',', '.'), errors='coerce')
+        # [UPGRADE] Extract numeric portion from p-value strings (e.g., "< 0.05" -> "0.05")
+        primary['p_val_num'] = primary['p_value'].astype(str).str.replace(',', '.').str.extract(r'(\d+\.?\d*)')[0]
+        primary['p_val_num'] = pd.to_numeric(primary['p_val_num'], errors='coerce')
 
         trial_stats = primary.sort_values(['nct_id', 'p_val_num']).groupby('nct_id').agg({
             'p_val_num': 'min',
