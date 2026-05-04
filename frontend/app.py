@@ -2,6 +2,8 @@ import os
 import json
 import html
 import base64
+import logging
+from urllib.parse import quote, unquote
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -30,8 +32,14 @@ st.set_page_config(
 CURRENT_DIR = Path(__file__).resolve().parent
 DATA_PATH = CURRENT_DIR / "data" / "search_registry.csv"
 TAXONOMY_PATH = CURRENT_DIR.parent / "models" / "taxonomy_01.json"
-API_URL = os.getenv("API_URL", "http://localhost:8000/predict")
+IS_CLOUD_RUN = bool(os.getenv("K_SERVICE"))
+
+API_URL = os.getenv("API_URL", "").strip()
+if not API_URL and not IS_CLOUD_RUN:
+    API_URL = "http://localhost:8000/predict"
+
 API_TIMEOUT_SECONDS = 60
+logger = logging.getLogger(__name__)
 ID_COL = "nct_id"
 DETAIL_TAB_INFO = "Trial Information"
 DETAIL_TAB_POPULATION = "Population Details"
@@ -958,7 +966,7 @@ def inject_custom_styles():
                 border-radius: 10px !important;
                 padding: 4px 12px 10px 12px !important;
                 margin: 0 !important;
-                resize: vertical !important;
+                resize: none !important;
                 white-space: pre-wrap !important;
                 overflow-wrap: break-word !important;
                 overflow-y: auto !important;
@@ -3696,7 +3704,7 @@ def init_session_state():
         "s_mode": "",
         "s_detail": "True",
         "s_detail_memory": "True",
-        "s_scores": "",
+        "s_scores": "True",
         "global_edit_mode": False,
         "show_detailed_drivers": True,
         "show_detailed_drivers_user_set": False,
@@ -3760,6 +3768,32 @@ def reset_filters(return_to_landing=True):
 
 def handle_sidebar_reset_filters():
     reset_filters(return_to_landing=True)
+
+
+def consume_home_click_query_param():
+    home_value = st.query_params.get("ctp_home", "")
+
+    if isinstance(home_value, list):
+        home_value = home_value[0] if home_value else ""
+
+    if str(home_value).strip().lower() in ("1", "true", "yes"):
+        detail_value = st.query_params.get("ctp_detail", None)
+        scores_value = st.query_params.get("ctp_scores", None)
+
+        if isinstance(detail_value, list):
+            detail_value = detail_value[0] if detail_value else ""
+
+        if isinstance(scores_value, list):
+            scores_value = scores_value[0] if scores_value else ""
+
+        if detail_value is not None:
+            persist_s_detail_value(unquote(str(detail_value)))
+
+        if scores_value is not None:
+            st.session_state["s_scores"] = unquote(str(scores_value))
+
+        reset_filters(return_to_landing=True)
+        st.query_params.clear()
 
 
 def start_search():
@@ -4051,6 +4085,8 @@ def render_transition_overlay_hook():
                 win.__ctpOverlayTimer = win.setTimeout(removeOverlay, timeoutMs);
             }
 
+            win.__ctpShowOverlay = showOverlay;
+
             function getButtonText(button) {
                 return (button.innerText || button.textContent || "").trim();
             }
@@ -4067,6 +4103,8 @@ def render_transition_overlay_hook():
 
             if (!win.__ctpOverlayListenerInstalled) {
                 doc.addEventListener("click", function(event) {
+
+
                     const button = event.target.closest("button");
 
                     if (button) {
@@ -4136,8 +4174,33 @@ def render_header(is_landing=True, show_predict_button=False, show_back_button=F
                 "<span style='font-size: var(--ui-demo-size); font-weight: 800; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.1em; line-height: 1; margin-bottom: 0px;'>Demo Version</span>"
             )
 
+            current_detail_value = get_s_detail_value()
+
+            if st.session_state.get("selected_nct_id") is not None and "show_detailed_drivers" in st.session_state:
+                current_detail_value = (
+                    "True"
+                    if st.session_state.get("show_detailed_drivers", False)
+                    else "False"
+                )
+
+            home_detail_param = quote(str(current_detail_value or ""), safe="")
+            home_scores_param = quote(str(st.session_state.get("s_scores", "") or ""), safe="")
+
+            home_link_overlay = (
+                f"<a href='?ctp_home=1&ctp_detail={home_detail_param}&ctp_scores={home_scores_param}' "
+                "target='_self' aria-label='Return to landing page' "
+                "onclick=\"window.__ctpShowOverlay && window.__ctpShowOverlay('Returning to start...', 1200);\" "
+                "style='position:absolute; inset:0; z-index:5; display:block; "
+                "text-decoration:none; background:transparent; color:inherit;'></a>"
+                if not is_landing
+                else ""
+            )
+
+            home_cursor = "cursor: pointer; position: relative;" if not is_landing else ""
+
             html = (
-                f"<div style='display: flex; align-items: center; gap: {logo_gap};'>"
+                f"<div style='display: flex; align-items: center; gap: {logo_gap}; {home_cursor}'>"
+                f"{home_link_overlay}"
                 f"<div style='background-color: white; border: {logo_border} solid #52606d; padding: var(--ui-logo-pad); border-radius: {logo_radius}; display: flex; align-items: center; justify-content: center; height: {logo_size}; width: {logo_size}; flex-shrink: 0; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-top: 0px;'>"
                 f"<img src='data:image/png;base64,{img_base64}' style='height: {logo_img_size}; filter: {BRAND_FILTER};'>"
                 f"</div>"
@@ -4812,6 +4875,10 @@ def get_analysis_result_for_selected_trial(row):
     ):
         with st.spinner("Analyzing signals..."):
             try:
+                if not API_URL:
+                    st.error("Prediction service is not configured.")
+                    return None
+
                 row_to_predict: pd.Series = get_edited_row(row)
                 prediction_payload = row_to_predict.replace({np.nan: None}).to_dict()
 
@@ -4832,14 +4899,17 @@ def get_analysis_result_for_selected_trial(row):
             except requests.exceptions.Timeout:
                 st.error("API Error: request timed out.")
                 return None
-            except requests.exceptions.RequestException as e:
-                st.error(f"API Error: {e}")
+            except requests.exceptions.RequestException:
+                logger.exception("Prediction API request failed")
+                st.error("Prediction service is temporarily unavailable. Please try again later.")
                 return None
-            except ValueError as e:
-                st.error(f"API response error: {e}")
+            except ValueError:
+                logger.exception("Prediction API returned an invalid response")
+                st.error("Prediction service returned an invalid response. Please try again later.")
                 return None
-            except Exception as e:
-                st.error(f"System Error: {e}")
+            except Exception:
+                logger.exception("Unexpected prediction workflow error")
+                st.error("An unexpected error occurred. Please try again later.")
                 return None
 
     if st.session_state.get("trigger_prediction", False):
@@ -5111,6 +5181,8 @@ def render_detail_page():
 
 def route_app():
     x_base = X_ALL
+    consume_home_click_query_param()
+
     selected_id = st.session_state.get("selected_nct_id")
 
     if selected_id:

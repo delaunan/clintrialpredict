@@ -314,14 +314,24 @@ class ClinicalTrialLoader:
         df['gender'] = df['gender'].fillna('UNKNOWN').str.upper()
 
         def parse_age(val, default):
+            """
+            Surgically converts AACT age strings into numeric Years.
+            Includes support for neonate units (Minutes, Hours) and 'Birth' sentinels.
+            """
             if pd.isna(val) or str(val).lower() in ['nan', 'none', '']: return default
             try:
-                match = re.search(r'(\d+(\.\d+)?)', str(val))
+                text = str(val).lower()
+                # 'Birth' maps directly to Year 0
+                if 'birth' in text: return 0.0
+                match = re.search(r'(\d+(\.\d+)?)', text)
                 if not match: return default
-                num = float(match.group(1)); text = str(val).lower()
+                num = float(match.group(1))
+                # Temporal Unit Conversion Logic
                 if 'month' in text: num /= 12.0
                 elif 'week' in text: num /= 52.0
                 elif 'day' in text: num /= 365.0
+                elif 'hour' in text: num /= (365.0 * 24.0)
+                elif 'minute' in text: num /= (365.0 * 24.0 * 60.0)
                 return num
             except: return default
 
@@ -329,11 +339,12 @@ class ClinicalTrialLoader:
         df['min_age_years'] = df['minimum_age'].apply(lambda x: parse_age(x, np.nan))
         df['max_age_years'] = df['maximum_age'].apply(lambda x: parse_age(x, np.nan))
 
-        # 1. CHILD: Floor < 18 OR Ceiling < 18
+        # 1. CHILD: Included if Floor < 18 OR Ceiling <= 18 (captures pediatric-only trials)
+        # fillna(0) ensures trials with missing minimum age floors are caught as pediatric-inclusive
         df['child'] = 0
-        df.loc[(df['min_age_years'] < 18) | (df['max_age_years'] < 18), 'child'] = 1
+        df.loc[(df['min_age_years'].fillna(0) < 18) | (df['max_age_years'] <= 18), 'child'] = 1
 
-        # 2. ADULT: Exclude if Ceiling < 18 OR Floor >= 65. Default 1.
+        # 2. ADULT: Exclude if Ceiling < 18 (Strict Child) OR Floor >= 65 (Strict Geriatric). Default 1.
         df['adult'] = 1
         df.loc[(df['max_age_years'] < 18) | (df['min_age_years'] >= 65), 'adult'] = 0
 
