@@ -5248,7 +5248,7 @@ def render_completion_prediction_tab(row):
 
             with st.container(key="treemap_zoom_hint"):
                 st.markdown(
-                    "<strong>Interactive score drivers</strong> (click to zoom in, click a title to zoom out)",
+                    "<strong>Interactive score drivers</strong> (click any block to zoom in, click a header to zoom out)",
                     unsafe_allow_html=True
                 )
 
