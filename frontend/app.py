@@ -3,6 +3,8 @@ import json
 import html
 import base64
 import logging
+import uuid
+import hashlib
 from urllib.parse import quote, unquote
 from pathlib import Path
 from dotenv import load_dotenv
@@ -41,6 +43,172 @@ if not API_URL and not IS_CLOUD_RUN:
 API_TIMEOUT_SECONDS = 60
 logger = logging.getLogger(__name__)
 ID_COL = "nct_id"
+
+
+# ==========================
+# LIGHTWEIGHT AUDIT LOGGING
+# ==========================
+# Server-side only.
+# No cookies, no browser tracking, no third-party analytics, no database.
+# Cloud Run captures these JSON logs automatically in Cloud Logging.
+
+def audit_clean(value):
+    if value is None:
+        return None
+
+    try:
+        if pd.isna(value):
+            return None
+    except Exception:
+        pass
+
+    if isinstance(value, (np.integer,)):
+        return int(value)
+
+    if isinstance(value, (np.floating,)):
+        return float(value)
+
+    if isinstance(value, (np.bool_,)):
+        return bool(value)
+
+    if isinstance(value, (list, tuple, set)):
+        return [audit_clean(v) for v in value]
+
+    if isinstance(value, dict):
+        return {str(k): audit_clean(v) for k, v in value.items()}
+
+    return value
+
+
+def get_audit_session_id():
+    if "audit_session_id" not in st.session_state:
+        st.session_state["audit_session_id"] = str(uuid.uuid4())
+
+    return st.session_state["audit_session_id"]
+
+
+def get_audit_client_ip():
+    """
+    Best-effort client IP detection for Cloud Run + Streamlit.
+
+    We never log the raw IP. It is only used locally to create a hashed
+    visitor_id, then discarded.
+    """
+    try:
+        context = getattr(st, "context", None)
+        headers = getattr(context, "headers", {}) if context else {}
+    except Exception:
+        headers = {}
+
+    try:
+        headers_dict = dict(headers or {})
+    except Exception:
+        headers_dict = {}
+
+    x_forwarded_for = None
+
+    for key, value in headers_dict.items():
+        if str(key).lower() == "x-forwarded-for":
+            x_forwarded_for = str(value)
+            break
+
+    if x_forwarded_for:
+        client_ip = x_forwarded_for.split(",")[0].strip()
+        if client_ip:
+            return client_ip
+
+    try:
+        context = getattr(st, "context", None)
+        ip_address = getattr(context, "ip_address", None) if context else None
+        if ip_address:
+            return str(ip_address).strip()
+    except Exception:
+        pass
+
+    return None
+
+
+def get_audit_visitor_id():
+    """
+    Approximate visitor/network ID.
+
+    Same public IP + same AUDIT_SALT => same visitor_id.
+    This helps estimate usage without storing raw IP addresses.
+    """
+    if "audit_visitor_id" in st.session_state:
+        return st.session_state["audit_visitor_id"]
+
+    client_ip = get_audit_client_ip()
+
+    if not client_ip:
+        st.session_state["audit_visitor_id"] = "unknown"
+        return st.session_state["audit_visitor_id"]
+
+    audit_salt = os.getenv("AUDIT_SALT", "ctpredict-local-audit-salt")
+    raw_value = f"{audit_salt}|{client_ip}"
+
+    visitor_hash = hashlib.sha256(raw_value.encode("utf-8")).hexdigest()[:16]
+    st.session_state["audit_visitor_id"] = f"ip_{visitor_hash}"
+
+    return st.session_state["audit_visitor_id"]
+
+
+def get_selected_trial_audit_fields(nct_id=None):
+    selected_id = str(nct_id or st.session_state.get("selected_nct_id") or "").strip()
+
+    fields = {
+        "nct_id": selected_id or None,
+    }
+
+    if not selected_id:
+        return fields
+
+    try:
+        selected_df = X_ALL[X_ALL[ID_COL].astype(str) == selected_id]
+    except Exception:
+        return fields
+
+    if selected_df.empty:
+        return fields
+
+    row = selected_df.iloc[0]
+
+    fields.update({
+        "trial_label": audit_clean(row.get("ui_search_label")),
+        "sponsor": audit_clean(row.get("lead_sponsor_canonical")),
+        "therapeutic_area": audit_clean(row.get("therapeutic_area_ui")),
+        "phase": audit_clean(row.get("phase_ui")),
+        "start_year": audit_clean(row.get("start_year")),
+    })
+
+    return fields
+
+
+def audit_log(event: str, **fields):
+    payload = {
+        "severity": "NOTICE",
+        "message": f"CTP_AUDIT {event}",
+        "app": "ctpredict",
+        "event": event,
+        "visitor_id": get_audit_visitor_id(),
+        "session_id": get_audit_session_id(),
+        "selected_nct_id": audit_clean(st.session_state.get("selected_nct_id")),
+        "search_initiated": audit_clean(st.session_state.get("search_initiated", False)),
+        "simulation_mode": audit_clean(st.session_state.get("global_edit_mode", False)),
+        **{key: audit_clean(value) for key, value in fields.items()},
+    }
+
+    print(json.dumps(payload, default=str), flush=True)
+
+
+def audit_app_access_once():
+    if st.session_state.get("_audit_app_access_logged", False):
+        return
+
+    audit_log("app_access")
+    st.session_state["_audit_app_access_logged"] = True
+
+
 DETAIL_TAB_INFO = "Trial Information"
 DETAIL_TAB_POPULATION = "Population Details"
 DETAIL_TAB_SCORE = "Completion Score"
@@ -3798,6 +3966,19 @@ def start_search():
         st.session_state.get("s_detail", st.session_state.get("s_detail_memory", ""))
     )
 
+    audit_log(
+        "search_trials",
+        sponsor_filter=st.session_state.get("f_sponsor"),
+        therapeutic_area_filter=st.session_state.get("f_ta"),
+        phase_filter=st.session_state.get("f_phase"),
+        start_year_filter=st.session_state.get("f_year"),
+        nct_id_filter=st.session_state.get("f_nct_id"),
+        registry=st.session_state.get("s_registry"),
+        analysis=st.session_state.get("s_mode"),
+        values=st.session_state.get("s_detail"),
+        scores=st.session_state.get("s_scores"),
+    )
+
     enter_results_view()
 
 
@@ -3832,6 +4013,11 @@ def enter_detail_view(selected_id):
     st.session_state.selected_nct_id = selected_id
     st.session_state.global_edit_mode = False
     reset_detail_prediction_state()
+
+    audit_log(
+        "open_trial",
+        **get_selected_trial_audit_fields(selected_id),
+    )
 
     return True
 
@@ -3906,9 +4092,20 @@ def sync_s_detail_text_input_to_memory():
 
 def handle_predict_trial_completion():
     if st.session_state.get("global_edit_mode", False):
+        audit_log(
+            "predict_blocked_simulation_mode",
+            reason="simulation_mode_on",
+            **get_selected_trial_audit_fields(),
+        )
+
         reset_detail_prediction_state()
         st.session_state.detail_prediction_notice = True
         return
+
+    audit_log(
+        "prediction_requested",
+        **get_selected_trial_audit_fields(),
+    )
 
     st.session_state.detail_completion_tab_visible = True
     st.session_state.detail_prediction_notice = False
@@ -3942,9 +4139,17 @@ def reset_trial_editor_state():
         st.session_state[state_key] = "" if value == "N/A" else str(value)
 
 def handle_global_edit_toggle():
+    simulation_mode = st.session_state.get("global_edit_mode", False)
+
+    audit_log(
+        "simulation_mode_toggle",
+        toggle_state="on" if simulation_mode else "off",
+        **get_selected_trial_audit_fields(),
+    )
+
     reset_detail_prediction_state()
 
-    if not st.session_state.get("global_edit_mode", False):
+    if not simulation_mode:
         reset_trial_editor_state()
 
 
@@ -4875,25 +5080,62 @@ def get_analysis_result_for_selected_trial(row):
                 )
 
                 if res.status_code == 200:
-                    st.session_state.analysis_result = res.json()
+                    result = res.json()
+
+                    st.session_state.analysis_result = result
                     st.session_state.analysis_nct_id = st.session_state.selected_nct_id
                     st.session_state.trigger_prediction = False
+
+                    audit_log(
+                        "prediction_success",
+                        score=result.get("score"),
+                        **get_selected_trial_audit_fields(),
+                    )
                 else:
+                    audit_log(
+                        "prediction_api_error",
+                        status_code=res.status_code,
+                        **get_selected_trial_audit_fields(),
+                    )
+
                     st.error(f"API Error: {res.status_code}")
                     return None
 
             except requests.exceptions.Timeout:
+                audit_log(
+                    "prediction_timeout",
+                    **get_selected_trial_audit_fields(),
+                )
+
                 st.error("API Error: request timed out.")
                 return None
+
             except requests.exceptions.RequestException:
+                audit_log(
+                    "prediction_request_exception",
+                    **get_selected_trial_audit_fields(),
+                )
+
                 logger.exception("Prediction API request failed")
                 st.error("Prediction service is temporarily unavailable. Please try again later.")
                 return None
+
             except ValueError:
+                audit_log(
+                    "prediction_invalid_response",
+                    **get_selected_trial_audit_fields(),
+                )
+
                 logger.exception("Prediction API returned an invalid response")
                 st.error("Prediction service returned an invalid response. Please try again later.")
                 return None
+
             except Exception:
+                audit_log(
+                    "prediction_unexpected_error",
+                    **get_selected_trial_audit_fields(),
+                )
+
                 logger.exception("Unexpected prediction workflow error")
                 st.error("An unexpected error occurred. Please try again later.")
                 return None
@@ -5006,8 +5248,8 @@ def render_completion_prediction_tab(row):
 
             with st.container(key="treemap_zoom_hint"):
                 st.markdown(
-                    "Click to zoom in, click a title to zoom out",
-                    unsafe_allow_html=False
+                    "<strong>Interactive score drivers</strong> (click to zoom in, click a title to zoom out)",
+                    unsafe_allow_html=True
                 )
 
             with st.container(key="treemap_detailed_drivers_toggle"):
@@ -5166,6 +5408,8 @@ def render_detail_page():
 
 
 def route_app():
+    audit_app_access_once()
+
     x_base = X_ALL
     consume_home_click_query_param()
 
@@ -5185,6 +5429,7 @@ def route_app():
         return
 
     render_landing_page(x_base)
+
 
 
 # ==========================
