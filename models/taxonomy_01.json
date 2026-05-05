@@ -236,7 +236,7 @@
         "subgroup": "Biological Profile",
         "priority": 8,
         "options": [
-          ["ESTABLISHED_COPY", "Established / Copy"],
+          ["ESTABLISHED_COPY", "Established"],
           ["NEXT_GEN_OPTIMIZED", "Next-Gen / Optimized"],
           ["FIRST_IN_CLASS", "First-in-Class (Novel)"],
           ["UNKNOWN", "Not Specified"]
@@ -244,7 +244,7 @@
       },
       "encoding": "ordinal",
       "mapping": {
-        "ESTABLISHED_COPY": [0, "Established / Copy"],
+        "ESTABLISHED_COPY": [0, "Established"],
         "NEXT_GEN_OPTIMIZED": [1, "Next-Gen / Optimized"],
         "FIRST_IN_CLASS": [2, "First-in-Class (Novel)"],
         "UNKNOWN": [0, "Not Specified"]

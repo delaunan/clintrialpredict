@@ -4188,7 +4188,7 @@ def render_header(is_landing=True, show_predict_button=False, show_back_button=F
                 else ""
             )
 
-            home_cursor = "cursor: pointer; position: relative;" if not is_landing else ""
+            home_cursor = "cursor: pointer; position: relative; width: fit-content;" if not is_landing else ""
 
             html = (
                 f"<div style='display: flex; align-items: center; gap: {logo_gap}; {home_cursor}'>"
