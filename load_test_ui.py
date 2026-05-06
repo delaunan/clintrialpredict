@@ -4,6 +4,7 @@ import json
 import time
 import os
 import random
+import re
 from datetime import datetime
 from pathlib import Path
 import pandas as pd
@@ -49,6 +50,49 @@ async def wait_for_any_selector(page, selectors, timeout_ms, user_id):
                 continue
         await asyncio.sleep(0.5)
     return None
+
+async def _click_simulation_toggle_base(page, user_id, intent_label):
+    """
+    Core logic to find and click the Simulation Mode toggle.
+    """
+    log(user_id, f"Toggling Simulation Mode {intent_label}...")
+    
+    strategies = [
+        # 1. Primary label
+        lambda p: p.get_by_label("Simulation Mode (Editing Content)"),
+        # 2. General label
+        lambda p: p.get_by_label("Simulation Mode"),
+        # 3. Role-based (Checkbox)
+        lambda p: p.get_by_role("checkbox", name=re.compile("Simulation Mode", re.I)),
+        # 4. Role-based (Switch)
+        lambda p: p.get_by_role("switch", name=re.compile("Simulation Mode", re.I)),
+        # 5. Data-testid fallback for Toggle
+        lambda p: p.locator('div[data-testid="stCheckbox"]').filter(has_text=re.compile("Simulation Mode", re.I)),
+        # 6. Data-testid fallback for generic toggle container
+        lambda p: p.locator('div[data-testid="stToggle"]').filter(has_text=re.compile("Simulation Mode", re.I)),
+        # 7. Text-based association
+        lambda p: p.locator('label').filter(has_text=re.compile("Simulation Mode", re.I))
+    ]
+    
+    for i, strategy in enumerate(strategies):
+        try:
+            element = strategy(page)
+            if await element.is_visible(timeout=3000):
+                log(user_id, f"Toggle found (strategy {i+1}). Clicking to set {intent_label}...")
+                await element.click()
+                # Wait for Streamlit rerun
+                await asyncio.sleep(2.0)
+                return True
+        except:
+            continue
+            
+    raise Exception(f"Simulation Mode toggle was not found to set {intent_label} on the trial detail page.")
+
+async def toggle_simulation_mode_on(page, user_id):
+    return await _click_simulation_toggle_base(page, user_id, "ON")
+
+async def toggle_simulation_mode_off(page, user_id):
+    return await _click_simulation_toggle_base(page, user_id, "OFF")
 
 async def click_dataframe_row(page, row_index, user_id, timeout):
     """
@@ -198,53 +242,61 @@ async def run_user_lifecycle(browser, user_id, args, start_delay):
         
         await asyncio.sleep(2.0)
 
-        # 4. Open Trial (MUST HAPPEN BEFORE TOGGLING SIMULATION MODE)
+        # 4. Open Trial
         log(user_id, f"Opening trial at row {args.row_index}...")
         step_start = time.perf_counter()
         await click_dataframe_row(page, args.row_index, user_id, args.timeout)
         results["timings"]["open_trial_seconds"] = time.perf_counter() - step_start
-
-        # 5. Scenario: Simulation Block - Turn on Toggle (ON DETAIL PAGE)
-        if args.scenario == "simulation-block":
-            log(user_id, "Toggling Simulation Mode ON (on detail page)...")
-            try:
-                # Try primary label selector
-                toggle = page.get_by_label("Simulation Mode (Editing Content)")
-                await toggle.click(timeout=5000)
-            except:
-                try:
-                    # Fallback text-based selector
-                    toggle = page.locator('text="Simulation Mode"').first
-                    await toggle.click(timeout=5000)
-                except:
-                    raise Exception("Simulation Mode toggle was not found on the trial detail page.")
-            await asyncio.sleep(2.0)
 
         if args.scenario == "basic":
             results["success"] = True
             log(user_id, "Basic scenario complete.")
             return results
 
-        # 6. Predict
-        log(user_id, "Clicking 'Predict Trial Completion'...")
-        step_start = time.perf_counter()
-        predict_btn = page.get_by_role("button", name="Predict Trial Completion")
-        await predict_btn.click()
-        
+        # 5. Prediction or Simulation Flow
         if args.scenario == "simulation-block":
+            # --- PHASE 1: SIMULATION ON (BLOCK) ---
+            step_start_block = time.perf_counter()
+            await toggle_simulation_mode_on(page, user_id)
+            
+            log(user_id, "Clicking 'Predict Trial Completion' (Guardrail Test)...")
+            predict_btn = page.get_by_role("button", name="Predict Trial Completion")
+            await predict_btn.click()
+            
             blocked = await detect_simulation_block(page, user_id, args.timeout)
-            if blocked:
-                results["success"] = True
-                log(user_id, "Guardrail verification success.")
-            else:
+            if not blocked:
                 raise Exception("Simulation mode was ON but no guardrail notice appeared after Predict.")
+            
+            log(user_id, "Simulation Mode ON guardrail check passed.")
+            results["timings"]["simulation_block_seconds"] = time.perf_counter() - step_start_block
+            
+            # --- PHASE 2: SIMULATION OFF (SUCCESS) ---
+            step_start_real = time.perf_counter()
+            log(user_id, "Turning Simulation Mode OFF for real prediction check...")
+            await toggle_simulation_mode_off(page, user_id)
+            
+            log(user_id, "Clicking 'Predict Trial Completion' (Real Prediction Test)...")
+            # Re-fetch button to ensure not stale
+            predict_btn = page.get_by_role("button", name="Predict Trial Completion")
+            await predict_btn.wait_for(state="visible", timeout=args.timeout)
+            await predict_btn.click()
+            
+            await wait_for_prediction_result(page, user_id, args.timeout)
+            log(user_id, "Simulation Mode OFF prediction check passed.")
+            results["timings"]["simulation_off_prediction_seconds"] = time.perf_counter() - step_start_real
+            
+            results["success"] = True
         else:
-            # prediction scenario
+            # Standard prediction scenario
+            log(user_id, "Clicking 'Predict Trial Completion'...")
+            step_start = time.perf_counter()
+            predict_btn = page.get_by_role("button", name="Predict Trial Completion")
+            await predict_btn.click()
+            
             await wait_for_prediction_result(page, user_id, args.timeout)
             results["success"] = True
             log(user_id, "Prediction scenario success.")
-            
-        results["timings"]["prediction_seconds"] = time.perf_counter() - step_start
+            results["timings"]["prediction_seconds"] = time.perf_counter() - step_start
 
     except Exception as e:
         results["error"] = str(e)
@@ -276,6 +328,8 @@ async def run_user_lifecycle(browser, user_id, args, start_delay):
 # ==============================================================================
 
 async def main():
+    global OUTPUT_DIR, SCREENSHOT_DIR
+
     parser = argparse.ArgumentParser(description="CTPredict UI Load Test (Playwright)")
     parser.add_argument("--url", default=DEFAULT_URL, help=f"UI URL")
     parser.add_argument("--users", type=int, default=DEFAULT_USERS, help=f"Simulated users")
@@ -288,7 +342,6 @@ async def main():
     
     args = parser.parse_args()
     
-    global OUTPUT_DIR, SCREENSHOT_DIR
     OUTPUT_DIR = Path(args.output_dir)
     SCREENSHOT_DIR = OUTPUT_DIR / "screenshots"
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -302,6 +355,7 @@ async def main():
     print("="*70 + "\n")
 
     async with async_playwright() as p:
+        # Architecture: One Chromium browser, isolated browser contexts
         browser = await p.chromium.launch(headless=not args.headful)
 
         tasks = []
@@ -338,6 +392,8 @@ async def main():
     print(f"Avg Grid Wait:       {avg_t('grid_wait_seconds'):.2f}s")
     print(f"Avg Trial Open:      {avg_t('open_trial_seconds'):.2f}s")
     print(f"Avg Prediction:      {avg_t('prediction_seconds'):.2f}s")
+    print(f"Avg Sim Block:       {avg_t('simulation_block_seconds'):.2f}s")
+    print(f"Avg Sim Off Pred:    {avg_t('simulation_off_prediction_seconds'):.2f}s")
     print(f"Avg Total Duration:  {avg_t('total_seconds'):.2f}s")
     print("-" * 70)
     
@@ -348,6 +404,7 @@ async def main():
     else:
         print("PERFECT RUN: All users completed the flow.")
     
+    # Save artifacts
     with open(OUTPUT_DIR / "load_test_results.json", "w") as f:
         json.dump(all_results, f, indent=2)
 
@@ -362,6 +419,8 @@ async def main():
             "grid_wait": r["timings"].get("grid_wait_seconds"),
             "trial_open": r["timings"].get("open_trial_seconds"),
             "prediction": r["timings"].get("prediction_seconds"),
+            "sim_block": r["timings"].get("simulation_block_seconds"),
+            "sim_off_pred": r["timings"].get("simulation_off_prediction_seconds"),
             "error": r["error"]
         } for r in all_results
     ])

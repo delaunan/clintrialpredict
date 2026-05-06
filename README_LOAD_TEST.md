@@ -7,6 +7,7 @@ This directory contains a Playwright-based load testing suite for the CTPredict 
 - **Scaling Limits:** Verifies how many concurrent Streamlit sessions the current Cloud Run configuration can handle before slowing down or crashing.
 - **Search-to-Prediction Path:** Tests the full integration between the Frontend (Streamlit) and Backend (FastAPI Scoring Engine).
 - **Native Dataframe Interaction:** Validates the reliability of native `st.dataframe` row selection under load.
+- **Guardrail Integrity:** Confirms that Simulation Mode correctly blocks predictions and that reverting it allows normal operation.
 
 ## Installation
 
@@ -36,8 +37,8 @@ python load_test_ui.py --users 1 --headful --timeout 120000 --scenario basic
 # Validate prediction flow with multiple users
 python load_test_ui.py --users 3 --headful --ramp-seconds 1
 
-# Validate simulation guardrail flow
-python load_test_ui.py --users 1 --headful --scenario simulation-block
+# Validate simulation guardrail, then turn Simulation Mode off and validate real prediction
+python load_test_ui.py --users 1 --headful --timeout 120000 --scenario simulation-block
 ```
 
 ## Running Launch-Readiness Tests
@@ -66,7 +67,7 @@ python load_test_ui.py --users 15 --ramp-seconds 0
 ### Scenario Options
 - `--scenario basic`: Stop after opening a trial.
 - `--scenario prediction`: Perform full search -> open -> predict (Default).
-- `--scenario simulation-block`: Test the guardrail notice when Simulation Mode is on.
+- `--scenario simulation-block`: Turn Simulation Mode on, verify prediction is blocked, turn it off, then verify real prediction works.
 
 ## Interpreting Results
 
