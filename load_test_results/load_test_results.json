@@ -2,36 +2,40 @@
   {
     "user_id": 1,
     "scenario": "prediction",
-    "success": false,
-    "error": "Failed to open trial page after multiple click attempts on row 0",
+    "success": true,
+    "error": null,
     "timings": {
-      "open_app_seconds": 2.0942554520006524,
-      "search_seconds": 0.9235379230012768,
-      "grid_wait_seconds": 6.514575013003196,
-      "total_seconds": 52.72341978100303
+      "open_app_seconds": 14.721855693998805,
+      "search_seconds": 1.4145830130000832,
+      "grid_wait_seconds": 8.75569951000034,
+      "open_trial_seconds": 3.941342039999654,
+      "prediction_seconds": 7.5187338549985725,
+      "total_seconds": 36.39951787500104
     },
-    "started_at": "2026-05-05T20:19:48.000676",
-    "ended_at": "2026-05-05T20:20:40.865675",
+    "started_at": "2026-05-06T11:39:10.837778",
+    "ended_at": "2026-05-06T11:39:48.871656",
     "row_index": 0,
-    "screenshot": "load_test_results/screenshots/user_01_failure.png",
-    "dom_snapshot": "load_test_results/screenshots/user_01_failure.html"
+    "screenshot": null,
+    "dom_snapshot": null
   },
   {
     "user_id": 2,
     "scenario": "prediction",
-    "success": false,
-    "error": "Failed to open trial page after multiple click attempts on row 0",
+    "success": true,
+    "error": null,
     "timings": {
-      "open_app_seconds": 3.7746615979995113,
-      "search_seconds": 1.7450456780061359,
-      "grid_wait_seconds": 4.113243206003972,
-      "total_seconds": 52.66876726099872
+      "open_app_seconds": 14.429218778001086,
+      "search_seconds": 5.243870206000793,
+      "grid_wait_seconds": 4.217093563000162,
+      "open_trial_seconds": 3.3194785460000276,
+      "prediction_seconds": 6.534502012000303,
+      "total_seconds": 33.81151874200077
     },
-    "started_at": "2026-05-05T20:19:48.102943",
-    "ended_at": "2026-05-05T20:20:40.913281",
+    "started_at": "2026-05-06T11:39:10.890425",
+    "ended_at": "2026-05-06T11:39:46.336300",
     "row_index": 0,
-    "screenshot": "load_test_results/screenshots/user_02_failure.png",
-    "dom_snapshot": "load_test_results/screenshots/user_02_failure.html"
+    "screenshot": null,
+    "dom_snapshot": null
   },
   {
     "user_id": 3,
@@ -39,15 +43,15 @@
     "success": true,
     "error": null,
     "timings": {
-      "open_app_seconds": 3.099284481999348,
-      "search_seconds": 1.119111778003571,
-      "grid_wait_seconds": 5.121338801000093,
-      "open_trial_seconds": 2.6955268189994968,
-      "prediction_seconds": 4.303825290997338,
-      "total_seconds": 18.37732217899611
+      "open_app_seconds": 18.33796590899874,
+      "search_seconds": 2.0555733979999786,
+      "grid_wait_seconds": 2.6692896490003477,
+      "open_trial_seconds": 2.1554982849993394,
+      "prediction_seconds": 9.481343244999152,
+      "total_seconds": 34.73734277800031
     },
-    "started_at": "2026-05-05T20:19:48.203016",
-    "ended_at": "2026-05-05T20:20:06.580343",
+    "started_at": "2026-05-06T11:39:10.940690",
+    "ended_at": "2026-05-06T11:39:47.312386",
     "row_index": 0,
     "screenshot": null,
     "dom_snapshot": null
@@ -55,36 +59,40 @@
   {
     "user_id": 4,
     "scenario": "prediction",
-    "success": false,
-    "error": "Failed to open trial page after multiple click attempts on row 0",
+    "success": true,
+    "error": null,
     "timings": {
-      "open_app_seconds": 3.1297664800003986,
-      "search_seconds": 2.356805039002211,
-      "grid_wait_seconds": 3.999729754999862,
-      "total_seconds": 52.6332054010054
+      "open_app_seconds": 14.376822865999202,
+      "search_seconds": 1.5050742109997373,
+      "grid_wait_seconds": 8.963707691000309,
+      "open_trial_seconds": 4.028436254000553,
+      "prediction_seconds": 7.057731529999728,
+      "total_seconds": 35.96579884499988
     },
-    "started_at": "2026-05-05T20:19:48.304063",
-    "ended_at": "2026-05-05T20:20:41.078840",
+    "started_at": "2026-05-06T11:39:10.991064",
+    "ended_at": "2026-05-06T11:39:48.591216",
     "row_index": 0,
-    "screenshot": "load_test_results/screenshots/user_04_failure.png",
-    "dom_snapshot": "load_test_results/screenshots/user_04_failure.html"
+    "screenshot": null,
+    "dom_snapshot": null
   },
   {
     "user_id": 5,
     "scenario": "prediction",
-    "success": false,
-    "error": "Failed to open trial page after multiple click attempts on row 0",
+    "success": true,
+    "error": null,
     "timings": {
-      "open_app_seconds": 3.2277875610016054,
-      "search_seconds": 1.9127000290027354,
-      "grid_wait_seconds": 4.2698649230005685,
-      "total_seconds": 52.52912308600207
+      "open_app_seconds": 13.338118214998758,
+      "search_seconds": 2.584561446999942,
+      "grid_wait_seconds": 8.847402539999166,
+      "open_trial_seconds": 4.198202179999498,
+      "prediction_seconds": 7.241627024000991,
+      "total_seconds": 36.243602526999894
     },
-    "started_at": "2026-05-05T20:19:48.403323",
-    "ended_at": "2026-05-05T20:20:41.074018",
+    "started_at": "2026-05-06T11:39:11.041761",
+    "ended_at": "2026-05-06T11:39:48.919723",
     "row_index": 0,
-    "screenshot": "load_test_results/screenshots/user_05_failure.png",
-    "dom_snapshot": "load_test_results/screenshots/user_05_failure.html"
+    "screenshot": null,
+    "dom_snapshot": null
   },
   {
     "user_id": 6,
@@ -92,15 +100,15 @@
     "success": true,
     "error": null,
     "timings": {
-      "open_app_seconds": 4.133824639997329,
-      "search_seconds": 0.31521079300000565,
-      "grid_wait_seconds": 4.621634201001143,
-      "open_trial_seconds": 2.643731942996965,
-      "prediction_seconds": 3.9834691519936314,
-      "total_seconds": 17.733796683001856
+      "open_app_seconds": 17.899957263000033,
+      "search_seconds": 1.5638125540008332,
+      "grid_wait_seconds": 5.1204309069999,
+      "open_trial_seconds": 4.708264982000401,
+      "prediction_seconds": 8.2721915789989,
+      "total_seconds": 37.59726237199902
     },
-    "started_at": "2026-05-05T20:19:48.503346",
-    "ended_at": "2026-05-05T20:20:06.237147",
+    "started_at": "2026-05-06T11:39:11.091983",
+    "ended_at": "2026-05-06T11:39:50.323608",
     "row_index": 0,
     "screenshot": null,
     "dom_snapshot": null
@@ -111,15 +119,15 @@
     "success": true,
     "error": null,
     "timings": {
-      "open_app_seconds": 3.562743684000452,
-      "search_seconds": 0.24989060899679316,
-      "grid_wait_seconds": 2.9969410249977955,
-      "open_trial_seconds": 1.800379498003167,
-      "prediction_seconds": 5.069540820004477,
-      "total_seconds": 15.7291355319976
+      "open_app_seconds": 13.198065536000286,
+      "search_seconds": 1.5138200629990024,
+      "grid_wait_seconds": 10.497270941999886,
+      "open_trial_seconds": 2.493993189000321,
+      "prediction_seconds": 6.539566532001118,
+      "total_seconds": 34.27694432399949
     },
-    "started_at": "2026-05-05T20:19:48.603316",
-    "ended_at": "2026-05-05T20:20:04.332448",
+    "started_at": "2026-05-06T11:39:11.141192",
+    "ended_at": "2026-05-06T11:39:47.052492",
     "row_index": 0,
     "screenshot": null,
     "dom_snapshot": null
@@ -130,15 +138,15 @@
     "success": true,
     "error": null,
     "timings": {
-      "open_app_seconds": 5.52276503900066,
-      "search_seconds": 0.6214539959983085,
-      "grid_wait_seconds": 1.8820687219995307,
-      "open_trial_seconds": 2.5493460729994695,
-      "prediction_seconds": 5.270773843003553,
-      "total_seconds": 17.90016888500395
+      "open_app_seconds": 16.840766139999687,
+      "search_seconds": 2.5792003400001704,
+      "grid_wait_seconds": 3.9803491340007895,
+      "open_trial_seconds": 3.259787406999749,
+      "prediction_seconds": 7.327170353000838,
+      "total_seconds": 34.02065575400047
     },
-    "started_at": "2026-05-05T20:19:48.702901",
-    "ended_at": "2026-05-05T20:20:06.603082",
+    "started_at": "2026-05-06T11:39:11.190010",
+    "ended_at": "2026-05-06T11:39:46.845019",
     "row_index": 0,
     "screenshot": null,
     "dom_snapshot": null
@@ -149,15 +157,15 @@
     "success": true,
     "error": null,
     "timings": {
-      "open_app_seconds": 3.1776232499978505,
-      "search_seconds": 2.2342369479956687,
-      "grid_wait_seconds": 1.281609848003427,
-      "open_trial_seconds": 1.847671960000298,
-      "prediction_seconds": 4.725728441000683,
-      "total_seconds": 15.32360170299944
+      "open_app_seconds": 14.141569608998907,
+      "search_seconds": 5.216713089999757,
+      "grid_wait_seconds": 6.1773395750005875,
+      "open_trial_seconds": 5.958898749999207,
+      "prediction_seconds": 6.220146490999468,
+      "total_seconds": 37.749441056999785
     },
-    "started_at": "2026-05-05T20:19:48.802719",
-    "ended_at": "2026-05-05T20:20:04.126320",
+    "started_at": "2026-05-06T11:39:11.241055",
+    "ended_at": "2026-05-06T11:39:50.624857",
     "row_index": 0,
     "screenshot": null,
     "dom_snapshot": null
@@ -168,15 +176,205 @@
     "success": true,
     "error": null,
     "timings": {
-      "open_app_seconds": 5.057232151004428,
-      "search_seconds": 0.7099716509983409,
-      "grid_wait_seconds": 2.020871831999102,
-      "open_trial_seconds": 2.6440539850009372,
-      "prediction_seconds": 5.09647213700373,
-      "total_seconds": 17.590564458994777
+      "open_app_seconds": 16.01296002500021,
+      "search_seconds": 3.2159444139997504,
+      "grid_wait_seconds": 6.072142307000831,
+      "open_trial_seconds": 4.18461063399991,
+      "prediction_seconds": 7.227664608999476,
+      "total_seconds": 36.74626275199989
     },
-    "started_at": "2026-05-05T20:19:48.903627",
-    "ended_at": "2026-05-05T20:20:06.494201",
+    "started_at": "2026-05-06T11:39:11.290465",
+    "ended_at": "2026-05-06T11:39:49.671083",
+    "row_index": 0,
+    "screenshot": null,
+    "dom_snapshot": null
+  },
+  {
+    "user_id": 11,
+    "scenario": "prediction",
+    "success": true,
+    "error": null,
+    "timings": {
+      "open_app_seconds": 14.500884469000084,
+      "search_seconds": 1.5829068010007177,
+      "grid_wait_seconds": 8.179791354999907,
+      "open_trial_seconds": 4.068955869001002,
+      "prediction_seconds": 7.225001777998841,
+      "total_seconds": 35.5907189669997
+    },
+    "started_at": "2026-05-06T11:39:11.340218",
+    "ended_at": "2026-05-06T11:39:48.565292",
+    "row_index": 0,
+    "screenshot": null,
+    "dom_snapshot": null
+  },
+  {
+    "user_id": 12,
+    "scenario": "prediction",
+    "success": true,
+    "error": null,
+    "timings": {
+      "open_app_seconds": 17.322376220001388,
+      "search_seconds": 1.8696563209996384,
+      "grid_wait_seconds": 6.182473532000586,
+      "open_trial_seconds": 3.848547936000614,
+      "prediction_seconds": 8.227192512998954,
+      "total_seconds": 37.48336229800043
+    },
+    "started_at": "2026-05-06T11:39:11.390510",
+    "ended_at": "2026-05-06T11:39:50.508233",
+    "row_index": 0,
+    "screenshot": null,
+    "dom_snapshot": null
+  },
+  {
+    "user_id": 13,
+    "scenario": "prediction",
+    "success": true,
+    "error": null,
+    "timings": {
+      "open_app_seconds": 14.107473875999858,
+      "search_seconds": 4.883866984999258,
+      "grid_wait_seconds": 3.901745821000077,
+      "open_trial_seconds": 3.1641333990010025,
+      "prediction_seconds": 6.204082301001108,
+      "total_seconds": 32.293937909000306
+    },
+    "started_at": "2026-05-06T11:39:11.440197",
+    "ended_at": "2026-05-06T11:39:44.719234",
+    "row_index": 0,
+    "screenshot": null,
+    "dom_snapshot": null
+  },
+  {
+    "user_id": 14,
+    "scenario": "prediction",
+    "success": true,
+    "error": null,
+    "timings": {
+      "open_app_seconds": 12.981132903001708,
+      "search_seconds": 1.8517859969997517,
+      "grid_wait_seconds": 9.347134668998478,
+      "open_trial_seconds": 3.87635031499849,
+      "prediction_seconds": 7.5263455559997965,
+      "total_seconds": 35.62273405000087
+    },
+    "started_at": "2026-05-06T11:39:11.490908",
+    "ended_at": "2026-05-06T11:39:48.747999",
+    "row_index": 0,
+    "screenshot": null,
+    "dom_snapshot": null
+  },
+  {
+    "user_id": 15,
+    "scenario": "prediction",
+    "success": true,
+    "error": null,
+    "timings": {
+      "open_app_seconds": 13.98152704200038,
+      "search_seconds": 1.383220435000112,
+      "grid_wait_seconds": 3.3727637699994375,
+      "open_trial_seconds": 2.309049922001577,
+      "prediction_seconds": 4.899575056999311,
+      "total_seconds": 26.052149516999634
+    },
+    "started_at": "2026-05-06T11:39:11.541172",
+    "ended_at": "2026-05-06T11:39:38.578414",
+    "row_index": 0,
+    "screenshot": null,
+    "dom_snapshot": null
+  },
+  {
+    "user_id": 16,
+    "scenario": "prediction",
+    "success": true,
+    "error": null,
+    "timings": {
+      "open_app_seconds": 13.743710558999737,
+      "search_seconds": 4.945485477001057,
+      "grid_wait_seconds": 6.331568928000706,
+      "open_trial_seconds": 2.7074870970009215,
+      "prediction_seconds": 7.8830896809995465,
+      "total_seconds": 35.730976828001076
+    },
+    "started_at": "2026-05-06T11:39:12.575430",
+    "ended_at": "2026-05-06T11:39:48.955668",
+    "row_index": 0,
+    "screenshot": null,
+    "dom_snapshot": null
+  },
+  {
+    "user_id": 17,
+    "scenario": "prediction",
+    "success": true,
+    "error": null,
+    "timings": {
+      "open_app_seconds": 13.03298392799843,
+      "search_seconds": 2.056552811000074,
+      "grid_wait_seconds": 3.3456651369997417,
+      "open_trial_seconds": 2.324714259000757,
+      "prediction_seconds": 5.576509913998962,
+      "total_seconds": 26.427281096001025
+    },
+    "started_at": "2026-05-06T11:39:12.625747",
+    "ended_at": "2026-05-06T11:39:39.053024",
+    "row_index": 0,
+    "screenshot": null,
+    "dom_snapshot": null
+  },
+  {
+    "user_id": 18,
+    "scenario": "prediction",
+    "success": true,
+    "error": null,
+    "timings": {
+      "open_app_seconds": 16.03261639899938,
+      "search_seconds": 2.835223635998773,
+      "grid_wait_seconds": 2.9789616329999262,
+      "open_trial_seconds": 3.9204780370000663,
+      "prediction_seconds": 6.320046517001174,
+      "total_seconds": 32.152158525999766
+    },
+    "started_at": "2026-05-06T11:39:12.675869",
+    "ended_at": "2026-05-06T11:39:45.477279",
+    "row_index": 0,
+    "screenshot": null,
+    "dom_snapshot": null
+  },
+  {
+    "user_id": 19,
+    "scenario": "prediction",
+    "success": true,
+    "error": null,
+    "timings": {
+      "open_app_seconds": 11.946990094000284,
+      "search_seconds": 2.1336425650006277,
+      "grid_wait_seconds": 4.418675198001438,
+      "open_trial_seconds": 2.1181349009984842,
+      "prediction_seconds": 5.921324392000315,
+      "total_seconds": 26.5885110349991
+    },
+    "started_at": "2026-05-06T11:39:12.725342",
+    "ended_at": "2026-05-06T11:39:39.313864",
+    "row_index": 0,
+    "screenshot": null,
+    "dom_snapshot": null
+  },
+  {
+    "user_id": 20,
+    "scenario": "prediction",
+    "success": true,
+    "error": null,
+    "timings": {
+      "open_app_seconds": 13.679124895999848,
+      "search_seconds": 1.489158795999174,
+      "grid_wait_seconds": 8.648338729999523,
+      "open_trial_seconds": 2.659280525998838,
+      "prediction_seconds": 6.0414622129992495,
+      "total_seconds": 32.55938899699868
+    },
+    "started_at": "2026-05-06T11:39:12.775908",
+    "ended_at": "2026-05-06T11:39:45.984550",
     "row_index": 0,
     "screenshot": null,
     "dom_snapshot": null

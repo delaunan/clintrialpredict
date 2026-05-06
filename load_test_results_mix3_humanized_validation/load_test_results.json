@@ -1,0 +1,76 @@
+[
+  {
+    "user_id": 1,
+    "scenario": "prediction",
+    "row_index": 0,
+    "viewport_width": 1536,
+    "viewport_height": 864,
+    "base_ramp_delay_seconds": 0.0,
+    "start_jitter_seconds": 0.24489185380347622,
+    "total_start_delay_seconds": 0.24489185380347622,
+    "success": true,
+    "error": null,
+    "timings": {
+      "total_think_time_seconds": 1.9544512600437525,
+      "open_app_seconds": 7.552016449999428,
+      "search_seconds": 0.8333166669999628,
+      "grid_wait_seconds": 1.5792839110017667,
+      "open_trial_seconds": 2.4287601269988954,
+      "prediction_seconds": 16.257392894998702,
+      "total_seconds": 30.793945900000836
+    },
+    "started_at": "2026-05-06T12:35:27.921274",
+    "ended_at": "2026-05-06T12:35:59.565681",
+    "screenshot": null,
+    "dom_snapshot": null
+  },
+  {
+    "user_id": 2,
+    "scenario": "basic",
+    "row_index": 1,
+    "viewport_width": 1366,
+    "viewport_height": 768,
+    "base_ramp_delay_seconds": 1.0,
+    "start_jitter_seconds": 0.6766994874229113,
+    "total_start_delay_seconds": 1.6766994874229113,
+    "success": true,
+    "error": null,
+    "timings": {
+      "total_think_time_seconds": 3.0750534058060355,
+      "open_app_seconds": 2.989204694000364,
+      "search_seconds": 0.8861280450000777,
+      "grid_wait_seconds": 1.5409752129999106,
+      "open_trial_seconds": 1.838055042000633,
+      "total_seconds": 10.396974887999022
+    },
+    "started_at": "2026-05-06T12:35:30.205939",
+    "ended_at": "2026-05-06T12:35:40.602916",
+    "screenshot": null,
+    "dom_snapshot": null
+  },
+  {
+    "user_id": 3,
+    "scenario": "simulation-block",
+    "row_index": 4,
+    "viewport_width": 1366,
+    "viewport_height": 768,
+    "base_ramp_delay_seconds": 2.0,
+    "start_jitter_seconds": 0.5904925124490397,
+    "total_start_delay_seconds": 2.59049251244904,
+    "success": true,
+    "error": null,
+    "timings": {
+      "total_think_time_seconds": 3.0034200711643066,
+      "open_app_seconds": 8.916764743000385,
+      "search_seconds": 0.8399138750010025,
+      "grid_wait_seconds": 1.5664201879990287,
+      "open_trial_seconds": 2.349838889000239,
+      "simulation_block_seconds": 13.053476317998502,
+      "total_seconds": 28.673975769999743
+    },
+    "started_at": "2026-05-06T12:35:31.116912",
+    "ended_at": "2026-05-06T12:35:59.790891",
+    "screenshot": null,
+    "dom_snapshot": null
+  }
+]
