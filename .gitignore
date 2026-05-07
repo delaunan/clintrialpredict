@@ -31,3 +31,10 @@ models/shap_values_prod_test.joblib
 
 __pycache__/
 *.pyc
+
+# Load test outputs
+load_test_results*/
+**/load_test_results.json
+**/load_test_results.csv
+**/user_*_failure.png
+**/user_*_failure.html
