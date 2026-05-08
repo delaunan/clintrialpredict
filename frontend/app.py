@@ -691,13 +691,13 @@ def inject_custom_styles():
 
             /* 1440 x 900 and smaller desktop baseline */
             :root {{
-                --ui-treemap-hint-y-shift: 17px;
+                --ui-treemap-hint-y-shift: 13px;
             }}
 
             /* Around 1920 x 1080 */
             @media (min-width: 1800px) and (min-height: 950px) {{
                 :root {{
-                    --ui-treemap-hint-y-shift: 0px;
+                    --ui-treemap-hint-y-shift: 2px;
                 }}
             }}
 
@@ -1778,13 +1778,27 @@ def inject_custom_styles():
 
             .st-key-treemap_zoom_hint p {{
                 font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
-                font-size: 0.72rem !important;
+                font-size: 0.76rem !important;
                 font-weight: 600 !important;
                 line-height: 1 !important;
                 color: #64748b !important;
                 white-space: nowrap !important;
                 margin: 0 !important;
                 padding: 0 !important;
+            }}
+
+            .st-key-treemap_zoom_hint .treemap-hint-title {{
+                font-size: 1.05rem !important;
+                font-weight: 800 !important;
+                line-height: 1 !important;
+                color: #334155 !important;
+            }}
+
+            .st-key-treemap_zoom_hint .treemap-hint-text {{
+                font-size: 0.78rem !important;
+                font-weight: 600 !important;
+                line-height: 1 !important;
+                color: #334155 !important;
             }}
 
             .st-key-treemap_detailed_drivers_toggle {{
@@ -3449,6 +3463,27 @@ def inject_custom_styles():
                 box-sizing: border-box !important;
             }}
 
+            /* Mobile landing only:
+               release the desktop equal-height contract so white cards grow
+               naturally with their text. Desktop rules above remain unchanged. */
+            @media (max-width: 768px) {{
+                .st-key-landing_shell .right-column-stack {{
+                    min-height: 0 !important;
+                    height: auto !important;
+                }}
+
+                .st-key-landing_shell .right-column-stack .highlight-box {{
+                    min-height: 0 !important;
+                    height: auto !important;
+                    flex: 0 0 auto !important;
+                    overflow: visible !important;
+                }}
+
+                .st-key-landing_shell .right-column-stack .highlight-text {{
+                    overflow: visible !important;
+                }}
+            }}
+
             /* Results grid: shrink to row count, but never exceed the responsive maximum.
                Python sets the actual row-based height through dynamic_height.
                CSS only caps large result sets; it must not force a fixed height. */
@@ -4538,6 +4573,11 @@ def render_trials_grid(df):
     grid_df = df[grid_cols].copy()
     grid_df.columns = grid_labels
 
+    if "Start Year" in grid_df.columns:
+        grid_df["Start Year"] = pd.to_numeric(grid_df["Start Year"], errors="coerce").map(
+            lambda x: "" if pd.isna(x) else str(int(x))
+        )
+
     if show_score and "Score" in grid_df.columns:
         grid_df["Score"] = pd.to_numeric(grid_df["Score"], errors="coerce").map(
             lambda x: "" if pd.isna(x) else f"{x:.1f}".replace(".", ",")
@@ -4559,7 +4599,7 @@ def render_trials_grid(df):
             "Sponsor": st.column_config.TextColumn("Sponsor", width=166),
             "Area": st.column_config.TextColumn("Area", width=100),
             "Phase": st.column_config.TextColumn("Phase", width=60),
-            "Start Year": st.column_config.NumberColumn("Start Year", width=60, format="%d"),
+            "Start Year": st.column_config.TextColumn("Start Year", width=60),
             "Score": st.column_config.TextColumn("Score", width=40),
         }
     else:
@@ -4569,7 +4609,7 @@ def render_trials_grid(df):
             "Sponsor": st.column_config.TextColumn("Sponsor", width=170),
             "Area": st.column_config.TextColumn("Area", width=100),
             "Phase": st.column_config.TextColumn("Phase", width=60),
-            "Start Year": st.column_config.NumberColumn("Start Year", width=60, format="%d"),
+            "Start Year": st.column_config.TextColumn("Start Year", width=60),
         }
 
     table_event = st.dataframe(
@@ -5248,7 +5288,8 @@ def render_completion_prediction_tab(row):
 
             with st.container(key="treemap_zoom_hint"):
                 st.markdown(
-                    "<strong>Interactive score drivers</strong> (click any block to zoom in, click a header to zoom out)",
+                    "<strong class='treemap-hint-title'>Interactive Score Drivers</strong> "
+                    "<span class='treemap-hint-text'>(click to zoom in, click a header to zoom out)</span>",
                     unsafe_allow_html=True
                 )
 

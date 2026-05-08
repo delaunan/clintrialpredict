@@ -38,6 +38,19 @@ GAUGE_MARKER_LINE_WIDTH = 4
 GAUGE_MARKER_THICKNESS = 0.7
 BAR_WIDTH = 0.7
 
+# Treemap label typography only.
+# Values are in px inside Plotly HTML labels.
+TREEMAP_SUBTOPIC_FONT_SIZE = 16
+TREEMAP_IMPACT_FONT_SIZE = 15
+TREEMAP_DETAIL_FONT_SIZE = 15
+
+
+# Treemap header typography only.
+# ROOT = ALL DRIVERS.
+# PILLAR = SCIENTIFIC CHALLENGE, THERAPEUTIC CONTEXT, etc.
+TREEMAP_ROOT_HEADER_FONT_SIZE = 16
+TREEMAP_PILLAR_HEADER_FONT_SIZE = 16
+
 
 
 
@@ -57,17 +70,25 @@ def mix_white(rgb, factor=0.7):
     new_b = int(b + (255 - b) * factor)
     return (new_r, new_g, new_b)
 
-def fmt_header(text, value, txt_color="#334155", split=False):
+def fmt_header(text, value, txt_color=STYLE_CONFIG["font_color"], split=False, font_size=18):
+    header_style = (
+        f"font-family:{STYLE_CONFIG['font_family']}; "
+        f"font-size:{font_size}px; "
+        f"color:{txt_color}; "
+        f"line-height:0.95; "
+        f"display:inline-block; "
+        f"margin:0; "
+        f"padding:0;"
+    )
+
     if split:
         return (
-            f"<span style='font-family:{STYLE_CONFIG['font_family']}; "
-            f"font-size:18px; color:{txt_color}; line-height:1.0;'>"
+            f"<span style='{header_style}'>"
             f"<b>{text}</b><br><b>({value:+.1f} pts)</b>"
             f"</span>"
         )
     return (
-        f"<span style='font-family:{STYLE_CONFIG['font_family']}; "
-        f"font-size:18px; color:{txt_color}; line-height:1.0;'>"
+        f"<span style='{header_style}'>"
         f"<b>{text}</b> <b>({value:+.1f} pts)</b>"
         f"</span>"
     )
@@ -286,7 +307,7 @@ def plot_treemap(subcat_impacts, pillar_impacts, show_values=True, height=600):
     c = STYLE_CONFIG["colors"]
     leaf_data = []
 
-    nodes["ALL_DRIVERS"] = {"parent": "", "label": fmt_header("ALL DRIVERS", node_sums["ALL_DRIVERS"]), "color": "#FFFFFF", "value": 0}
+    nodes["ALL_DRIVERS"] = {"parent": "", "label": fmt_header("ALL DRIVERS", node_sums["ALL_DRIVERS"], font_size=TREEMAP_ROOT_HEADER_FONT_SIZE), "color": "#FFFFFF", "value": 0}
 
     for p_item in pillar_impacts:
         p_name, p_imp = p_item['Pillar'], p_item['Impact']
@@ -299,7 +320,7 @@ def plot_treemap(subcat_impacts, pillar_impacts, show_values=True, height=600):
 
         nodes[p_id] = {
             "parent": "ALL_DRIVERS",
-            "label": fmt_header(p_clean.upper(), p_imp),
+            "label": fmt_header(p_clean.upper(), p_imp, font_size=TREEMAP_PILLAR_HEADER_FONT_SIZE),
             "color": bg_color,
             "value": 0
         }
@@ -320,13 +341,14 @@ def plot_treemap(subcat_impacts, pillar_impacts, show_values=True, height=600):
         ratio = max(0.15, min(abs(impact) / 8.0, 1.0))
         color = interpolate_color(c["blue_soft"], c["blue_deep"], ratio) if impact >= 0 else interpolate_color(c["red_soft"], c["red_deep"], ratio)
 
-        feat_html = "• " + "<br>• ".join(feat_details) if feat_details else ""
+        bullet_separator = "<br>• "
+        feat_html = "• " + bullet_separator.join(feat_details) if feat_details else ""
 
         label_html = (
             f"<span style='font-family:{STYLE_CONFIG['font_family']}; line-height:1.05;'>"
-            f"<b style='font-size:15px; color:#F4F7FB;'>{subtopic}</b>"
-            f"<br><b style='font-size:14px; color:#F4F7FB;'>{impact:+.1f} pts</b>"
-            f"<br><br><span style='font-size:11px; font-weight:500; color:#F4F7FB;'>{feat_html}</span>"
+            f"<b style='font-size:{TREEMAP_SUBTOPIC_FONT_SIZE}px; color:#F4F7FB;'>{subtopic}</b>"
+            f"<br><b style='font-size:{TREEMAP_IMPACT_FONT_SIZE}px; color:#F4F7FB;'>{impact:+.1f} pts</b>"
+            f"<br><br><span style='font-size:{TREEMAP_DETAIL_FONT_SIZE}px; font-weight:500; color:#F4F7FB;'>{feat_html}</span>"
             f"</span>"
         )
 
@@ -352,7 +374,12 @@ def plot_treemap(subcat_impacts, pillar_impacts, show_values=True, height=600):
         textinfo="label",
         textposition="top left",
         tiling=dict(packing="squarify"),
-        hoverinfo="skip"
+        hoverinfo="skip",
+        textfont=dict(
+            family=STYLE_CONFIG["font_family"],
+            size=TREEMAP_PILLAR_HEADER_FONT_SIZE,
+            color=STYLE_CONFIG["font_color"],
+        )
     ))
 
     fig.update_layout(
