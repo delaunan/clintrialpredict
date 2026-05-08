@@ -7,3 +7,6 @@ textColor="#334155"
 font="sans serif"
 dataframeHeaderBackgroundColor = "#e2e8f0"
 dataframeBorderColor = "#cbd5e1"
+
+[server]
+enableStaticServing = true
