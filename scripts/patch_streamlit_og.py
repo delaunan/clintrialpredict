@@ -13,7 +13,7 @@ PUBLIC_APP_URL = os.getenv(
     "https://clintrial-ui-835962039082.europe-west1.run.app",
 ).rstrip("/")
 
-OG_TITLE = "ClinTrialPredict | Clinical Trial Predictive Engine"
+OG_TITLE = "CTPredict | Predict Late-Stage Trial Completion & Early Termination | Key Drivers & Risk Tiers"
 
 OG_DESCRIPTION = (
     "Predict full clinical trial completion from early trial design information. "
@@ -21,7 +21,7 @@ OG_DESCRIPTION = (
     "publicly available clinical trial data. Explore risk tiers, score drivers, "
     "and benchmarked operational signals."
 )
-OG_IMAGE_FILENAME = "linkedin-preview-v3.png"
+OG_IMAGE_FILENAME = "linkedin-preview-v5.png"
 OG_IMAGE_URL = f"{PUBLIC_APP_URL}/app/static/{OG_IMAGE_FILENAME}"
 
 
