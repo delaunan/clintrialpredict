@@ -208,6 +208,27 @@ def audit_app_access_once():
     audit_log("app_access")
     st.session_state["_audit_app_access_logged"] = True
 
+def audit_view_transition(current_view: str):
+    previous_view = st.session_state.get("_audit_current_view")
+
+    if previous_view == current_view:
+        return
+
+    st.session_state["_audit_current_view"] = current_view
+
+    if current_view == "landing":
+        landing_view_number = st.session_state.get("_audit_landing_view_number", 0) + 1
+        st.session_state["_audit_landing_view_number"] = landing_view_number
+
+        landing_view_id = f"{get_audit_session_id()}__landing_{landing_view_number}"
+        st.session_state["_audit_landing_view_id"] = landing_view_id
+
+        audit_log(
+            "landing_page_view",
+            landing_view_id=landing_view_id,
+            previous_view=previous_view,
+            landing_view_number=landing_view_number,
+        )
 
 DETAIL_TAB_INFO = "Trial Information"
 DETAIL_TAB_POPULATION = "Population Details"
@@ -4003,6 +4024,8 @@ def start_search():
 
     audit_log(
         "search_trials",
+        landing_view_id=st.session_state.get("_audit_landing_view_id"),
+        landing_view_number=st.session_state.get("_audit_landing_view_number"),
         sponsor_filter=st.session_state.get("f_sponsor"),
         therapeutic_area_filter=st.session_state.get("f_ta"),
         phase_filter=st.session_state.get("f_phase"),
@@ -5458,6 +5481,7 @@ def route_app():
 
     if selected_id:
         if is_valid_trial_id(selected_id):
+            audit_view_transition("detail")
             render_detail_page()
             return
 
@@ -5466,9 +5490,11 @@ def route_app():
         reset_detail_prediction_state()
 
     if st.session_state.get("search_initiated", False):
+        audit_view_transition("results")
         render_results_page(x_base)
         return
 
+    audit_view_transition("landing")
     render_landing_page(x_base)
 
 
