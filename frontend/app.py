@@ -21,6 +21,9 @@ from utils.plot import plot_success_gauge, plot_impact_bar, plot_treemap
 # Load environment variables
 load_dotenv()
 
+from pitch_landing import render_pitch_page
+
+
 # ==========================
 # 1. SETUP & CONFIGURATION
 # ==========================
@@ -5476,6 +5479,10 @@ def route_app():
 
     x_base = X_ALL
     consume_home_click_query_param()
+
+    if not st.session_state.get("pitch_seen", False):
+        render_pitch_page()
+        return
 
     selected_id = st.session_state.get("selected_nct_id")
 
