@@ -196,14 +196,14 @@ def render_pitch_page():
                 flex: 1;
                 display: flex;
                 flex-direction: column;
-                justify-content: center;
+                justify-content: flex-start;
             }
             .pitch-flex-col-img {
                 flex: 1.2; /* Slightly wider for the images */
                 background: var(--pitch-card-bg);
                 border: 1px solid var(--pitch-border);
                 border-radius: var(--pitch-radius);
-                padding: 2rem;
+                padding: 0.5rem; /* Reduced padding to make image look larger */
                 box-shadow: var(--pitch-shadow-md);
                 display: flex;
                 align-items: center;
@@ -241,7 +241,7 @@ def render_pitch_page():
                 font-family: 'Inter', sans-serif;
                 font-size: clamp(1.75rem, 3vw, 2.25rem);
                 font-weight: 800;
-                color: var(--pitch-brand-dark); /* Color synced to Four Dimensions title */
+                color: var(--pitch-brand-dark);
                 margin-top: 0;
                 margin-bottom: 1.25rem;
                 letter-spacing: -0.01em;
@@ -318,17 +318,17 @@ def render_pitch_page():
 
             /* Dimension Items */
             .dim-item {
-                margin-bottom: 1.25rem;
+                margin-bottom: 1.5rem;
             }
             .dim-title {
-                font-weight: 800;
-                font-size: 1.15rem;
-                color: var(--pitch-brand-dark);
+                font-weight: 700;
+                font-size: 1.1rem;
+                color: var(--pitch-text-sec); /* Matched to "High Risk" label color */
                 margin-bottom: 0.2rem;
             }
             .dim-desc {
                 font-size: 1.05rem;
-                color: var(--pitch-text-sec);
+                color: var(--pitch-text-sec); /* Matched to description text size/color */
             }
 
             /* Foundation Banner */
@@ -529,7 +529,7 @@ def render_pitch_page():
                     <div style="margin-bottom: 8px;"><span class="color-box cb-low"></span><span style="font-weight: 700; color: var(--pitch-text-sec);">Low Risk:</span> 75-100 points</div>
                 </div>
             </div>
-            <div class="score-cell">
+            <div class="score-cell">r
                 <div class="pitch-img-box gauge-box">{gauge_img_html}</div>
             </div>
             <div class="score-cell">
@@ -549,15 +549,14 @@ def render_pitch_page():
 
     st.markdown("<div style='height: 4rem;'></div>", unsafe_allow_html=True)
 
-    # Row 2: Four dimensions
-    st.markdown('<div class="pitch-h2-full">Four dimensions behind each prediction</div>', unsafe_allow_html=True)
+    # --- 6. FOUR RISK DIMENSIONS ---
     st.markdown(f"""
         <div class="pitch-flex-row">
             <div class="pitch-flex-col-img">
                 {render_image_box("barchart.png", "Impact Bar Chart")}
             </div>
             <div class="pitch-flex-col-text">
-                <div class="pitch-p">CTPredict groups trial-design signals into four pillars:</div>
+                <div class="pitch-h2-score" style="margin-top: 0; margin-bottom: 2rem;">Four Risk Dimensions</div>
                 <div class="dim-item">
                     <div class="dim-title">Scientific Challenge</div>
                     <div class="dim-desc">Biological Complexity · Protocol Design</div>
@@ -599,7 +598,7 @@ def render_pitch_page():
         <div class="pitch-full-width-text"></div>
     """, unsafe_allow_html=True)
 
-    # --- 6. MODEL AND DATA FOUNDATION ---
+    # --- 7. MODEL AND DATA FOUNDATION ---
     st.markdown('<div class="pitch-section-title">Model and data foundation</div>', unsafe_allow_html=True)
     st.markdown("""
         <div class="pitch-foundation-banner">
@@ -612,7 +611,7 @@ def render_pitch_page():
         </div>
     """, unsafe_allow_html=True)
 
-    # --- 7. HOW STRONG IS THE PREDICTION ---
+    # --- 8. HOW STRONG IS THE PREDICTION ---
     st.markdown('<div class="pitch-section-title">How strong is the prediction</div>', unsafe_allow_html=True)
     st.markdown('<div class="pitch-h3" style="text-align: center; margin-bottom: 3rem;">Model performance and early-risk signal.</div>', unsafe_allow_html=True)
 
@@ -633,7 +632,7 @@ def render_pitch_page():
         </div>
     """, unsafe_allow_html=True)
 
-    # --- 8. WHERE IT ADDS VALUE ---
+    # --- 9. WHERE IT ADDS VALUE ---
     st.markdown('<div class="pitch-section-title">Where it adds value</div>', unsafe_allow_html=True)
     st.markdown('<div class="pitch-value-subtitle">One predictive engine. Multiple decision perspectives.</div>', unsafe_allow_html=True)
 
@@ -672,7 +671,7 @@ def render_pitch_page():
         </div>
     """, unsafe_allow_html=True)
 
-    # --- 9. BOTTOM CTA CARD ---
+    # --- 10. BOTTOM CTA CARD ---
     with st.container(key="cta_card_bottom"):
         st.markdown("""
             <div class="pitch-cta-title">See the prediction in action.</div>
@@ -680,7 +679,7 @@ def render_pitch_page():
         """, unsafe_allow_html=True)
         st.button("Launch Demo", key="cta_btn_bottom", on_click=launch_demo, type="primary")
 
-    # --- 10. FOOTER ---
+    # --- 11. FOOTER ---
     st.markdown("""
         <div class="pitch-footer">
             <div class="pitch-h3">Pilot version. Welcoming your ideas.</div>
