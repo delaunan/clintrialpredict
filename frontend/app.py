@@ -21,7 +21,7 @@ from utils.plot import plot_success_gauge, plot_impact_bar, plot_treemap
 # Load environment variables
 load_dotenv()
 
-from pitch_landing import render_pitch_page
+from frontend.pitch_landing import render_pitch_page
 
 
 # ==========================

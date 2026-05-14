@@ -78,8 +78,8 @@ def render_pitch_page(audit_log=None):
         the caller to avoid a circular import (app.py imports this module).
         When provided, the landing page logs two events:
           * landing_page_shown  — once, when the page first renders
-          * landing_demo_click  — when "Access Demo" is clicked, including
-            seconds_on_landing (dwell time) and which button was used.
+          * landing_demo_click  — when the "Access Demo" CTA is clicked,
+            including seconds_on_landing (dwell time) and which button.
         When None, all audit calls are no-ops, so this file still runs
         standalone.
 
@@ -507,10 +507,20 @@ def render_pitch_page(audit_log=None):
             .st-key-cta_wide_top  div[data-testid="stColumn"]:last-child > div,
             .st-key-cta_wide_bottom div[data-testid="stColumn"]:last-child > div {
                 display: flex;
+                flex-direction: column;
                 align-items: center;
-                justify-content: flex-end;
+                justify-content: center;
                 height: 100%;
+                width: max-content;
+                margin-left: auto;
+                transform: translate(-120px, 5px) !important;
             }
+            .st-key-cta_wide_top .stButton,
+            .st-key-cta_wide_bottom .stButton {
+                transform: none !important;
+                width: 100%;
+            }
+
             .st-key-cta_wide_top .stButton > button[kind="primary"],
             .st-key-cta_wide_bottom .stButton > button[kind="primary"] {
                 padding: 1rem 2.75rem !important;
@@ -520,6 +530,30 @@ def render_pitch_page(audit_log=None):
                 min-width: 200px !important;
                 margin: 0 !important;
             }
+            /* reassurance microline directly under the CTA button.
+               width:100% + right-aligned text makes its right edge line up
+               cleanly with the button's right edge (the button hugs the
+               column's right side via align-items: flex-end above). */
+            /* CTA reassurance text position
+               transform: translateX(...) controls left/right.
+               margin-top controls up/down.
+               More negative translateX = more left.
+               Bigger margin-top = more down. */
+
+            .cta-reassure {
+                font-family: 'Inter', sans-serif;
+                font-size: 0.8rem;
+                font-weight: 600;
+                color: var(--pitch-text-soft);
+                text-align: center;
+                margin-top: 0.0rem;
+                white-space: nowrap;
+                letter-spacing: 0.01em;
+                width: 100%;
+                padding-right: 0;
+                transform: translateY(-8px) !important;
+            }
+
             @media (max-width: 768px) {
                 .st-key-cta_wide_top, .st-key-cta_wide_bottom {
                     padding: 1.75rem !important;
@@ -528,7 +562,21 @@ def render_pitch_page(audit_log=None):
                 .st-key-cta_wide_top  div[data-testid="stColumn"]:last-child > div,
                 .st-key-cta_wide_bottom div[data-testid="stColumn"]:last-child > div {
                     justify-content: center;
+                    align-items: center;
                     margin-top: 1.1rem;
+                    width: 100%;
+                    margin-left: 0;
+                    transform: none !important;
+                }
+                .st-key-cta_wide_top .stButton,
+                .st-key-cta_wide_bottom .stButton {
+                    transform: none !important;
+                }
+                .cta-reassure {
+                    text-align: center;
+                    padding-right: 0;
+                    transform: none !important;
+                    width: 100%;
                 }
             }
 
@@ -954,12 +1002,14 @@ def render_pitch_page(audit_log=None):
         c1, c2 = st.columns([2.2, 1], gap="large")
         with c1:
             st.markdown("""
-                <div class="cta-wide-title">See it score a real trial.</div>
-                <div class="cta-wide-subtitle">Pick any Phase II/III trial — from risk tier to score drivers in a few clicks.</div>
+                <div class="cta-wide-title">Choose a trial to score.</div>
+                <div class="cta-wide-subtitle">Review its completion score, risk tier, and key risk drivers.<br><span style="font-size:0.88rem;">(Demo version: reach out for more trials, additional trials available on request.)</span></div>
             """, unsafe_allow_html=True)
         with c2:
             st.button("Access Demo  →", key="cta_btn_top", on_click=launch_demo,
                       args=("cta_top",), type="primary")
+            st.markdown('<div class="cta-reassure">No sign-up · Opens instantly</div>',
+                        unsafe_allow_html=True)
 
     # ====================================================================
     # THE PROBLEM — What's at stake
@@ -1166,12 +1216,14 @@ def render_pitch_page(audit_log=None):
         c1, c2 = st.columns([2.2, 1], gap="large")
         with c1:
             st.markdown("""
-                <div class="cta-wide-title">Curious how a real trial would score?</div>
-                <div class="cta-wide-subtitle">Pick any Phase II/III trial and explore its risk tier, score, and drivers.</div>
+                <div class="cta-wide-title">Test CTPredict with a trial of your choice.</div>
+                <div class="cta-wide-subtitle">Explore its completion score, risk tier, and key risk drivers.<br><span style="font-size:0.88rem;">(Demo version: reach out for more trials, additional trials available on request.)</span></div>
             """, unsafe_allow_html=True)
         with c2:
             st.button("Access Demo  →", key="cta_btn_bottom", on_click=launch_demo,
                       args=("cta_bottom",), type="primary")
+            st.markdown('<div class="cta-reassure">No sign-up · Opens instantly</div>',
+                        unsafe_allow_html=True)
 
     # ====================================================================
     # FOOTER
