@@ -932,13 +932,13 @@ def render_pitch_page(audit_log=None):
             <div class="hero-body">
                 <div class="hero-body-text">
                     <div class="pitch-p">
-                        Predicts <span class="hl-blue nowrap">full completion</span> or <span class="hl-red nowrap">early termination</span> in Phase II/III trials from early design-stage information.
+                        Predict <span class="hl-blue nowrap">full completion</span> or <span class="hl-red nowrap">early termination</span> in Phase II/III trials from early design-stage information.
                     </div>
                     <div class="pitch-p">
                         Built on publicly available data, classifying trials by risk tier and revealing trial-specific risk drivers.
                     </div>
                     <div class="pitch-p">
-                        Helps test the impact of trial-design changes through simulation mode.
+                        Test the impact of trial-design changes through simulation mode.
                     </div>
                 </div>
                 <div class="hero-body-img">
@@ -1104,7 +1104,7 @@ def render_pitch_page(audit_log=None):
             </div>
             <div class="metric-card">
                 <div class="metric-title">78% ROC AUC</div>
-                <div class="pitch-p">78% of the time, CTPredict assigns a lower completion score to trials that later terminate early - well above the 50% random baseline, an exceptional result while using only publicly available trial data.</div>
+                <div class="pitch-p">78% of the time, CTPredict assigns a lower completion score to trials that later fail - well above the 50% random baseline, an exceptional result while using only publicly available trial data.</div>
             </div>
             <div class="metric-card">
                 <div class="metric-title">Audit 20%, catch nearly 40% of failures</div>
