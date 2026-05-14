@@ -135,20 +135,15 @@ def render_pitch_page():
         st.markdown(f'<div class="sub-question">{text}</div>', unsafe_allow_html=True)
 
     @contextmanager
-    def clickable(key):
+    def hover_lift(key):
         """
-        Wrap a visual so the whole region behaves like the Access Demo button.
-
-        Renders the caller's markup inside an st.container(key="click_<key>"),
-        then drops an invisible, full-cover st.button on top of it. CSS
-        (see .st-key-click_ rules) stretches that button over the region and
-        sets opacity:0, so a click anywhere in the region calls launch_demo().
-        The button keeps a real label for screen readers and keyboard focus.
+        Wrap a visual in a container that gets a subtle hover lift (pure CSS,
+        see .st-key-lift_ rules). No button, no click behaviour — just the
+        hover affordance. (An earlier invisible-button overlay was removed
+        because st.rerun() from a callback didn't transition to the app.)
         """
-        with st.container(key=f"click_{key}"):
+        with st.container(key=f"lift_{key}"):
             yield
-            st.button("Open demo", key=f"clickbtn_{key}",
-                      on_click=launch_demo)
 
     # ---------- CSS ----------
     st.markdown("""
@@ -179,7 +174,7 @@ def render_pitch_page():
 
             /* tightened top/bottom padding to lift the fold */
             .block-container {
-                padding-top: 1.25rem !important;
+                padding-top: 2.25rem !important;
                 padding-bottom: 4rem !important;
                 max-width: 1200px !important;
             }
@@ -301,13 +296,15 @@ def render_pitch_page():
             .hl-grey { color: var(--pitch-brand-dark); background: #e2e8f0;            padding: 1px 7px; border-radius: 5px; font-weight: 700; }
             /* light highlight for use on dark backgrounds (foundation banner) */
             .hl-light { color: #ffffff; background: rgba(255,255,255,0.16); padding: 1px 7px; border-radius: 5px; font-weight: 800; }
-            /* subtle emphasis for inline key terms in body copy */
-            .hl-em { color: var(--pitch-brand-dark); font-weight: 800; }
             /* keeps a multi-word phrase from breaking across lines */
             .nowrap { white-space: nowrap; }
 
-            /* ============ HERO (compact) ============ */
-            .hero-headline-wrap { margin-bottom: 1.75rem; }
+            /* ============ HERO ============ */
+            /* more breathing room up top — the page was feeling cramped */
+            .hero-headline-wrap {
+                margin-top: 1.5rem;
+                margin-bottom: 2.5rem;
+            }
             .hero-h1 {
                 font-family: 'Inter', sans-serif;
                 font-weight: 900;
@@ -328,10 +325,14 @@ def render_pitch_page():
                 font-size: clamp(1.85rem, 3vw, 2.5rem);
             }
 
+            /* Fixed hero-body height = screenshot frame height
+               (≈340px image cap + 2×0.55rem padding). Both cards fill it
+               exactly, so the text card and the screenshot card match. */
             .hero-body {
                 display: flex;
                 gap: 2rem;
                 align-items: stretch;
+                height: 358px;
             }
             .hero-body-text {
                 flex: 1;
@@ -343,13 +344,13 @@ def render_pitch_page():
                 border: 1px solid var(--pitch-border);
                 border-radius: 18px;
                 box-shadow: var(--pitch-shadow-md);
-                padding: 1.75rem 2rem;
+                padding: 1.5rem 2rem;
                 transition: transform 0.2s ease, box-shadow 0.2s ease;
             }
             .hero-body-text .pitch-p {
                 font-size: 1.02rem;
                 line-height: 1.55;
-                margin-bottom: 0.9rem;
+                margin-bottom: 0.85rem;
             }
             .hero-body-img {
                 flex: 1.3;
@@ -369,11 +370,12 @@ def render_pitch_page():
                 justify-content: center;
                 overflow: hidden;
                 max-width: 100%;
+                height: 100%;
                 transition: transform 0.2s ease, box-shadow 0.2s ease;
             }
             .hero-screenshot-frame img {
                 max-width: 100%;
-                max-height: 340px;     /* caps vertical footprint -> CTA near fold */
+                max-height: 100%;
                 width: auto;
                 height: auto;
                 display: block;
@@ -382,12 +384,17 @@ def render_pitch_page():
             }
             .hero-screenshot-frame.placeholder {
                 width: 100%;
-                min-height: 280px;
                 color: var(--pitch-text-soft);
                 font-weight: 600;
             }
             @media (max-width: 900px) {
-                .hero-body { flex-direction: column; gap: 1.5rem; align-items: stretch; }
+                .hero-body {
+                    flex-direction: column;
+                    gap: 1.5rem;
+                    align-items: stretch;
+                    height: auto;            /* release the fixed height on mobile */
+                }
+                .hero-screenshot-frame { height: auto; }
                 .hero-screenshot-frame img { max-height: none; width: 100%; }
             }
 
@@ -473,6 +480,14 @@ def render_pitch_page():
                 justify-content: center;
                 min-width: 0;
             }
+            /* alternating layout — media on the right instead of the left.
+               Applied to every other split-card so the page zig-zags
+               (best practice: breaks the monotonous single-gutter scan). */
+            .split-card.reverse { flex-direction: row-reverse; }
+            .split-card.reverse .split-card-media {
+                border-right: none;
+                border-left: 1px solid var(--pitch-border);
+            }
             .split-card-media img,
             .split-card-media svg {
                 max-width: 100%;
@@ -520,8 +535,14 @@ def render_pitch_page():
                 letter-spacing: -0.01em;
             }
             @media (max-width: 850px) {
-                .split-card { flex-direction: column; }
-                .split-card-media { border-right: none; border-bottom: 1px solid var(--pitch-border); }
+                .split-card,
+                .split-card.reverse { flex-direction: column; }
+                .split-card-media,
+                .split-card.reverse .split-card-media {
+                    border-right: none;
+                    border-left: none;
+                    border-bottom: 1px solid var(--pitch-border);
+                }
             }
 
             /* dimension list inside a split-card body */
@@ -597,6 +618,7 @@ def render_pitch_page():
                 grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
                 gap: 1.25rem;
                 margin-bottom: 1rem;
+                align-items: stretch;
             }
             .metric-card {
                 background: var(--pitch-card-bg);
@@ -614,33 +636,33 @@ def render_pitch_page():
                 color: var(--pitch-brand-dark);
                 margin-bottom: 0.6rem;
                 letter-spacing: -0.01em;
-                line-height: 1.2;
+                line-height: 1.25;
+                min-height: 2.5em;       /* 1- and 2-line titles align */
+                display: flex;
+                align-items: center;
             }
             .metric-card .pitch-p { font-size: 0.98rem; margin-bottom: 0; }
+            @media (max-width: 640px) {
+                .metric-title { min-height: 0; }
+            }
 
             /* ============ WHERE IT PAYS OFF — value cards ============ */
-            /* Cards now live inside st.columns (3 + 2), each wrapped in a
-               clickable container — so they size to their column and stretch
-               to full height to keep a row visually even. */
+            /* Cards live inside st.columns (3 + 2). A fixed min-height keeps
+               every card the same size regardless of copy length — far more
+               reliable than chaining height:100% through Streamlit's DOM. */
             .value-card {
                 background: var(--pitch-card-bg);
                 border: 1px solid var(--pitch-border);
                 border-radius: var(--pitch-radius);
-                padding: 2rem 1.7rem;
+                padding: 2rem 1.6rem;
                 box-shadow: var(--pitch-shadow-sm);
                 width: 100%;
-                height: 100%;
+                min-height: 288px;
                 text-align: center;
                 display: flex;
                 flex-direction: column;
                 align-items: center;
                 transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
-            }
-            /* make the clickable wrapper + its column fill height so cards
-               in the same row match */
-            div[class*="st-key-click_val_"] { height: 100%; }
-            div[data-testid="stColumn"] > div[data-testid="stVerticalBlock"] {
-                height: 100%;
             }
             .value-icon {
                 width: 56px;
@@ -650,23 +672,30 @@ def render_pitch_page():
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                margin-bottom: 1.15rem;
+                margin-bottom: 1.1rem;
                 color: var(--pitch-deep-blue);
+                flex-shrink: 0;
             }
             .value-icon svg { width: 28px; height: 28px; display: block; }
             .value-icon img { width: 30px; height: 30px; object-fit: contain; display: block; }
             .value-card h4 {
                 font-family: 'Inter', sans-serif;
-                font-size: 1.12rem;
+                font-size: 1.1rem;
                 font-weight: 800;
                 color: var(--pitch-brand-dark);
-                margin: 0 0 0.5rem 0;
+                margin: 0 0 0.6rem 0;
                 line-height: 1.3;
+                min-height: 2.6em;            /* 1 or 2-line titles align */
+                display: flex;
+                align-items: center;
             }
             .value-card .pitch-p {
                 font-size: 0.96rem;
                 line-height: 1.55;
                 margin: 0;
+            }
+            @media (max-width: 640px) {
+                .value-card { min-height: 0; }
             }
 
             /* ============ FOOTER ============ */
@@ -685,6 +714,32 @@ def render_pitch_page():
                 font-weight: 800;
                 color: var(--pitch-brand-dark);
                 margin-bottom: 0.9rem;
+            }
+            /* data & responsible-use note — quieter, set apart from the
+               rest of the footer with a soft panel and a top rule */
+            .footer-compliance {
+                max-width: 880px;
+                margin: 0 auto 1.75rem auto;
+                padding: 1.4rem 1.6rem;
+                background: var(--pitch-media-bg);
+                border: 1px solid var(--pitch-border);
+                border-radius: var(--pitch-radius-sm);
+                text-align: left;
+            }
+            .footer-compliance-title {
+                font-family: 'Inter', sans-serif;
+                font-size: 0.72rem;
+                font-weight: 800;
+                letter-spacing: 0.13em;
+                text-transform: uppercase;
+                color: var(--pitch-text-soft);
+                margin-bottom: 0.55rem;
+            }
+            .footer-compliance-text {
+                font-family: 'Inter', sans-serif;
+                font-size: 0.88rem;
+                line-height: 1.6;
+                color: var(--pitch-text-sec);
             }
 
             /* ============ PRIMARY BUTTON + SHINE ============ */
@@ -725,7 +780,7 @@ def render_pitch_page():
                     transparent 0%, rgba(255,255,255,0.55) 50%, transparent 100%);
                 transform: skewX(-22deg);
                 pointer-events: none;
-                animation: btnShine 2.1s ease-in-out infinite;
+                animation: btnShine 1.6s ease-in-out infinite;
             }
             @keyframes btnShine {
                 0%   { left: -160%; }
@@ -736,70 +791,24 @@ def render_pitch_page():
                 .stButton > button[kind="primary"]::after { animation: none; display: none; }
             }
 
-            /* ============ CLICKABLE OVERLAY ============ */
-            /* Each clickable region is an st.container(key="click_<x>")
-               holding the visual markup plus an invisible st.button. The
-               button is stretched over the whole region and set to
-               opacity:0 — so a click anywhere launches the demo, while the
-               visual underneath stays exactly as designed. */
-            div[class*="st-key-click_"] {
-                position: relative;
-            }
-            /* drop the vertical-block gap so the absolute button adds no space */
-            div[class*="st-key-click_"] > div[data-testid="stVerticalBlock"] {
-                gap: 0 !important;
-            }
-            /* button wrapper -> cover the entire region */
-            div[class*="st-key-click_"] .stButton {
-                position: absolute;
-                inset: 0;
-                z-index: 20;
-                margin: 0 !important;
-                padding: 0 !important;
-            }
-            /* the button itself -> invisible but fully clickable */
-            div[class*="st-key-click_"] .stButton > button {
-                width: 100% !important;
-                height: 100% !important;
-                min-height: 0 !important;
-                margin: 0 !important;
-                padding: 0 !important;
-                border: none !important;
-                background: transparent !important;
-                box-shadow: none !important;
-                opacity: 0 !important;
-                cursor: pointer !important;
-            }
-            div[class*="st-key-click_"] .stButton > button:hover,
-            div[class*="st-key-click_"] .stButton > button:active,
-            div[class*="st-key-click_"] .stButton > button:focus {
-                background: transparent !important;
-                border: none !important;
-                box-shadow: none !important;
-            }
-            /* keyboard users still get a visible focus ring */
-            div[class*="st-key-click_"] .stButton > button:focus-visible {
-                opacity: 1 !important;
-                background: transparent !important;
-                box-shadow: 0 0 0 3px rgba(47,98,166,0.45) !important;
-                border-radius: var(--pitch-radius-lg) !important;
-            }
-            /* hover affordance — lift whatever visual the region contains */
-            div[class*="st-key-click_"]:hover .split-card,
-            div[class*="st-key-click_"]:hover .value-card,
-            div[class*="st-key-click_"]:hover .hero-screenshot-frame,
-            div[class*="st-key-click_"]:hover .hero-body-text {
+            /* ============ HOVER LIFT ============ */
+            /* Visuals wrapped in st.container(key="lift_<x>") get a subtle
+               lift on hover. Pure CSS affordance — no click behaviour. */
+            div[class*="st-key-lift_"]:hover .split-card,
+            div[class*="st-key-lift_"]:hover .value-card,
+            div[class*="st-key-lift_"]:hover .hero-screenshot-frame,
+            div[class*="st-key-lift_"]:hover .hero-body-text {
                 transform: translateY(-4px);
                 box-shadow: var(--pitch-shadow-lg);
             }
-            div[class*="st-key-click_"]:hover .value-card {
+            div[class*="st-key-lift_"]:hover .value-card {
                 border-color: var(--pitch-accent);
             }
             @media (prefers-reduced-motion: reduce) {
-                div[class*="st-key-click_"]:hover .split-card,
-                div[class*="st-key-click_"]:hover .value-card,
-                div[class*="st-key-click_"]:hover .hero-screenshot-frame,
-                div[class*="st-key-click_"]:hover .hero-body-text {
+                div[class*="st-key-lift_"]:hover .split-card,
+                div[class*="st-key-lift_"]:hover .value-card,
+                div[class*="st-key-lift_"]:hover .hero-screenshot-frame,
+                div[class*="st-key-lift_"]:hover .hero-body-text {
                     transform: none;
                 }
             }
@@ -846,7 +855,7 @@ def render_pitch_page():
         </div>
     """, unsafe_allow_html=True)
 
-    with clickable("hero"):
+    with hover_lift("hero"):
         st.markdown(f"""
             <div class="hero-body">
                 <div class="hero-body-text">
@@ -854,10 +863,10 @@ def render_pitch_page():
                         Predicts <span class="hl-blue nowrap">full completion</span> or <span class="hl-red nowrap">early termination</span> in Phase II/III trials from early design-stage information.
                     </div>
                     <div class="pitch-p">
-                        Built on publicly available data, classifying trials by <span class="hl-em">risk tier</span> and revealing trial-specific <span class="hl-em">risk drivers</span>.
+                        Built on publicly available data, classifying trials by risk tier and revealing trial-specific risk drivers.
                     </div>
                     <div class="pitch-p">
-                        Helps test the impact of trial-design changes through <span class="hl-em">simulation mode</span>.
+                        Helps test the impact of trial-design changes through simulation mode.
                     </div>
                 </div>
                 <div class="hero-body-img">
@@ -890,7 +899,7 @@ def render_pitch_page():
         f'<img src="{why_b64}" alt="What is at stake">'
         if why_b64 else _STAKE_SVG
     )
-    with clickable("stake"):
+    with hover_lift("stake"):
         st.markdown(f"""
             <div class="split-card">
                 <div class="split-card-media">{stake_visual}</div>
@@ -910,9 +919,9 @@ def render_pitch_page():
 
     # --- How do you read the score? ---
     sub_question("How do you read the score?")
-    with clickable("gauge"):
+    with hover_lift("gauge"):
         st.markdown(f"""
-            <div class="split-card">
+            <div class="split-card reverse">
                 <div class="split-card-media gauge">
                     <div class="gauge-zoom">{media_img("gauge.png", "Completion Score Gauge")}</div>
                 </div>
@@ -946,7 +955,7 @@ def render_pitch_page():
 
     # --- What does the model assess? ---
     sub_question("What does the model assess?")
-    with clickable("barchart"):
+    with hover_lift("barchart"):
         st.markdown(f"""
             <div class="split-card">
                 <div class="split-card-media">{media_img("barchart.png", "Impact Bar Chart")}</div>
@@ -974,9 +983,9 @@ def render_pitch_page():
 
     # --- Which factors drive a prediction? ---
     sub_question("Which factors drive a prediction?")
-    with clickable("treemap"):
+    with hover_lift("treemap"):
         st.markdown(f"""
-            <div class="split-card">
+            <div class="split-card reverse">
                 <div class="split-card-media" style="flex: 1.7;">{media_img("treemap.png", "Interactive Treemap")}</div>
                 <div class="split-card-body">
                     <div class="split-card-h">A drivers map of 27 core trial features.</div>
@@ -998,7 +1007,7 @@ def render_pitch_page():
     st.markdown("""
         <div class="foundation-banner">
             <div class="pitch-p">
-                CTPredict is built on publicly available AACT data from <span class="hl-light">30,000+</span> industry-led Phase II/III trials initiated since 2009. Its XGBoost supervised machine-learning model uses <span class="hl-light">27 design-stage variables</span> to learn patterns of full completion vs. early termination.
+                CTPredict is built on publicly available AACT data from <span class="hl-light">30,000+</span> industry-led Phase II/III trials initiated since 2009. Its XGBoost supervised machine-learning model uses <span class="hl-light nowrap">27 design-stage variables</span> to learn patterns of full completion vs. early termination.
             </div>
             <div class="pitch-p fn-note">
                 <strong>AACT:</strong> Aggregate Analysis of ClinicalTrials.gov - an analysis-ready public database derived from ClinicalTrials.gov records.
@@ -1007,22 +1016,26 @@ def render_pitch_page():
     """, unsafe_allow_html=True)
 
     # --- How well does it predict? ---
-    # NOTE: metric cards below are placeholders pending the user's validated
-    # numbers + chosen card order. Wording uses "ROC AUC".
+    # Metric cards — verified against the test-set evaluation
+    # (Phase 2/3 industry trials, 2022-2023 start dates):
+    #   recall  = 512 / (512+172) = 74.9%   -> "3 in 4 caught"
+    #   ROC AUC = 78.0%
+    #   top-20% audit captures 38.3% of all failures -> "nearly 40%"
+    # Order is by impact: recall, then AUC, then the prioritization framing.
     sub_question("How well does it predict?")
     st.markdown("""
         <div class="metrics-grid">
             <div class="metric-card">
+                <div class="metric-title">3 in 4 at-risk trials caught</div>
+                <div class="pitch-p">Around 75% of trials that later terminated early were placed in the High Risk or Watchlist tiers - scoring below 50 - from design-stage information alone.</div>
+            </div>
+            <div class="metric-card">
                 <div class="metric-title">78% ROC AUC</div>
-                <div class="pitch-p"><span class="hl-grey">78%</span> of the time, CTPredict assigns a lower completion score to trials that later terminate early - well above the <span class="hl-grey">50%</span> chance baseline, using only publicly available Phase II/III trial data.</div>
+                <div class="pitch-p">78% of the time, CTPredict assigns a lower completion score to trials that later terminate early - well above the 50% random baseline, an exceptional result while using only publicly available trial data.</div>
             </div>
             <div class="metric-card">
-                <div class="metric-title">3 in 4 terminations flagged at trial start</div>
-                <div class="pitch-p">Around <span class="hl-grey">75%</span> of trials that later terminated early fall into the High Risk or Watchlist categories - below <span class="hl-grey">50 points</span>.</div>
-            </div>
-            <div class="metric-card">
-                <div class="metric-title">Clear risk-zone separation</div>
-                <div class="pitch-p">In the highest-risk zone, the large majority of trials genuinely terminated early - while the safest zone is dominated by full completions.</div>
+                <div class="metric-title">Audit 20%, catch nearly 40% of failures</div>
+                <div class="pitch-p">Ranked by CTPredict score, reviewing just the riskiest 20% of a portfolio surfaces close to 40% of all trials that later terminate - roughly double a random review, so attention goes where it matters first.</div>
             </div>
         </div>
     """, unsafe_allow_html=True)
@@ -1033,10 +1046,8 @@ def render_pitch_page():
     section_head("Where it pays off")
     sub_question("Who puts it to work?")
 
-    # Each value card is its own clickable region. They're laid out with
-    # st.columns (3 on top, 2 centered below) instead of a CSS flex-wrap,
-    # because each card needs to be an independent st.container for the
-    # invisible-button overlay to cover exactly that card.
+    # Value cards laid out with st.columns (3 on top, 2 centered below) so
+    # each sits in its own hover-lift container and rows stay height-matched.
     def value_card_html(icon_key, png_name, title, desc):
         return f"""
             <div class="value-card">
@@ -1063,7 +1074,7 @@ def render_pitch_page():
     row1 = st.columns(3, gap="medium")
     for col, (k, png, title, desc) in zip(row1, _value_cards[:3]):
         with col:
-            with clickable(f"val_{k}"):
+            with hover_lift(f"val_{k}"):
                 st.markdown(value_card_html(k, png, title, desc),
                             unsafe_allow_html=True)
 
@@ -1071,7 +1082,7 @@ def render_pitch_page():
     row2 = st.columns([1, 2, 2, 1], gap="medium")
     for col, (k, png, title, desc) in zip(row2[1:3], _value_cards[3:]):
         with col:
-            with clickable(f"val_{k}"):
+            with hover_lift(f"val_{k}"):
                 st.markdown(value_card_html(k, png, title, desc),
                             unsafe_allow_html=True)
 
@@ -1094,9 +1105,14 @@ def render_pitch_page():
     st.markdown("""
         <div class="pitch-footer">
             <div class="footer-h">Pilot version. Welcoming your ideas.</div>
-            <div class="pitch-p" style="max-width: 800px; margin: 0 auto 1.25rem auto;">
-                This demo focuses on single-trial exploration. Broader views are available or currently being developed, including sponsor full-portfolio screening, therapeutic-area benchmarking, and simulation-based use cases.<br><br>
-                I would be happy to hear your feedback, questions, or ideas for future development.
+            <div class="pitch-p" style="max-width: 820px; margin: 0 auto 1.5rem auto;">
+                This demo focuses on single-trial exploration. Broader views are available or currently being developed, including sponsor full-portfolio screening, therapeutic-area benchmarking, and simulation-based use cases. Feedback, questions, and ideas for future development are very welcome.
+            </div>
+            <div class="footer-compliance">
+                <div class="footer-compliance-title">Data &amp; responsible-use note</div>
+                <div class="footer-compliance-text">
+                    CTPredict is built exclusively on publicly available, aggregated clinical-trial registry data (AACT / ClinicalTrials.gov). It uses no proprietary, confidential, or patient-level data, and no personal data is processed. CTPredict is a research and decision-support tool, not a regulated medical device, and does not provide medical, clinical, regulatory, investment, or legal advice. Its outputs are probabilistic estimates derived from historical patterns and are intended to inform - not replace - expert judgment and formal review processes.
+                </div>
             </div>
             <div class="pitch-p-strong">Contact: Nicolas Delaunay</div>
             <div class="pitch-p">Email: <a href="mailto:delaunay80@gmail.com" style="color: var(--pitch-brand-dark); text-decoration: none; font-weight: 700;">delaunay80@gmail.com</a></div>
