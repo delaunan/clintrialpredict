@@ -113,15 +113,18 @@ def render_pitch_page():
 
     # ---------- CALLBACK ----------
     def launch_demo():
+        # on_click callback: just set state. Streamlit automatically reruns
+        # after a callback returns, so calling st.rerun() here would be a
+        # no-op (and logs a warning). app.py's main() re-checks pitch_seen
+        # on that automatic rerun and moves past the landing page.
         st.session_state["pitch_seen"] = True
         st.session_state["selected_nct_id"] = None
-        st.rerun()
 
     # ---------- HELPERS ----------
     def section_head(title, subtitle=None):
-        # Header = title (flanked by soft fading rules) + accent underline
-        # (+ optional subtitle). The flanking rules frame each section
-        # without hard borders.
+        # Header = title flanked by fading side rules (+ optional subtitle).
+        # The flanking rules are the only frame element — the old underline
+        # was removed to keep the side rules as the single accent.
         sub = f'<div class="section-subtitle">{subtitle}</div>' if subtitle else ''
         st.markdown(f"""
             <div class="section-head">
@@ -130,7 +133,6 @@ def render_pitch_page():
                     <div class="section-title">{title}</div>
                     <span class="section-rule right"></span>
                 </div>
-                <div class="section-underline"></div>
                 {sub}
             </div>
         """, unsafe_allow_html=True)
@@ -143,8 +145,9 @@ def render_pitch_page():
         """
         Wrap a visual in a container that gets a subtle hover lift (pure CSS,
         see .st-key-lift_ rules). No button, no click behaviour — just the
-        hover affordance. (An earlier invisible-button overlay was removed
-        because st.rerun() from a callback didn't transition to the app.)
+        hover affordance. (An earlier invisible-button overlay was removed at
+        the user's request — they preferred only the CTA buttons to be
+        clickable.)
         """
         with st.container(key=f"lift_{key}"):
             yield
@@ -178,7 +181,7 @@ def render_pitch_page():
 
             /* tightened top/bottom padding to lift the fold */
             .block-container {
-                padding-top: 1.5rem !important;
+                padding-top: 0.5rem !important;
                 padding-bottom: 4rem !important;
                 max-width: 1200px !important;
             }
@@ -189,7 +192,7 @@ def render_pitch_page():
                 align-items: center;
                 gap: 13px;
                 justify-content: flex-start;
-                margin-bottom: 3.25rem;
+                margin-bottom: 4rem;
             }
             .header-logo-box {
                 background-color: #ffffff;
@@ -221,14 +224,12 @@ def render_pitch_page():
                 gap: 11px;
                 margin-top: 4px;
             }
+            /* badge — no outline, just quiet uppercase text */
             .header-badge {
                 font-size: 0.6rem;
                 color: var(--pitch-text-soft);
                 text-transform: uppercase;
-                border: 1px solid var(--pitch-border);
-                padding: 2px 7px;
-                border-radius: 4px;
-                letter-spacing: 0.09em;
+                letter-spacing: 0.11em;
                 font-weight: 700;
             }
 
@@ -253,30 +254,22 @@ def render_pitch_page():
             .section-rule {
                 height: 2px;
                 flex: 1;
-                max-width: 130px;
-                border-radius: 1px;
-                position: relative;
+                max-width: 200px;
             }
+            /* slower fade — the accent stays solid for most of the rule's
+               length and only eases out near the far end */
             .section-rule.left {
-                background: linear-gradient(90deg, rgba(137,167,201,0) 0%, var(--pitch-accent) 100%);
+                background: linear-gradient(90deg,
+                    rgba(137,167,201,0) 0%,
+                    rgba(137,167,201,0.55) 35%,
+                    var(--pitch-accent) 100%);
             }
             .section-rule.right {
-                background: linear-gradient(90deg, var(--pitch-accent) 0%, rgba(137,167,201,0) 100%);
+                background: linear-gradient(90deg,
+                    var(--pitch-accent) 0%,
+                    rgba(137,167,201,0.55) 65%,
+                    rgba(137,167,201,0) 100%);
             }
-            /* small dot at the inner end of each rule, toward the title */
-            .section-rule.left::after,
-            .section-rule.right::after {
-                content: "";
-                position: absolute;
-                top: 50%;
-                width: 5px;
-                height: 5px;
-                border-radius: 50%;
-                background: var(--pitch-accent);
-                transform: translateY(-50%);
-            }
-            .section-rule.left::after  { right: -2px; }
-            .section-rule.right::after { left: -2px; }
             .section-eyebrow {
                 font-family: 'Inter', sans-serif;
                 font-size: 0.72rem;
@@ -298,13 +291,6 @@ def render_pitch_page():
             @media (max-width: 560px) {
                 .section-rule { display: none; }
                 .section-title { white-space: normal; }
-            }
-            .section-underline {
-                width: 44px;
-                height: 3px;
-                background: linear-gradient(90deg, var(--pitch-accent), var(--pitch-deep-blue));
-                border-radius: 2px;
-                margin: 0.8rem auto 0 auto;
             }
             .section-subtitle {
                 font-family: 'Inter', sans-serif;
@@ -346,9 +332,11 @@ def render_pitch_page():
             .nowrap { white-space: nowrap; }
 
             /* ============ HERO ============ */
+            /* the gap above the headline (header margin-bottom) and the gap
+               below it are kept equal — the headline sits evenly framed */
             .hero-headline-wrap {
-                margin-top: 1.25rem;
-                margin-bottom: 1.85rem;
+                margin-top: 0;
+                margin-bottom: 4rem;
             }
             .hero-h1 {
                 font-family: 'Inter', sans-serif;
@@ -363,11 +351,13 @@ def render_pitch_page():
                 display: block;
                 font-size: clamp(2.1rem, 3.5vw, 2.95rem);
             }
-            /* line 2 — keeps the previous (smaller) size */
+            /* line 2 — keeps the previous (smaller) size, with a touch of
+               space above it so the two headline lines aren't cramped */
             .hero-h1 .accent-line {
                 color: var(--pitch-accent);
                 display: block;
                 font-size: clamp(1.85rem, 3vw, 2.5rem);
+                margin-top: 0.35rem;
             }
 
             /* The screenshot frame sizes to its image (equal padding all
@@ -820,7 +810,7 @@ def render_pitch_page():
                     transparent 0%, rgba(255,255,255,0.55) 50%, transparent 100%);
                 transform: skewX(-22deg);
                 pointer-events: none;
-                animation: btnShine 1.6s ease-in-out infinite;
+                animation: btnShine 1.25s ease-in-out infinite;
             }
             @keyframes btnShine {
                 0%   { left: -160%; }
@@ -926,7 +916,7 @@ def render_pitch_page():
                 <div class="cta-wide-subtitle">Pick any Phase II/III trial — from risk tier to score drivers in a few clicks.</div>
             """, unsafe_allow_html=True)
         with c2:
-            st.button("Access Demo", key="cta_btn_top", on_click=launch_demo, type="primary")
+            st.button("Access Demo  →", key="cta_btn_top", on_click=launch_demo, type="primary")
 
     # ====================================================================
     # THE PROBLEM — What's at stake
@@ -1137,7 +1127,7 @@ def render_pitch_page():
                 <div class="cta-wide-subtitle">Pick any Phase II/III trial and explore its risk tier, score, and drivers.</div>
             """, unsafe_allow_html=True)
         with c2:
-            st.button("Access Demo", key="cta_btn_bottom", on_click=launch_demo, type="primary")
+            st.button("Access Demo  →", key="cta_btn_bottom", on_click=launch_demo, type="primary")
 
     # ====================================================================
     # FOOTER
@@ -1146,7 +1136,7 @@ def render_pitch_page():
         <div class="pitch-footer">
             <div class="footer-h">Pilot version. Welcoming your ideas.</div>
             <div class="pitch-p" style="max-width: 820px; margin: 0 auto 1.5rem auto;">
-                This demo focuses on single-trial exploration. Broader views are available or currently being developed, including sponsor full-portfolio screening, therapeutic-area benchmarking, and simulation-based use cases. Feedback, questions, and ideas for future development are very welcome.
+                This demo focuses on single-trial exploration and includes a limited set of trials - additional trials can be made available on request. Broader capabilities are available or in development, including sponsor full-portfolio screening, therapeutic-area benchmarking, and simulation-based use cases. Feedback, questions, and ideas for future development are very welcome.
             </div>
             <div class="pitch-p-strong">Contact: Nicolas Delaunay</div>
             <div class="pitch-p">Email: <a href="mailto:delaunay80@gmail.com" style="color: var(--pitch-brand-dark); text-decoration: none; font-weight: 700;">delaunay80@gmail.com</a></div>
@@ -1157,6 +1147,6 @@ def render_pitch_page():
     st.markdown("""
         <div class="page-disclaimer">
             <span class="page-disclaimer-title">Data &amp; responsible-use note.</span>
-            CTPredict is built only on publicly available, aggregated clinical-trial registry data (AACT / ClinicalTrials.gov) - no proprietary, confidential, patient-level, or personal data. It is a research and decision-support tool, not a regulated medical device, and does not provide medical, regulatory, investment, or legal advice. Its outputs are probabilistic estimates intended to inform - not replace - expert judgment and formal review.
+            CTPredict uses only public, aggregated registry data (AACT / ClinicalTrials.gov) - no proprietary, patient-level, or personal data. It is a decision-support tool, not a regulated medical device, and its probabilistic estimates are meant to inform expert judgment, not replace it.
         </div>
     """, unsafe_allow_html=True)
