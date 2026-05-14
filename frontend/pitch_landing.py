@@ -15,11 +15,11 @@ _STAKE_SVG = """
   <circle cx="210" cy="135" r="90" fill="#89A7C9" fill-opacity="0.14" stroke="#89A7C9" stroke-width="2"/>
   <circle cx="160" cy="218" r="90" fill="#2f62a6" fill-opacity="0.11" stroke="#2f62a6" stroke-width="2"/>
   <circle cx="260" cy="218" r="90" fill="#52606d" fill-opacity="0.11" stroke="#52606d" stroke-width="2"/>
-  <text x="210" y="78" text-anchor="middle" fill="#2f62a6"
+  <text x="210" y="102" text-anchor="middle" fill="#2f62a6"
         font-family="Inter, system-ui, sans-serif" font-size="14" font-weight="800">Clinical</text>
-  <text x="116" y="262" text-anchor="middle" fill="#2f62a6"
+  <text x="134" y="250" text-anchor="middle" fill="#2f62a6"
         font-family="Inter, system-ui, sans-serif" font-size="14" font-weight="800">Financial</text>
-  <text x="304" y="262" text-anchor="middle" fill="#52606d"
+  <text x="286" y="250" text-anchor="middle" fill="#52606d"
         font-family="Inter, system-ui, sans-serif" font-size="14" font-weight="800">Strategic</text>
   <rect x="164" y="174" width="92" height="28" rx="14" fill="#334155"/>
   <text x="210" y="192" text-anchor="middle" fill="white"
@@ -119,13 +119,17 @@ def render_pitch_page():
 
     # ---------- HELPERS ----------
     def section_head(title, subtitle=None):
-        # Numbered eyebrows (01 / 02 ...) were removed — redundant with the
-        # titles themselves and added stacking. Header is now just title +
-        # underline (+ optional subtitle).
+        # Header = title (flanked by soft fading rules) + accent underline
+        # (+ optional subtitle). The flanking rules frame each section
+        # without hard borders.
         sub = f'<div class="section-subtitle">{subtitle}</div>' if subtitle else ''
         st.markdown(f"""
             <div class="section-head">
-                <div class="section-title">{title}</div>
+                <div class="section-title-row">
+                    <span class="section-rule left"></span>
+                    <div class="section-title">{title}</div>
+                    <span class="section-rule right"></span>
+                </div>
                 <div class="section-underline"></div>
                 {sub}
             </div>
@@ -174,7 +178,7 @@ def render_pitch_page():
 
             /* tightened top/bottom padding to lift the fold */
             .block-container {
-                padding-top: 2.25rem !important;
+                padding-top: 1.5rem !important;
                 padding-bottom: 4rem !important;
                 max-width: 1200px !important;
             }
@@ -185,7 +189,7 @@ def render_pitch_page():
                 align-items: center;
                 gap: 13px;
                 justify-content: flex-start;
-                margin-bottom: 2.5rem;
+                margin-bottom: 3.25rem;
             }
             .header-logo-box {
                 background-color: #ffffff;
@@ -236,6 +240,43 @@ def render_pitch_page():
                 text-align: center;
                 margin: 4.25rem 0 0 0;
             }
+            /* title flanked by soft rules that fade toward the text —
+               frames each section without hard side borders */
+            .section-title-row {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                gap: 1.5rem;
+                max-width: 760px;
+                margin: 0 auto;
+            }
+            .section-rule {
+                height: 2px;
+                flex: 1;
+                max-width: 130px;
+                border-radius: 1px;
+                position: relative;
+            }
+            .section-rule.left {
+                background: linear-gradient(90deg, rgba(137,167,201,0) 0%, var(--pitch-accent) 100%);
+            }
+            .section-rule.right {
+                background: linear-gradient(90deg, var(--pitch-accent) 0%, rgba(137,167,201,0) 100%);
+            }
+            /* small dot at the inner end of each rule, toward the title */
+            .section-rule.left::after,
+            .section-rule.right::after {
+                content: "";
+                position: absolute;
+                top: 50%;
+                width: 5px;
+                height: 5px;
+                border-radius: 50%;
+                background: var(--pitch-accent);
+                transform: translateY(-50%);
+            }
+            .section-rule.left::after  { right: -2px; }
+            .section-rule.right::after { left: -2px; }
             .section-eyebrow {
                 font-family: 'Inter', sans-serif;
                 font-size: 0.72rem;
@@ -252,6 +293,11 @@ def render_pitch_page():
                 color: var(--pitch-brand-dark);
                 letter-spacing: -0.015em;
                 line-height: 1.15;
+                white-space: nowrap;
+            }
+            @media (max-width: 560px) {
+                .section-rule { display: none; }
+                .section-title { white-space: normal; }
             }
             .section-underline {
                 width: 44px;
@@ -300,10 +346,9 @@ def render_pitch_page():
             .nowrap { white-space: nowrap; }
 
             /* ============ HERO ============ */
-            /* more breathing room up top — the page was feeling cramped */
             .hero-headline-wrap {
-                margin-top: 1.5rem;
-                margin-bottom: 2.5rem;
+                margin-top: 1.25rem;
+                margin-bottom: 1.85rem;
             }
             .hero-h1 {
                 font-family: 'Inter', sans-serif;
@@ -325,14 +370,14 @@ def render_pitch_page():
                 font-size: clamp(1.85rem, 3vw, 2.5rem);
             }
 
-            /* Fixed hero-body height = screenshot frame height
-               (≈340px image cap + 2×0.55rem padding). Both cards fill it
-               exactly, so the text card and the screenshot card match. */
+            /* The screenshot frame sizes to its image (equal padding all
+               round). The text card stretches to match it — since the body
+               copy is short, the screenshot is the taller element and
+               drives the row height. */
             .hero-body {
                 display: flex;
                 gap: 2rem;
                 align-items: stretch;
-                height: 358px;
             }
             .hero-body-text {
                 flex: 1;
@@ -356,27 +401,24 @@ def render_pitch_page():
                 flex: 1.3;
                 min-width: 0;
                 display: flex;
-                align-items: center;
+                align-items: stretch;
                 justify-content: center;
             }
             .hero-screenshot-frame {
                 background: var(--pitch-card-bg);
                 border: 1px solid var(--pitch-border);
                 border-radius: 18px;
-                padding: 0.55rem;
+                padding: 0.6rem;             /* equal margin all round */
                 box-shadow: var(--pitch-shadow-lg);
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                overflow: hidden;
-                max-width: 100%;
-                height: 100%;
+                width: 100%;
                 transition: transform 0.2s ease, box-shadow 0.2s ease;
             }
             .hero-screenshot-frame img {
-                max-width: 100%;
-                max-height: 100%;
-                width: auto;
+                width: 100%;
+                max-height: 330px;
                 height: auto;
                 display: block;
                 border-radius: 12px;
@@ -384,6 +426,7 @@ def render_pitch_page():
             }
             .hero-screenshot-frame.placeholder {
                 width: 100%;
+                min-height: 260px;
                 color: var(--pitch-text-soft);
                 font-weight: 600;
             }
@@ -392,10 +435,8 @@ def render_pitch_page():
                     flex-direction: column;
                     gap: 1.5rem;
                     align-items: stretch;
-                    height: auto;            /* release the fixed height on mobile */
                 }
-                .hero-screenshot-frame { height: auto; }
-                .hero-screenshot-frame img { max-height: none; width: 100%; }
+                .hero-screenshot-frame img { max-height: none; }
             }
 
             /* ============ WIDE CTA CARDS ============ */
@@ -474,7 +515,7 @@ def render_pitch_page():
                 flex: 1.35;
                 background: #ffffff;          /* pure white — PNG edges blend invisibly */
                 border-right: 1px solid var(--pitch-border);
-                padding: 1.75rem;
+                padding: 1.25rem;
                 display: flex;
                 align-items: center;
                 justify-content: center;
@@ -490,12 +531,20 @@ def render_pitch_page():
             }
             .split-card-media img,
             .split-card-media svg {
+                width: 100%;
                 max-width: 100%;
-                max-height: 320px;
+                max-height: 340px;
                 height: auto;
                 display: block;
+                object-fit: contain;
             }
+            /* the chart PNGs read better filling their panel — slightly
+               tighter padding + a larger height ceiling */
+            .split-card-media.wide { padding: 0.85rem; }
+            .split-card-media.wide img { max-height: 380px; }
             .split-card-media.gauge { overflow: hidden; }
+            .split-card-media.gauge img,
+            .split-card-media.gauge svg { width: auto; }
             .split-card-media.gauge .gauge-zoom {
                 transform: scale(1.04);
                 transform-origin: center;
@@ -649,7 +698,8 @@ def render_pitch_page():
             /* ============ WHERE IT PAYS OFF — value cards ============ */
             /* Cards live inside st.columns (3 + 2). A fixed min-height keeps
                every card the same size regardless of copy length — far more
-               reliable than chaining height:100% through Streamlit's DOM. */
+               reliable than chaining height:100% through Streamlit's DOM.
+               vertical margin gives the two rows breathing room. */
             .value-card {
                 background: var(--pitch-card-bg);
                 border: 1px solid var(--pitch-border);
@@ -658,6 +708,7 @@ def render_pitch_page():
                 box-shadow: var(--pitch-shadow-sm);
                 width: 100%;
                 min-height: 288px;
+                margin: 0.7rem 0;
                 text-align: center;
                 display: flex;
                 flex-direction: column;
@@ -715,30 +766,19 @@ def render_pitch_page():
                 color: var(--pitch-brand-dark);
                 margin-bottom: 0.9rem;
             }
-            /* data & responsible-use note — quieter, set apart from the
-               rest of the footer with a soft panel and a top rule */
-            .footer-compliance {
-                max-width: 880px;
-                margin: 0 auto 1.75rem auto;
-                padding: 1.4rem 1.6rem;
-                background: var(--pitch-media-bg);
-                border: 1px solid var(--pitch-border);
-                border-radius: var(--pitch-radius-sm);
-                text-align: left;
-            }
-            .footer-compliance-title {
+            /* data & responsible-use note — plain quiet text at the very
+               bottom of the page, no card, no panel */
+            .page-disclaimer {
+                max-width: 900px;
+                margin: 2.25rem auto 0.5rem auto;
                 font-family: 'Inter', sans-serif;
-                font-size: 0.72rem;
-                font-weight: 800;
-                letter-spacing: 0.13em;
-                text-transform: uppercase;
+                font-size: 0.82rem;
+                line-height: 1.65;
                 color: var(--pitch-text-soft);
-                margin-bottom: 0.55rem;
+                text-align: center;
             }
-            .footer-compliance-text {
-                font-family: 'Inter', sans-serif;
-                font-size: 0.88rem;
-                line-height: 1.6;
+            .page-disclaimer-title {
+                font-weight: 700;
                 color: var(--pitch-text-sec);
             }
 
@@ -928,7 +968,7 @@ def render_pitch_page():
                 <div class="split-card-body">
                     <div class="split-card-h">A 0-100 completion score, sorted into four risk tiers.</div>
                     <div class="pitch-p">
-                        Reflects how closely a trial resembles historical patterns of <span class="hl-red nowrap">early termination</span> or <span class="hl-blue nowrap">full completion</span>.
+                        Reflects how closely a trial resembles historical patterns of <span class="hl-red nowrap">early termination</span> or <span class="hl-blue nowrap">full completion</span>. Four risk tiers:
                     </div>
                     <div style="margin-top: 0.4rem;">
                         <div class="tier-row"><span class="color-box cb-high"></span><span class="pitch-p-strong">High Risk</span> &nbsp;0-25 points</div>
@@ -958,7 +998,7 @@ def render_pitch_page():
     with hover_lift("barchart"):
         st.markdown(f"""
             <div class="split-card">
-                <div class="split-card-media">{media_img("barchart.png", "Impact Bar Chart")}</div>
+                <div class="split-card-media wide" style="flex: 1.55;">{media_img("barchart.png", "Impact Bar Chart")}</div>
                 <div class="split-card-body">
                     <div class="split-card-h">Four risk dimensions.</div>
                     <div class="dim-item">
@@ -986,7 +1026,7 @@ def render_pitch_page():
     with hover_lift("treemap"):
         st.markdown(f"""
             <div class="split-card reverse">
-                <div class="split-card-media" style="flex: 1.7;">{media_img("treemap.png", "Interactive Treemap")}</div>
+                <div class="split-card-media wide" style="flex: 1.95;">{media_img("treemap.png", "Interactive Treemap")}</div>
                 <div class="split-card-body">
                     <div class="split-card-h">A drivers map of 27 core trial features.</div>
                     <div class="pitch-p">
@@ -998,9 +1038,9 @@ def render_pitch_page():
         """, unsafe_allow_html=True)
 
     # ====================================================================
-    # THE EVIDENCE — Where the prediction holds up
+    # THE EVIDENCE — How CTPredict performs
     # ====================================================================
-    section_head("Where the prediction holds up")
+    section_head("How CTPredict performs")
 
     # --- What powers the engine? ---
     sub_question("What powers the engine?")
@@ -1041,10 +1081,10 @@ def render_pitch_page():
     """, unsafe_allow_html=True)
 
     # ====================================================================
-    # THE PAYOFF — Where it pays off
+    # THE PAYOFF — Where it brings value
     # ====================================================================
-    section_head("Where it pays off")
-    sub_question("Who puts it to work?")
+    section_head("Where it brings value")
+    sub_question("Which decisions does it support?")
 
     # Value cards laid out with st.columns (3 on top, 2 centered below) so
     # each sits in its own hover-lift container and rows stay height-matched.
@@ -1061,7 +1101,7 @@ def render_pitch_page():
         ("portfolio", "icon_portfolio_mgt.png", "Portfolio Management",
          "Highlight late-stage assets that may require closer scrutiny."),
         ("ta", "icon_ta_lead.png", "Therapeutic Area Leadership",
-         "Benchmark completion-risk patterns across indications, modalities, phases, and trial designs within a therapeutic area."),
+         "Benchmark completion-risk patterns across indications, modalities, and trial designs."),
         ("clinical", "icon_clin_lead.png", "Clinical Development Leads",
          "Explore in simulation mode how design choices may shift the completion-risk profile before trial initiation."),
         ("investor", "icon_investor.png", "Investors & Analysts",
@@ -1108,13 +1148,15 @@ def render_pitch_page():
             <div class="pitch-p" style="max-width: 820px; margin: 0 auto 1.5rem auto;">
                 This demo focuses on single-trial exploration. Broader views are available or currently being developed, including sponsor full-portfolio screening, therapeutic-area benchmarking, and simulation-based use cases. Feedback, questions, and ideas for future development are very welcome.
             </div>
-            <div class="footer-compliance">
-                <div class="footer-compliance-title">Data &amp; responsible-use note</div>
-                <div class="footer-compliance-text">
-                    CTPredict is built exclusively on publicly available, aggregated clinical-trial registry data (AACT / ClinicalTrials.gov). It uses no proprietary, confidential, or patient-level data, and no personal data is processed. CTPredict is a research and decision-support tool, not a regulated medical device, and does not provide medical, clinical, regulatory, investment, or legal advice. Its outputs are probabilistic estimates derived from historical patterns and are intended to inform - not replace - expert judgment and formal review processes.
-                </div>
-            </div>
             <div class="pitch-p-strong">Contact: Nicolas Delaunay</div>
             <div class="pitch-p">Email: <a href="mailto:delaunay80@gmail.com" style="color: var(--pitch-brand-dark); text-decoration: none; font-weight: 700;">delaunay80@gmail.com</a></div>
+        </div>
+    """, unsafe_allow_html=True)
+
+    # ---- Data & responsible-use note: plain text, very bottom, no card ----
+    st.markdown("""
+        <div class="page-disclaimer">
+            <span class="page-disclaimer-title">Data &amp; responsible-use note.</span>
+            CTPredict is built only on publicly available, aggregated clinical-trial registry data (AACT / ClinicalTrials.gov) - no proprietary, confidential, patient-level, or personal data. It is a research and decision-support tool, not a regulated medical device, and does not provide medical, regulatory, investment, or legal advice. Its outputs are probabilistic estimates intended to inform - not replace - expert judgment and formal review.
         </div>
     """, unsafe_allow_html=True)
