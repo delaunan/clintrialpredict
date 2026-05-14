@@ -1,4 +1,5 @@
 import base64
+from contextlib import contextmanager
 from pathlib import Path
 import streamlit as st
 
@@ -117,11 +118,13 @@ def render_pitch_page():
         st.rerun()
 
     # ---------- HELPERS ----------
-    def section_head(num, eyebrow, title, subtitle=None):
+    def section_head(title, subtitle=None):
+        # Numbered eyebrows (01 / 02 ...) were removed — redundant with the
+        # titles themselves and added stacking. Header is now just title +
+        # underline (+ optional subtitle).
         sub = f'<div class="section-subtitle">{subtitle}</div>' if subtitle else ''
         st.markdown(f"""
             <div class="section-head">
-                <div class="section-eyebrow">{num} &middot; {eyebrow}</div>
                 <div class="section-title">{title}</div>
                 <div class="section-underline"></div>
                 {sub}
@@ -130,6 +133,22 @@ def render_pitch_page():
 
     def sub_question(text):
         st.markdown(f'<div class="sub-question">{text}</div>', unsafe_allow_html=True)
+
+    @contextmanager
+    def clickable(key):
+        """
+        Wrap a visual so the whole region behaves like the Access Demo button.
+
+        Renders the caller's markup inside an st.container(key="click_<key>"),
+        then drops an invisible, full-cover st.button on top of it. CSS
+        (see .st-key-click_ rules) stretches that button over the region and
+        sets opacity:0, so a click anywhere in the region calls launch_demo().
+        The button keeps a real label for screen readers and keyboard focus.
+        """
+        with st.container(key=f"click_{key}"):
+            yield
+            st.button("Open demo", key=f"clickbtn_{key}",
+                      on_click=launch_demo)
 
     # ---------- CSS ----------
     st.markdown("""
@@ -280,19 +299,34 @@ def render_pitch_page():
             .hl-blue { color: var(--pitch-deep-blue); background: rgba(47,98,166,0.10); padding: 1px 7px; border-radius: 5px; font-weight: 700; }
             .hl-red  { color: var(--pitch-red);       background: rgba(176,63,63,0.10); padding: 1px 7px; border-radius: 5px; font-weight: 700; }
             .hl-grey { color: var(--pitch-brand-dark); background: #e2e8f0;            padding: 1px 7px; border-radius: 5px; font-weight: 700; }
+            /* light highlight for use on dark backgrounds (foundation banner) */
+            .hl-light { color: #ffffff; background: rgba(255,255,255,0.16); padding: 1px 7px; border-radius: 5px; font-weight: 800; }
+            /* subtle emphasis for inline key terms in body copy */
+            .hl-em { color: var(--pitch-brand-dark); font-weight: 800; }
+            /* keeps a multi-word phrase from breaking across lines */
+            .nowrap { white-space: nowrap; }
 
             /* ============ HERO (compact) ============ */
-            .hero-headline-wrap { margin-bottom: 2rem; }
+            .hero-headline-wrap { margin-bottom: 1.75rem; }
             .hero-h1 {
                 font-family: 'Inter', sans-serif;
-                font-size: clamp(1.85rem, 3vw, 2.5rem);
                 font-weight: 900;
                 color: var(--pitch-brand-dark);
-                line-height: 1.12;
+                line-height: 1.1;
                 letter-spacing: -0.025em;
                 margin: 0;
             }
-            .hero-h1 .accent-line { color: var(--pitch-accent); display: block; }
+            /* line 1 — slightly larger */
+            .hero-h1 .hero-line-1 {
+                display: block;
+                font-size: clamp(2.1rem, 3.5vw, 2.95rem);
+            }
+            /* line 2 — keeps the previous (smaller) size */
+            .hero-h1 .accent-line {
+                color: var(--pitch-accent);
+                display: block;
+                font-size: clamp(1.85rem, 3vw, 2.5rem);
+            }
 
             .hero-body {
                 display: flex;
@@ -309,11 +343,13 @@ def render_pitch_page():
                 border: 1px solid var(--pitch-border);
                 border-radius: 18px;
                 box-shadow: var(--pitch-shadow-md);
-                padding: 2rem 2.1rem;
+                padding: 1.75rem 2rem;
+                transition: transform 0.2s ease, box-shadow 0.2s ease;
             }
             .hero-body-text .pitch-p {
-                font-size: 1.05rem;
-                margin-bottom: 1rem;
+                font-size: 1.02rem;
+                line-height: 1.55;
+                margin-bottom: 0.9rem;
             }
             .hero-body-img {
                 flex: 1.3;
@@ -333,6 +369,7 @@ def render_pitch_page():
                 justify-content: center;
                 overflow: hidden;
                 max-width: 100%;
+                transition: transform 0.2s ease, box-shadow 0.2s ease;
             }
             .hero-screenshot-frame img {
                 max-width: 100%;
@@ -424,6 +461,7 @@ def render_pitch_page():
                 box-shadow: var(--pitch-shadow-md);
                 overflow: hidden;
                 margin-bottom: 1.5rem;
+                transition: transform 0.2s ease, box-shadow 0.2s ease;
             }
             .split-card-media {
                 flex: 1.35;
@@ -442,7 +480,11 @@ def render_pitch_page():
                 height: auto;
                 display: block;
             }
-            .split-card-media.gauge .gauge-zoom { transform: scale(1.18); }
+            .split-card-media.gauge { overflow: hidden; }
+            .split-card-media.gauge .gauge-zoom {
+                transform: scale(1.04);
+                transform-origin: center;
+            }
             .media-placeholder {
                 color: var(--pitch-text-soft);
                 font-weight: 600;
@@ -577,32 +619,28 @@ def render_pitch_page():
             .metric-card .pitch-p { font-size: 0.98rem; margin-bottom: 0; }
 
             /* ============ WHERE IT PAYS OFF — value cards ============ */
-            .value-grid {
-                display: flex;
-                flex-wrap: wrap;
-                justify-content: center;
-                gap: 1.4rem;
-                margin-bottom: 1rem;
-            }
+            /* Cards now live inside st.columns (3 + 2), each wrapped in a
+               clickable container — so they size to their column and stretch
+               to full height to keep a row visually even. */
             .value-card {
                 background: var(--pitch-card-bg);
                 border: 1px solid var(--pitch-border);
                 border-radius: var(--pitch-radius);
                 padding: 2rem 1.7rem;
                 box-shadow: var(--pitch-shadow-sm);
-                flex: 0 1 calc(33.333% - 1rem);
-                min-width: 258px;
-                max-width: 350px;
+                width: 100%;
+                height: 100%;
                 text-align: center;
                 display: flex;
                 flex-direction: column;
                 align-items: center;
                 transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
             }
-            .value-card:hover {
-                transform: translateY(-4px);
-                box-shadow: var(--pitch-shadow-md);
-                border-color: var(--pitch-accent);
+            /* make the clickable wrapper + its column fill height so cards
+               in the same row match */
+            div[class*="st-key-click_val_"] { height: 100%; }
+            div[data-testid="stColumn"] > div[data-testid="stVerticalBlock"] {
+                height: 100%;
             }
             .value-icon {
                 width: 56px;
@@ -687,15 +725,83 @@ def render_pitch_page():
                     transparent 0%, rgba(255,255,255,0.55) 50%, transparent 100%);
                 transform: skewX(-22deg);
                 pointer-events: none;
-                animation: btnShine 3.4s ease-in-out infinite;
+                animation: btnShine 2.1s ease-in-out infinite;
             }
             @keyframes btnShine {
                 0%   { left: -160%; }
-                55%  { left: 160%; }
+                70%  { left: 160%; }
                 100% { left: 160%; }
             }
             @media (prefers-reduced-motion: reduce) {
                 .stButton > button[kind="primary"]::after { animation: none; display: none; }
+            }
+
+            /* ============ CLICKABLE OVERLAY ============ */
+            /* Each clickable region is an st.container(key="click_<x>")
+               holding the visual markup plus an invisible st.button. The
+               button is stretched over the whole region and set to
+               opacity:0 — so a click anywhere launches the demo, while the
+               visual underneath stays exactly as designed. */
+            div[class*="st-key-click_"] {
+                position: relative;
+            }
+            /* drop the vertical-block gap so the absolute button adds no space */
+            div[class*="st-key-click_"] > div[data-testid="stVerticalBlock"] {
+                gap: 0 !important;
+            }
+            /* button wrapper -> cover the entire region */
+            div[class*="st-key-click_"] .stButton {
+                position: absolute;
+                inset: 0;
+                z-index: 20;
+                margin: 0 !important;
+                padding: 0 !important;
+            }
+            /* the button itself -> invisible but fully clickable */
+            div[class*="st-key-click_"] .stButton > button {
+                width: 100% !important;
+                height: 100% !important;
+                min-height: 0 !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                border: none !important;
+                background: transparent !important;
+                box-shadow: none !important;
+                opacity: 0 !important;
+                cursor: pointer !important;
+            }
+            div[class*="st-key-click_"] .stButton > button:hover,
+            div[class*="st-key-click_"] .stButton > button:active,
+            div[class*="st-key-click_"] .stButton > button:focus {
+                background: transparent !important;
+                border: none !important;
+                box-shadow: none !important;
+            }
+            /* keyboard users still get a visible focus ring */
+            div[class*="st-key-click_"] .stButton > button:focus-visible {
+                opacity: 1 !important;
+                background: transparent !important;
+                box-shadow: 0 0 0 3px rgba(47,98,166,0.45) !important;
+                border-radius: var(--pitch-radius-lg) !important;
+            }
+            /* hover affordance — lift whatever visual the region contains */
+            div[class*="st-key-click_"]:hover .split-card,
+            div[class*="st-key-click_"]:hover .value-card,
+            div[class*="st-key-click_"]:hover .hero-screenshot-frame,
+            div[class*="st-key-click_"]:hover .hero-body-text {
+                transform: translateY(-4px);
+                box-shadow: var(--pitch-shadow-lg);
+            }
+            div[class*="st-key-click_"]:hover .value-card {
+                border-color: var(--pitch-accent);
+            }
+            @media (prefers-reduced-motion: reduce) {
+                div[class*="st-key-click_"]:hover .split-card,
+                div[class*="st-key-click_"]:hover .value-card,
+                div[class*="st-key-click_"]:hover .hero-screenshot-frame,
+                div[class*="st-key-click_"]:hover .hero-body-text {
+                    transform: none;
+                }
             }
         </style>
     """, unsafe_allow_html=True)
@@ -731,30 +837,34 @@ def render_pitch_page():
         else '<div class="hero-screenshot-frame placeholder"><span>Visual: screenshot.png</span></div>'
     )
 
-    st.markdown(f"""
+    st.markdown("""
         <div class="hero-headline-wrap">
             <div class="hero-h1">
-                Identify clinical trials at risk
+                <span class="hero-line-1">Identify clinical trials at risk</span>
                 <span class="accent-line">before execution begins</span>
             </div>
         </div>
-        <div class="hero-body">
-            <div class="hero-body-text">
-                <div class="pitch-p">
-                    Predicts <span class="hl-blue">full completion</span> or <span class="hl-red">early termination</span> in Phase II/III trials from early design-stage information.
-                </div>
-                <div class="pitch-p">
-                    Built on publicly available data from 30,000+ past trials, classifying trials by risk tier and revealing trial-specific risk drivers.
-                </div>
-                <div class="pitch-p">
-                    Helps assess the impact of trial-design modifications through simulation mode.
-                </div>
-            </div>
-            <div class="hero-body-img">
-                {screenshot_html}
-            </div>
-        </div>
     """, unsafe_allow_html=True)
+
+    with clickable("hero"):
+        st.markdown(f"""
+            <div class="hero-body">
+                <div class="hero-body-text">
+                    <div class="pitch-p">
+                        Predicts <span class="hl-blue nowrap">full completion</span> or <span class="hl-red nowrap">early termination</span> in Phase II/III trials from early design-stage information.
+                    </div>
+                    <div class="pitch-p">
+                        Built on publicly available data, classifying trials by <span class="hl-em">risk tier</span> and revealing trial-specific <span class="hl-em">risk drivers</span>.
+                    </div>
+                    <div class="pitch-p">
+                        Helps test the impact of trial-design changes through <span class="hl-em">simulation mode</span>.
+                    </div>
+                </div>
+                <div class="hero-body-img">
+                    {screenshot_html}
+                </div>
+            </div>
+        """, unsafe_allow_html=True)
 
     # ====================================================================
     # CTA CARD #1
@@ -770,9 +880,9 @@ def render_pitch_page():
             st.button("Access Demo", key="cta_btn_top", on_click=launch_demo, type="primary")
 
     # ====================================================================
-    # 01 · THE PROBLEM — What's at stake
+    # THE PROBLEM — What's at stake
     # ====================================================================
-    section_head("01", "The problem", "What's at stake")
+    section_head("What's at stake")
     sub_question("Why focus on Phase II/III?")
 
     why_b64 = get_img_b64("Why_it_matters.png")
@@ -780,43 +890,48 @@ def render_pitch_page():
         f'<img src="{why_b64}" alt="What is at stake">'
         if why_b64 else _STAKE_SVG
     )
-    st.markdown(f"""
-        <div class="split-card">
-            <div class="split-card-media">{stake_visual}</div>
-            <div class="split-card-body dark">
-                <div class="split-card-h">Focus attention early, where clinical, financial, and strategic stakes are highest.</div>
-                <div class="pitch-p">
-                    Phase II/III is where scientific ambition meets major financial and strategic stakes. CTPredict helps identify trials most exposed to early-termination risk, helping focus support, review, and key protocol or strategic decisions where they matter most.
+    with clickable("stake"):
+        st.markdown(f"""
+            <div class="split-card">
+                <div class="split-card-media">{stake_visual}</div>
+                <div class="split-card-body dark">
+                    <div class="split-card-h">Focus attention early, where clinical, financial, and strategic stakes are highest.</div>
+                    <div class="pitch-p">
+                        Phase II/III is where scientific ambition meets major financial and strategic stakes. CTPredict helps identify trials most exposed to early-termination risk, helping focus support, review, and key protocol or strategic decisions where they matter most.
+                    </div>
                 </div>
             </div>
-        </div>
-    """, unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
 
     # ====================================================================
-    # 02 · THE METHOD — Inside the engine
+    # THE METHOD — Inside the engine
     # ====================================================================
-    section_head("02", "The method", "Inside the engine")
+    section_head("Inside the engine")
 
     # --- How do you read the score? ---
     sub_question("How do you read the score?")
-    st.markdown(f"""
-        <div class="split-card">
-            <div class="split-card-media gauge">
-                <div class="gauge-zoom">{media_img("gauge.png", "Completion Score Gauge")}</div>
-            </div>
-            <div class="split-card-body">
-                <div class="split-card-h">A 0-100 completion score, sorted into four risk tiers.</div>
-                <div class="pitch-p">
-                    Reflects how closely a trial resembles historical patterns of <span class="hl-red">early termination</span> or <span class="hl-blue">full completion</span>.
+    with clickable("gauge"):
+        st.markdown(f"""
+            <div class="split-card">
+                <div class="split-card-media gauge">
+                    <div class="gauge-zoom">{media_img("gauge.png", "Completion Score Gauge")}</div>
                 </div>
-                <div style="margin-top: 0.4rem;">
-                    <div class="tier-row"><span class="color-box cb-high"></span><span class="pitch-p-strong">High Risk</span> &nbsp;0-25 points</div>
-                    <div class="tier-row"><span class="color-box cb-watch"></span><span class="pitch-p-strong">Watchlist</span> &nbsp;25-50 points</div>
-                    <div class="tier-row"><span class="color-box cb-fav"></span><span class="pitch-p-strong">Favorable</span> &nbsp;50-75 points</div>
-                    <div class="tier-row"><span class="color-box cb-low"></span><span class="pitch-p-strong">Low Risk</span> &nbsp;75-100 points</div>
+                <div class="split-card-body">
+                    <div class="split-card-h">A 0-100 completion score, sorted into four risk tiers.</div>
+                    <div class="pitch-p">
+                        Reflects how closely a trial resembles historical patterns of <span class="hl-red nowrap">early termination</span> or <span class="hl-blue nowrap">full completion</span>.
+                    </div>
+                    <div style="margin-top: 0.4rem;">
+                        <div class="tier-row"><span class="color-box cb-high"></span><span class="pitch-p-strong">High Risk</span> &nbsp;0-25 points</div>
+                        <div class="tier-row"><span class="color-box cb-watch"></span><span class="pitch-p-strong">Watchlist</span> &nbsp;25-50 points</div>
+                        <div class="tier-row"><span class="color-box cb-fav"></span><span class="pitch-p-strong">Favorable</span> &nbsp;50-75 points</div>
+                        <div class="tier-row"><span class="color-box cb-low"></span><span class="pitch-p-strong">Low Risk</span> &nbsp;75-100 points</div>
+                    </div>
                 </div>
             </div>
-        </div>
+        """, unsafe_allow_html=True)
+
+    st.markdown("""
         <div class="interpret-grid">
             <div class="interpret-card">
                 <div class="interpret-card-title" style="color: var(--pitch-red);"><span class="color-box cb-high"></span> Red reflects a riskier trial profile.</div>
@@ -831,57 +946,59 @@ def render_pitch_page():
 
     # --- What does the model assess? ---
     sub_question("What does the model assess?")
-    st.markdown(f"""
-        <div class="split-card">
-            <div class="split-card-media">{media_img("barchart.png", "Impact Bar Chart")}</div>
-            <div class="split-card-body">
-                <div class="split-card-h">Four risk dimensions.</div>
-                <div class="dim-item">
-                    <div class="dim-title">Scientific Challenge</div>
-                    <div class="dim-desc">Biological Complexity · Protocol Design</div>
-                </div>
-                <div class="dim-item">
-                    <div class="dim-title">Execution Framework</div>
-                    <div class="dim-desc">Operational Setup · Methodological Rigor</div>
-                </div>
-                <div class="dim-item">
-                    <div class="dim-title">Therapeutic Context</div>
-                    <div class="dim-desc">Disease Profile · Development Stage</div>
-                </div>
-                <div class="dim-item">
-                    <div class="dim-title">Patient Profile</div>
-                    <div class="dim-desc">Population Scope · Clinical Severity</div>
+    with clickable("barchart"):
+        st.markdown(f"""
+            <div class="split-card">
+                <div class="split-card-media">{media_img("barchart.png", "Impact Bar Chart")}</div>
+                <div class="split-card-body">
+                    <div class="split-card-h">Four risk dimensions.</div>
+                    <div class="dim-item">
+                        <div class="dim-title">Scientific Challenge</div>
+                        <div class="dim-desc">Biological Complexity · Protocol Design</div>
+                    </div>
+                    <div class="dim-item">
+                        <div class="dim-title">Execution Framework</div>
+                        <div class="dim-desc">Operational Setup · Methodological Rigor</div>
+                    </div>
+                    <div class="dim-item">
+                        <div class="dim-title">Therapeutic Context</div>
+                        <div class="dim-desc">Disease Profile · Development Stage</div>
+                    </div>
+                    <div class="dim-item">
+                        <div class="dim-title">Patient Profile</div>
+                        <div class="dim-desc">Population Scope · Clinical Severity</div>
+                    </div>
                 </div>
             </div>
-        </div>
-    """, unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
 
     # --- Which factors drive a prediction? ---
     sub_question("Which factors drive a prediction?")
-    st.markdown(f"""
-        <div class="split-card">
-            <div class="split-card-media" style="flex: 1.7;">{media_img("treemap.png", "Interactive Treemap")}</div>
-            <div class="split-card-body">
-                <div class="split-card-h">A drivers map of 27 core trial features.</div>
-                <div class="pitch-p">
-                    Breaks each prediction into <span class="hl-grey">27 core trial features</span>, distributed across the four main risk dimensions, showing which factors contribute most to the final risk signal.
+    with clickable("treemap"):
+        st.markdown(f"""
+            <div class="split-card">
+                <div class="split-card-media" style="flex: 1.7;">{media_img("treemap.png", "Interactive Treemap")}</div>
+                <div class="split-card-body">
+                    <div class="split-card-h">A drivers map of 27 core trial features.</div>
+                    <div class="pitch-p">
+                        Breaks each prediction into <span class="hl-grey">27 core trial features</span>, distributed across the four main risk dimensions, showing which factors contribute most to the final risk signal.
+                    </div>
+                    <div class="pitch-p">Larger blocks indicate stronger impact.</div>
                 </div>
-                <div class="pitch-p">Larger blocks indicate stronger impact.</div>
             </div>
-        </div>
-    """, unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
 
     # ====================================================================
-    # 03 · THE EVIDENCE — Does it hold up?
+    # THE EVIDENCE — Where the prediction holds up
     # ====================================================================
-    section_head("03", "The evidence", "Does it hold up?")
+    section_head("Where the prediction holds up")
 
     # --- What powers the engine? ---
     sub_question("What powers the engine?")
     st.markdown("""
         <div class="foundation-banner">
             <div class="pitch-p">
-                CTPredict is built on publicly available AACT data from industry-led Phase II/III trials initiated since 2009. Its XGBoost supervised machine-learning model uses 27 design-stage variables to learn patterns of full completion vs. early termination.
+                CTPredict is built on publicly available AACT data from <span class="hl-light">30,000+</span> industry-led Phase II/III trials initiated since 2009. Its XGBoost supervised machine-learning model uses <span class="hl-light">27 design-stage variables</span> to learn patterns of full completion vs. early termination.
             </div>
             <div class="pitch-p fn-note">
                 <strong>AACT:</strong> Aggregate Analysis of ClinicalTrials.gov - an analysis-ready public database derived from ClinicalTrials.gov records.
@@ -890,60 +1007,73 @@ def render_pitch_page():
     """, unsafe_allow_html=True)
 
     # --- How well does it predict? ---
+    # NOTE: metric cards below are placeholders pending the user's validated
+    # numbers + chosen card order. Wording uses "ROC AUC".
     sub_question("How well does it predict?")
     st.markdown("""
         <div class="metrics-grid">
             <div class="metric-card">
-                <div class="metric-title">30,000+ trials</div>
-                <div class="pitch-p">Industry-led Phase II/III trials initiated since 2009, labelled for supervised learning as full completion vs. early termination.</div>
+                <div class="metric-title">78% ROC AUC</div>
+                <div class="pitch-p"><span class="hl-grey">78%</span> of the time, CTPredict assigns a lower completion score to trials that later terminate early - well above the <span class="hl-grey">50%</span> chance baseline, using only publicly available Phase II/III trial data.</div>
             </div>
             <div class="metric-card">
-                <div class="metric-title">78% AUC</div>
-                <div class="pitch-p">78% of the time, CTPredict assigns a lower completion score to trials that later terminate early - well above the 50% chance baseline, using only publicly available Phase II/III trial data.</div>
+                <div class="metric-title">3 in 4 terminations flagged at trial start</div>
+                <div class="pitch-p">Around <span class="hl-grey">75%</span> of trials that later terminated early fall into the High Risk or Watchlist categories - below <span class="hl-grey">50 points</span>.</div>
             </div>
             <div class="metric-card">
-                <div class="metric-title">3 in 4 early terminations flagged early</div>
-                <div class="pitch-p">Around 75% of trials that later terminated early fall into the High Risk or Watchlist categories - below 50 points.</div>
+                <div class="metric-title">Clear risk-zone separation</div>
+                <div class="pitch-p">In the highest-risk zone, the large majority of trials genuinely terminated early - while the safest zone is dominated by full completions.</div>
             </div>
         </div>
     """, unsafe_allow_html=True)
 
     # ====================================================================
-    # 04 · THE PAYOFF — Where it pays off
+    # THE PAYOFF — Where it pays off
     # ====================================================================
-    section_head("04", "The payoff", "Where it pays off",
-                 subtitle="One predictive engine. Multiple decision perspectives.")
+    section_head("Where it pays off")
     sub_question("Who puts it to work?")
 
-    st.markdown(f"""
-        <div class="value-grid">
+    # Each value card is its own clickable region. They're laid out with
+    # st.columns (3 on top, 2 centered below) instead of a CSS flex-wrap,
+    # because each card needs to be an independent st.container for the
+    # invisible-button overlay to cover exactly that card.
+    def value_card_html(icon_key, png_name, title, desc):
+        return f"""
             <div class="value-card">
-                <div class="value-icon">{value_icon("portfolio", "icon_portfolio_mgt.png")}</div>
-                <h4>Portfolio Management</h4>
-                <div class="pitch-p">Highlight late-stage assets that may require closer scrutiny.</div>
+                <div class="value-icon">{value_icon(icon_key, png_name)}</div>
+                <h4>{title}</h4>
+                <div class="pitch-p">{desc}</div>
             </div>
-            <div class="value-card">
-                <div class="value-icon">{value_icon("ta", "icon_ta_lead.png")}</div>
-                <h4>Therapeutic Area Leadership</h4>
-                <div class="pitch-p">Benchmark completion-risk patterns across indications, modalities, phases, and trial designs within a therapeutic area.</div>
-            </div>
-            <div class="value-card">
-                <div class="value-icon">{value_icon("clinical", "icon_clin_lead.png")}</div>
-                <h4>Clinical Development Leads</h4>
-                <div class="pitch-p">Explore in simulation mode how design choices may shift the completion-risk profile before trial initiation.</div>
-            </div>
-            <div class="value-card">
-                <div class="value-icon">{value_icon("investor", "icon_investor.png")}</div>
-                <h4>Investors & Analysts</h4>
-                <div class="pitch-p">Compare completion-risk profiles across late-stage assets in the industry using public data.</div>
-            </div>
-            <div class="value-card">
-                <div class="value-icon">{value_icon("training", "icon_training.png")}</div>
-                <h4>Training & Capability Building</h4>
-                <div class="pitch-p">Use real trials and simulation mode to support learning and strengthen risk-based decision-making.</div>
-            </div>
-        </div>
-    """, unsafe_allow_html=True)
+        """
+
+    _value_cards = [
+        ("portfolio", "icon_portfolio_mgt.png", "Portfolio Management",
+         "Highlight late-stage assets that may require closer scrutiny."),
+        ("ta", "icon_ta_lead.png", "Therapeutic Area Leadership",
+         "Benchmark completion-risk patterns across indications, modalities, phases, and trial designs within a therapeutic area."),
+        ("clinical", "icon_clin_lead.png", "Clinical Development Leads",
+         "Explore in simulation mode how design choices may shift the completion-risk profile before trial initiation."),
+        ("investor", "icon_investor.png", "Investors & Analysts",
+         "Compare completion-risk profiles across late-stage assets in the industry using public data."),
+        ("training", "icon_training.png", "Training & Capability Building",
+         "Use real trials and simulation mode to support learning and strengthen risk-based decision-making."),
+    ]
+
+    # Row 1 — three cards
+    row1 = st.columns(3, gap="medium")
+    for col, (k, png, title, desc) in zip(row1, _value_cards[:3]):
+        with col:
+            with clickable(f"val_{k}"):
+                st.markdown(value_card_html(k, png, title, desc),
+                            unsafe_allow_html=True)
+
+    # Row 2 — two cards, centered to match the 3-wide row's card width
+    row2 = st.columns([1, 2, 2, 1], gap="medium")
+    for col, (k, png, title, desc) in zip(row2[1:3], _value_cards[3:]):
+        with col:
+            with clickable(f"val_{k}"):
+                st.markdown(value_card_html(k, png, title, desc),
+                            unsafe_allow_html=True)
 
     # ====================================================================
     # CTA CARD #2
