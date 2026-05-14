@@ -1,4 +1,5 @@
 import base64
+import time
 from contextlib import contextmanager
 from pathlib import Path
 import streamlit as st
@@ -66,24 +67,52 @@ _VALUE_ICONS = {
 }
 
 
-def render_pitch_page():
+def render_pitch_page(audit_log=None):
     """
     Polished, responsive landing page for CTPredict.
 
-    Section flow (every section uses the same header format: numbered
-    eyebrow + title + accent underline, and the same centered sub-question
-    style for its parts):
+    Parameters
+    ----------
+    audit_log : callable, optional
+        The audit_log(event, **fields) function from app.py. Passed in by
+        the caller to avoid a circular import (app.py imports this module).
+        When provided, the landing page logs two events:
+          * landing_page_shown  — once, when the page first renders
+          * landing_demo_click  — when "Access Demo" is clicked, including
+            seconds_on_landing (dwell time) and which button was used.
+        When None, all audit calls are no-ops, so this file still runs
+        standalone.
 
+    Section flow:
       Header
       Hero            — compact headline + 3 sentences facing the screenshot
       CTA card        — Access Demo (with shine)
-      01 THE PROBLEM  / What's at stake
-      02 THE METHOD   / Inside the engine
-      03 THE EVIDENCE / Does it hold up?
-      04 THE PAYOFF   / Where it pays off
+      What's at stake / Inside the engine / How CTPredict performs /
+      Where it brings value
       CTA card        — Access Demo (with shine)
       Footer
     """
+
+    # ---------- AUDIT ----------
+    # Reuse app.py's audit_log (passed in) so events share the same
+    # visitor_id / session_id / JSON format and land in Cloud Logging.
+    # A no-op fallback keeps the module importable and runnable on its own.
+    def _audit(event, **fields):
+        if callable(audit_log):
+            try:
+                audit_log(event, **fields)
+            except Exception:
+                # Audit must never break the page render.
+                pass
+
+    # Record when the landing page was first shown this session, and emit a
+    # one-time "shown" event. Streamlit reruns this function on every
+    # interaction, so both are guarded to fire only once per session.
+    if "_landing_shown_ts" not in st.session_state:
+        st.session_state["_landing_shown_ts"] = time.time()
+    if not st.session_state.get("_landing_shown_logged", False):
+        _audit("landing_page_shown")
+        st.session_state["_landing_shown_logged"] = True
 
     # ---------- ASSETS ----------
     assets_dir = Path(__file__).resolve().parent
@@ -112,11 +141,24 @@ def render_pitch_page():
         return _VALUE_ICONS[key]
 
     # ---------- CALLBACK ----------
-    def launch_demo():
+    def launch_demo(source="unknown"):
         # on_click callback: just set state. Streamlit automatically reruns
         # after a callback returns, so calling st.rerun() here would be a
         # no-op (and logs a warning). app.py's main() re-checks pitch_seen
         # on that automatic rerun and moves past the landing page.
+        #
+        # Audit: record how long the visitor spent on the landing page
+        # before clicking, and which CTA button they used.
+        shown_ts = st.session_state.get("_landing_shown_ts")
+        seconds_on_landing = (
+            round(time.time() - shown_ts, 1) if shown_ts else None
+        )
+        _audit(
+            "landing_demo_click",
+            source=source,
+            seconds_on_landing=seconds_on_landing,
+        )
+
         st.session_state["pitch_seen"] = True
         st.session_state["selected_nct_id"] = None
 
@@ -916,7 +958,8 @@ def render_pitch_page():
                 <div class="cta-wide-subtitle">Pick any Phase II/III trial — from risk tier to score drivers in a few clicks.</div>
             """, unsafe_allow_html=True)
         with c2:
-            st.button("Access Demo  →", key="cta_btn_top", on_click=launch_demo, type="primary")
+            st.button("Access Demo  →", key="cta_btn_top", on_click=launch_demo,
+                      args=("cta_top",), type="primary")
 
     # ====================================================================
     # THE PROBLEM — What's at stake
@@ -1127,7 +1170,8 @@ def render_pitch_page():
                 <div class="cta-wide-subtitle">Pick any Phase II/III trial and explore its risk tier, score, and drivers.</div>
             """, unsafe_allow_html=True)
         with c2:
-            st.button("Access Demo  →", key="cta_btn_bottom", on_click=launch_demo, type="primary")
+            st.button("Access Demo  →", key="cta_btn_bottom", on_click=launch_demo,
+                      args=("cta_bottom",), type="primary")
 
     # ====================================================================
     # FOOTER

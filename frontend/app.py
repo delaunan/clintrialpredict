@@ -5481,7 +5481,7 @@ def route_app():
     consume_home_click_query_param()
 
     if not st.session_state.get("pitch_seen", False):
-        render_pitch_page()
+        render_pitch_page(audit_log=audit_log)
         return
 
     selected_id = st.session_state.get("selected_nct_id")
