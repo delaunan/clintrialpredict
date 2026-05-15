@@ -228,30 +228,30 @@ def render_pitch_page(audit_log=None):
                 max-width: 1200px !important;
             }
 
-            /* ============ HEADER (compact) ============ */
+            /* ============ HEADER — APP LANDING SIZE ============ */
             .header-container {
                 display: flex;
-                align-items: center;
-                gap: 13px;
+                align-items: flex-start;
+                gap: 12px;
                 justify-content: flex-start;
                 margin-bottom: 4rem;
             }
             .header-logo-box {
                 background-color: #ffffff;
-                border: 3px solid var(--pitch-brand-dark);
+                border: 4px solid var(--pitch-brand-dark);
                 padding: 2px;
-                border-radius: 13px;
+                border-radius: 18px;
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                height: 54px;
-                width: 54px;
+                height: 72px;
+                width: 72px;
                 flex-shrink: 0;
                 box-shadow: 0 4px 12px rgba(0,0,0,0.05);
             }
-            .header-logo-box img { height: 44px; }
+            .header-logo-box img { height: 70px; }
             .header-title {
-                font-size: 1.95rem;
+                font-size: 2.8rem;
                 font-weight: 800;
                 color: var(--pitch-brand-dark);
                 line-height: 1;
@@ -259,19 +259,18 @@ def render_pitch_page(audit_log=None):
             }
             .header-subtitle {
                 color: var(--pitch-brand-dark);
-                font-size: 1.02rem;
+                font-size: 1.5rem;
                 font-weight: 800;
                 display: flex;
                 align-items: baseline;
-                gap: 11px;
-                margin-top: 4px;
+                gap: 15px;
+                margin-top: 0px;
             }
-            /* badge — no outline, just quiet uppercase text */
             .header-badge {
-                font-size: 0.6rem;
+                font-size: 0.7rem;
                 color: var(--pitch-text-soft);
                 text-transform: uppercase;
-                letter-spacing: 0.11em;
+                letter-spacing: 0.1em;
                 font-weight: 700;
             }
 
@@ -427,6 +426,7 @@ def render_pitch_page(audit_log=None):
             .hero-body-text .pitch-p {
                 font-size: 1.02rem;
                 line-height: 1.55;
+                font-weight: 500;
                 margin-bottom: 0.85rem;
             }
             .hero-body-img {
@@ -932,7 +932,426 @@ def render_pitch_page(audit_log=None):
                     transform: none;
                 }
             }
+            /* ============ APP-ALIGNED LARGE-SCREEN SCALE ============ */
+            /* Matches the visual scale philosophy of app.py:
+               wide page shell, controlled horizontal padding, capped growth. */
+            @media (min-width: 1500px) {
+
+                .block-container {
+                    width: 100% !important;
+                    max-width: 1760px !important;
+                    padding-left: clamp(2.5rem, 5vw, 6.5rem) !important;
+                    padding-right: clamp(2.5rem, 5vw, 6.5rem) !important;
+                    padding-top: 2rem !important;
+                    padding-bottom: 4rem !important;
+                    margin-left: auto !important;
+                    margin-right: auto !important;
+                }
+
+                /* Header — match app.py landing scale */
+                .header-container {
+                    margin-bottom: 4.2rem;
+                    gap: 13px;
+                }
+
+                .header-logo-box {
+                    height: 78px;
+                    width: 78px;
+                    border-radius: 19px;
+                    border-width: 4px;
+                }
+
+                .header-logo-box img {
+                    height: 76px;
+                }
+
+                .header-title {
+                    font-size: 3rem;
+                }
+
+                .header-subtitle {
+                    font-size: 1.6rem;
+                }
+
+                .header-badge {
+                    font-size: 0.73rem;
+                }
+
+                /* Hero headline */
+                .hero-headline-wrap {
+                    margin-bottom: 4.1rem;
+                }
+
+                .hero-h1 .hero-line-1 {
+                    font-size: clamp(3.35rem, 2.75vw, 4rem);
+                }
+
+                .hero-h1 .accent-line {
+                    font-size: clamp(2.85rem, 2.25vw, 3.35rem);
+                }
+
+                /* Hero row */
+                .hero-body {
+                    gap: clamp(2.7rem, 2.8vw, 3.6rem);
+                }
+
+                .hero-body-text {
+                    flex: 1.05;
+                    padding: clamp(2.1rem, 1.9vw, 2.8rem)
+                             clamp(2.5rem, 2.4vw, 3.3rem);
+                    border-radius: 20px;
+                }
+
+                .hero-body-text .pitch-p {
+                    font-size: clamp(1.18rem, 0.95vw, 1.3rem);
+                    line-height: 1.64;
+                    margin-bottom: 1rem;
+                }
+
+                .hero-body-img {
+                    flex: 1.5;
+                }
+
+                .hero-screenshot-frame {
+                    padding: 0.8rem;
+                    border-radius: 20px;
+                }
+
+                .hero-screenshot-frame img {
+                    max-height: clamp(460px, 26vw, 560px);
+                }
+
+                /* CTA cards */
+                .st-key-cta_wide_top,
+                .st-key-cta_wide_bottom {
+                    padding: 2.4rem 3.4rem !important;
+                    margin: 3rem 0 2rem 0 !important;
+                }
+
+                .cta-wide-title {
+                    font-size: clamp(1.7rem, 1.45vw, 2rem);
+                }
+
+                .cta-wide-subtitle {
+                    font-size: 1.16rem;
+                }
+
+                .st-key-cta_wide_top .stButton > button[kind="primary"],
+                .st-key-cta_wide_bottom .stButton > button[kind="primary"] {
+                    padding: 1.15rem 3.2rem !important;
+                    font-size: 1.2rem !important;
+                    min-width: 235px !important;
+                }
+
+                .stButton > button[kind="primary"] p {
+                    font-size: 1.2rem !important;
+                }
+
+                .cta-reassure {
+                    font-size: 0.9rem;
+                }
+
+                /* Section headers */
+                .section-head {
+                    margin: 5.2rem 0 0 0;
+                }
+
+                .section-title-row {
+                    max-width: 960px;
+                    gap: 2rem;
+                }
+
+                .section-rule {
+                    max-width: 270px;
+                }
+
+                .section-title {
+                    font-size: clamp(2.35rem, 1.9vw, 2.8rem);
+                }
+
+                .sub-question {
+                    font-size: clamp(1.42rem, 1.15vw, 1.65rem);
+                    margin: 2.85rem 0 1.8rem 0;
+                }
+
+                /* Shared text */
+                .pitch-p {
+                    font-size: clamp(1.12rem, 0.9vw, 1.22rem);
+                    line-height: 1.66;
+                }
+
+                /* Split cards */
+                .split-card {
+                    margin-bottom: 2rem;
+                    border-radius: 22px;
+                }
+
+                .split-card-body {
+                    padding: clamp(3rem, 2.6vw, 3.9rem);
+                }
+
+                .split-card-h {
+                    font-size: clamp(1.75rem, 1.45vw, 2.05rem);
+                    margin-bottom: 1.1rem;
+                }
+
+                .split-card-media {
+                    padding: 1.6rem;
+                }
+
+                .split-card-media img,
+                .split-card-media svg {
+                    max-height: clamp(460px, 26vw, 580px);
+                }
+
+                .split-card-media.wide {
+                    padding: 1rem;
+                }
+
+                .split-card-media.wide img {
+                    max-height: clamp(500px, 28vw, 620px);
+                }
+
+                .dim-title {
+                    font-size: 1.2rem;
+                }
+
+                .dim-desc {
+                    font-size: 1.1rem;
+                }
+
+                .tier-row {
+                    font-size: 1.1rem;
+                }
+
+                /* Interpretation cards */
+                .interpret-grid {
+                    gap: 1.5rem;
+                }
+
+                .interpret-card {
+                    padding: 2rem 2.25rem;
+                }
+
+                .interpret-card-title {
+                    font-size: 1.18rem;
+                }
+
+                /* Foundation banner */
+                .foundation-banner {
+                    padding: 3.2rem 4rem;
+                }
+
+                .foundation-banner .pitch-p {
+                    max-width: 1040px;
+                    font-size: 1.18rem;
+                }
+
+                .foundation-banner .fn-note {
+                    font-size: 0.98rem;
+                }
+
+                /* Metric cards */
+                .metrics-grid {
+                    gap: 1.5rem;
+                }
+
+                .metric-card {
+                    padding: 2.45rem 2.25rem;
+                }
+
+                .metric-title {
+                    font-size: 1.52rem;
+                }
+
+                .metric-card .pitch-p {
+                    font-size: 1.08rem;
+                }
+
+                /* Value cards */
+                .value-card {
+                    min-height: clamp(320px, 18vw, 375px);
+                    padding: clamp(2.35rem, 1.9vw, 2.85rem)
+                             clamp(1.9rem, 1.5vw, 2.3rem);
+                }
+
+                .value-icon {
+                    width: 66px;
+                    height: 66px;
+                    border-radius: 17px;
+                    margin-bottom: 1.25rem;
+                }
+
+                .value-icon svg {
+                    width: 33px;
+                    height: 33px;
+                }
+
+                .value-icon img {
+                    width: 35px;
+                    height: 35px;
+                }
+
+                .value-card h4 {
+                    font-size: 1.24rem;
+                }
+
+                .value-card .pitch-p {
+                    font-size: 1.05rem;
+                }
+
+                /* Footer */
+                .pitch-footer {
+                    padding: 3.25rem 3.8rem;
+                }
+
+                .pitch-footer .footer-h {
+                    font-size: 1.6rem;
+                }
+
+                .page-disclaimer {
+                    max-width: 1080px;
+                    font-size: 0.9rem;
+                }
+            }
+
+            /* Same philosophy as app.py large desktop breakpoint */
+            @media (min-width: 1800px) and (min-height: 950px) {
+
+                .block-container {
+                    max-width: 2060px !important;
+                    padding-left: clamp(3rem, 5vw, 7.5rem) !important;
+                    padding-right: clamp(3rem, 5vw, 7.5rem) !important;
+                    padding-top: 2.3rem !important;
+                }
+
+                .hero-screenshot-frame img {
+                    max-height: clamp(500px, 27vw, 620px);
+                }
+            }
+
+            /* 2560px+ typography bump.
+               Keeps 1920px close to current, but avoids the miniature look
+               on 2560x1440 and 2880px screens. */
+            @media (min-width: 2300px) and (min-height: 1200px) {
+
+                .header-logo-box {
+                    height: 88px;
+                    width: 88px;
+                    border-radius: 22px;
+                    border-width: 4px;
+                }
+
+                .header-logo-box img {
+                    height: 86px;
+                }
+
+                .header-title {
+                    font-size: 3.35rem;
+                }
+
+                .header-subtitle {
+                    font-size: 1.78rem;
+                }
+
+                .header-badge {
+                    font-size: 0.78rem;
+                }
+
+                .hero-h1 .hero-line-1 {
+                    font-size: clamp(3.75rem, 2.45vw, 4.35rem);
+                }
+
+                .hero-h1 .accent-line {
+                    font-size: clamp(3.15rem, 2.05vw, 3.65rem);
+                }
+
+                .hero-body-text .pitch-p {
+                    font-size: clamp(1.3rem, 0.95vw, 1.42rem);
+                    line-height: 1.64;
+                }
+
+                .pitch-p {
+                    font-size: clamp(1.22rem, 0.88vw, 1.34rem);
+                    line-height: 1.66;
+                }
+
+                .cta-wide-title {
+                    font-size: clamp(1.9rem, 1.35vw, 2.2rem);
+                }
+
+                .cta-wide-subtitle {
+                    font-size: 1.28rem;
+                }
+
+                .cta-reassure {
+                    font-size: 0.98rem;
+                }
+
+                .st-key-cta_wide_top .stButton > button[kind="primary"],
+                .st-key-cta_wide_bottom .stButton > button[kind="primary"] {
+                    font-size: 1.28rem !important;
+                    min-width: 255px !important;
+                }
+
+                .stButton > button[kind="primary"] p {
+                    font-size: 1.28rem !important;
+                }
+
+                .section-title {
+                    font-size: clamp(2.65rem, 1.8vw, 3.05rem);
+                }
+
+                .sub-question {
+                    font-size: clamp(1.6rem, 1.08vw, 1.85rem);
+                }
+
+                .split-card-h {
+                    font-size: clamp(1.95rem, 1.35vw, 2.25rem);
+                }
+
+                .dim-title {
+                    font-size: 1.3rem;
+                }
+
+                .dim-desc {
+                    font-size: 1.2rem;
+                }
+
+                .tier-row {
+                    font-size: 1.2rem;
+                }
+
+                .interpret-card-title {
+                    font-size: 1.28rem;
+                }
+
+                .metric-title {
+                    font-size: 1.7rem;
+                }
+
+                .metric-card .pitch-p {
+                    font-size: 1.18rem;
+                }
+
+                .value-card h4 {
+                    font-size: 1.36rem;
+                }
+
+                .value-card .pitch-p {
+                    font-size: 1.14rem;
+                }
+
+                .pitch-footer .footer-h {
+                    font-size: 1.75rem;
+                }
+
+                .page-disclaimer {
+                    font-size: 0.98rem;
+                }
+            }
         </style>
+
     """, unsafe_allow_html=True)
 
     # ====================================================================
@@ -980,10 +1399,10 @@ def render_pitch_page(audit_log=None):
             <div class="hero-body">
                 <div class="hero-body-text">
                     <div class="pitch-p">
-                        Predict <span class="hl-blue nowrap">full completion</span> or <span class="hl-red nowrap">early termination</span> in Phase II/III trials from early design-stage information.
+                        Predict <span class="hl-blue nowrap">full completion</span> or <span class="hl-red nowrap">early termination</span> in <span class="nowrap">Phase II/III trials</span> from early design-stage information,
                     </div>
                     <div class="pitch-p">
-                        Built on publicly available data, classifying trials by risk tier and revealing trial-specific risk drivers.
+                        with <span class="hl-grey">CTPredict</span>, a public-data-trained engine that classifies trials by risk tier and reveals trial-specific risk drivers.
                     </div>
                     <div class="pitch-p">
                         Test the impact of trial-design changes through simulation mode.
