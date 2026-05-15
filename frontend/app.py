@@ -1336,6 +1336,8 @@ def inject_custom_styles():
 
             /* Buttons */
             .stButton > button {{
+                position: relative !important;
+                overflow: hidden !important;
                 border-radius: var(--ui-button-radius) !important;
                 font-weight: 400 !important;
                 font-size: var(--ui-button-font-size) !important;
@@ -1395,6 +1397,43 @@ def inject_custom_styles():
                 font-weight: inherit !important;
                 line-height: inherit !important;
                 letter-spacing: inherit !important;
+            }}
+
+            /* Blue-state button shine only */
+            .stButton > button[kind="primary"] > * {{
+                position: relative !important;
+                z-index: 1 !important;
+            }}
+
+            .stButton > button[kind="primary"]::after {{
+                content: "";
+                position: absolute;
+                top: 0;
+                left: -160%;
+                width: 55%;
+                height: 100%;
+                background: linear-gradient(
+                    120deg,
+                    transparent 0%,
+                    rgba(255,255,255,0.45) 50%,
+                    transparent 100%
+                );
+                transform: skewX(-22deg);
+                pointer-events: none;
+                animation: appBtnShine 3.00s ease-in-out infinite;
+            }}
+
+            @keyframes appBtnShine {{
+                0%   {{ left: -160%; }}
+                70%  {{ left: 160%; }}
+                100% {{ left: 160%; }}
+            }}
+
+            @media (prefers-reduced-motion: reduce) {{
+                .stButton > button[kind="primary"]::after {{
+                    animation: none !important;
+                    display: none !important;
+                }}
             }}
 
 
