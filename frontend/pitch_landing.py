@@ -1399,13 +1399,13 @@ def render_pitch_page(audit_log=None):
             <div class="hero-body">
                 <div class="hero-body-text">
                     <div class="pitch-p">
-                        Predict <span class="hl-blue nowrap">full completion</span> or <span class="hl-red nowrap">early termination</span> in <span class="nowrap">Phase II/III trials</span> from early design-stage information,
+                        Predict <span class="hl-blue nowrap">full completion</span> or <span class="hl-red nowrap">early termination</span> in <span class="nowrap">Phase II/III trials</span> from early design-stage information.
                     </div>
                     <div class="pitch-p">
-                        with <span class="hl-grey">CTPredict</span>, a public-data-trained engine that classifies trials by risk tier and reveals trial-specific risk drivers.
+                        CTPredict is a <span class="hl-grey nowrap">machine-learning model</span> trained on 30,000+ past trial outcomes to classify new trials by risk tier and reveal trial-specific risk drivers.
                     </div>
                     <div class="pitch-p">
-                        Test the impact of trial-design changes through simulation mode.
+                        Test the impact of trial-design changes through <span class="hl-grey nowrap">simulation mode</span>.
                     </div>
                 </div>
                 <div class="hero-body-img">
@@ -1544,19 +1544,6 @@ def render_pitch_page(audit_log=None):
     # ====================================================================
     section_head("How CTPredict performs")
 
-    # --- What powers the engine? ---
-    sub_question("What powers the engine?")
-    st.markdown("""
-        <div class="foundation-banner">
-            <div class="pitch-p">
-                CTPredict is built on publicly available AACT data from <span class="hl-light">30,000+</span> industry-led Phase II/III trials initiated since 2009. Its XGBoost supervised machine-learning model uses <span class="hl-light nowrap">27 design-stage variables</span> to learn patterns of full completion vs. early termination.
-            </div>
-            <div class="pitch-p fn-note">
-                <strong>AACT:</strong> Aggregate Analysis of ClinicalTrials.gov - an analysis-ready public database derived from ClinicalTrials.gov records.
-            </div>
-        </div>
-    """, unsafe_allow_html=True)
-
     # --- How well does it predict? ---
     # Metric cards — verified against the test-set evaluation
     # (Phase 2/3 industry trials, 2022-2023 start dates):
@@ -1578,6 +1565,19 @@ def render_pitch_page(audit_log=None):
             <div class="metric-card">
                 <div class="metric-title">Audit 20%, catch nearly 40% of failures</div>
                 <div class="pitch-p">Ranked by CTPredict score, reviewing just the riskiest 20% of a portfolio surfaces close to 40% of all trials that later terminate - roughly double a random review, so attention goes where it matters first.</div>
+            </div>
+        </div>
+    """, unsafe_allow_html=True)
+
+    # --- What powers the engine? ---
+    sub_question("What powers the engine?")
+    st.markdown("""
+        <div class="foundation-banner">
+            <div class="pitch-p">
+                CTPredict is built on publicly available AACT* data from <span class="hl-light">30,000+</span> industry-led Phase II/III trials initiated since 2009. At its core is a <span class="hl-light">supervised XGBoost machine-learning model</span>, embedded in a <span class="hl-light">multi-stage predictive pipeline</span> where supporting models and feature-engineering layers convert raw trial information into trial-level risk drivers and an overall completion-risk score.
+            </div>
+            <div class="pitch-p fn-note">
+                *<strong>AACT:</strong> Aggregate Analysis of ClinicalTrials.gov - a public database derived from ClinicalTrials.gov records.
             </div>
         </div>
     """, unsafe_allow_html=True)
