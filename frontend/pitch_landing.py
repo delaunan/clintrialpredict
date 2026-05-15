@@ -1399,7 +1399,7 @@ def render_pitch_page(audit_log=None):
             <div class="hero-body">
                 <div class="hero-body-text">
                     <div class="pitch-p">
-                        Predict <span class="hl-blue nowrap">full completion</span> or <span class="hl-red nowrap">early termination</span> in <span class="nowrap">Phase II/III trials</span> from early design-stage information.
+                        Predict whether <span class="nowrap">Phase II/III trials</span> are most likely to <span class="hl-blue nowrap">complete</span> or <span class="hl-red nowrap">terminate early</span>, using early design-stage information.
                     </div>
                     <div class="pitch-p">
                         CTPredict is a <span class="hl-grey nowrap">machine-learning model</span> trained on 30,000+ past trial outcomes to classify new trials by risk tier and reveal trial-specific risk drivers.
@@ -1530,7 +1530,7 @@ def render_pitch_page(audit_log=None):
             <div class="split-card reverse">
                 <div class="split-card-media wide" style="flex: 1.95;">{media_img("treemap.png", "Interactive Treemap")}</div>
                 <div class="split-card-body">
-                    <div class="split-card-h">A drivers map of 27 core trial features.</div>
+                    <div class="split-card-h">A transparent view of the score.</div>
                     <div class="pitch-p">
                         Breaks each prediction into <span class="hl-grey">27 core trial features</span>, distributed across the four main risk dimensions, showing which factors contribute most to the final risk signal.
                     </div>
@@ -1577,7 +1577,7 @@ def render_pitch_page(audit_log=None):
                 CTPredict is built on publicly available AACT* data from <span class="hl-light">30,000+</span> industry-led Phase II/III trials initiated since 2009. At its core is a <span class="hl-light">supervised XGBoost machine-learning model</span>, embedded in a <span class="hl-light">multi-stage predictive pipeline</span> where supporting models and feature-engineering layers convert raw trial information into trial-level risk drivers and an overall completion-risk score.
             </div>
             <div class="pitch-p fn-note">
-                *<strong>AACT:</strong> Aggregate Analysis of ClinicalTrials.gov - a public database derived from ClinicalTrials.gov records.
+                &#42;AACT: Aggregate Analysis of ClinicalTrials.gov - a public database derived from ClinicalTrials.gov records.
             </div>
         </div>
     """, unsafe_allow_html=True)
