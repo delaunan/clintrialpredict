@@ -18,7 +18,7 @@ REGISTRY_PATH = BASE_DIR / "frontend" / "data" / "search_registry.csv"
 from src.prep.pipeline import preprocessor, create_search_label, PIPELINE_REGISTRY
 
 BIG_PHARMA = [
-    'ROCHE', 'GENENTECH (ROCHE)', 'CHUGAI (ROCHE)', 'SPARK (ROCHE)', 
+    'ROCHE', 'GENENTECH (ROCHE)', 'CHUGAI (ROCHE)', 'SPARK (ROCHE)', 'CARMOT (ROCHE)',
     'J&J', 'ACTELION (J&J)', 'CENTOCOR (J&J)', 'CRUCELL (J&J)', 'MOMENTA (J&J)',
     'PFIZER', 'SEAGEN', 'HOSPIRA (PFIZER)', 'WARNER-LAMBERT (PFIZER)',
     'AZN', 'ALEXION (AZN)', 'MEDIMMUNE (AZN)', 'PEARL THERAPEUTICS (AZN)', 'ALEXION',
@@ -172,7 +172,13 @@ def refresh_registry():
     
     df_full['is_correct'] = df_full.apply(check_accuracy, axis=1)
 
-    # 5. DYNAMIC SELECTION
+    # 5. Canonical Sponsor Overrides (M&A Logic)
+    # Based on Historian Protocol: Post-2024 Carmot trials are ROCHE
+    df_full.loc[(df_full['lead_sponsor_canonical'] == 'CARMOT THERAPEUTICS') & (df_full['start_year'] >= 2024), 'lead_sponsor_canonical'] = 'ROCHE'
+    # Pre-2024 Carmot trials are CARMOT (ROCHE)
+    df_full.loc[(df_full['lead_sponsor_canonical'] == 'CARMOT THERAPEUTICS') & (df_full['start_year'] < 2024), 'lead_sponsor_canonical'] = 'CARMOT (ROCHE)'
+
+    # 6. DYNAMIC SELECTION
     registry_fields = list(PIPELINE_REGISTRY["FIELDS"].keys())
     calculated_artifacts = [
         'Clinical_Score', 'Zone', 'is_correct', 'ui_search_label', 'Internal_Score_Raw',

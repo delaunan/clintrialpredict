@@ -56,6 +56,7 @@ Compare `[START_YEAR]` to the `Acquisition Year`.
 | **FOREST LABS** | 2014 | **ABBVIE** | **RAYZEBIO** | 2024 | **BMS** |
 | **CEREVEL** | 2024 | **ABBVIE** | **MORPHOSYS** | 2024 | **NOVARTIS** |
 | **ALPINE** | 2024 | **VERTEX** | **SANDOZ** | 2023 | **NOVARTIS** (Spin) |
+| **CARMOT** | 2024 | **ROCHE** | | | |
 
 ---
 

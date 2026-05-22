@@ -1424,7 +1424,7 @@ def inject_custom_styles():
             }}
 
             @keyframes appBtnShine {{
-                0%   {{ left: -160%; }}
+                0%   {{ left: -160%; }}g
                 70%  {{ left: 160%; }}
                 100% {{ left: 160%; }}
             }}
@@ -5439,7 +5439,7 @@ def render_landing_page(x_base):
                             <div class="highlight-title">Industry-Scale Public Clinical Data</div>
                             <div class="highlight-kicker">Intelligence Source</div>
                         </div>
-                        <div class="highlight-text">Built on the publicly available <b>AACT registry</b>, this machine learning system leverages execution patterns from <b>30,000+ Phase II and III trials</b> since 2005. The analytical scope focuses on <b>late-stage studies</b>, where strategic and financial stakes are highest.</div>
+                        <div class="highlight-text">Built on the publicly available <b>AACT registry</b>, this machine learning system leverages execution patterns from <b>24,000 Phase II and III trials</b> since 2009. The analytical scope focuses on <b>late-stage studies</b>, where strategic and financial stakes are highest.</div>
                     </div>
                     <div class="highlight-box">
                         <div style="display: flex; justify-content: space-between; align-items: flex-start;">
