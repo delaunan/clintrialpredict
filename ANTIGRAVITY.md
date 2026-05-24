@@ -34,13 +34,15 @@ The v2.0 cycle transforms the platform from a historical discovery engine into a
 ## **4. Deployment Artifacts & Parity**
 | Service Layer | Artifact Name | Purpose |
 | :--- | :--- | :--- |
-| **API** | `model_prod_01.joblib` | Full Preprocessor + XGBoost Pipeline. |
-| **API** | `thresholds_01.json` | TA-specific logit boundaries & Calibration Offsets. |
-| **API** | `shap_values_01.joblib` | Pre-calculated SHAP vectors for instant UI response. |
-| **API** | `taxonomy_01.json` | Feature-to-Pillar mapping and UI hierarchies. |
-| **UI** | `search_registry.csv` | Enriched database for the AgGrid discovery engine. |
+| **API** | [model_prod_01.joblib](file:///home/delaunan/code/delaunan/clintrialpredict/models/model_prod_01.joblib) | Full Preprocessor + XGBoost Pipeline. |
+| **API** | [thresholds_01.json](file:///home/delaunan/code/delaunan/clintrialpredict/models/thresholds_01.json) | TA-specific logit boundaries & Calibration Offsets. |
+| **API** | [shap_values_01.joblib](file:///home/delaunan/code/delaunan/clintrialpredict/models/shap_values_01.joblib) | Pre-calculated SHAP vectors for instant UI response. |
+| **API** | [taxonomy_01.json](file:///home/delaunan/code/delaunan/clintrialpredict/models/taxonomy_01.json) | Feature-to-Pillar mapping and UI hierarchies. |
+| **UI** | [search_registry.csv](file:///home/delaunan/code/delaunan/clintrialpredict/frontend/data/search_registry.csv) | Enriched database for the AgGrid discovery engine. |
 
 - **Scoring Parity Standard**: 100% mathematical consistency between Notebook and API achieved via **Bottom-Up Rounding** and **Residual Absorption** into the "Therapeutic Context" pillar.
+- **Pipeline Generation**: Generate [search_registry.csv](file:///home/delaunan/code/delaunan/clintrialpredict/frontend/data/search_registry.csv) dynamically by running [refresh_registry.py](file:///home/delaunan/code/delaunan/clintrialpredict/refresh_registry.py).
+- **Mathematical Audit**: Run [audit_parity.py](file:///home/delaunan/code/delaunan/clintrialpredict/audit_parity.py) to check for score calculation or UI aggregation discrepancies.
 
 ---
 
@@ -72,3 +74,9 @@ To maintain 100% production uptime, all improvements follow the Staging-to-Produ
 ### **Advisory & Planning Protocols**
 - Default to advisory mode: explain, inspect, compare, review risks, and propose options before editing.
 - Adhere strictly to the Planning Mode workflow: create/update `implementation_plan.md` and obtain approval before execution.
+
+### **Parity & Regression Safeguards**
+- **Before staging or committing any code edits**: If model coefficients, categories, preprocess pipeline scripts (`src/prep/`), or scoring functions are modified:
+  1. Re-generate the local Streamlit database: `python refresh_registry.py`
+  2. Run the mathematical audit verification: `python audit_parity.py`
+  3. The audit must show **100% Perfect Parity** before changes are eligible for Staging deployment.
