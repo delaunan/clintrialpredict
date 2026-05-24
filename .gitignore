@@ -38,3 +38,8 @@ load_test_results*/
 **/load_test_results.csv
 **/user_*_failure.png
 **/user_*_failure.html
+
+# Local assistant configs
+.gemini/.env
+.antigravitycli/
+.claude/

@@ -18,7 +18,7 @@ The v2.0 cycle transforms the platform from a historical discovery engine into a
 
 ### **Phase 2: Intelligent Protocol Mapping (v2.2)**
 - **Text-to-Logic**: Users can edit raw trial information (Population, Summary, Criteria).
-- **Gemini One-Shot Strategy**: A specialized agent will parse the edited text and automatically map it to the 27 model features.
+- **Antigravity One-Shot Strategy**: A specialized agent will parse the edited text and automatically map it to the 27 model features.
 - **Verification Loop**: Automated feature updates will be displayed in the Tab 4 console for final user review and manual refinement.
 
 ---
@@ -58,3 +58,17 @@ To maintain 100% production uptime, all improvements follow the Staging-to-Produ
    # Deploy Staging UI (pointing to staging API)
    gcloud run deploy clintrial-ui-staging --source . --set-env-vars API_URL=[STAGING_API_URL]
    ```
+
+---
+
+## **6. Agent Operational Guidelines (Antigravity Rules)**
+
+### **Default Behavior**
+- Treat repositories as read-only unless the user explicitly approves a specific code edit.
+- Do not create, modify, delete, format, rename, or move files unless the user explicitly asks for that exact change.
+- Before making any code change, first inspect the relevant files and propose a minimal plan.
+- Do not run destructive commands unless explicitly approved.
+
+### **Advisory & Planning Protocols**
+- Default to advisory mode: explain, inspect, compare, review risks, and propose options before editing.
+- Adhere strictly to the Planning Mode workflow: create/update `implementation_plan.md` and obtain approval before execution.
