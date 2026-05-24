@@ -41,5 +41,13 @@ load_test_results*/
 
 # Local assistant configs
 .gemini/.env
+.gemini/checkpoints/
+.gemini/state.json
+.gemini/history/
 .antigravitycli/
 .claude/
+
+# AI Agent Configuration & Instructions (Force include)
+!GEMINI.md
+!ARCHITECTURAL_LOG.md
+!.gemini/settings.json
