@@ -156,11 +156,14 @@ deploy_api() {
 }
 
 deploy_ui() {
-    echo -e "${BLUE}Deploying UI service: $UI_SERVICE...${NC}"
-    gcloud run deploy "$UI_SERVICE" \
+    local service_name="${1:-$UI_SERVICE}"
+    local variant="${2:-"trial_audit"}"
+
+    echo -e "${BLUE}Deploying UI service: $service_name (Variant: $variant)...${NC}"
+    gcloud run deploy "$service_name" \
        --image "$IMAGE" \
        --command "streamlit","run","frontend/app.py","--server.port","8080","--server.address","0.0.0.0" \
-       --set-env-vars API_URL="$API_URL" \
+       --set-env-vars API_URL="$API_URL",APP_VARIANT="$variant" \
        --memory 3Gi \
        --port 8080 \
        --concurrency 4 \
@@ -204,7 +207,21 @@ case $COMMAND in
         require_ready
         build_image
         push_image
-        deploy_ui
+        deploy_ui "$UI_SERVICE" "trial_audit"
+        ;;
+    game)
+        print_header
+        require_ready
+        build_image
+        push_image
+        deploy_ui "clintrial-game" "serious_game"
+        ;;
+    simulator)
+        print_header
+        require_ready
+        build_image
+        push_image
+        deploy_ui "clintrial-simulator" "simulator"
         ;;
     all)
         print_header
@@ -212,10 +229,10 @@ case $COMMAND in
         build_image
         push_image
         deploy_api
-        deploy_ui
+        deploy_ui "$UI_SERVICE" "trial_audit"
         ;;
     *)
-        echo "Usage: $0 {check|auth|build|push|api|ui|all}"
+        echo "Usage: $0 {check|auth|build|push|api|ui|game|simulator|all}"
         exit 1
         ;;
 esac
