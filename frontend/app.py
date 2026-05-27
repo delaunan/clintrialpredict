@@ -1,6 +1,13 @@
 import os
+import sys
+from pathlib import Path
 import streamlit as st
 from dotenv import load_dotenv
+
+# Ensure project root is in sys.path for absolute imports
+root_path = str(Path(__file__).resolve().parent.parent)
+if root_path not in sys.path:
+    sys.path.append(root_path)
 
 # Load environment variables
 load_dotenv()
@@ -21,7 +28,7 @@ st.set_page_config(
 variant = os.getenv("APP_VARIANT", "trial_audit").lower()
 
 if variant == "trial_audit":
-    import views.trial_audit as audit
+    import frontend.views.trial_audit as audit
     audit.init_session_state()
     audit.keep_filter_state_alive()
     audit.inject_custom_styles()

@@ -9,9 +9,21 @@ REGION="europe-west1"
 IMAGE="europe-west1-docker.pkg.dev/clintrial-predict-2025/images/app-v01:latest"
 API_SERVICE="clintrial-api"
 UI_SERVICE="clintrial-ui"
-API_URL="https://clintrial-api-835962039082.europe-west1.run.app/predict"
 
-# --- Colors for Output ---
+# --- Helper Functions ---
+
+get_api_url() {
+    # Dynamically fetch the URL of the API service from Google Cloud
+    local url
+    url=$(gcloud run services describe "$API_SERVICE" --platform managed --region "$REGION" --format 'value(status.url)' 2>/dev/null || echo "")
+    if [ -n "$url" ]; then
+        echo "${url}/predict"
+    else
+        # Fallback to a safe placeholder if the service doesn't exist yet
+        echo "PENDING_API_DEPLOYMENT"
+    fi
+}
+
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -158,12 +170,16 @@ deploy_api() {
 deploy_ui() {
     local service_name="${1:-$UI_SERVICE}"
     local variant="${2:-"trial_audit"}"
+    local api_url
+    api_url=$(get_api_url)
 
     echo -e "${BLUE}Deploying UI service: $service_name (Variant: $variant)...${NC}"
+    echo -e "${BLUE}Targeting API URL: $api_url${NC}"
+    
     gcloud run deploy "$service_name" \
        --image "$IMAGE" \
        --command "streamlit","run","frontend/app.py","--server.port","8080","--server.address","0.0.0.0" \
-       --set-env-vars API_URL="$API_URL",APP_VARIANT="$variant" \
+       --set-env-vars API_URL="$api_url",APP_VARIANT="$variant" \
        --memory 3Gi \
        --port 8080 \
        --concurrency 4 \

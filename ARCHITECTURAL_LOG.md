@@ -98,7 +98,13 @@ All variants share the same **Scoring Engine**, **Parity Logic**, and **Data Reg
 | **`simulator`** | Interactive Forecasting | Adds "Simulation Mode" (Live FastAPI /predict calls). |
 | **`serious_game`** | Strategic Management | Adds Portfolio View, Cost Estimation, and Market Potential layers. |
 
-### **C. Implementation Mandates**
+### **D. Frontend Structure (Modular)**
+- `frontend/app.py`: Lightweight router/entry point.
+- `frontend/assets/`: Centralized storage for images and static visuals.
+- `frontend/views/`: Individual product variants (e.g., `trial_audit.py`, `pitch_landing.py`).
+- `frontend/utils/`: Shared UI helper functions (e.g., `plot.py`).
+
+### **E. Implementation Mandates**
 1. **Feature Toggles**: Use `os.getenv("APP_VARIANT")` to conditionally render UI components. Default is `trial_audit`.
 2. **Modular Views**: Logic for non-core features (Game/Simulator) must reside in `frontend/views/` to keep `app.py` as a lightweight router.
 3. **Safety**: Bugs in a variant's UI logic must not impact the `trial_audit` variant's stability.

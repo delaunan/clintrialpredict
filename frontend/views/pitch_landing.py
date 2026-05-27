@@ -115,15 +115,14 @@ def render_pitch_page(audit_log=None):
         st.session_state["_landing_shown_logged"] = True
 
     # ---------- ASSETS ----------
-    assets_dir = Path(__file__).resolve().parent
+    # This view is in frontend/views/, assets are in frontend/assets/
+    assets_dir = Path(__file__).resolve().parent.parent / "assets"
 
     def get_img_b64(filename):
-        for path in (assets_dir / filename,
-                     assets_dir / "frontend" / filename,
-                     Path("./frontend") / filename):
-            if path.exists():
-                with open(path, "rb") as f:
-                    return f"data:image/png;base64,{base64.b64encode(f.read()).decode()}"
+        path = assets_dir / filename
+        if path.exists():
+            with open(path, "rb") as f:
+                return f"data:image/png;base64,{base64.b64encode(f.read()).decode()}"
         return None
 
     def media_img(filename, alt_text):

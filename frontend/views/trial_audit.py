@@ -16,16 +16,15 @@ import requests
 
 
 # IMPORT PLOTTING UTILS
-from utils.plot import plot_success_gauge, plot_impact_bar, plot_treemap
+from frontend.utils.plot import plot_success_gauge, plot_impact_bar, plot_treemap
 
 # Load environment variables
 load_dotenv()
 
 import sys
 from pathlib import Path
-# Add parent dir to sys.path to allow importing modules from frontend/
-sys.path.append(str(Path(__file__).resolve().parent.parent))
-from pitch_landing import render_pitch_page
+# pitch_landing is now in the same views/ directory
+from frontend.views.pitch_landing import render_pitch_page
 
 
 # ==========================
@@ -38,9 +37,11 @@ from pitch_landing import render_pitch_page
 # )
 
 # --- PATHS & URLS ---
-CURRENT_DIR = Path(__file__).resolve().parent.parent # Points to frontend/
-DATA_PATH = CURRENT_DIR / "data" / "search_registry.csv"
-TAXONOMY_PATH = CURRENT_DIR.parent / "models" / "taxonomy_01.json"
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent # Points to project root
+FRONTEND_DIR = PROJECT_ROOT / "frontend"
+ASSETS_DIR = FRONTEND_DIR / "assets"
+DATA_PATH = FRONTEND_DIR / "data" / "search_registry.csv"
+TAXONOMY_PATH = PROJECT_ROOT / "models" / "taxonomy_01.json"
 IS_CLOUD_RUN = bool(os.getenv("K_SERVICE"))
 
 API_URL = os.getenv("API_URL", "").strip()
@@ -3948,7 +3949,7 @@ VALID_NCT_IDS = set(X_ALL[ID_COL].dropna().astype(str))
 
 @st.cache_data
 def load_logo_base64():
-    logo_path = CURRENT_DIR / "logo_grey_title.png"
+    logo_path = ASSETS_DIR / "logo_grey_title.png"
     if not logo_path.exists():
         return ""
 
