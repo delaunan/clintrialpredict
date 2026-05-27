@@ -25,7 +25,9 @@ st.set_page_config(
 # ==========================
 # 2. VARIANT ROUTING
 # ==========================
-variant = os.getenv("APP_VARIANT", "trial_audit").lower()
+# Prioritize a session-specific override (for navigating between variants)
+# Fall back to the server-level environment variable.
+variant = st.session_state.get("variant_override", os.getenv("APP_VARIANT", "trial_audit")).lower()
 
 if variant == "trial_audit":
     import frontend.views.trial_audit as audit
@@ -40,7 +42,7 @@ elif variant == "simulator":
     st.title("Simulator Mode")
     st.info("Simulation variant is currently under development.")
     if st.button("Back to Audit"):
-        os.environ["APP_VARIANT"] = "trial_audit"
+        st.session_state["variant_override"] = "trial_audit"
         st.rerun()
 
 elif variant == "serious_game":
@@ -48,12 +50,12 @@ elif variant == "serious_game":
     st.title("Serious Game Mode")
     st.info("Serious Game variant (Portfolio, Costs, Market) is currently under development.")
     if st.button("Back to Audit"):
-        os.environ["APP_VARIANT"] = "trial_audit"
+        st.session_state["variant_override"] = "trial_audit"
         st.rerun()
 
 else:
     st.error(f"Unknown APP_VARIANT: {variant}")
     st.info("Defaulting to Trial Audit mode...")
     if st.button("Launch Audit"):
-        os.environ["APP_VARIANT"] = "trial_audit"
+        st.session_state["variant_override"] = "trial_audit"
         st.rerun()

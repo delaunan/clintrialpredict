@@ -246,6 +246,8 @@ case $COMMAND in
         push_image
         deploy_api
         deploy_ui "$UI_SERVICE" "trial_audit"
+        deploy_ui "clintrial-game" "serious_game"
+        deploy_ui "clintrial-simulator" "simulator"
         ;;
     *)
         echo "Usage: $0 {check|auth|build|push|api|ui|game|simulator|all}"
