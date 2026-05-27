@@ -82,3 +82,23 @@ To ensure the UI and API match the Notebook precisely, the system implements **R
 - **Database Refresh**: `python refresh_registry.py` (Re-calculates `search_registry.csv`).
 - **Parity Audit**: `python audit_parity.py` (Checks for mathematical drift).
 - **Deployment**: `scripts/deploy.sh` (Standard Cloud Run push).
+
+---
+
+## **7. Multi-Variant Product Architecture (v1.0 - Modular Roadmap)**
+To support multiple use cases from a single codebase, the system employs a **Core + Variant** pattern controlled by the `APP_VARIANT` environment variable.
+
+### **A. Shared Core (The Foundation)**
+All variants share the same **Scoring Engine**, **Parity Logic**, and **Data Registry**. Any change to the core must be verified against all variants using `audit_parity.py`.
+
+### **B. Product Variants**
+| Variant (`APP_VARIANT`) | Primary Focus | UI Components |
+| :--- | :--- | :--- |
+| **`trial_audit` (Default)** | Standard Discovery | Landing Search + Static Forensic View. |
+| **`simulator`** | Interactive Forecasting | Adds "Simulation Mode" (Live FastAPI /predict calls). |
+| **`serious_game`** | Strategic Management | Adds Portfolio View, Cost Estimation, and Market Potential layers. |
+
+### **C. Implementation Mandates**
+1. **Feature Toggles**: Use `os.getenv("APP_VARIANT")` to conditionally render UI components. Default is `trial_audit`.
+2. **Modular Views**: Logic for non-core features (Game/Simulator) must reside in `frontend/views/` to keep `app.py` as a lightweight router.
+3. **Safety**: Bugs in a variant's UI logic must not impact the `trial_audit` variant's stability.

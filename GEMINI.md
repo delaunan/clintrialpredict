@@ -26,4 +26,5 @@ Before staging or committing any code edits to model coefficients, categories, p
 ## 3. Multi-CLI Memory Strategy
 - All CLIs share this `GEMINI.md` for instructions.
 - Project-specific private notes are stored in `.gemini/tmp/clintrialpredict/memory/MEMORY.md`.
+- **Branch-Aware Memory**: To prevent context contamination, all agents MUST prefix every entry in `MEMORY.md` with the current Git branch name (e.g., `[branch-name]: progress note`). When reading `MEMORY.md`, agents MUST prioritize entries matching the current branch and treat others as historical or out-of-scope.
 - Use shared memory for cross-turn persistence to avoid duplicating session info.

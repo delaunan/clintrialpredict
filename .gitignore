@@ -51,3 +51,4 @@ load_test_results*/
 !GEMINI.md
 !ARCHITECTURAL_LOG.md
 !.gemini/settings.json
+.codexrc
