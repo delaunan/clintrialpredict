@@ -4064,6 +4064,26 @@ def consume_home_click_query_param():
         st.query_params.clear()
 
 
+def consume_trial_open_query_param():
+    trial_value = st.query_params.get("ctp_trial", None)
+
+    if isinstance(trial_value, list):
+        trial_value = trial_value[0] if trial_value else ""
+
+    selected_id = unquote(str(trial_value or "")).strip()
+
+    if not selected_id:
+        return False
+
+    st.query_params.clear()
+    opened = enter_detail_view(selected_id)
+
+    if opened:
+        st.session_state["pitch_seen"] = True
+
+    return opened
+
+
 def start_search():
     persist_s_detail_value(
         st.session_state.get("s_detail", st.session_state.get("s_detail_memory", ""))
@@ -4395,7 +4415,6 @@ def render_transition_overlay_hook():
 
             function getOverlayConfig(text) {
                 if (text === "Search Trials") return ["Loading trials...", 1600];
-                if (text === "Back to Results") return ["Returning to results...", 1600];
                 if (text === "Reset Filters") return ["Resetting filters...", 1600];
                 if (text === "Predict Trial Completion") return ["Generating completion score...", 3330];
                 return null;
@@ -4405,8 +4424,6 @@ def render_transition_overlay_hook():
 
             if (!win.__ctpOverlayListenerInstalled) {
                 doc.addEventListener("click", function(event) {
-
-
                     const button = event.target.closest("button");
 
                     if (button) {
@@ -4531,13 +4548,7 @@ def render_header(is_landing=True, show_predict_button=False, show_back_button=F
                         )
 
                 with c_back:
-                    if show_back_button:
-                        st.button(
-                            "Back to Results",
-                            width="stretch",
-                            key="header_back_btn",
-                            on_click=enter_results_view
-                        )
+                    pass
 
                 with c_predict:
                     if show_predict_button:
@@ -4654,6 +4665,7 @@ def render_trials_grid(df):
         )
 
     grid_df = grid_df.sort_values("NCT ID", ascending=True, kind="stable").reset_index(drop=True)
+    grid_df.insert(0, "Trial", grid_df["NCT ID"].map(lambda nct_id: f"?ctp_trial={quote(str(nct_id))}"))
 
     # Keep row mechanics Python-side, while the final CSS block clamps
     # the visual dataframe height per viewport profile.
@@ -4664,6 +4676,7 @@ def render_trials_grid(df):
 
     if show_score:
         column_config = {
+            "Trial": st.column_config.LinkColumn("Trial", display_text="Open", width=70),
             "NCT ID": st.column_config.TextColumn("NCT ID", width=92),
             "Identity": st.column_config.TextColumn("Identity", width=476),
             "Sponsor": st.column_config.TextColumn("Sponsor", width=166),
@@ -4674,6 +4687,7 @@ def render_trials_grid(df):
         }
     else:
         column_config = {
+            "Trial": st.column_config.LinkColumn("Trial", display_text="Open", width=70),
             "NCT ID": st.column_config.TextColumn("NCT ID", width=92),
             "Identity": st.column_config.TextColumn("Identity", width=490),
             "Sponsor": st.column_config.TextColumn("Sponsor", width=170),
@@ -4682,24 +4696,15 @@ def render_trials_grid(df):
             "Start Year": st.column_config.TextColumn("Start Year", width=60),
         }
 
-    table_event = st.dataframe(
+    st.dataframe(
         grid_df,
         hide_index=True,
         width="stretch",
         height=dynamic_height,
         column_config=column_config,
-        selection_mode="single-row",
-        on_select="rerun",
         row_height=row_h,
         key=f"trials_table_{'scores' if show_score else 'base'}",
     )
-
-    selected_rows = table_event.selection.rows
-
-    if selected_rows:
-        selected_idx = selected_rows[0]
-        if 0 <= selected_idx < len(grid_df):
-            return grid_df.iloc[selected_idx]["NCT ID"]
 
     return None
 
@@ -5506,7 +5511,7 @@ def render_detail_page():
         render_header(
             is_landing=False,
             show_predict_button=True,
-            show_back_button=True,
+            show_back_button=False,
             show_global_edit_toggle=True
         )
 
@@ -5523,6 +5528,10 @@ def route_app():
 
     x_base = X_ALL
     consume_home_click_query_param()
+    if consume_trial_open_query_param():
+        audit_view_transition("detail")
+        render_detail_page()
+        return
 
     if not st.session_state.get("pitch_seen", False):
         render_pitch_page(audit_log=audit_log)
@@ -5549,8 +5558,6 @@ def route_app():
     render_landing_page(x_base)
 
 
-
 # ==========================
 # 6. MAIN UI FLOW
 # ==========================
-
