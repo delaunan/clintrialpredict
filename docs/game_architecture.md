@@ -135,9 +135,9 @@ The current `data/data_clinpred.csv` file already contains several fields that c
 | Current status | `overall_status` | Determines whether operational values are final, partial, planned, or censored. |
 | Stage | `phase`, `phase_ui`, `phase_ml` | Core cost and future-commitment driver. |
 | Enrollment | `enrollment`, `enrollment_type` | Reliable final target mainly for completed trials with actual enrollment; ongoing actuals are lower bounds, not final totals. |
-| Duration | `start_date`, `completion_date`, `primary_completion_date`, `primary_duration_months`, `is_duration_unknown` | Completed trials can define final duration; ongoing trials may contain planned dates but require uncertainty handling. |
+| Duration | `start_date`, `completion_date`, `primary_completion_date`, `primary_duration_months`, `is_duration_unknown` | Completed trials should define total trial duration from start-to-completion dates. `primary_duration_months` should be treated as an endpoint/follow-up duration proxy, not the total cost-duration target. |
 | Sites | `number_of_facilities` | Final-ish for completed trials; observed-to-date lower bound for ongoing trials. |
-| Countries | Reconstruct from `data/countries.txt` by `nct_id`; `includes_us` is already in `data_clinpred.csv` | Country count is not directly in `data_clinpred.csv`; ongoing country lists are observed-to-date lower bounds. |
+| Countries | Reconstruct from `data/countries.txt` by `nct_id` | Country count is not directly in `data_clinpred.csv`; ongoing country lists are observed-to-date lower bounds. The cost method should remain US-agnostic. |
 | Design complexity | `number_of_arms`, `allocation`, `masking`, `intervention_model`, `has_placebo`, `has_dmc` | Cost multipliers and operational-complexity proxies. |
 | Therapeutic context | `therapeutic_area`, `gbd_indication_name`, `gbd_cause_id_3`, `is_rare_disease` | Phase and TA cost calibration, rare-disease recruitment burden, future market logic. |
 | Product complexity | `therapeutic_modality`, `administration_complexity`, `primary_purpose` | Per-patient and protocol-complexity assumptions. |
@@ -283,6 +283,30 @@ predicted_final_duration = max(model_prediction, elapsed_duration_to_decision_da
 
 For the first version, exact historical observed-to-date patient, site, and country values may not be available for a past portfolio committee date. In that case, use the current extract as a pragmatic lower-bound approximation where appropriate, clearly label it as an approximation, and keep the participant-facing scenario focused on discussion-quality decisions rather than forensic reconstruction.
 
+Before building model-ready datasets, create explicit target-readiness flags. These flags make the operational modelling step auditable and prevent planned, ongoing, completed, and partial-stop values from being mixed accidentally.
+
+Required MVP flags:
+
+| Flag | Meaning | Use |
+| ---- | ------- | --- |
+| `is_completed_actual_enrollment_target` | Completed trial with positive `ACTUAL` enrollment. | Training target for final enrollment model. |
+| `is_ongoing_actual_enrollment_lower_bound` | Ongoing/actionable trial with positive `ACTUAL` enrollment. | Lower bound when estimating final enrollment if continued. |
+| `is_estimated_planned_enrollment` | Trial with positive `ESTIMATED` enrollment. | Planned/expected scale feature, not final actual truth. |
+| `is_completed_site_count_target` | Completed trial with positive site/facility count. | Training target for final site-count model. |
+| `is_ongoing_site_count_lower_bound` | Ongoing/actionable trial with positive site/facility count. | Lower bound when estimating final site count if continued. |
+| `is_completed_country_count_target` | Completed trial with reconstructed positive country count. | Training target for final country-count model. |
+| `is_ongoing_country_count_lower_bound` | Ongoing/actionable trial with reconstructed positive country count. | Lower bound when estimating final country count if continued. |
+| `is_completed_duration_target` | Completed trial with positive known duration. | Training target for final duration model. |
+
+For duration, the MVP target should be date-derived total trial duration:
+
+```text
+total_duration_months_observed =
+    (completion_date or primary_completion_date - start_date) / average days per month
+```
+
+`primary_duration_months` can remain a useful endpoint-duration or follow-up-duration feature, but it should not be used as the total trial-duration target for cost modelling.
+
 ### 9.2 Recommended MVP modelling approach
 
 For the MVP, avoid predicting total cost directly. Instead, estimate operational quantities and convert them into cost with transparent assumptions.
@@ -305,10 +329,10 @@ Fallbacks should remain simple and explainable:
 
 | Future model | Target variable | Why it matters | Possible features | MVP priority |
 | ------------ | --------------- | -------------- | ----------------- | ------------ |
-| Final duration model | Final duration in months for completed trials. | Drives monthly management cost, calendar spend, and time-to-next-decision. | Phase, therapeutic area, intervention type, planned dates or duration when available, planned enrollment, number of arms, masking, allocation, endpoint proxies. | High |
+| Final duration model | Date-derived total duration in months for completed trials. | Drives monthly management cost, calendar spend, and time-to-next-decision. | Phase, therapeutic area, intervention type, endpoint-duration proxy, planned enrollment, number of arms, masking, allocation, endpoint proxies. | High |
 | Actual enrollment model | Final actual enrolled patients for completed trials. | Drives patient-level cost and recruitment burden. | Planned or observed-to-date enrollment, phase, condition, sponsor type, therapeutic area, rare disease proxy, eligibility complexity. | High |
 | Site count model | Final site count for completed trials. | Drives site startup, monitoring, and geography complexity. | Planned or observed-to-date sites, planned enrollment, phase, therapeutic area, sponsor tier, intervention model. | Medium |
-| Country count model | Final country count for completed trials. | Drives country startup cost and operational complexity. | Reconstructed country count, includes-US flag, sponsor tier, trial size, therapeutic area, phase, planned enrollment. | Medium |
+| Country count model | Final country count for completed trials. | Drives country startup cost and operational complexity. | Reconstructed country count, sponsor tier, trial size, therapeutic area, phase, planned enrollment. | Medium |
 | Recruitment complexity proxy | Relative difficulty of recruiting and retaining patients. | Modifies patient cost, duration risk, and operational burden. | Rare disease proxy, eligibility restrictions, age eligibility, condition severity, intervention type, trial duration. | High |
 | Downstream phase size estimate | Expected size of invented next phase. | Supports future commitment estimates beyond the current trial. | Current phase, next-phase template, therapeutic area, condition, historical similar completed trials, market category. | Later |
 
@@ -321,7 +345,7 @@ Each operational indicator should use the simplest model that is accurate enough
 | Final duration months | Phase/TA median baseline, `HistGradientBoostingRegressor`, `XGBRegressor` on `log1p(target)`. | `XGBRegressor` if it clearly improves over baselines; otherwise gradient boosting or median fallback. | MAE and RMSE on months after inverse transform; calibration by phase and TA; minimum duration sanity checks. |
 | Final enrollment | Phase/TA median baseline, `HistGradientBoostingRegressor`, `XGBRegressor` on `log1p(target)`, optional quantile model later. | `XGBRegressor` on `log1p(enrollment)` for MVP if validation is stable. | Error on log scale and original scale; high-enrollment outlier handling; phase-level calibration. |
 | Final site count | Phase/TA median baseline, `HistGradientBoostingRegressor`, `XGBRegressor` on `log1p(target)`. | Best validated gradient-boosting model, with median fallback for sparse groups. | Count plausibility, lower-bound enforcement, calibration by phase and multinational proxy. |
-| Final country count | Phase/TA median baseline, `HistGradientBoostingRegressor`, `XGBRegressor` on `log1p(target)`. | Best validated gradient-boosting model after reconstructing country count from `data/countries.txt`. | Count plausibility, includes-US sanity check, calibration by phase and sponsor tier. |
+| Final country count | Phase/TA median baseline, `HistGradientBoostingRegressor`, `XGBRegressor` on `log1p(target)`. | Best validated gradient-boosting model after reconstructing country count from `data/countries.txt`. | Count plausibility, US-agnostic geography handling, calibration by phase and sponsor tier. |
 | Recruitment complexity proxy | Rule-based score, shallow tree model, or gradient boosting if a target is defined. | Rule-based MVP score unless a strong supervised target is available. | Interpretability and directional plausibility. |
 | Future phase size | Similar-trials median, weighted nearest-neighbor median, optional model later. | Similar-trials median for MVP. | Explainability, stability, and reasonable future-phase scale. |
 
@@ -338,7 +362,40 @@ General rules:
 
 The UI should not expose the model-selection complexity. It should show concise estimates and clear assumption labels.
 
-### 9.4 Required and optional data sources
+### 9.4 Updated operational-size modelling direction
+
+Early notebook benchmarks showed that direct point estimates for enrollment, sites, and countries can look much better when the model is allowed to use final observed operational quantities from completed trials as features. Those scores are useful as an upper-bound or known-input benchmark, but they are too optimistic for a forecast unless those quantities are actually known at the simulation decision date.
+
+The recommended next approach is therefore:
+
+1. Keep three benchmark modes.
+   - **Dependency-pruned forecast**: exclude `enrollment_num`, `site_count_num`, and `country_count_num` when those values would have to be guessed. This is the cleanest design-stage forecast baseline.
+   - **Sequenced forecast**: predict one operational quantity first, then feed that prediction into the next model. Use out-of-fold upstream predictions during training so downstream models do not learn from true completed values that would not be known in practice.
+   - **Known-input mode**: allow enrollment, sites, or countries as features only when they are user-provided, planned, or observed-to-date lower bounds at the scenario date.
+2. Prioritize duration and enrollment accuracy.
+   - Duration is currently the most stable target because endpoint/follow-up duration, indication, sponsor, phase, and design features carry direct signal.
+   - Enrollment remains the most important operational-size target and needs a stronger approach than one direct regressor.
+3. Add supervised operational size bands before trying generic clustering.
+   - For enrollment, create bands such as `tiny`, `small`, `medium`, `large`, and `mega`.
+   - Train a classifier for enrollment band, then use band probabilities or band-specific priors alongside the log-enrollment regressor.
+   - Evaluate whether the model first gets the order of magnitude right before judging exact patient count.
+   - After this supervised baseline is established, run a controlled clustering/archetype experiment as an optional enhancement. Cluster trials using design, sponsor, indication, endpoint, and complexity features; add the cluster label as a candidate feature or cluster-specific prior; keep it only if it improves enrollment or duration validation metrics, not merely because the clusters look plausible.
+4. Use grouped priors as stabilizers.
+   - Blend or compare model outputs with historical medians and ranges by phase, therapeutic area, indication group, rare-disease flag, sponsor tier, and modality.
+   - This is especially important because median completed enrollment is much smaller than the mean, while a small number of very large trials dominate absolute error.
+5. Estimate sites from enrollment logic when appropriate.
+   - Site count should be checked against expected patients per site for similar trials.
+   - Independent site predictions can still be benchmarked, but the implementation should reconcile enrollment, sites, and countries as a bundle.
+6. Return ranges, not only point estimates.
+   - The serious-game module should show expected value plus low/high scenario values for enrollment and duration.
+   - Point estimates alone are misleading for heavily skewed operational targets.
+7. Always run reconciliation checks before cost calculation.
+   - Flag impossible or suspicious combinations such as countries greater than sites, fewer than one patient per site, or a very low-enrollment trial spread across many sites.
+   - Reconciliation should not silently hide model uncertainty; it should make questionable operational bundles auditable.
+
+This direction came from comparing four benchmark families in `notebooks/serious_game.ipynb`: grouped-median baselines, enhanced gradient-boosted regressors, dependency-pruned regressors, and sequenced y-to-y models. The key conclusion is that the strongest raw scores were partly driven by operational cross-target features, while dependency-pruned and sequenced results are more credible for forecasting. Future sessions should use the pruned and sequenced scores as the default implementation benchmark, and reserve the stronger known-input/oracle scores for scenarios where the user explicitly provides planned or current operational values.
+
+### 9.5 Required and optional data sources
 
 The primary source for the first notebook should be `data/data_clinpred.csv`.
 
@@ -572,6 +629,7 @@ Recommended notebook structure:
 | `<REF:DATA_LOAD>` | Load `data/data_clinpred.csv` and supporting `data/countries.txt`. | Base dataframe and country-count table. |
 | `<REF:DATA_AUDIT>` | Audit schema, missingness, status counts, phase counts, and key cost-driver distributions. | Data-quality summary. |
 | `<REF:FIELD_CONTRACT>` | Classify fields as direct, lower-bound, final target, feature, synthetic, or excluded. | Field contract table. |
+| `<REF:TARGET_READINESS_FLAGS>` | Create explicit flags for completed training targets, ongoing lower bounds, and planned estimates. | Auditable target/lower-bound flags. |
 | `<REF:TARGET_BUILD>` | Build completed-trial targets for duration, enrollment, sites, and countries. | Modelling dataset with target definitions. |
 | `<REF:FEATURE_BUILD>` | Build leakage-safe features for operational models. | Feature matrix and preprocessing plan. |
 | `<REF:MODEL_BENCHMARK>` | Compare baselines and candidate models per target. | Champion model selection per indicator. |
