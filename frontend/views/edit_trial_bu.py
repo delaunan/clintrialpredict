@@ -3915,108 +3915,47 @@ def inject_custom_styles():
                 fill: transparent !important;
             }}
 
-            /* ===================== TRIAL FEATURES TAB ===================== */
-            /* Responsive tokens (laptop baseline). The breakpoint blocks at the
-               end scale these exactly like the rest of the app, so the grid
-               keeps pace with the user's screen resolution. */
             html body [class*="st-key-simulation_feature_pillar_"] {{
-                --sim-control-h: var(--ui-top-strip-control-h);
-                --sim-label-font: 0.75rem;
-                --sim-space: 20px;              /* card padding and horizontal field gaps */
-                --sim-title-gap: 34px;
-                --sim-title-extra-gap: 22px;
-                --sim-row-gap-inner: 16px;
-                --sim-title-font: 1.22rem;
-                --sim-icon: 42px;
-                --sim-icon-svg: 24px;
-                --sim-num-gap: 10px;
-                --sim-num-field-w: 92px;
-                --sim-row1-h: 248px;
-                --sim-row2-h: 338px;
-
                 background: #ffffff !important;
-                border: 1px solid #e2e8f0 !important;
+                border: 1px solid #d5e0ec !important;
                 border-radius: 14px !important;
-                padding: var(--sim-space) !important;
-                margin-bottom: 0 !important;
+                padding: 12px 14px 14px 14px !important;
+                margin-bottom: 10px !important;
                 box-shadow: var(--ui-shell-shadow) !important;
             }}
 
-            /* Row 1 — Therapeutic Context + Patient Profile share one height. */
-            html body [class*="st-key-simulation_feature_pillar_"][class*="_therapeutic_context_"],
-            html body [class*="st-key-simulation_feature_pillar_"][class*="_patient_profile_"] {{
-                height: var(--sim-row1-h) !important;
-                min-height: var(--sim-row1-h) !important;
-            }}
-
-            /* Row 2 — Scientific Challenge + Execution Framework share one height. */
             html body [class*="st-key-simulation_feature_pillar_"][class*="_scientific_challenge_"],
-            html body [class*="st-key-simulation_feature_pillar_"][class*="_execution_framework_"] {{
-                height: var(--sim-row2-h) !important;
-                min-height: var(--sim-row2-h) !important;
+            html body [class*="st-key-simulation_feature_pillar_"][class*="_therapeutic_context_"] {{
+                height: 275px !important;
+                min-height: 275px !important;
             }}
 
-            /* Internal card rhythm: the header breathes more than field rows,
-               while card side padding and centre field gap share one token. */
-            html body [class*="st-key-simulation_feature_pillar_"] [data-testid="stVerticalBlock"] {{
-                gap: var(--sim-row-gap-inner) !important;
+            html body [class*="st-key-simulation_feature_pillar_"][class*="_execution_framework_"],
+            html body [class*="st-key-simulation_feature_pillar_"][class*="_patient_profile_"] {{
+                height: 245px !important;
+                min-height: 245px !important;
             }}
 
-            html body [class*="st-key-simulation_feature_pillar_"] .sim-pillar-head + [data-testid="stHorizontalBlock"] {{
-                margin-top: calc(var(--sim-title-gap) - var(--sim-row-gap-inner)) !important;
-            }}
-
+            html body [class*="st-key-simulation_feature_pillar_"] [data-testid="stVerticalBlock"],
             html body [class*="st-key-simulation_feature_pillar_"] [data-testid="stHorizontalBlock"] {{
-                gap: var(--sim-space) !important;
-                justify-content: stretch !important;
-            }}
-
-            /* Header — icon chip + pillar name. No bottom margin; the vertical
-               block gap supplies the title->first-row spacing. */
-            html body [class*="st-key-simulation_feature_pillar_"] .sim-pillar-head {{
-                display: flex !important;
-                align-items: center !important;
-                gap: 10px !important;
-                margin: 0 0 var(--sim-title-extra-gap) 0 !important;
-            }}
-
-            html body [class*="st-key-simulation_feature_pillar_"] .sim-pillar-icon {{
-                width: var(--sim-icon) !important;
-                height: var(--sim-icon) !important;
-                border-radius: 10px !important;
-                background: #eef3f9 !important;
-                color: #2f62a6 !important;
-                display: flex !important;
-                align-items: center !important;
-                justify-content: center !important;
-                flex: 0 0 var(--sim-icon) !important;
-            }}
-
-            html body [class*="st-key-simulation_feature_pillar_"] .sim-pillar-icon svg {{
-                width: var(--sim-icon-svg) !important;
-                height: var(--sim-icon-svg) !important;
-                display: block !important;
+                gap: 0.52rem !important;
             }}
 
             html body [class*="st-key-simulation_feature_pillar_"] .highlight-title {{
-                margin: 0 !important;
-                font-size: var(--sim-title-font) !important;
-                line-height: 1.1 !important;
+                margin-bottom: 7px !important;
+                font-size: 0.96rem !important;
+                line-height: 1 !important;
             }}
 
-            /* Field labels — natural height, tight to their control. Labels lay
-               out at the (narrowed) column width, so dropdown labels mostly sit
-               on one line and the whole grid stays compact. */
             html body [class*="st-key-simulation_feature_pillar_"] [data-testid="stWidgetLabel"] {{
                 min-height: 0 !important;
-                height: auto !important;
-                margin: 0 0 3px 0 !important;
+                margin: 0 0 2px 0 !important;
                 padding: 0 !important;
             }}
 
             html body [class*="st-key-simulation_feature_pillar_"] [data-testid="stWidgetLabel"] p {{
-                font-size: var(--sim-label-font) !important;
-                line-height: 1.12 !important;
+                font-size: 0.68rem !important;
+                line-height: 1 !important;
                 white-space: normal !important;
                 margin: 0 !important;
                 padding: 0 !important;
@@ -4024,23 +3963,24 @@ def inject_custom_styles():
 
             html body [class*="st-key-simulation_feature_pillar_"] [data-testid="stElementContainer"] {{
                 margin: 0 !important;
-                width: 100% !important;
-                max-width: 100% !important;
+                width: min(100%, 260px) !important;
+                max-width: 260px !important;
             }}
 
-            /* Equal-width columns; the fields fill them, so widening the gutter
-               (above) is what narrows every field by the same proportion. */
             html body [class*="st-key-simulation_feature_pillar_"] [data-testid="stHorizontalBlock"] [data-testid="column"] {{
-                flex: 1 1 0 !important;
-                width: auto !important;
+                flex: 0 0 auto !important;
+                width: min(260px, calc((100vw - 260px) / 4)) !important;
                 min-width: 0 !important;
             }}
 
-            /* Control box — shared height for selects AND number inputs. */
+            html body [class*="st-key-simulation_feature_pillar_"] [data-testid="stHorizontalBlock"] {{
+                justify-content: flex-start !important;
+            }}
+
             html body [class*="st-key-simulation_feature_pillar_"] div[data-baseweb="select"] > div,
             html body [class*="st-key-simulation_feature_pillar_"] div[data-baseweb="input"] > div {{
-                min-height: var(--sim-control-h) !important;
-                height: var(--sim-control-h) !important;
+                min-height: var(--ui-top-strip-control-h) !important;
+                height: var(--ui-top-strip-control-h) !important;
                 display: flex !important;
                 align-items: center !important;
                 padding: 0 !important;
@@ -4051,8 +3991,8 @@ def inject_custom_styles():
             html body [class*="st-key-simulation_feature_pillar_"] div[data-baseweb="input"],
             html body [class*="st-key-simulation_feature_pillar_"] [data-testid="stSelectbox"],
             html body [class*="st-key-simulation_feature_pillar_"] [data-testid="stNumberInput"] {{
-                width: 100% !important;
-                max-width: 100% !important;
+                width: min(100%, 260px) !important;
+                max-width: 260px !important;
             }}
 
             html body [class*="st-key-simulation_feature_pillar_"] [data-testid="stTextInputRootElement"] input,
@@ -4060,121 +4000,6 @@ def inject_custom_styles():
                 min-height: 100% !important;
                 height: 100% !important;
                 font-size: var(--ui-control-font-size) !important;
-            }}
-
-            /* Numeric fields stay on the same two-column row but use an inline
-               label so the second-row cards keep matching heights. */
-            html body [class*="st-key-simfield_"][class*="_num_"] [data-testid="stNumberInput"] {{
-                display: flex !important;
-                flex-direction: row !important;
-                align-items: center !important;
-                gap: var(--sim-num-gap) !important;
-                width: 100% !important;
-            }}
-
-            html body [class*="st-key-simfield_"][class*="_num_"] [data-testid="stWidgetLabel"] {{
-                flex: 1 1 auto !important;
-                min-width: 0 !important;
-                margin: 0 !important;
-                display: flex !important;
-                align-items: center !important;
-            }}
-
-            html body [class*="st-key-simfield_"][class*="_num_"] [data-testid="stWidgetLabel"] p {{
-                line-height: 1.12 !important;
-            }}
-
-            html body [class*="st-key-simfield_"][class*="_num_"] [data-baseweb="input"] {{
-                flex: 0 0 var(--sim-num-field-w) !important;
-                width: var(--sim-num-field-w) !important;
-                min-width: var(--sim-num-field-w) !important;
-                max-width: var(--sim-num-field-w) !important;
-            }}
-
-            /* Match the top/bottom row separation to the compact horizontal
-               gap between the two cards. Streamlit adds its own vertical block
-               gap around keyed containers, so the second row is pulled upward
-               directly rather than relying only on margin-bottom. */
-            html body [class*="st-key-sim_feature_row_"] {{
-                margin-bottom: 0 !important;
-            }}
-
-            html body [class*="st-key-sim_feature_row_"]:last-of-type {{
-                margin-bottom: 0 !important;
-            }}
-
-            html body .st-key-sim_feature_row_1 {{
-                margin-top: -10px !important;
-            }}
-
-            /* Per-field wrapper that carries the changed-value flag. */
-            html body [class*="st-key-simfield_"] {{
-                margin: 0 !important;
-                padding: 0 !important;
-                width: 100% !important;
-            }}
-
-            /* Changed value — the control box turns a soft blue so a modified
-               input reads instantly against its unchanged white neighbours. */
-            html body [class*="st-key-simfield_chg_"] div[data-baseweb="select"] > div,
-            html body [class*="st-key-simfield_chg_"] div[data-baseweb="input"] > div {{
-                background-color: #e8f0fb !important;
-                border-color: #9bbbe2 !important;
-                box-shadow: inset 0 0 0 1px rgba(47,98,166,0.10),
-                            var(--ui-control-shadow) !important;
-            }}
-
-            /* Resolution scaling — mirrors the app's existing breakpoints so the
-               Trial Features grid grows with the screen like every other view. */
-            @media (min-width: 1800px) and (min-height: 950px) {{
-                html body [class*="st-key-simulation_feature_pillar_"] {{
-                    --sim-control-h: 26px;
-                    --sim-label-font: 0.80rem;
-                    --sim-space: 22px;
-                    --sim-title-gap: 38px;
-                    --sim-title-extra-gap: 25px;
-                    --sim-row-gap-inner: 18px;
-                    --sim-title-font: 1.32rem;
-                    --sim-icon: 46px;
-                    --sim-icon-svg: 26px;
-                    --sim-num-field-w: 100px;
-                    --sim-row1-h: 278px;
-                    --sim-row2-h: 380px;
-                }}
-            }}
-
-            @media (min-width: 2250px) and (min-height: 1050px) {{
-                html body [class*="st-key-simulation_feature_pillar_"] {{
-                    --sim-control-h: 29px;
-                    --sim-label-font: 0.86rem;
-                    --sim-space: 25px;
-                    --sim-title-gap: 44px;
-                    --sim-title-extra-gap: 29px;
-                    --sim-row-gap-inner: 20px;
-                    --sim-title-font: 1.43rem;
-                    --sim-icon: 50px;
-                    --sim-icon-svg: 28px;
-                    --sim-num-field-w: 108px;
-                    --sim-row1-h: 318px;
-                    --sim-row2-h: 432px;
-                }}
-            }}
-
-            @media (min-width: 2700px) and (min-height: 1250px) {{
-                html body [class*="st-key-simulation_feature_pillar_"] {{
-                    --sim-control-h: 32px;
-                    --sim-label-font: 0.92rem;
-                    --sim-space: 28px;
-                    --sim-title-gap: 50px;
-                    --sim-title-extra-gap: 33px;
-                    --sim-row-gap-inner: 22px;
-                    --sim-title-font: 1.52rem;
-                    --sim-icon: 54px;
-                    --sim-icon-svg: 31px;
-                    --sim-num-field-w: 116px;
-                    --sim-row1-h: 354px;
-                    --sim-row2-h: 480px;
-                }}
             }}
 
             html body .simulation-score-delta {{
@@ -4292,8 +4117,7 @@ SIMULATION_FEATURE_IDS = [
 ]
 SIMULATION_FEATURE_ID_SET = set(SIMULATION_FEATURE_IDS)
 SIMULATION_FEATURE_LABEL_OVERRIDES = {
-    "primary_duration_months_ml": "Max Primary Endpoint Duration  \n(in months)",
-    "has_dmc_ml": "Data Monitoring Comittee",
+    "primary_duration_months_ml": "Maximum Primary Endpoint Duration (months)",
 }
 SIMULATION_FEATURE_LAYOUT = {
     "Therapeutic Context": [
@@ -4315,47 +4139,11 @@ SIMULATION_FEATURE_LAYOUT = {
     ],
     "Execution Framework": [
         ["allocation_ml", "masking_ml"],
-        ["comparator_benchmark_ml", "has_placebo_ml"],
-        ["administration_complexity_ml"],
+        ["comparator_benchmark_ml", "administration_complexity_ml"],
+        ["has_placebo_ml", "has_dmc_ml"],
+        ["sponsor_tier_ml"],
         ["number_of_arms_ml", "primary_duration_months_ml"],
-        ["has_dmc_ml", "sponsor_tier_ml"],
     ],
-}
-
-# Minimalist single-stroke line icons for each Trial Features pillar header.
-# Same visual language as the landing-page "Where it brings value" icons:
-# inherit colour via currentColor, 1.7 stroke, rounded joins. Sit inside the
-# soft-blue rounded chip styled by .sim-pillar-icon.
-SIMULATION_PILLAR_ICONS = {
-    # Therapeutic Context -> compass (navigating the therapeutic area)
-    "Therapeutic Context": (
-        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" '
-        'stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">'
-        '<circle cx="12" cy="12" r="9"/>'
-        '<polygon points="12 6.5 14 12 12 17.5 10 12"/></svg>'
-    ),
-    # Patient Profile -> person (the population under study)
-    "Patient Profile": (
-        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" '
-        'stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">'
-        '<circle cx="12" cy="8" r="3.4"/>'
-        '<path d="M5.5 19.5c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/></svg>'
-    ),
-    # Scientific Challenge -> conical flask (the science / modality)
-    "Scientific Challenge": (
-        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" '
-        'stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">'
-        '<path d="M9 3h6"/>'
-        '<path d="M10 3v6.2l-5 8.1A1.6 1.6 0 0 0 6.4 20h11.2a1.6 1.6 0 0 0 1.4-2.7L14 9.2V3"/>'
-        '<path d="M7.6 14.6h8.8"/></svg>'
-    ),
-    # Execution Framework -> sliders (the operational / design levers)
-    "Execution Framework": (
-        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" '
-        'stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">'
-        '<path d="M4 7h8"/><path d="M16 7h4"/><circle cx="14" cy="7" r="2"/>'
-        '<path d="M4 17h4"/><path d="M12 17h8"/><circle cx="10" cy="17" r="2"/></svg>'
-    ),
 }
 
 VALID_NCT_IDS = set(X_ALL[ID_COL].dropna().astype(str))
@@ -5675,35 +5463,6 @@ def _sync_indication_widget_to_shared_state(row):
     queue_simulation_reprediction_if_score_visible()
 
 
-def _feature_value_is_modified(field_id, row, state_key, initial_val, options):
-    """True when the current input differs from the trial's original value.
-
-    Used only to flag the control box with a soft-blue highlight in the
-    Trial Features tab. Mirrors the exact value resolution used to render
-    each control so the comparison stays faithful to what is shown.
-    """
-    if field_id == "gbd_cause_id_3_ml":
-        current_id = pd.to_numeric(st.session_state.get(state_key, initial_val), errors="coerce")
-        current_id = 0 if pd.isna(current_id) else int(current_id)
-        initial_id = pd.to_numeric(row.get("gbd_cause_id_3_ml", 0), errors="coerce")
-        initial_id = 0 if pd.isna(initial_id) else int(initial_id)
-        return current_id != initial_id
-
-    if options:
-        initial_label = str(_option_label_for_state_value(field_id, initial_val)).strip()
-        current_raw = st.session_state.get(state_key, initial_val)
-        current_label = str(_option_label_for_state_value(field_id, current_raw)).strip()
-        return current_label != initial_label
-
-    current_value = pd.to_numeric(st.session_state.get(state_key, initial_val), errors="coerce")
-    initial_value = pd.to_numeric(initial_val, errors="coerce")
-    if pd.isna(current_value) and pd.isna(initial_value):
-        return False
-    if pd.isna(current_value) or pd.isna(initial_value):
-        return True
-    return round(float(current_value), 6) != round(float(initial_value), 6)
-
-
 def _render_trial_feature_control(field_id, row):
     trial_key = st.session_state.get("selected_nct_id", "no_trial")
     state_key, initial_val, options = _init_trial_field_state(field_id, row)
@@ -5712,95 +5471,56 @@ def _render_trial_feature_control(field_id, row):
     ui = meta.get("ui", {})
     label = SIMULATION_FEATURE_LABEL_OVERRIDES.get(field_id, ui.get("label", field_id))
 
-    # Flag the wrapper when the value has been edited away from the original,
-    # so the control box can render in a soft blue (see .st-key-simfield_chg_).
-    # Keep the field type in the wrapper class for targeted visual tuning.
-    changed = _feature_value_is_modified(field_id, row, state_key, initial_val, options)
-    is_number_field = field_id != "gbd_cause_id_3_ml" and not options
-    kind = "num" if is_number_field else "sel"
-    container_key = (
-        f"simfield_{'chg' if changed else 'base'}_{kind}_{_field_token(field_id)}"
-    )
+    if field_id == "gbd_cause_id_3_ml":
+        indication_options = _get_indication_options(row)
+        current_id = pd.to_numeric(st.session_state.get(state_key, initial_val), errors="coerce")
+        current_id = 0 if pd.isna(current_id) else int(current_id)
+        labels = [_format_indication_label(name, option_id) for option_id, name in indication_options]
+        selected_index = 0
+        for idx, (option_id, _) in enumerate(indication_options):
+            if option_id == current_id:
+                selected_index = idx
+                break
 
-    with st.container(key=container_key):
-        if field_id == "gbd_cause_id_3_ml":
-            indication_options = _get_indication_options(row)
-            current_id = pd.to_numeric(st.session_state.get(state_key, initial_val), errors="coerce")
-            current_id = 0 if pd.isna(current_id) else int(current_id)
-            labels = [_format_indication_label(name, option_id) for option_id, name in indication_options]
-            selected_index = 0
-            for idx, (option_id, _) in enumerate(indication_options):
-                if option_id == current_id:
-                    selected_index = idx
-                    break
+        if widget_key in st.session_state and st.session_state.get(widget_key) not in labels:
+            _safe_set_session_value(widget_key, labels[selected_index] if labels else "")
 
-            if widget_key in st.session_state and st.session_state.get(widget_key) not in labels:
-                _safe_set_session_value(widget_key, labels[selected_index] if labels else "")
-
-            _selectbox_with_optional_default(
-                label,
-                options=labels,
-                selected_index=selected_index,
-                key=widget_key,
-                on_change=_sync_indication_widget_to_shared_state,
-                args=(row,)
-            )
-            return
-
-        if options:
-            labels, selected_index = _resolve_field_labels(field_id, state_key, initial_val, options)
-            if widget_key in st.session_state and st.session_state.get(widget_key) not in labels:
-                _safe_set_session_value(widget_key, labels[selected_index] if labels else "")
-
-            _selectbox_with_optional_default(
-                label,
-                options=labels,
-                selected_index=selected_index,
-                key=widget_key,
-                on_change=_sync_feature_widget_to_shared_state,
-                args=(field_id,)
-            )
-            return
-
-        allows_decimal = field_id == "primary_duration_months_ml"
-        current_value_raw = pd.to_numeric(st.session_state.get(state_key, initial_val), errors="coerce")
-        if pd.isna(current_value_raw):
-            current_value = 0.0 if allows_decimal else 0
-        elif allows_decimal:
-            current_value = round(float(current_value_raw), 1)
-        else:
-            current_value = int(round(float(current_value_raw)))
-
-        # Guard: simulation resets store the initial value back into the widget
-        # key as a *string* (via _option_label_for_state_value, which has no
-        # numeric option to map to). st.number_input then crashes comparing that
-        # string to its integer minimum. Coerce any non-integer stored value
-        # back to an int so the control always receives a number.
-        if widget_key in st.session_state:
-            stored = st.session_state.get(widget_key)
-            valid_numeric_type = (int, float) if allows_decimal else (int,)
-            if isinstance(stored, bool) or not isinstance(stored, valid_numeric_type):
-                repaired = pd.to_numeric(stored, errors="coerce")
-                st.session_state[widget_key] = (
-                    current_value
-                    if pd.isna(repaired)
-                    else (
-                        round(float(repaired), 1)
-                        if allows_decimal
-                        else int(round(float(repaired)))
-                    )
-                )
-
-        _number_input_with_optional_default(
+        _selectbox_with_optional_default(
             label,
-            current_value,
-            min_value=0.0 if allows_decimal else 0,
-            step=0.1 if allows_decimal else 1,
-            format="%.1f" if allows_decimal else "%d",
+            options=labels,
+            selected_index=selected_index,
+            key=widget_key,
+            on_change=_sync_indication_widget_to_shared_state,
+            args=(row,)
+        )
+        return
+
+    if options:
+        labels, selected_index = _resolve_field_labels(field_id, state_key, initial_val, options)
+        if widget_key in st.session_state and st.session_state.get(widget_key) not in labels:
+            _safe_set_session_value(widget_key, labels[selected_index] if labels else "")
+
+        _selectbox_with_optional_default(
+            label,
+            options=labels,
+            selected_index=selected_index,
             key=widget_key,
             on_change=_sync_feature_widget_to_shared_state,
             args=(field_id,)
         )
+        return
+
+    current_value = pd.to_numeric(st.session_state.get(state_key, initial_val), errors="coerce")
+    current_value = 0.0 if pd.isna(current_value) else float(current_value)
+    _number_input_with_optional_default(
+        label,
+        current_value,
+        min_value=0.0,
+        step=1.0,
+        key=widget_key,
+        on_change=_sync_feature_widget_to_shared_state,
+        args=(field_id,)
+    )
 
 
 def render_trial_features_tab(row):
@@ -5814,25 +5534,20 @@ def render_trial_features_tab(row):
         ("Scientific Challenge", "Execution Framework"),
     ]
 
-    for row_index, row_pillars in enumerate(layout_rows):
-        with st.container(key=f"sim_feature_row_{row_index}"):
-            columns = st.columns(2, gap="xsmall")
-            for col, pillar in zip(columns, row_pillars):
-                if pillar not in grouped:
-                    continue
+    for row_pillars in layout_rows:
+        columns = st.columns(2, gap="xsmall")
+        for col, pillar in zip(columns, row_pillars):
+            if pillar not in grouped:
+                continue
 
-                with col:
-                    _render_trial_feature_pillar(pillar, grouped.get(pillar, []), row)
+            with col:
+                _render_trial_feature_pillar(pillar, grouped.get(pillar, []), row)
 
 
 def _render_trial_feature_pillar(pillar, fields, row):
     with st.container(key=f"simulation_feature_pillar_{_field_token(pillar)}"):
-        icon_svg = SIMULATION_PILLAR_ICONS.get(pillar, "")
         st.markdown(
-            f"<div class='sim-pillar-head'>"
-            f"<span class='sim-pillar-icon'>{icon_svg}</span>"
-            f"<span class='highlight-title'>{html.escape(pillar)}</span>"
-            f"</div>",
+            f"<div class='highlight-title'>{html.escape(pillar)}</div>",
             unsafe_allow_html=True
         )
         layout = SIMULATION_FEATURE_LAYOUT.get(pillar)
@@ -5849,12 +5564,7 @@ def _render_trial_feature_pillar(pillar, fields, row):
             if not visible_fields:
                 continue
 
-            # Single-field rows still use a two-column grid (the second column
-            # is left empty) so the lone field keeps the same width as the
-            # left-hand field of the rows above it, rather than stretching
-            # across the whole card. Multi-field rows keep their own count.
-            column_count = 2 if len(visible_fields) == 1 else len(visible_fields)
-            row_cols = st.columns(column_count, gap="small")
+            row_cols = st.columns(len(visible_fields), gap="small")
             for col, field_id in zip(row_cols, visible_fields):
                 with col:
                     _render_trial_feature_control(field_id, row)

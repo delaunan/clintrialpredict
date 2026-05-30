@@ -29,6 +29,8 @@ Current Trial Features layout:
 - Top right: `Patient Profile`
 - Bottom left: `Scientific Challenge`
 - Bottom right: `Execution Framework`
+- The layout is visually finalized as of this session: four white rounded pillar cards, two fields per row by default, single-field rows left-aligned at half-card width, equal top-row card heights, equal bottom-row card heights, compact row-to-row spacing, and enlarged pillar icon/title headers with extra separation before the first field row.
+- `number_of_arms_ml` remains an integer input. `primary_duration_months_ml` is displayed and edited with one decimal place and `0.1` increments.
 
 Current Trial Features row structure:
 
@@ -48,14 +50,20 @@ Current Trial Features row structure:
   - `endpoint_rigor_ml`, `endpoint_structure_ml`
 - Execution Framework:
   - `allocation_ml`, `masking_ml`
-  - `comparator_benchmark_ml`, `administration_complexity_ml`
-  - `has_placebo_ml`, `has_dmc_ml`
-  - `sponsor_tier_ml`
+  - `comparator_benchmark_ml`, `has_placebo_ml`
+  - `administration_complexity_ml`
   - `number_of_arms_ml`, `primary_duration_months_ml`
+  - `has_dmc_ml`, `sponsor_tier_ml`
+
+Current Trial Features label overrides:
+
+- `primary_duration_months_ml`: `Max Primary Endpoint Duration (in months)`, with `(in months)` visually on the second label line.
+- `has_dmc_ml`: `Data Monitoring Comittee`.
 
 Verification completed:
 
 - `python -m py_compile api/main.py frontend/views/edit_trial.py frontend/utils/plot.py`
+- During the latest Trial Features layout refinement, `python -m py_compile frontend/views/edit_trial.py` was run repeatedly after each visual/control change.
 - Earlier parity run: `python refresh_registry.py` and `python audit_parity.py`, with `4,423/4,423` audit parity.
 - Sample unchanged simulation rows matched registry scores in earlier checks.
 - Local API probes confirmed frontend-style TA edit changed score from `39.4` to `45.6` after the TA canonicalization fix.
@@ -63,7 +71,7 @@ Verification completed:
 
 Remaining work before deployment:
 
-- Manual browser smoke test of the latest Trial Features layout and mode-off reset behavior.
+- Manual browser smoke test of behavior when users change Trial Features values, including queued/recomputed simulation prediction behavior and score/chart consistency.
 - Confirm visually that normal/audit mode never carries edited values into gauge, treemap, or bar chart after toggling edit mode off.
 - Confirm simulation-only gauge and bar deltas disappear in edit mode off.
 - Re-run `python refresh_registry.py` and `python audit_parity.py` before deployment if any additional scoring/parity-sensitive edits are made.
@@ -202,13 +210,13 @@ Include all 31 taxonomy model-facing fields with a non-`Metadata` UI pillar. Thi
 
 - `masking_ml` - Bias Control
 - `allocation_ml` - Allocation Method
-- `has_dmc_ml` - DMC Involvment Status
+- `has_dmc_ml` - Data Monitoring Comittee
 - `has_placebo_ml` - Placebo Control
 - `comparator_benchmark_ml` - Benchmark Comparator
 - `administration_complexity_ml` - Delivery Profile
 - `number_of_arms_ml` - Number of Arms
 - `sponsor_tier_ml` - Sponsor Type
-- `primary_duration_months_ml` - Maximum Primary Endpoint Duration
+- `primary_duration_months_ml` - Max Primary Endpoint Duration (in months)
 
 ## GBD Indication Selection
 
