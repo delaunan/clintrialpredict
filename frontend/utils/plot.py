@@ -188,8 +188,9 @@ def plot_success_gauge(score_val, height=220):
 # 2. IMPACT BAR CHART
 # ==========================
 
-def plot_impact_bar(df_pillars, height=240):
+def plot_impact_bar(df_pillars, height=240, delta_by_pillar=None):
     df_plot = df_pillars.copy()
+    delta_by_pillar = delta_by_pillar or {}
 
     df_plot['Pillar_Clean'] = df_plot['Pillar'].apply(
         lambda x: f"<b>{re.sub(r'^\\d+\\.\\s*', '', x)}</b>"
@@ -251,7 +252,8 @@ def plot_impact_bar(df_pillars, height=240):
         ))
 
     label_offset = max(limit * 0.05, 0.35)
-    axis_limit = limit + label_offset + 0.35
+    delta_gutter = max(limit * 0.36, 2.4) if delta_by_pillar else 0
+    axis_limit = limit + label_offset + 0.35 + delta_gutter
 
     for _, row in df_plot.iterrows():
         val = row["Impact"]
@@ -272,12 +274,38 @@ def plot_impact_bar(df_pillars, height=240):
             )
         )
 
+        pillar_key = re.sub(r'^\\d+\\.\\s*', '', str(row["Pillar"]))
+        if pillar_key in delta_by_pillar:
+            delta_val = delta_by_pillar[pillar_key]
+            delta_color = (
+                get_rgb_str(c["blue_deep"])
+                if delta_val >= 0
+                else get_rgb_str(c["red_deep"])
+            )
+            fig.add_annotation(
+                x=0.985,
+                y=row["Pillar_Clean"],
+                xref="paper",
+                yref="y",
+                text=f"<b>({delta_val:+.1f})</b>",
+                showarrow=False,
+                xanchor="right",
+                yanchor="middle",
+                align="right",
+                font=dict(
+                    size=12,
+                    color=delta_color,
+                    family=STYLE_CONFIG["font_family"]
+                )
+            )
+
     fig.add_vline(x=0, line_width=1, line_color="#333333")
     fig.update_layout(
         barmode='relative',
         xaxis=dict(
             showticklabels=False,
             range=[-axis_limit, axis_limit],
+            domain=[0.0, 0.78] if delta_by_pillar else [0.0, 1.0],
             zeroline=False,
             showgrid=False
         ),
@@ -289,7 +317,7 @@ def plot_impact_bar(df_pillars, height=240):
                 family=STYLE_CONFIG["font_family"]
             )
         ),
-        margin=dict(l=10, r=10, t=10, b=10),
+        margin=dict(l=10, r=24 if delta_by_pillar else 10, t=10, b=10),
         height=height,
         paper_bgcolor="white",
         plot_bgcolor="white",

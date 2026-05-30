@@ -37,6 +37,14 @@ if variant == "trial_audit":
     audit.render_transition_overlay_hook()
     audit.route_app()
 
+elif variant == "edit_trial":
+    import frontend.views.edit_trial as edit_trial
+    edit_trial.init_session_state()
+    edit_trial.keep_filter_state_alive()
+    edit_trial.inject_custom_styles()
+    edit_trial.render_transition_overlay_hook()
+    edit_trial.route_app()
+
 elif variant == "simulator":
     # Placeholder for Simulator variant
     st.title("Simulator Mode")
