@@ -2,6 +2,55 @@
 
 This document started as the planning reference for turning the current read-only/audit demo into a simple, robust live simulation workflow. It now also records the implementation state of the isolated edit-mode variant so future sessions can resume without rediscovering the same decisions.
 
+## Implementation Status - 2026-05-31
+
+The current edit-mode implementation phase is complete. The next session should be refinement-only unless a new defect is found.
+
+Implemented since the 2026-05-30 status:
+
+- `frontend/views/edit_trial.py` now uses a latest-prediction snapshot workflow for simulation mode.
+- Simulation Mode creates a prerecorded baseline snapshot from original selected-trial values and audit prediction data, then shows `Trial Features` with `Completion Score` available.
+- `Predict Trial Completion` is visually blue only when pending UI changes exist and grey/visually inactive when current values match the latest prediction snapshot; clicking it with no pending changes is a no-op.
+- Field edits no longer queue or run automatic prediction. Gauge, impact bar, and treemap stay tied to the latest successful snapshot until `Predict Trial Completion` is clicked.
+- Pending-change comparison now uses user-visible UI option identity (`compare_values`) instead of only ML-facing encoded values. This means changes such as `Not Specified` -> `Novel Target (No Prior Approvals)` are marked pending even when both options map to the same encoded model value.
+- Snapshots and session-state history now store both `submitted_values` for scoring/API submission and `compare_values` for UI pending-change comparison, plus display labels, score, previous score, point/percent delta, impacts, and changed fields.
+- Previous-value markers render inline after the field label, in blue, and disappear after successful prediction or full revert.
+- Long previous indication labels are truncated inline for layout stability.
+- `primary_duration_months_ml` uses two-decimal display and `0.01` steps while preserving numeric comparison.
+- Trial Features widget keys are deleted during reset so Simulation Mode off/on starts from original selected-trial values and does not reuse stale previous-session dropdown state.
+- Simulation tab order is now `Trial Information`, `Population Details`, `Completion Score`, `Trial Features`; when Simulation Mode is toggled on, `Trial Features` opens by default.
+- Simulation-only gauge comparison now shows compact previous-score and variance text (`Prev: SCORE pts` plus up/down/flat indicator and percent/flat marker).
+- Impact-bar pillar deltas now render without parentheses, use a slightly larger font, and show `-` for effectively zero variation.
+- `frontend/utils/plot.py` remains shared and now only carries the small formatting support for simulation pillar deltas.
+
+Current remaining refinements after the global Indication selector implementation:
+
+- Perform a manual browser polish pass for the latest visual details.
+- Smoke test the global Indication selector in `APP_VARIANT=edit_trial`, including TA-based ordering, TA-triggered reset to `Other / Unclassified (0)`, red attention styling, and blue pending styling after explicit indication selection.
+- Re-run full parity gates before deployment if scoring, preprocessing, model-facing category, or parity-sensitive paths are changed.
+
+Verification completed for this phase:
+
+- `python -m py_compile frontend/views/edit_trial.py`
+- `python -m py_compile frontend/views/edit_trial.py frontend/utils/plot.py`
+- `git diff --check -- frontend/views/edit_trial.py`
+- `git diff --check -- frontend/views/edit_trial.py frontend/utils/plot.py`
+- Targeted local checks confirmed UI-option pending comparison for encoded-collision fields such as Target Precedent.
+- Targeted local checks confirmed Simulation Mode off/on reset clears stale Trial Features widget keys and only the intentionally changed field becomes pending.
+- Earlier local API probes confirmed unchanged audit baseline shape and live simulation score response behavior.
+- Earlier full audit parity run remained `4,423/4,423`.
+
+Files changed in this phase:
+
+- `frontend/views/edit_trial.py`
+- `frontend/utils/plot.py`
+- `docs/edit_architecture.md`
+
+Files intentionally not changed:
+
+- `frontend/views/trial_audit.py`
+- model artifacts, taxonomy artifacts, SHAP artifacts, registry data, notebooks, durable storage, login/team/session persistence.
+
 ## Implementation Status - 2026-05-30
 
 The first edit-mode implementation is in place on branch `edit_mode`.
@@ -30,7 +79,7 @@ Current Trial Features layout:
 - Bottom left: `Scientific Challenge`
 - Bottom right: `Execution Framework`
 - The layout is visually finalized as of this session: four white rounded pillar cards, two fields per row by default, single-field rows left-aligned at half-card width, equal top-row card heights, equal bottom-row card heights, compact row-to-row spacing, and enlarged pillar icon/title headers with extra separation before the first field row.
-- `number_of_arms_ml` remains an integer input. `primary_duration_months_ml` should preserve numeric precision for scoring and use two-decimal display with `0.01` increments in the next implementation pass.
+- `number_of_arms_ml` remains an integer input. `primary_duration_months_ml` preserves numeric precision for scoring and uses two-decimal display with `0.01` increments.
 
 Current Trial Features row structure:
 
@@ -59,6 +108,9 @@ Current Trial Features label overrides:
 
 - `primary_duration_months_ml`: `Max Primary Endpoint Duration (in months)`, with `(in months)` visually on the second label line.
 - `has_dmc_ml`: `Data Monitoring Comittee`.
+- `adult_ml`: `Adult Profiles`.
+- `child_ml`: `Pediatric Profiles`.
+- `older_adult_ml`: `Geratic Profiles`.
 
 Verification completed:
 
@@ -69,7 +121,7 @@ Verification completed:
 - Local API probes confirmed frontend-style TA edit changed score from `39.4` to `45.6` after the TA canonicalization fix.
 - Local API and Streamlit health checks returned `200` on test ports.
 
-Remaining work before deployment:
+Remaining work before deployment or refinement release:
 
 - Manual browser smoke test of behavior when users change Trial Features values, including pending-change markers, stale-score notice, button state, explicit prediction, and score/chart consistency.
 - Confirm visually that normal/audit mode never carries edited values into gauge, treemap, or bar chart after toggling edit mode off.
@@ -78,7 +130,7 @@ Remaining work before deployment:
 
 ## Final Implementation Rules
 
-These rules are the acceptance contract for the next implementation pass. Once this document is finalized, code changes should be the simplest robust edits that satisfy these rules, without broad refactors or unrelated UI cleanup.
+These rules are the current edit-mode behavior contract. Future refinements should keep changes surgical and preserve this contract unless the refinement explicitly updates it.
 
 ### Safety Boundary
 
@@ -93,7 +145,8 @@ These rules are the acceptance contract for the next implementation pass. Once t
 - Use `models/taxonomy_01.json` as the source of truth for Trial Features labels, options, pillars, priorities, mappings, and display names.
 - Use `models/model_prod_01.joblib` and `models/thresholds_01.json` as the live scoring sources.
 - Use `frontend/data/search_registry.csv` only as the selected-trial display/search baseline and original-score source.
-- Use `data/data_clinpred.csv` only for the dynamic GBD indication lookup, unless a small generated lookup is explicitly introduced later.
+- Use `data/reference/gbd_stats.csv` Level 3 rows as the complete source for the Indication selector.
+- Use `data/data_clinpred.csv` only to enrich Indication ordering with observed TA+L3 pair support.
 - Do not duplicate taxonomy mappings in frontend or backend code except as narrow defensive fallback logic.
 
 ### State And Synchronization
@@ -102,9 +155,10 @@ These rules are the acceptance contract for the next implementation pass. Once t
 - Any tab that displays an editable model feature must read from the same state-aware value helpers used by Trial Features.
 - Simulation mode must be driven by one latest prediction snapshot per selected trial/session.
 - A snapshot is created or replaced only after a successful prediction result or after loading the prerecorded baseline snapshot when simulation mode first turns on for an existing selected trial.
-- Pending changes are computed by comparing current effective Trial Features values against the latest prediction snapshot, not against the original registry row after a newer prediction has run.
+- Pending changes are computed by comparing current visible UI option identity against the latest prediction snapshot, not against the original registry row after a newer prediction has run.
+- Snapshots store model-facing `submitted_values` for scoring and UI-facing `compare_values` for pending-change comparison.
 - Turning simulation mode on must show Trial Features and create a baseline snapshot from original selected-trial values and prerecorded audit prediction data if no current simulation snapshot exists for that selected trial.
-- Turning simulation mode off must reset visible Trial Features values to the original selected-trial values, clear simulation-only state, restore the normal audit tab layout, and prevent edited values from leaking into the audit gauge, treemap, or impact bar.
+- Turning simulation mode off must reset visible Trial Features values to the original selected-trial values, clear simulation-only state, clear Trial Features widget keys, restore the normal audit tab layout, and prevent edited values from leaking into the audit gauge, treemap, or impact bar.
 - Changing selected trial must clear simulation prediction state and initialize editor values from the newly selected row.
 
 ### Prediction Contract
@@ -137,30 +191,46 @@ Clinical_Score = clip(round(50 + sum(rounded pillar impacts), 1), 1, 99)
 
 - Trial Features must remain visible throughout simulation mode, including after a successful prediction.
 - When simulation mode turns on, Completion Score must be visible immediately after baseline snapshot creation, including gauge, impact bar, treemap, pillar impacts, and feature impacts.
+- In simulation mode with score visible, tab order is `Trial Information`, `Population Details`, `Completion Score`, `Trial Features`; when Simulation Mode is toggled on, `Trial Features` opens by default.
 - `Predict Trial Completion` is grey/visually inactive when current visible Trial Features values match the latest prediction snapshot. It may remain enabled for implementation simplicity, but clicking it in this state must not run prediction.
 - `Predict Trial Completion` is blue/active when at least one visible Trial Features value has pending changes.
 - If the user changes a field and then reverts all fields back to the latest snapshot values, `Predict Trial Completion` turns grey/inactive again.
 - Field-level pending-change UI must continue using the existing soft-blue highlight.
-- When a field has pending changes, show the previous value from the latest prediction snapshot near the field label. The simplest robust visual treatment is acceptable: append `(previous: VALUE)` to the label or right-align `VALUE` on the same label row.
+- When a field has pending changes, show the previous value from the latest prediction snapshot inline after the field label.
 - Previous-value text should be light blue while the field has pending changes. After successful prediction, incorporated previous-value markers may turn grey if simple and stable, or disappear if that is simpler.
 - When Completion Score is visible and pending changes exist, show a concise left-side gauge-card notice: `Click Predict to update`.
 - Hide the stale-score notice after successful prediction and when all pending changes are reverted.
 - Show simulation-only score delta and impact-bar deltas only after a non-baseline simulation `Predict Trial Completion` prediction exists.
+- Gauge comparison uses a compact `Prev:` label plus previous score and up/down/flat variance indicator. Impact-bar deltas render without parentheses and use `-` for effectively zero variation.
 - Hide all simulation-only deltas in normal/audit mode.
 - Keep the Trial Features layout compact: four pillar panels, two fields per row where possible, single-field rows left aligned, stable card heights within each row, and no layout shift from labels or controls.
 - Keep the existing Trial Features visual design for this pass. Do not redesign the layout.
 
 ### GBD Indication Rules
 
-- Filter `gbd_cause_id_3_ml` options by the currently selected therapeutic area using observed TA+L3 pairs.
-- Always include the current trial indication as a safe option even if it is outside the selected TA.
-- Always include `Other / Unclassified` mapped to `0` as an option or fallback.
-- When therapeutic area changes, keep the current indication until the user explicitly selects another one.
+- The UI must expose one user-facing field: `Indication`. Do not add a second indication field or separate model-support field.
+- The Indication selector must contain all IHME Level 3 indications from `data/reference/gbd_stats.csv`, using `Cause ID`, `Cause Name`, `model_ta`, and `Sort Order`.
+- Put `Other / Unclassified (0)` as the first option so users who open the dropdown see the selected-TA indications directly below it. Prefer existing IHME Level 3 category fallbacks such as `Other malignant neoplasms`, `Other cardiovascular and circulatory diseases`, or `Other digestive diseases` when they match the user's search/TA context; do not push users to ID `0` unless no more specific L3 indication fits.
+- Display each option as `"{Cause Name} ({Cause ID})"` and store the selected ID in `gbd_cause_id_3_ml`.
+- Store the selected display name in `gbd_indication_name_3` for UI labels and API explanation text.
+- Therapeutic Area must rank and group indication options, not hard-filter them.
+- Normalize Therapeutic Area values through `taxonomy_01.json` before ranking, because UI labels such as `Oncology` and model codes such as `ONCOLOGY` must match `gbd_stats.model_ta` values such as `Oncology`.
+- Sort indication options for the selected Therapeutic Area in this order:
+  1. `Other / Unclassified (0)`.
+  2. IHME Level 3 indications whose `gbd_stats.model_ta` matches the selected Therapeutic Area, ordered by `Sort Order`.
+  3. IHME Level 3 indications observed with the selected Therapeutic Area in `data/data_clinpred.csv`, ordered by descending observed support then hierarchy `Sort Order`.
+  4. All remaining IHME Level 3 indications, ordered by `model_ta` then hierarchy `Sort Order`.
+- If an indication belongs to more than one ranking bucket, show it once at its highest-priority position.
+- Changing Therapeutic Area must reset the current Indication value to `Other / Unclassified (0)` and rerank the option list around the new Therapeutic Area.
+- A Therapeutic Area-triggered Indication reset must mark the Indication field red to show that the TA change requires an explicit indication choice.
+- When the user changes Indication after a TA-triggered reset, clear the red attention state and use the normal soft-blue pending-change treatment.
+- If the user intentionally selects `Other / Unclassified (0)` from the Indication selector, treat it as a normal user-selected indication and use blue pending-change styling, not red attention styling.
 - When indication changes, update `gbd_cause_id_3_ml` and `gbd_indication_name_3`, but do not automatically change therapeutic area.
+- Do not show user-facing warnings such as limited pair support, unsupported model support, unseen category, or global-baseline scoring. Sparse and unseen indications are handled internally by the fitted target encoder/global fallback behavior.
 
 ### Verification Gate
 
-Before considering the implementation complete:
+Before considering future refinements complete:
 
 - Run `python -m py_compile api/main.py frontend/views/edit_trial.py frontend/utils/plot.py` after relevant code edits.
 - Run focused API probes for unchanged-row parity and for an edited therapeutic-area score change.
@@ -191,11 +261,11 @@ The intended user flow is:
 2. Toggle `Simulation Mode` on.
 3. A new `Trial Features` tab appears.
 4. If no current simulation snapshot exists for the selected trial, the app creates a baseline snapshot from original selected-trial values and prerecorded audit prediction data.
-5. `Completion Score` appears immediately from that baseline snapshot, after `Trial Features`.
+5. `Completion Score` appears immediately from that baseline snapshot and remains available before `Trial Features` in the tab order.
 6. `Trial Features` contains four white rounded boxes, one per pillar:
    - Therapeutic Context
-   - Scientific Challenge
    - Patient Profile
+   - Scientific Challenge
    - Execution Framework
 7. Each box contains editable controls for the model features in that pillar, using UI labels from `models/taxonomy_01.json`.
 8. Changing a field updates the matching value anywhere else it appears in the other tabs and marks pending changes without running prediction.
@@ -203,7 +273,7 @@ The intended user flow is:
 10. Clicking `Predict Trial Completion` calls live prediction and replaces the latest prediction snapshot after success.
 11. After each successful live prediction, the submitted values and live prediction result become the new reference snapshot, `Predict Trial Completion` turns grey/inactive, and Trial Features remains visible.
 12. When simulation mode is toggled off, Trial Features disappears, simulation-only state is cleared, visible Trial Features values reset to original selected-trial values, and the app returns to the normal audit view.
-13. After a simulated prediction beyond the baseline snapshot, the gauge shows the previous score and percentage variation compared with the immediately previous prediction snapshot.
+13. After a simulated prediction beyond the baseline snapshot, the gauge shows `Prev: SCORE pts` plus a compact up/down/flat percentage variation compared with the immediately previous prediction snapshot.
 
 ## Recommended Architecture
 
@@ -252,7 +322,7 @@ Live simulation cannot use `models/shap_values_01.joblib` after edits, because t
 
 Validation finding: XGBoost native `pred_contribs=True` reproduced the saved notebook SHAP feature vectors exactly for sampled unchanged rows (`max_abs_diff_features = 0.0`). Therefore live simulation can use native XGBoost contribution output without adding or persisting a separate SHAP explainer artifact.
 
-No model retraining is required. No model artifact should be modified for the first implementation.
+No model retraining is required. No model artifact should be modified for edit-mode refinements.
 
 Important terminology:
 
@@ -295,9 +365,9 @@ Include all 31 taxonomy model-facing fields with a non-`Metadata` UI pillar. Thi
 - `line_of_therapy_ml` - Line of Therapy
 - `gender_ml` - Patient Gender Eligibility Status
 - `healthy_volunteers_ml` - Population Type
-- `adult_ml` - Adult Profile Eligibility Status
-- `child_ml` - Pediatric Profile Eligibility Status
-- `older_adult_ml` - Geriatric Profile Eligibility Status
+- `adult_ml` - Adult Profiles
+- `child_ml` - Pediatric Profiles
+- `older_adult_ml` - Geratic Profiles
 
 ### Execution Framework
 
@@ -311,32 +381,54 @@ Include all 31 taxonomy model-facing fields with a non-`Metadata` UI pillar. Thi
 - `sponsor_tier_ml` - Sponsor Type
 - `primary_duration_months_ml` - Max Primary Endpoint Duration (in months)
 
+Execution Framework alignment rules:
+
+- When the user changes `comparator_benchmark_ml` to `PLACEBO` / `Placebo Control`, set `has_placebo_ml` / Placebo Control to `Yes`.
+- When the user changes `comparator_benchmark_ml` to `NO_CONTROL_GROUP` / `No Control Group or Not Specified`, set `has_placebo_ml` / Placebo Control to `No`.
+- This is a one-time alignment triggered only by Benchmark Comparator changes. The user can manually change Placebo Control afterward without the app forcing it back until Benchmark Comparator changes again.
+- If the alignment changes Placebo Control away from the latest prediction snapshot value, it should use the normal blue pending-change styling.
+
 ## GBD Indication Selection
 
 `gbd_cause_id_3_ml` has no static options in `taxonomy_01.json`, so it needs a dynamic option source.
 
-Recommended source for the first implementation:
+Current implementation status:
 
-- Build options from `data/data_clinpred.csv` or from a small generated lookup derived from it.
-- Use distinct observed `(therapeutic_area, gbd_cause_id_3, gbd_indication_name_3)` combinations.
-- Display as `"{gbd_indication_name_3} ({gbd_cause_id_3})"` and store `gbd_cause_id_3_ml`.
-- Filter options by the currently selected `therapeutic_area_ml`.
-- Always include the current trial's indication even if it is outside the selected TA, to avoid losing the existing value.
-- Always include an `Other / Unclassified` option mapped to `0` if present, or as a local fallback.
+- The current code builds a narrower TA-filtered lookup from observed pairs in `data/data_clinpred.csv`.
+- This is now superseded by the agreed refinement below.
 
-Important data finding: `data/data_clinpred.csv` has 155 distinct L3 indications but 325 observed TA+L3 pairs. Sixty-seven L3 IDs appear under more than one therapeutic area. Therefore the UI menu should be TA-filtered using the observed pair, not assume a globally unique TA for each L3 ID.
+Agreed refinement:
+
+- Build one global, searchable Indication selector from all IHME Level 3 rows in `data/reference/gbd_stats.csv`.
+- Use `Cause ID`, `Cause Name`, `model_ta`, and `Sort Order` from `gbd_stats.csv`.
+- Enrich the lookup with observed pair support from `data/data_clinpred.csv`, using distinct `(therapeutic_area, gbd_cause_id_3_ml)` pairs and row counts only for option ranking.
+- Display options as `"{Cause Name} ({Cause ID})"` and store the selected ID in `gbd_cause_id_3_ml`.
+- Store the selected display name in `gbd_indication_name_3`.
+- Put `Other / Unclassified (0)` first in the dropdown.
+- Keep IHME Level 3 category fallbacks in the normal list, for example `Other malignant neoplasms`, `Other cardiovascular and circulatory diseases`, and `Other digestive diseases`.
+- Normalize Therapeutic Area values through `taxonomy_01.json` so UI labels and model codes can be compared against `gbd_stats.model_ta`.
+
+Important data findings:
+
+- `data/reference/hier_gbd.csv` has 176 IHME Level 3 indications.
+- `data/data_clinpred.csv` has 155 distinct `gbd_cause_id_3_ml` values: 154 hierarchy L3 IDs plus ID `0`.
+- Twenty-two IHME Level 3 indications are absent from `data/data_clinpred.csv`.
+- Four `data_clinpred.csv` L3 IDs are present in data but absent from the fitted target encoder: `358`, `510`, `533`, and `704`.
+- `data/data_clinpred.csv` has 325 observed TA+L3 pairs. Sixty-seven L3 IDs appear under more than one therapeutic area.
+- The UI must not assume a globally unique Therapeutic Area for each L3 ID.
 
 When a user changes therapeutic area:
 
-- The indication menu should rerender with the new TA's observed indications.
-- If the current indication is not valid for the new TA, keep it as a temporary first option.
-- Do not automatically reset indication to `Other / Unclassified`; the user should choose the new indication explicitly.
+- Reset Indication to `Other / Unclassified (0)`.
+- Rerank the single Indication list around the newly selected Therapeutic Area.
+- Mark the Indication field red until the user explicitly changes Indication.
+- Do not hide cross-TA, sparse, or hierarchy-only L3 options.
 
 When a user changes indication:
 
 - Set `gbd_cause_id_3_ml`.
 - Set `gbd_indication_name_3` for display and API explanation labels.
-- Do not automatically change therapeutic area in the first implementation, because the same L3 can appear in multiple TAs and the user has already selected the TA filter.
+- Do not automatically change therapeutic area, because the same L3 can appear in multiple TAs and Therapeutic Area is an independent calibration input.
 
 ## Backend Live Prediction
 
@@ -412,7 +504,7 @@ Therefore changing `Therapeutic Area` in `Trial Features` can change the score t
 - direct model/preprocessor inputs where applicable,
 - the post-model TA-specific calibration offset.
 
-The first implementation should keep the calibration offset anchored in `Therapeutic Context` / `Therapeutic Area Profile`, exactly as audit mode does.
+The current implementation keeps the calibration offset anchored in `Therapeutic Context` / `Therapeutic Area Profile`, exactly as audit mode does.
 
 ## Live Encoding Contract
 
@@ -461,6 +553,7 @@ Recommended session-state objects:
 A latest prediction snapshot is the last set of values and outputs that were actually used to produce the score currently displayed in Completion Score. It should include:
 
 - submitted feature values as canonical ML-facing values,
+- UI comparison values as stable option identities,
 - display feature values as user-friendly UI labels,
 - score,
 - pillar impacts,
@@ -476,7 +569,8 @@ Snapshot rules:
 - When simulation mode turns on and no current simulation snapshot exists for the selected trial, create a baseline snapshot from original selected-trial values and prerecorded audit prediction data.
 - In simulation mode, "initial value" means the value stored in the latest prediction snapshot, not necessarily the original registry value.
 - After each successful `Predict Trial Completion` click, the submitted canonical values and live prediction result become the new reference snapshot.
-- Pending-change comparison must always use canonical ML-facing values from the latest snapshot.
+- Pending-change comparison must use UI comparison values from the latest snapshot. This is intentional because a user-visible option change should look pending even when two UI options share the same encoded model value.
+- Scoring/API submission must continue to use canonical ML-facing submitted values.
 - User-facing previous-value markers must display friendly UI labels, not raw model codes.
 - Do not use the word "dirty" in user-facing UI text. If used in code comments, explain that it simply means "pending changes".
 
@@ -493,7 +587,7 @@ Avoid separate long-lived state for original-vs-current edit comparisons once a 
 
 Resolved behavior decisions:
 
-- When therapeutic area changes, keep the current indication until the user chooses another indication.
+- The Indication field is a single global selector. Changing Therapeutic Area resets Indication to `Other / Unclassified (0)`, reranks the option list, and marks the Indication field red until the user explicitly chooses an indication.
 - `Trial Features` should include all 31 taxonomy model-facing fields.
 - Sponsor name should remain editable only in `Trial Information`.
 - `Trial Features` should expose `sponsor_tier_ml` / Sponsor Type, not sponsor name.
@@ -523,8 +617,10 @@ Simulation mode after baseline snapshot creation:
 
 - `Trial Information`
 - `Population Details`
-- `Trial Features`
 - `Completion Score`
+- `Trial Features`
+
+When Simulation Mode is toggled on, `Trial Features` opens by default even though `Completion Score` is already available from the baseline snapshot.
 
 The `Predict Trial Completion` button should no longer be blocked by simulation mode. In simulation mode, it should submit the current edited row only when pending changes exist. Changing tabs, opening Population Details, or interacting anywhere except `Predict Trial Completion` must not run a new prediction.
 
@@ -546,9 +642,9 @@ Button state is derived from the latest prediction snapshot:
 A field has pending changes when its current effective UI value differs from the value stored in the latest prediction snapshot.
 
 - Pending-change comparison must be against the latest snapshot, not against the original registry row once a newer prediction has been run.
-- Pending-change comparison should use canonical ML-facing values derived through `models/taxonomy_01.json`, not raw UI labels.
-- Do not mix UI labels and ML values in the same comparison field. Keep a canonical value for comparison/API submission and a display value for user-facing labels.
-- For taxonomy fields, map labels and option keys to the same canonical value before comparison.
+- Pending-change comparison uses UI option identity derived through `models/taxonomy_01.json`, not encoded ML value alone.
+- Do not mix UI labels and ML values in the same comparison field. Keep `submitted_values` for scoring/API submission, `compare_values` for pending-change comparison, and display values for user-facing labels.
+- For taxonomy fields, map labels to stable option keys for comparison so UI-visible changes are marked pending even if the encoded ML value is unchanged.
 - For numeric fields, compare numeric values rather than formatted strings.
 - Decimal fields such as `primary_duration_months_ml` must preserve scoring precision and use two-decimal UI control precision. Formatting alone must not create pending changes.
 - Keep the existing soft-blue field highlight.
@@ -557,10 +653,7 @@ A field has pending changes when its current effective UI value differs from the
 - After successful prediction, incorporated previous-value markers may either turn grey if this is simple and stable, or disappear if that is significantly simpler.
 - On the next edit cycle, the previous value shown must come from the most recent prediction snapshot.
 
-The simplest robust visual implementation is acceptable:
-
-- append `(previous: VALUE)` to the label, or
-- right-align `VALUE` on the same label row.
+Current visual implementation appends `(previous: VALUE)` inline after the field label and truncates long indication previous values.
 
 ## Stale Score Notice
 
@@ -585,7 +678,7 @@ Show score comparison only after a successful simulated `Predict Trial Completio
 - Compute percentage variation as `(new_score / previous_score - 1) * 100` when `previous_score` is valid and nonzero.
 - Previous score color: blue when previous score is `>= 50`, red when previous score is `< 50`.
 - Percentage variation color: blue when positive, red when negative, neutral/grey or subdued when zero.
-- Keep the display lightweight: no badge and no heavy visual treatment.
+- Keep the display lightweight: `Prev: SCORE pts`, an up/down/flat marker, and percentage or `-` for effectively no variation.
 
 Example:
 
@@ -602,6 +695,7 @@ Edge case:
 - They must not visually change merely because the user changed a field.
 - They update only after successful `Predict Trial Completion`, except for the initial baseline snapshot when simulation mode is turned on.
 - After successful `Predict Trial Completion`, chart values and point variations must reflect the latest API response.
+- Impact-bar variation labels render without parentheses and show `-` when variation is effectively zero.
 - For existing selected trials, the initial baseline chart values come from prerecorded audit prediction data. If expected prerecorded data is missing, use the existing audit error behavior and do not add new fallback scoring logic in this pass.
 
 ## Prediction History Preparation
@@ -623,6 +717,7 @@ Each history record should include:
 - selected `nct_id`,
 - source, such as `prerecorded_baseline` or `simulation_ptc`,
 - submitted feature values,
+- UI comparison values,
 - display feature values,
 - score,
 - previous score if available,
@@ -650,7 +745,7 @@ A later blank-trial mode may start from no prerecorded audit baseline. In that m
 - Reverting all changes makes `Predict Trial Completion` grey/inactive again.
 - Changing tabs does not run prediction.
 - Pending-change fields show previous snapshot value.
-- Pending-change comparison uses canonical ML-facing values while previous-value display uses friendly UI labels.
+- Pending-change comparison uses UI option identity while scoring/API submission uses canonical ML-facing values.
 - Completion Score stale notice appears only when pending changes exist.
 - `Predict Trial Completion` click updates score/charts and creates a new snapshot.
 - Simulation mode off resets visible values and clears simulation-only UI.
@@ -678,10 +773,12 @@ A later blank-trial mode may start from no prerecorded audit baseline. In that m
 
 ### Phase 2 - GBD indication dropdown - Implemented
 
-- Build a cached TA-filtered indication lookup.
+- Current implementation uses `frontend/data/gbd_l3_indication_lookup.csv`, generated by `scripts/build_gbd_l3_lookup.py`.
+- The lookup contains all IHME Level 3 indications from `data/reference/gbd_stats.csv`, enriched with observed TA+L3 support from `data/data_clinpred.csv`.
 - Add the indication dropdown under `Therapeutic Context`.
 - Synchronize selected indication ID and display name into the edited row.
-- Preserve current indication as a safe option.
+- Therapeutic Area resets Indication to `Other / Unclassified (0)`, reranks the single Indication selector, and marks Indication red until the user chooses an indication.
+- `Other / Unclassified (0)` appears first; more specific IHME Level 3 `Other ...` indications remain in their normal hierarchy positions.
 
 ### Phase 3 - Live backend scoring - Implemented
 
@@ -692,10 +789,10 @@ A later blank-trial mode may start from no prerecorded audit baseline. In that m
 - Recompute the TA-specific calibration offset from the edited therapeutic area. Current implementation prioritizes edited `therapeutic_area_ml` / `therapeutic_area_ui` over original `therapeutic_area`.
 - Keep response shape compatible with the current frontend charts.
 
-### Phase 4 - Prediction workflow - Needs snapshot contract revision
+### Phase 4 - Prediction workflow - Implemented
 
 - Let `Predict Trial Completion` work while simulation mode is on.
-- When simulation mode turns on, create a baseline snapshot from original selected-trial values and prerecorded audit prediction data, then show `Completion Score` after `Trial Features`.
+- When simulation mode turns on, create a baseline snapshot from original selected-trial values and prerecorded audit prediction data.
 - Keep gauge, impact bar, and treemap tied to the latest successful prediction snapshot.
 - Do not run prediction from tab changes or field edits.
 - Use pending-change comparison against the latest snapshot to control field markers, stale-score notice, and `Predict Trial Completion` button color/state.
@@ -705,7 +802,7 @@ A later blank-trial mode may start from no prerecorded audit baseline. In that m
 - Add simulation-only pillar delta annotations in the impact bar.
 - Changing Trial Features must not queue or run automatic reprediction; it only marks pending changes until `Predict Trial Completion` is clicked.
 
-### Phase 5 - Verification - Partially complete
+### Phase 5 - Verification - Implementation checks complete / refinement smoke test pending
 
 - Verify current demo behavior under `APP_VARIANT=trial_audit`.
 - Verify simulation behavior under `APP_VARIANT=edit_trial`.
@@ -713,12 +810,12 @@ A later blank-trial mode may start from no prerecorded audit baseline. In that m
 - For sampled unchanged rows, compare native live contribution vectors against `models/shap_values_01.joblib` if needed.
 - Verify that changing only therapeutic area updates the TA calibration offset and that the offset appears under `Therapeutic Context` / `Therapeutic Area Profile`.
 - Confirm edited values are reflected in all tabs after rerun.
-- Confirm TA-filtered GBD options include expected values and `Other / Unclassified`.
+- Confirm the Indication selector includes all IHME Level 3 options, places `Other / Unclassified (0)` first, ranks selected-TA options directly below it, keeps cross-TA options searchable, resets to `Other / Unclassified (0)` when Therapeutic Area changes, shows red attention styling after that reset, and switches to blue pending-change styling after user indication selection.
 - Confirm simulation-mode off resets the tab layout.
 - Run `python refresh_registry.py` and `python audit_parity.py` before deployment if scoring code or parity-sensitive paths are changed.
 
-Completed verification includes py_compile, local API probes, local health checks, and an earlier full audit parity run. Remaining verification is primarily manual browser smoke testing of the latest visual layout and mode-off reset behavior.
+Completed verification includes py_compile, diff checks, lookup shape checks, targeted local state checks, local API probes, local health checks, and an earlier full audit parity run. Remaining verification is primarily manual browser smoke testing of the latest visual refinements and the global Indication selector.
 
 ## Open Questions
 
-No open architecture questions remain for the first implementation pass.
+No open architecture questions remain for the first implementation pass. The next session is expected to manually verify the global Indication selector and Therapeutic Area-based option ranking in the browser.

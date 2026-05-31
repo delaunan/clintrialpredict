@@ -44,6 +44,7 @@ FRONTEND_DIR = PROJECT_ROOT / "frontend"
 ASSETS_DIR = FRONTEND_DIR / "assets"
 DATA_PATH = FRONTEND_DIR / "data" / "search_registry.csv"
 DATA_CLINPRED_PATH = PROJECT_ROOT / "data" / "data_clinpred.csv"
+GBD_L3_LOOKUP_PATH = FRONTEND_DIR / "data" / "gbd_l3_indication_lookup.csv"
 TAXONOMY_PATH = PROJECT_ROOT / "models" / "taxonomy_01.json"
 IS_CLOUD_RUN = bool(os.getenv("K_SERVICE"))
 
@@ -4125,6 +4126,14 @@ def inject_custom_styles():
                             var(--ui-control-shadow) !important;
             }}
 
+            html body [class*="st-key-simfield_attn_"] div[data-baseweb="select"] > div,
+            html body [class*="st-key-simfield_attn_"] div[data-baseweb="input"] > div {{
+                background-color: #fff1f2 !important;
+                border-color: #f29aa3 !important;
+                box-shadow: inset 0 0 0 1px rgba(190,18,60,0.16),
+                            var(--ui-control-shadow) !important;
+            }}
+
             /* Resolution scaling — mirrors the app's existing breakpoints so the
                Trial Features grid grows with the screen like every other view. */
             @media (min-width: 1800px) and (min-height: 950px) {{
@@ -4190,6 +4199,17 @@ def inject_custom_styles():
                 white-space: nowrap !important;
                 text-align: right !important;
                 pointer-events: none !important;
+            }}
+
+            html body .simulation-score-delta .score-delta-label {{
+                font-weight: 800 !important;
+            }}
+
+            html body .simulation-score-delta .score-delta-triangle {{
+                display: inline-block !important;
+                margin: 0 4px 0 8px !important;
+                font-size: 0.86em !important;
+                transform: translateY(-1px) !important;
             }}
 
             html body .simulation-stale-notice {{
@@ -4277,14 +4297,44 @@ def load_data():
 
 @st.cache_data
 def load_gbd_indication_lookup():
-    columns = ["therapeutic_area", "gbd_cause_id_3_ml", "gbd_indication_name_3"]
+    columns = [
+        "gbd_cause_id_3_ml",
+        "gbd_indication_name_3",
+        "canonical_model_ta",
+        "canonical_model_ta_code",
+        "sort_order",
+        "observed_rows_total",
+        "observed_tas",
+        "observed_rows_by_ta",
+    ]
 
-    if not DATA_CLINPRED_PATH.exists():
-        return pd.DataFrame(columns=columns)
+    if GBD_L3_LOOKUP_PATH.exists():
+        lookup = pd.read_csv(GBD_L3_LOOKUP_PATH)
+    elif DATA_CLINPRED_PATH.exists():
+        legacy_columns = ["therapeutic_area", "gbd_cause_id_3_ml", "gbd_indication_name_3"]
+        legacy = pd.read_csv(DATA_CLINPRED_PATH, usecols=legacy_columns)
+        lookup = legacy.rename(columns={"therapeutic_area": "canonical_model_ta_code"})
+        lookup["canonical_model_ta"] = lookup["canonical_model_ta_code"]
+        lookup["sort_order"] = 999999
+        lookup["observed_rows_total"] = 0
+        lookup["observed_tas"] = ""
+        lookup["observed_rows_by_ta"] = "{}"
+    else:
+        lookup = pd.DataFrame(columns=columns)
 
-    lookup = pd.read_csv(DATA_CLINPRED_PATH, usecols=columns)
-    lookup = lookup.dropna(subset=["gbd_cause_id_3_ml"])
-    lookup["therapeutic_area"] = lookup["therapeutic_area"].fillna("UNCLASSIFIED").astype(str)
+    for column, default in {
+        "gbd_cause_id_3_ml": 0,
+        "gbd_indication_name_3": "Other / Unclassified",
+        "canonical_model_ta": "Other/Unclassified",
+        "canonical_model_ta_code": "UNCLASSIFIED",
+        "sort_order": 999999,
+        "observed_rows_total": 0,
+        "observed_tas": "",
+        "observed_rows_by_ta": "{}",
+    }.items():
+        if column not in lookup.columns:
+            lookup[column] = default
+
     lookup["gbd_cause_id_3_ml"] = pd.to_numeric(
         lookup["gbd_cause_id_3_ml"],
         errors="coerce"
@@ -4294,17 +4344,31 @@ def load_gbd_indication_lookup():
         .fillna("Other / Unclassified")
         .astype(str)
     )
-    lookup = lookup.drop_duplicates(columns).sort_values(
-        ["therapeutic_area", "gbd_indication_name_3", "gbd_cause_id_3_ml"]
-    )
+    lookup["canonical_model_ta"] = lookup["canonical_model_ta"].fillna("Other/Unclassified").astype(str)
+    lookup["canonical_model_ta_code"] = lookup["canonical_model_ta_code"].fillna("UNCLASSIFIED").astype(str)
+    lookup["sort_order"] = pd.to_numeric(lookup["sort_order"], errors="coerce").fillna(999999).astype(int)
+    lookup["observed_rows_total"] = pd.to_numeric(
+        lookup["observed_rows_total"],
+        errors="coerce"
+    ).fillna(0).astype(int)
+    lookup["observed_tas"] = lookup["observed_tas"].fillna("").astype(str)
+    lookup["observed_rows_by_ta"] = lookup["observed_rows_by_ta"].fillna("{}").astype(str)
+    lookup["canonical_model_ta_code"] = lookup["canonical_model_ta_code"].fillna("UNCLASSIFIED").astype(str).str.upper()
 
     fallback = pd.DataFrame([{
-        "therapeutic_area": "UNCLASSIFIED",
         "gbd_cause_id_3_ml": 0,
         "gbd_indication_name_3": "Other / Unclassified",
+        "canonical_model_ta": "Other/Unclassified",
+        "canonical_model_ta_code": "UNCLASSIFIED",
+        "sort_order": 999999,
+        "observed_rows_total": 0,
+        "observed_tas": "UNCLASSIFIED",
+        "observed_rows_by_ta": "{\"UNCLASSIFIED\": 0}",
     }])
 
-    return pd.concat([lookup, fallback], ignore_index=True).drop_duplicates(columns)
+    lookup = pd.concat([lookup, fallback], ignore_index=True)
+    lookup = lookup.drop_duplicates(["gbd_cause_id_3_ml"], keep="first")
+    return lookup.sort_values(["sort_order", "gbd_cause_id_3_ml"]).reset_index(drop=True)
 
 
 X_ALL, TAXONOMY = load_data()
@@ -4318,6 +4382,9 @@ SIMULATION_FEATURE_ID_SET = set(SIMULATION_FEATURE_IDS)
 SIMULATION_FEATURE_LABEL_OVERRIDES = {
     "primary_duration_months_ml": "Max Primary Endpoint Duration  \n(in months)",
     "has_dmc_ml": "Data Monitoring Comittee",
+    "adult_ml": "Adult Profiles",
+    "child_ml": "Pediatric Profiles",
+    "older_adult_ml": "Geratic Profiles",
 }
 SIMULATION_FEATURE_LAYOUT = {
     "Therapeutic Context": [
@@ -4421,6 +4488,7 @@ def init_session_state():
         "detail_completion_tab_visible": False,
         "detail_prediction_notice": False,
         "completion_score_tab_jump_nonce": 0,
+        "simulation_open_features_tab": False,
         "simulation_prediction_result": None,
         "simulation_prediction_nct_id": None,
         "simulation_initial_result": None,
@@ -4636,16 +4704,16 @@ def _pillar_impacts_from_result(result):
     return _json_safe(result.get("pillar_impacts") or [])
 
 
-def _changed_fields_between(previous_snapshot, submitted_values):
+def _changed_fields_between(previous_snapshot, compare_values):
     if not previous_snapshot:
         return []
 
-    previous_values = (previous_snapshot or {}).get("submitted_values") or {}
+    previous_values = (previous_snapshot or {}).get("compare_values") or (previous_snapshot or {}).get("submitted_values") or {}
     changed = []
 
     for field_id in SIMULATION_FEATURE_IDS:
         if _values_equal_for_snapshot(
-            submitted_values.get(field_id),
+            compare_values.get(field_id),
             previous_values.get(field_id),
             field_id=field_id
         ):
@@ -4655,7 +4723,14 @@ def _changed_fields_between(previous_snapshot, submitted_values):
     return changed
 
 
-def set_latest_prediction_snapshot(nct_id, result, submitted_values, previous_snapshot=None, source="simulation_ptc"):
+def set_latest_prediction_snapshot(
+    nct_id,
+    result,
+    submitted_values,
+    previous_snapshot=None,
+    source="simulation_ptc",
+    compare_values=None,
+):
     score = _score_from_result(result)
     previous_score = _score_from_result((previous_snapshot or {}).get("result"))
 
@@ -4666,8 +4741,9 @@ def set_latest_prediction_snapshot(nct_id, result, submitted_values, previous_sn
         if previous_score:
             score_delta_percent = round(((score / previous_score) - 1.0) * 100.0, 1)
 
+    compare_values = compare_values or submitted_values
     display_values = {
-        field_id: get_display_value_for_field(field_id, submitted_values.get(field_id))
+        field_id: get_display_value_for_field(field_id, compare_values.get(field_id))
         for field_id in SIMULATION_FEATURE_IDS
     }
 
@@ -4676,6 +4752,7 @@ def set_latest_prediction_snapshot(nct_id, result, submitted_values, previous_sn
         "nct_id": str(nct_id),
         "source": source,
         "submitted_values": _json_safe(submitted_values),
+        "compare_values": _json_safe(compare_values),
         "display_values": _json_safe(display_values),
         "score": score,
         "previous_score": previous_score,
@@ -4686,7 +4763,7 @@ def set_latest_prediction_snapshot(nct_id, result, submitted_values, previous_sn
         "feature_impacts": _json_safe(result.get("feature_impacts") or result.get("subcat_impacts") or []),
         "subcat_impacts": _json_safe(result.get("subcat_impacts") or []),
         "result": _json_safe(result),
-        "changed_fields": _changed_fields_between(previous_snapshot, submitted_values),
+        "changed_fields": _changed_fields_between(previous_snapshot, compare_values),
     }
 
     st.session_state[get_simulation_snapshot_key(nct_id)] = snapshot
@@ -4715,6 +4792,7 @@ def append_simulation_prediction_history(snapshot):
         "nct_id": snapshot.get("nct_id"),
         "source": snapshot.get("source"),
         "submitted_values": snapshot.get("submitted_values"),
+        "compare_values": snapshot.get("compare_values"),
         "display_values": snapshot.get("display_values"),
         "score": snapshot.get("score"),
         "previous_score": snapshot.get("previous_score"),
@@ -4724,6 +4802,57 @@ def append_simulation_prediction_history(snapshot):
         "feature_impacts": snapshot.get("feature_impacts"),
         "changed_fields": snapshot.get("changed_fields"),
     })
+
+
+def _mapped_value_for_option_key(field_id, option_key):
+    mapping = TAXONOMY.get(field_id, {}).get("mapping", {})
+    if option_key in mapping:
+        mapped = mapping[option_key]
+        return mapped[0] if isinstance(mapped, list) and mapped else mapped
+
+    option_text = str(option_key)
+    for candidate_key, mapped in mapping.items():
+        if str(candidate_key).upper() == option_text.upper():
+            return mapped[0] if isinstance(mapped, list) and mapped else mapped
+
+    return option_key
+
+
+def _option_key_for_ui_value(field_id, value):
+    if field_id == "gbd_cause_id_3_ml":
+        numeric = pd.to_numeric(value, errors="coerce")
+        return 0 if pd.isna(numeric) else int(numeric)
+
+    numeric_fields = {"number_of_arms_ml", "primary_duration_months_ml"}
+    if field_id in numeric_fields:
+        numeric = pd.to_numeric(value, errors="coerce")
+        if pd.isna(numeric):
+            return None
+        return round(float(numeric), 2) if field_id == "primary_duration_months_ml" else int(round(float(numeric)))
+
+    if isinstance(value, bool):
+        return "1" if value else "0"
+
+    meta = TAXONOMY.get(field_id, {})
+    options = meta.get("ui", {}).get("options") or []
+    mapping = meta.get("mapping", {})
+    value_text = str(value).strip()
+
+    for option_key, option_label in options:
+        if value == option_label or value_text == str(option_key):
+            return str(option_key)
+
+    for option_key, mapped in mapping.items():
+        mapped_value = mapped[0] if isinstance(mapped, list) and mapped else mapped
+        mapped_label = mapped[1] if isinstance(mapped, list) and len(mapped) > 1 else option_key
+        if (
+            value_text == str(mapped_value)
+            or value_text.lower() == str(mapped_label).lower()
+            or value_text.upper() == str(option_key).upper()
+        ):
+            return str(option_key)
+
+    return None if value in (None, "", "N/A") else str(value)
 
 
 def _canonical_feature_value(field_id, value):
@@ -4745,7 +4874,7 @@ def _canonical_feature_value(field_id, value):
 
     for option_key, option_label in options:
         if value == option_label or value_text == str(option_key):
-            return option_key
+            return _mapped_value_for_option_key(field_id, option_key)
 
     for option_key, mapped in mapping.items():
         mapped_value = mapped[0] if isinstance(mapped, list) and mapped else mapped
@@ -4785,6 +4914,13 @@ def get_display_value_for_field(field_id, value):
         numeric = pd.to_numeric(value, errors="coerce")
         return "N/A" if pd.isna(numeric) else str(int(round(float(numeric))))
 
+    meta = TAXONOMY.get(field_id, {})
+    options = meta.get("ui", {}).get("options") or []
+    value_text = str(value).strip()
+    for option_key, option_label in options:
+        if value == option_label or value_text == str(option_key):
+            return str(option_label)
+
     label = _option_label_for_state_value(field_id, value)
     return "N/A" if label in (None, "") else str(label)
 
@@ -4804,7 +4940,25 @@ def get_current_feature_values(row):
     return values
 
 
+def get_current_compare_values(row):
+    values = {}
+    trial_key = str(row.get(ID_COL, st.session_state.get("selected_nct_id", "no_trial")))
+
+    for field_id in SIMULATION_FEATURE_IDS:
+        state_key = f"input_{trial_key}_{field_id}"
+        initial_val = _get_initial_field_value(field_id, row)
+        values[field_id] = _option_key_for_ui_value(
+            field_id,
+            st.session_state.get(state_key, initial_val)
+        )
+
+    return values
+
+
 def _values_equal_for_snapshot(current, reference, field_id=None):
+    current = _option_key_for_ui_value(field_id, current) if field_id else current
+    reference = _option_key_for_ui_value(field_id, reference) if field_id else reference
+
     if field_id == "primary_duration_months_ml":
         current_num = pd.to_numeric(current, errors="coerce")
         reference_num = pd.to_numeric(reference, errors="coerce")
@@ -4823,8 +4977,8 @@ def get_pending_feature_ids(row):
     if not snapshot:
         return []
 
-    current_values = get_current_feature_values(row)
-    reference_values = snapshot.get("submitted_values") or {}
+    current_values = get_current_compare_values(row)
+    reference_values = snapshot.get("compare_values") or snapshot.get("submitted_values") or {}
 
     return [
         field_id
@@ -4879,12 +5033,14 @@ def ensure_simulation_baseline_snapshot(row):
         return
 
     submitted_values = get_current_feature_values(row)
+    compare_values = get_current_compare_values(row)
     set_latest_prediction_snapshot(
         nct_id,
         result,
         submitted_values,
         previous_snapshot=None,
-        source="prerecorded_baseline"
+        source="prerecorded_baseline",
+        compare_values=compare_values
     )
     st.session_state.analysis_result = result
     st.session_state.analysis_nct_id = nct_id
@@ -5054,16 +5210,9 @@ def reset_trial_editor_state():
         initial_val = _get_initial_field_value(field_id, row)
 
         _safe_set_session_value(state_key, initial_val)
-        if widget_key in st.session_state:
-            if field_id == "gbd_cause_id_3_ml":
-                try:
-                    cause_id = int(float(initial_val))
-                except (TypeError, ValueError):
-                    cause_id = 0
-                indication_name = trial_val(row, "gbd_indication_name_3", default="Other / Unclassified")
-                _safe_set_session_value(widget_key, _format_indication_label(indication_name, cause_id))
-            else:
-                _safe_set_session_value(widget_key, _option_label_for_state_value(field_id, initial_val))
+        _safe_delete_session_value(widget_key)
+
+    st.session_state[_indication_attention_key()] = False
 
     for suffix, candidates in TRIAL_EDITOR_TEXT_FIELDS.items():
         state_key = f"text_{trial_key}_{suffix}"
@@ -5082,9 +5231,13 @@ def handle_global_edit_toggle():
     reset_detail_prediction_state()
 
     if simulation_mode:
+        st.session_state.simulation_open_features_tab = True
+        st.session_state.completion_score_tab_jump_nonce += 1
         set_simulation_initial_score()
         reset_trial_editor_state()
     else:
+        st.session_state.simulation_open_features_tab = False
+        st.session_state.completion_score_tab_jump_nonce += 1
         reset_trial_editor_state()
 
 
@@ -5640,6 +5793,14 @@ def _safe_set_session_value(key, value):
         pass
 
 
+def _safe_delete_session_value(key):
+    try:
+        if key in st.session_state:
+            del st.session_state[key]
+    except st.errors.StreamlitAPIException:
+        pass
+
+
 def _option_label_for_state_value(field_id, value):
     meta = TAXONOMY.get(field_id, {})
     options = meta.get("ui", {}).get("options") or []
@@ -5926,7 +6087,40 @@ def _canonical_ta_from_state(row):
         if str(value) == str(mapped_value) or str(value).lower() == str(mapped_label).lower():
             return str(option_key)
 
-    return str(row.get("therapeutic_area", "UNCLASSIFIED") or "UNCLASSIFIED")
+    return str(row.get("therapeutic_area", "UNCLASSIFIED") or "UNCLASSIFIED").upper()
+
+
+def _indication_attention_key():
+    trial_key = st.session_state.get("selected_nct_id", "no_trial")
+    return f"indication_requires_choice_{trial_key}"
+
+
+def _feature_widget_override_key(field_id):
+    trial_key = st.session_state.get("selected_nct_id", "no_trial")
+    return f"feature_widget_override_{trial_key}_{field_id}"
+
+
+def _queue_feature_widget_override(field_id, value):
+    st.session_state[_feature_widget_override_key(field_id)] = value
+
+
+def _consume_feature_widget_override(field_id):
+    key = _feature_widget_override_key(field_id)
+    if key not in st.session_state:
+        return None
+    return st.session_state.pop(key)
+
+
+def _observed_rows_for_ta(item, ta_code):
+    try:
+        rows_by_ta = json.loads(str(getattr(item, "observed_rows_by_ta", "{}") or "{}"))
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return 0
+
+    try:
+        return int(rows_by_ta.get(str(ta_code).upper(), 0))
+    except (TypeError, ValueError):
+        return 0
 
 
 def _format_indication_label(name, cause_id):
@@ -5955,18 +6149,44 @@ def _get_indication_options(row):
         row.get("gbd_indication_name_3", "Other / Unclassified")
     )
 
-    lookup = GBD_INDICATION_LOOKUP
-    filtered = lookup[lookup["therapeutic_area"].astype(str) == ta]
+    ranked_options = []
+    for item in GBD_INDICATION_LOOKUP.itertuples(index=False):
+        option_id = int(item.gbd_cause_id_3_ml)
+        option_name = str(item.gbd_indication_name_3)
+
+        if option_id == 0:
+            bucket = -1
+            rank = (bucket, 0, 999999, option_name.lower(), option_id)
+        elif str(item.canonical_model_ta_code).upper() == ta:
+            bucket = 0
+            rank = (bucket, 0, int(item.sort_order), option_name.lower(), option_id)
+        else:
+            observed_rows = _observed_rows_for_ta(item, ta)
+            if observed_rows > 0:
+                bucket = 1
+                rank = (bucket, -observed_rows, int(item.sort_order), option_name.lower(), option_id)
+            else:
+                bucket = 2
+                rank = (
+                    bucket,
+                    str(item.canonical_model_ta_code).upper(),
+                    int(item.sort_order),
+                    option_name.lower(),
+                    option_id,
+                )
+
+        ranked_options.append((rank, option_id, option_name))
+
     options = [
-        (int(item.gbd_cause_id_3_ml), str(item.gbd_indication_name_3))
-        for item in filtered.itertuples(index=False)
+        (option_id, option_name)
+        for _, option_id, option_name in sorted(ranked_options, key=lambda value: value[0])
     ]
 
     if not any(option_id == current_id for option_id, _ in options):
-        options.insert(0, (current_id, str(current_name or "Other / Unclassified")))
+        options.insert(1, (current_id, str(current_name or "Other / Unclassified")))
 
     if not any(option_id == 0 for option_id, _ in options):
-        options.append((0, "Other / Unclassified"))
+        options.insert(0, (0, "Other / Unclassified"))
 
     seen = set()
     deduped = []
@@ -5985,6 +6205,27 @@ def _sync_feature_widget_to_shared_state(field_id):
     widget_key = f"feature_{trial_key}_{field_id}"
     state_key = f"input_{trial_key}_{field_id}"
     st.session_state[state_key] = st.session_state.get(widget_key)
+
+    if field_id == "therapeutic_area_ml":
+        st.session_state[f"input_{trial_key}_gbd_cause_id_3_ml"] = 0
+        st.session_state[f"input_{trial_key}_gbd_indication_name_3"] = "Other / Unclassified"
+        _queue_feature_widget_override(
+            "gbd_cause_id_3_ml",
+            _format_indication_label("Other / Unclassified", 0)
+        )
+        st.session_state[_indication_attention_key()] = True
+
+    if field_id == "comparator_benchmark_ml":
+        comparator_key = _option_key_for_ui_value(field_id, st.session_state.get(state_key))
+        placebo_state_key = f"input_{trial_key}_has_placebo_ml"
+
+        if comparator_key == "PLACEBO":
+            st.session_state[placebo_state_key] = "Yes"
+            _queue_feature_widget_override("has_placebo_ml", "Yes")
+        elif comparator_key == "NO_CONTROL_GROUP":
+            st.session_state[placebo_state_key] = "No"
+            _queue_feature_widget_override("has_placebo_ml", "No")
+
     st.session_state.simulation_has_edits = True
     queue_simulation_reprediction_if_score_visible()
 
@@ -6005,6 +6246,7 @@ def _sync_indication_widget_to_shared_state(row):
 
     st.session_state[f"input_{trial_key}_gbd_cause_id_3_ml"] = selected_id
     st.session_state[f"input_{trial_key}_gbd_indication_name_3"] = selected_name
+    st.session_state[_indication_attention_key()] = False
     st.session_state.simulation_has_edits = True
     queue_simulation_reprediction_if_score_visible()
 
@@ -6017,7 +6259,7 @@ def _feature_value_is_modified(field_id, row, state_key, initial_val, options):
 def _label_with_previous_value(label, field_id, row):
     nct_id = str(row.get(ID_COL, st.session_state.get("selected_nct_id", "")))
     snapshot = get_latest_prediction_snapshot(nct_id) or {}
-    reference_values = snapshot.get("submitted_values") or {}
+    reference_values = snapshot.get("compare_values") or snapshot.get("submitted_values") or {}
 
     if field_id not in get_pending_feature_ids(row):
         return label
@@ -6027,7 +6269,10 @@ def _label_with_previous_value(label, field_id, row):
         previous_value = get_display_value_for_field(field_id, reference_values.get(field_id))
 
     previous_value = str(previous_value or "N/A")
-    return f"{label}  \n:blue[(previous: {previous_value})]"
+    if field_id == "gbd_cause_id_3_ml" and len(previous_value) > 34:
+        previous_value = f"{previous_value[:31].rstrip()}..."
+
+    return f"{label} :blue[(previous: {previous_value})]"
 
 
 def _render_trial_feature_control(field_id, row):
@@ -6043,10 +6288,15 @@ def _render_trial_feature_control(field_id, row):
     # so the control box can render in a soft blue (see .st-key-simfield_chg_).
     # Keep the field type in the wrapper class for targeted visual tuning.
     changed = _feature_value_is_modified(field_id, row, state_key, initial_val, options)
+    needs_attention = (
+        field_id == "gbd_cause_id_3_ml"
+        and bool(st.session_state.get(_indication_attention_key(), False))
+    )
     is_number_field = field_id != "gbd_cause_id_3_ml" and not options
     kind = "num" if is_number_field else "sel"
+    state_token = "attn" if needs_attention else ("chg" if changed else "base")
     container_key = (
-        f"simfield_{'chg' if changed else 'base'}_{kind}_{_field_token(field_id)}"
+        f"simfield_{state_token}_{kind}_{_field_token(field_id)}"
     )
 
     with st.container(key=container_key):
@@ -6060,6 +6310,10 @@ def _render_trial_feature_control(field_id, row):
                 if option_id == current_id:
                     selected_index = idx
                     break
+
+            widget_override = _consume_feature_widget_override(field_id)
+            if widget_override in labels:
+                _safe_set_session_value(widget_key, widget_override)
 
             if widget_key in st.session_state and st.session_state.get(widget_key) not in labels:
                 _safe_set_session_value(widget_key, labels[selected_index] if labels else "")
@@ -6076,6 +6330,10 @@ def _render_trial_feature_control(field_id, row):
 
         if options:
             labels, selected_index = _resolve_field_labels(field_id, state_key, initial_val, options)
+            widget_override = _consume_feature_widget_override(field_id)
+            if widget_override in labels:
+                _safe_set_session_value(widget_key, widget_override)
+
             if widget_key in st.session_state and st.session_state.get(widget_key) not in labels:
                 _safe_set_session_value(widget_key, labels[selected_index] if labels else "")
 
@@ -6227,17 +6485,24 @@ def render_trial_detail_tabs_refined(row):
 
     with st.container(key="trial_detail_tabs"):
         if simulation_mode and score_visible:
-            tab1, tab2, tab_features, tab_score = st.tabs(
-                [DETAIL_TAB_INFO, DETAIL_TAB_POPULATION, DETAIL_TAB_FEATURES, DETAIL_TAB_SCORE],
-                default=DETAIL_TAB_SCORE,
+            default_sim_tab = (
+                DETAIL_TAB_FEATURES
+                if st.session_state.get("simulation_open_features_tab", False)
+                else DETAIL_TAB_SCORE
+            )
+            tab1, tab2, tab_score, tab_features = st.tabs(
+                [DETAIL_TAB_INFO, DETAIL_TAB_POPULATION, DETAIL_TAB_SCORE, DETAIL_TAB_FEATURES],
+                default=default_sim_tab,
                 key=f"trial_detail_tabs_sim_with_score_{st.session_state.get('completion_score_tab_jump_nonce', 0)}"
             )
+            st.session_state.simulation_open_features_tab = False
         elif simulation_mode:
             tab1, tab2, tab_features = st.tabs(
                 [DETAIL_TAB_INFO, DETAIL_TAB_POPULATION, DETAIL_TAB_FEATURES],
                 default=DETAIL_TAB_FEATURES,
                 key="trial_detail_tabs_sim_base"
             )
+            st.session_state.simulation_open_features_tab = False
             tab_score = None
         elif score_visible:
             tab1, tab2, tab_score = st.tabs(
@@ -6406,6 +6671,7 @@ def get_analysis_result_for_selected_trial(row):
                     else None
                 )
                 submitted_values = get_current_feature_values(row) if is_simulation_mode else None
+                compare_values = get_current_compare_values(row) if is_simulation_mode else None
 
                 res = requests.post(
                     API_URL,
@@ -6426,7 +6692,8 @@ def get_analysis_result_for_selected_trial(row):
                             result,
                             submitted_values,
                             previous_snapshot=previous_snapshot,
-                            source="simulation_ptc"
+                            source="simulation_ptc",
+                            compare_values=compare_values
                         )
                         st.session_state.analysis_result = snapshot["result"]
 
@@ -6539,16 +6806,24 @@ def render_completion_prediction_tab(row):
                         and pd.notna(delta_pct)
                     ):
                         previous_color = PLOT_BLUE_DEEP_RGB if float(previous_score) >= 50 else PLOT_RED_DEEP_RGB
-                        if float(delta_pct) > 0:
-                            pct_color = PLOT_BLUE_DEEP_RGB
-                        elif float(delta_pct) < 0:
-                            pct_color = PLOT_RED_DEEP_RGB
-                        else:
+                        if abs(float(delta_pct)) < 0.0001:
                             pct_color = "#64748b"
+                            pct_text = "-"
+                            pct_triangle = "▬"
+                        elif float(delta_pct) > 0:
+                            pct_color = PLOT_BLUE_DEEP_RGB
+                            pct_text = f"{float(delta_pct):+.1f}%"
+                            pct_triangle = "▲"
+                        else:
+                            pct_color = PLOT_RED_DEEP_RGB
+                            pct_text = f"{float(delta_pct):+.1f}%"
+                            pct_triangle = "▼"
                         delta_html = (
                             '<div class="simulation-score-delta">'
+                            f'<span class="score-delta-label" style="color:{previous_color};">Prev: </span>'
                             f'<span style="color:{previous_color};">{float(previous_score):.1f} pts</span>'
-                            f'<span style="color:{pct_color}; margin-left:8px;">{float(delta_pct):+.1f}%</span>'
+                            f'<span class="score-delta-triangle" style="color:{pct_color};">{pct_triangle}</span>'
+                            f'<span style="color:{pct_color};">{pct_text}</span>'
                             '</div>'
                         )
 

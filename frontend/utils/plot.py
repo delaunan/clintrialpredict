@@ -277,23 +277,27 @@ def plot_impact_bar(df_pillars, height=240, delta_by_pillar=None):
         pillar_key = re.sub(r'^\\d+\\.\\s*', '', str(row["Pillar"]))
         if pillar_key in delta_by_pillar:
             delta_val = delta_by_pillar[pillar_key]
+            is_flat_delta = abs(delta_val) < 0.0001
             delta_color = (
-                get_rgb_str(c["blue_deep"])
-                if delta_val >= 0
+                "#64748b"
+                if is_flat_delta
+                else get_rgb_str(c["blue_deep"])
+                if delta_val > 0
                 else get_rgb_str(c["red_deep"])
             )
+            delta_text = "-" if is_flat_delta else f"{delta_val:+.1f}"
             fig.add_annotation(
                 x=0.985,
                 y=row["Pillar_Clean"],
                 xref="paper",
                 yref="y",
-                text=f"<b>({delta_val:+.1f})</b>",
+                text=f"<b>{delta_text}</b>",
                 showarrow=False,
                 xanchor="right",
                 yanchor="middle",
                 align="right",
                 font=dict(
-                    size=12,
+                    size=14,
                     color=delta_color,
                     family=STYLE_CONFIG["font_family"]
                 )
