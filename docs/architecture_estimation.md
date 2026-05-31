@@ -1,16 +1,16 @@
-# CTPredict Serious-Game Architecture
+# CTPredict Estimation Architecture
 
 ## 1. Purpose of this document
 
-This document is the planning backbone for the future CTPredict serious-game mode. It defines the strategic and technical architecture for turning the current trial prediction product into a portfolio decision simulation.
+This document is the planning backbone for the future CTPredict estimation mode. It defines the strategic and technical architecture for turning the current trial prediction product into a missing operational value estimation workflow.
 
 This is not an implementation specification yet. It does not prescribe immediate code edits, model training, database changes, or UI changes. It should guide future discussions with Gemini CLI, Codex CLI, or another coding assistant before implementation begins.
 
 ## 2. Product vision
 
-The serious-game ambition is to simulate pharma portfolio decision-making under capital constraints. Participants should review a set of clinical development assets, compare risk, cost, operational burden, sunk cost, future commitments, and market potential, then decide which assets deserve continued investment.
+The estimation ambition is to fill missing operational values for clinical trials in a reproducible, auditable way. The immediate focus is final duration, enrollment, site count, and country count, with clear separation between observed values, lower bounds, and modelled estimates.
 
-The experience should feel like a portfolio committee review, not a prediction dashboard. The core question is not only "Which trial is risky?" but "Given limited capital, which assets should receive investment, and which should be stopped?"
+The workflow should feel like an estimation and data-quality workbench. The core question is: "Given the fields available for this trial, what operational values are missing, what can be estimated, and how reliable are those estimates?"
 
 ## 3. Current foundation
 
@@ -21,52 +21,49 @@ CTPredict currently provides:
 - An XGBoost completion / early-termination prediction engine.
 - A Streamlit application for trial search, trial detail review, and completion-risk scoring.
 - A scoring architecture aligned with the existing API, registry, and parity audit workflow.
-- A future product direction toward serious-game and strategic forecasting modes.
+- A future product direction toward estimation and strategic forecasting modes.
 
-## 4. Target serious-game scenario
+## 4. Target estimation workflow
 
-The future scenario should place participants in a pharma portfolio review. They receive a portfolio of molecules or clinical assets at different development stages. They cannot continue funding everything, so they must allocate scarce capital across competing programs.
+The future workflow should help analysts prepare trial-level operational estimates for downstream cost, planning, and forecasting work. Users start from existing trial records, identify missing or incomplete operational quantities, and generate auditable estimates with uncertainty ranges and validation flags.
 
-Example participant roles:
+Example users:
 
-- Portfolio committee member.
+- Data analyst.
+- Clinical operations analyst.
+- Forecasting analyst.
 - Business development analyst.
-- Clinical operations lead.
 - Finance partner.
-- Strategy lead.
 
-Example decisions:
+Example tasks:
 
-- Continue.
-- Terminate.
-- Pause.
-- Accelerate.
-- Partner / out-license.
-- Defer until more evidence is available.
+- Identify missing or unusable operational fields.
+- Reconstruct country count from source files.
+- Estimate final duration, enrollment, sites, and countries.
+- Preserve observed-to-date values as lower bounds.
+- Flag implausible operational bundles.
+- Export a reusable estimation table.
 
 Example constraints:
 
-- Limited annual budget.
-- Required cost reduction.
-- Maximum acceptable risk exposure.
-- Need to preserve future commercial value.
-- Strategic therapeutic-area priorities.
+- Avoid leakage from final observed values when forecasting from design-stage inputs.
+- Keep estimates reproducible from committed source data.
+- Label every estimate with its source, target definition, model family, and validation status.
+- Avoid writing derived outputs back into primary raw data.
 
 ## 5. Main architecture overview
 
 | Module | Purpose | Input | Output | Implementation stage |
 | ------ | ------- | ----- | ------ | -------------------- |
-| Trial data layer | Provide structured trial records from AACT / ClinicalTrials.gov and existing registry artifacts. | Raw and processed trial data, sponsor data, design data, eligibility data, intervention data. | Trial-level records for search, scoring, and future simulation. | Existing |
-| Design-stage feature layer | Represent information available at or near trial start. | Trial design, phase, sponsor, therapeutic area, condition, intervention, eligibility, planned dates. | Leakage-safe feature set for prediction and simulation. | Existing / Planned MVP |
+| Trial data layer | Provide structured trial records from AACT / ClinicalTrials.gov and existing registry artifacts. | Raw and processed trial data, sponsor data, design data, eligibility data, intervention data. | Trial-level records for search, scoring, and estimation. | Existing |
+| Design-stage feature layer | Represent information available at or near trial start. | Trial design, phase, sponsor, therapeutic area, condition, intervention, eligibility, planned dates. | Leakage-safe feature set for prediction and estimation. | Existing / Planned MVP |
 | Completion-risk engine | Estimate completion or early-termination risk using the current model. | Design-stage model features from the existing pipeline. | Completion-risk score, probability, and explanation components. | Existing |
-| Operational scale estimation engine | Estimate operational quantities needed by finance and portfolio simulation. | Design-stage features, historical completed trials, active-trial censoring logic. | Predicted duration, enrollment, site count, country count, recruitment burden. | Planned MVP |
-| Cost simulation engine | Convert operational estimates into transparent cost estimates. | Operational quantities, phase, therapeutic area, complexity assumptions, cost parameters. | Total trial cost, remaining cost, avoided cost, cost drivers. | Planned MVP |
-| Calendar-year spend engine | Spread total cost over time for budget-constrained decision-making. | Trial start date, expected end date, simulation date, cost curve assumptions. | Spent-to-date, remaining spend, annual spend by calendar year. | Planned MVP |
-| Downstream development engine | Estimate future investment implied by continuing an asset. | Current phase, asset stage, expected next phase, phase-specific cost assumptions. | Downstream phase commitment and probability-weighted future investment. | Planned later |
-| Market potential engine | Estimate or categorize commercial and strategic value. | Therapeutic area, indication, unmet need proxy, market category, strategic priority. | Market potential category and future value signal. | Planned MVP / Planned later |
-| Portfolio decision engine | Represent participant choices and enforce scenario constraints. | Asset list, budgets, decisions, risk and value measures. | Portfolio outcome, budget usage, asset-level decisions. | Planned MVP |
-| Serious-game scoring engine | Evaluate participant decisions against scenario goals. | Decisions, budget constraints, risk, cost, value, scenario rules. | Scores for budget discipline, value preservation, risk balance, and rationale quality. | Planned later |
-| Debrief and explanation layer | Explain outcomes and compare decisions with model-based or scenario-based guidance. | Portfolio outcomes, model outputs, assumptions, participant decisions. | Final debrief, decision summary, facilitator outputs. | Planned later |
+| Operational scale estimation engine | Estimate missing operational quantities. | Design-stage features, historical completed trials, active-trial censoring logic. | Predicted duration, enrollment, site count, country count, recruitment burden. | Planned MVP |
+| Reconciliation engine | Check whether estimated operational quantities are mutually plausible. | Estimated enrollment, sites, countries, duration, lower bounds, historical ratios. | Flags for impossible or suspicious bundles. | Planned MVP |
+| Cost translation layer | Optionally convert operational estimates into transparent cost estimates later. | Operational quantities, phase, therapeutic area, complexity assumptions, cost parameters. | Total trial cost, remaining cost, avoided cost, cost drivers. | Planned later |
+| Estimation output layer | Produce reusable trial-level estimation records. | Trial records, model outputs, validation flags, metadata. | Estimation-ready table for later UI, cost, or forecasting work. | Planned MVP |
+| Estimation validation engine | Evaluate model stability and estimate quality. | Validation folds, subgroup diagnostics, error metrics, reconciliation checks. | Champion model selection and known limitations. | Planned MVP |
+| Explanation layer | Explain estimate sources, target definitions, and uncertainty. | Model outputs, assumptions, diagnostics, source fields. | Human-readable estimation notes and audit metadata. | Planned later |
 
 ## 6. Data layers
 
@@ -111,7 +108,7 @@ Using these variables as inputs to a design-stage forecast would create leakage 
 
 ### 6.3 Synthetic financial data
 
-Synthetic financial data is created by the future cost engine. It is a simulation layer, not observed sponsor truth.
+Synthetic financial data is created by the future cost engine. It is a estimation layer, not observed sponsor truth.
 
 Examples:
 
@@ -155,68 +152,65 @@ Future models must preserve a strict separation between:
 - What is observed after trial execution.
 - What is estimated synthetically by a model or scenario rule.
 
-This separation is critical because the serious-game mode will ask users to make decisions at a specific point in time. Inputs available after that point must not be treated as if they were available to the decision-maker.
+This separation is critical because estimation mode may forecast from information available at a specific point in time. Inputs available after that point must not be treated as if they were available to the estimator.
 
 Rule: Any future model must document whether each input feature is available at design stage, observed after trial execution, or synthetically estimated.
 
-This rule applies to completion-risk modelling, operational scale estimation, cost simulation, market potential estimation, downstream commitment estimation, and serious-game scoring.
+This rule applies to completion-risk modelling, operational scale estimation, optional cost translation, market potential estimation, downstream commitment estimation, and estimation validation.
 
-## 8. Simulation decision-date data contract
+## 8. Estimation date data contract
 
-The serious-game mode should be anchored to a simulation decision date. This is the date at which participants are assumed to review the portfolio. A trial may later be completed, terminated, withdrawn, or still ongoing in the real dataset, but the participant-facing simulation should treat the selected assets as ongoing and actionable at the committee date.
+The estimation mode can be anchored to an estimation date. This is the date at which the model is assumed to forecast missing or incomplete operational values. A trial may later be completed, terminated, withdrawn, or still ongoing in the real dataset, but estimation features must only use information that would be available at or before the estimation date.
 
-For the first serious-game version, the objective is not to reconstruct a perfect historical AACT snapshot. The objective is to create a roughly realistic portfolio discussion. Final completion or termination outcomes should not be shown to the participant, because the scenario assumes the assets are still under review. The existing XGBoost risk module is already based on design-stage features and can provide the near-term completion / termination risk signal without relying on enrollment shortcuts.
+For the first estimation version, the objective is not to reconstruct a perfect historical AACT snapshot. The objective is to build a robust modelling contract for missing operational values. Final completion or termination outcomes may be used as training targets for completed trials, but they must not leak into design-stage forecast features.
 
 ### 8.1 Scenario date concepts
 
 | Concept | Meaning | Use |
 | ------- | ------- | --- |
-| Simulation decision date | Date at which the portfolio committee makes decisions. | Defines what is visible, incurred, remaining, and saveable. |
+| Estimation date | Date at which missing or incomplete values are estimated. | Defines what is visible, observed-to-date, and forecast-only. |
 | Trial start date | Date trial activity begins. | Determines eligibility and elapsed duration. |
-| Known or planned completion date as of decision date | Completion expectation visible at that decision point if available. | Input to duration estimate, subject to uncertainty. |
-| Final observed completion date | Completion date visible only after trial execution. | Training target or validation data, not participant-facing for historical scenarios. |
-| Current extracted status | Trial status in the current source extract. | Useful for data audit, but not necessarily the scenario status at a historical decision date. |
-| Scenario status | Scenario assumption that the asset is ongoing and actionable at the decision date. | Keeps the game focused on portfolio decisions rather than retrospective outcome knowledge. |
-| Expected completion date | Estimated or planned end date used for spend phasing. | Determines remaining current-trial duration and saveable cost. |
-| Expected time to market | Estimated remaining research and development time after the decision date. | Supports strategic value, opportunity cost, and sales-timing discussion. |
+| Known or planned completion date as of estimation date | Completion expectation visible at that point if available. | Input to duration estimate, subject to uncertainty. |
+| Final observed completion date | Completion date visible only after trial execution. | Training target or validation data, not an input for leakage-safe forecasts. |
+| Current extracted status | Trial status in the current source extract. | Useful for data audit, but not necessarily the status at a historical estimation date. |
+| Estimation status | Whether a record is completed, ongoing, censored, lower-bound only, or unsuitable for a target. | Keeps target construction and feature use explicit. |
+| Expected completion date | Estimated or planned end date. | Candidate duration feature or later cost input, subject to uncertainty. |
 
-### 8.2 Trial eligibility for a portfolio scenario
+### 8.2 Trial eligibility for estimation
 
-For a trial to appear in a portfolio scenario, it should normally satisfy:
+For a trial to appear in an estimation dataset, it should normally satisfy:
 
-- The trial start date is on or before the simulation decision date.
-- The selected portfolio committee date falls within a plausible active development window for the asset.
-- The asset is treated as strategically actionable at the decision date.
+- The trial start date is present when duration or elapsed-time features are needed.
 - The phase and therapeutic context are available.
-- The expected completion date is after the portfolio committee date, or can be estimated as after that date.
+- The target field is either observed as a completed-trial final value or explicitly treated as an observed-to-date lower bound.
+- The record has enough design-stage features to support the selected estimator.
+- The target definition does not require using future-observed values as input features.
 
-The number of selected trials does not need to be fixed at architecture time. A facilitator may hand-pick a small or larger portfolio later. The same data contract should work whether the portfolio contains 10, 15, 30, or another number of assets.
-
-Future implementation may support fictionalized assets or manually curated portfolios. In that case, the same data contract still applies: every participant-facing field should be either known for the scenario or explicitly marked as an estimate.
+The number of selected trials does not need to be fixed at architecture time. The same data contract should work for the full dataset, a filtered modelling cohort, or a manually curated validation subset.
 
 ### 8.3 Field-use contract
 
 Each candidate field should be classified before use.
 
-| Field class | Description | Example | Allowed participant-facing use |
+| Field class | Description | Example | Allowed estimation use |
 | ----------- | ----------- | ------- | ------------------------------ |
-| Directly visible at decision date | Known to the decision-maker at the scenario date. | Phase, sponsor, therapeutic area, trial title, planned enrollment if available. | Yes. |
-| Observed-to-date lower bound | Current operational value visible by the scenario date but not necessarily final. | Patients enrolled to date, active/listed sites, listed countries, elapsed duration. | Yes, as lower bound and incurred-cost input. |
+| Directly visible at estimation date | Known by the estimation date. | Phase, sponsor, therapeutic area, trial title, planned enrollment if available. | Yes. |
+| Observed-to-date lower bound | Current operational value visible by the estimation date but not necessarily final. | Patients enrolled to date, active/listed sites, listed countries, elapsed duration. | Yes, as lower bound and audit input. |
 | Final observed only | Known only after trial execution. | Final actual enrollment, final duration, final site count, final country count, final outcome. | No, except for training, validation, and retrospective audit. |
-| Prediction feature | Field allowed as input to an estimator. | Phase, TA, rare disease flag, modality, planned enrollment, number of arms. | Yes if available at decision date. |
-| Synthetic estimate | Modelled or rule-based output. | Predicted final enrollment if continued, future Phase III cost, path-to-market commitment. | Yes, if labelled as estimate. |
-| Excluded for leakage | Field that reveals future knowledge relative to the decision date. | Final completion outcome for an active historical trial. | No. |
+| Prediction feature | Field allowed as input to an estimator. | Phase, TA, rare disease flag, modality, planned enrollment, number of arms. | Yes if available at estimation date. |
+| Synthetic estimate | Modelled or rule-based output. | Predicted final enrollment, site count, country count, or duration. | Yes, if labelled as estimate. |
+| Excluded for leakage | Field that reveals future knowledge relative to the estimation date. | Final completion outcome for an active historical trial. | No. |
 
 ### 8.4 Precomputation versus runtime calculation
 
-Anchoring to a simulation decision date does not mean every value must be calculated interactively. Most asset-level estimates can be precomputed in advance. The date-dependent values are lightweight and can be calculated when a portfolio committee date is selected.
+Anchoring to an estimation date does not mean every value must be calculated interactively. Most asset-level estimates can be precomputed in advance. Date-dependent values are lightweight and can be calculated when an estimation date is selected.
 
 Precomputed asset-level estimates:
 
-- Predicted final duration if continued.
-- Predicted final enrollment if continued.
-- Predicted final site count if continued.
-- Predicted final country count if continued.
+- Predicted final duration.
+- Predicted final enrollment.
+- Predicted final site count.
+- Predicted final country count.
 - Estimated total current-trial cost.
 - Estimated future-phase cost to reach market.
 - Estimated remaining time to market.
@@ -225,15 +219,15 @@ Precomputed asset-level estimates:
 
 Runtime date-dependent calculations:
 
-- Elapsed duration at the portfolio committee date.
-- Cost incurred by the portfolio committee date.
+- Elapsed duration at the missing-value review date.
+- Cost incurred by the missing-value review date.
 - Remaining current-trial cost after the date.
 - Saveable cost this year.
 - Saveable cost next year.
 - Saveable cost in following years.
 - Whether the selected date is plausible for the selected asset.
 
-For a portfolio of hand-picked trials, these runtime calculations should be computationally light. They are mainly date arithmetic plus a deterministic spend curve applied to precomputed trial-cost and duration estimates.
+For a selected estimation cohort, these runtime calculations should be computationally light. They are mainly date arithmetic plus deterministic rules applied to precomputed operational estimates.
 
 ### 8.5 First-stage implementation path
 
@@ -247,9 +241,9 @@ The first implementation stage should follow this sequence:
 6. Invent next phases up to market using scenario templates and similar completed trials.
 7. Add next-phase cost and risk assumptions to estimate future development commitment.
 8. Produce a reusable asset-level table with precomputed estimates.
-9. At scenario time, apply the selected portfolio committee date to calculate incurred, remaining, and saveable cost.
+9. At scenario time, apply the selected missing-value review date to calculate incurred, remaining, and saveable cost.
 
-This sequence should be completed before any serious-game UI work beyond a minimal prototype.
+This sequence should be completed before any estimation UI work beyond a minimal prototype.
 
 ## 9. Operational scale estimation plan
 
@@ -265,9 +259,9 @@ Future datasets should distinguish three operational values per trial and per qu
 
 | Value type | Meaning | Main use |
 | ---------- | ------- | -------- |
-| Observed-to-date | Value currently visible in AACT / ClinicalTrials.gov at the simulation decision date. | Lower bound for ongoing trials; partial-spend input. |
-| Predicted final if continued | Estimated final operational scale if the asset continues. | Main driver of total cost, remaining cost, and future commitments. |
-| Realized if stopped | Partial scale and spend at termination or scenario decision date. | Incurred cost and avoided-cost calculation. |
+| Observed-to-date | Value currently visible in AACT / ClinicalTrials.gov at the estimation date. | Lower bound for ongoing trials; partial-spend input. |
+| Predicted final value | Estimated final operational scale. | Main estimate used for missing-value completion. |
+| Partial observed value | Partial scale observed before completion, termination, or extraction. | Lower-bound and censoring audit. |
 
 For ongoing trials, observed patient, site, and country values should constrain the prediction but should not be assumed to be the final total. If an ongoing trial has already reported 120 patients, 20 sites, or 4 countries, the predicted final value should not be lower than those observed-to-date values.
 
@@ -281,7 +275,7 @@ The same principle applies to duration:
 predicted_final_duration = max(model_prediction, elapsed_duration_to_decision_date)
 ```
 
-For the first version, exact historical observed-to-date patient, site, and country values may not be available for a past portfolio committee date. In that case, use the current extract as a pragmatic lower-bound approximation where appropriate, clearly label it as an approximation, and keep the participant-facing scenario focused on discussion-quality decisions rather than forensic reconstruction.
+For the first version, exact historical observed-to-date patient, site, and country values may not be available for a past estimation date. In that case, use the current extract as a pragmatic lower-bound approximation where appropriate and clearly label it as an approximation.
 
 Before building model-ready datasets, create explicit target-readiness flags. These flags make the operational modelling step auditable and prevent planned, ongoing, completed, and partial-stop values from being mixed accidentally.
 
@@ -290,12 +284,12 @@ Required MVP flags:
 | Flag | Meaning | Use |
 | ---- | ------- | --- |
 | `is_completed_actual_enrollment_target` | Completed trial with positive `ACTUAL` enrollment. | Training target for final enrollment model. |
-| `is_ongoing_actual_enrollment_lower_bound` | Ongoing/actionable trial with positive `ACTUAL` enrollment. | Lower bound when estimating final enrollment if continued. |
+| `is_ongoing_actual_enrollment_lower_bound` | Ongoing/actionable trial with positive `ACTUAL` enrollment. | Lower bound when estimating final enrollment. |
 | `is_estimated_planned_enrollment` | Trial with positive `ESTIMATED` enrollment. | Planned/expected scale feature, not final actual truth. |
 | `is_completed_site_count_target` | Completed trial with positive site/facility count. | Training target for final site-count model. |
-| `is_ongoing_site_count_lower_bound` | Ongoing/actionable trial with positive site/facility count. | Lower bound when estimating final site count if continued. |
+| `is_ongoing_site_count_lower_bound` | Ongoing/actionable trial with positive site/facility count. | Lower bound when estimating final site count. |
 | `is_completed_country_count_target` | Completed trial with reconstructed positive country count. | Training target for final country-count model. |
-| `is_ongoing_country_count_lower_bound` | Ongoing/actionable trial with reconstructed positive country count. | Lower bound when estimating final country count if continued. |
+| `is_ongoing_country_count_lower_bound` | Ongoing/actionable trial with reconstructed positive country count. | Lower bound when estimating final country count. |
 | `is_completed_duration_target` | Completed trial with positive known duration. | Training target for final duration model. |
 
 For duration, the MVP target should be date-derived total trial duration:
@@ -338,7 +332,7 @@ Fallbacks should remain simple and explainable:
 
 ### 9.3 Model selection protocol
 
-Each operational indicator should use the simplest model that is accurate enough and stable enough for cost simulation. The first notebook should compare a small set of candidates, then choose a champion per target.
+Each operational indicator should use the simplest model that is accurate enough and stable enough for optional cost translation. The first notebook should compare a small set of candidates, then choose a champion per target.
 
 | Target | Candidate models | Recommended first champion | Validation focus |
 | ------ | ---------------- | -------------------------- | ---------------- |
@@ -364,7 +358,7 @@ The UI should not expose the model-selection complexity. It should show concise 
 
 ### 9.4 Updated operational-size modelling direction
 
-Early notebook benchmarks showed that direct point estimates for enrollment, sites, and countries can look much better when the model is allowed to use final observed operational quantities from completed trials as features. Those scores are useful as an upper-bound or known-input benchmark, but they are too optimistic for a forecast unless those quantities are actually known at the simulation decision date.
+Early notebook benchmarks showed that direct point estimates for enrollment, sites, and countries can look much better when the model is allowed to use final observed operational quantities from completed trials as features. Those scores are useful as an upper-bound or known-input benchmark, but they are too optimistic for a forecast unless those quantities are actually known at the estimation date.
 
 The recommended next approach is therefore:
 
@@ -387,13 +381,13 @@ The recommended next approach is therefore:
    - Site count should be checked against expected patients per site for similar trials.
    - Independent site predictions can still be benchmarked, but the implementation should reconcile enrollment, sites, and countries as a bundle.
 6. Return ranges, not only point estimates.
-   - The serious-game module should show expected value plus low/high scenario values for enrollment and duration.
+   - The estimation module should show expected value plus low/high scenario values for enrollment and duration.
    - Point estimates alone are misleading for heavily skewed operational targets.
 7. Always run reconciliation checks before cost calculation.
    - Flag impossible or suspicious combinations such as countries greater than sites, fewer than one patient per site, or a very low-enrollment trial spread across many sites.
    - Reconciliation should not silently hide model uncertainty; it should make questionable operational bundles auditable.
 
-This direction came from comparing four benchmark families in `notebooks/serious_game.ipynb`: grouped-median baselines, enhanced gradient-boosted regressors, dependency-pruned regressors, and sequenced y-to-y models. The key conclusion is that the strongest raw scores were partly driven by operational cross-target features, while dependency-pruned and sequenced results are more credible for forecasting. Future sessions should use the pruned and sequenced scores as the default implementation benchmark, and reserve the stronger known-input/oracle scores for scenarios where the user explicitly provides planned or current operational values.
+This direction came from comparing four benchmark families in `notebooks/estimation.ipynb`: grouped-median baselines, enhanced gradient-boosted regressors, dependency-pruned regressors, and sequenced y-to-y models. The key conclusion is that the strongest raw scores were partly driven by operational cross-target features, while dependency-pruned and sequenced results are more credible for forecasting. Future sessions should use the pruned and sequenced scores as the default implementation benchmark, and reserve the stronger known-input/oracle scores for scenarios where the user explicitly provides planned or current operational values.
 
 ### 9.5 Required and optional data sources
 
@@ -412,12 +406,12 @@ Potentially useful existing sources if the notebook needs deeper audits:
 Files not currently present but useful only for later versions:
 
 - Historical AACT snapshots by date, if exact observed-to-date reconstruction becomes important.
-- External phase-transition / likelihood-of-approval benchmarks, if the game needs a true probability of reaching market rather than a scenario assumption.
+- External phase-transition / likelihood-of-approval benchmarks, if the estimation workflow needs a true probability of reaching market rather than a scenario assumption.
 - External clinical trial cost benchmarks, if assumptions need validation against published or licensed cost data.
 
 The MVP does not require these external files. It can proceed with `data_clinpred.csv`, reconstructed country counts, transparent cost assumptions, and scenario-level future risk assumptions.
 
-## 10. Cost simulation engine
+## 10. Cost translation engine
 
 The cost model should be a transparent, assumption-driven finance engine. It should convert operational quantities into cost estimates using editable assumptions rather than a single black-box prediction.
 
@@ -437,9 +431,9 @@ Total trial cost =
 
 The first version should be interpretable, editable, and easy to explain. It should be clear which costs are driven by phase, geography, trial size, therapeutic area, and protocol complexity.
 
-The cost engine should use `predicted_final_if_continued` values for total cost and remaining commitment. It should use `observed-to-date` values and elapsed duration for incurred cost. This allows the game to estimate how much has already been spent, how much is committed if the trial continues, and how much can be saved by stopping or pausing.
+The cost engine should use `predicted_final_if_continued` values for total cost and remaining commitment. It should use `observed-to-date` values and elapsed duration for incurred cost. This allows the estimation workflow to estimate how much has already been spent, how much is committed if the trial continues, and how much can be saved by stopping or pausing.
 
-The MVP should not assume linear spend. Current-trial cost should be allocated over the expected trial lifecycle using a simple spend curve. This is sufficient for discussion-quality portfolio simulation and avoids overcomplicating the UI.
+The MVP should not assume linear spend. Current-trial cost should be allocated over the expected trial lifecycle using a simple spend curve. This is sufficient for discussion-quality missing value estimation and avoids overcomplicating the UI.
 
 Cost calculation should be deterministic once the operational estimates and assumptions are fixed. This makes the output reproducible in a notebook and explainable in a workshop.
 
@@ -447,7 +441,7 @@ Recommended first calculation order:
 
 1. Build final-if-continued operational estimates.
 2. Calculate estimated total current-trial cost.
-3. Apply the non-linear lifecycle spend curve to split cost before and after the portfolio committee date.
+3. Apply the non-linear lifecycle spend curve to split cost before and after the missing-value review date.
 4. Calculate saveable cost by calendar bucket.
 5. Estimate future-phase cost to reach market.
 6. Combine current remaining cost and future-phase cost into total development commitment.
@@ -473,30 +467,30 @@ Do not put every cost driver in the UI. Keep the UI focused on the decision vari
 | Recruitment burden | Captures expected difficulty of finding and retaining patients. | Recruitment complexity model or proxy. | Recruitment burden multiplier. |
 | Geography complexity | Multicountry and high-site-count trials increase coordination cost. | Country count, site count, region mix if available. | Geography complexity multiplier. |
 
-### 10.1 Cost outputs for portfolio decisions
+### 10.1 Optional cost outputs
 
-The first phase should produce a small set of decision-grade cost outputs:
+Cost outputs are downstream and optional for this branch. If later enabled, the first phase should produce a small set of estimate-derived cost outputs:
 
 | Output | Meaning | UI use |
 | ------ | ------- | ------ |
 | Estimated total current-trial cost | Full expected cost if the current trial is completed. | Asset detail and cost explanation. |
 | Cost incurred to decision date | Estimated spend already consumed. | Sunk-cost context, not a reason to continue by itself. |
-| Remaining committed cost | Estimated additional cost if the current trial continues. | Main portfolio budget pressure. |
+| Remaining committed cost | Estimated additional cost implied by remaining trial activity. | Later planning input. |
 | Saveable cost this year | Estimated cost that could be avoided in the current calendar year. | Budget-reduction exercise. |
 | Saveable cost next year | Estimated cost that could be avoided in the next calendar year. | Medium-term budget planning. |
-| Saveable cost in following years | Estimated later cost that could be avoided. | Long-horizon portfolio view. |
+| Saveable cost in following years | Estimated later cost that could be avoided. | Long-horizon planning view. |
 | Future development commitment | Estimated cost of invented future phases needed to reach market. | Strategic continuation burden. |
-| Avoided future commitment | Future commitment avoided if the asset is terminated or out-licensed. | Portfolio-reduction debrief. |
+| Avoided future commitment | Future commitment avoided in a downstream scenario. | Later planning input. |
 
-The portfolio UI should show a simplified subset: cost incurred, remaining committed cost, saveable cost by year, future development commitment, completion risk, and market potential category.
+Any future UI should show a simplified subset: source operational estimates, estimated total cost, estimate confidence, and major cost drivers.
 
 ## 11. Calendar-year spend model
 
-The serious game needs costs over time, not only total cost. Participants should understand both the total obligation and the near-term budget impact of continuing an asset.
+Optional downstream planning may need costs over time, not only total cost. Analysts should understand both the total obligation and the near-term budget impact implied by the operational estimates.
 
 Key concepts:
 
-- Simulation decision date.
+- Estimation date.
 - Trial start date.
 - Expected end date.
 - Elapsed duration.
@@ -505,7 +499,7 @@ Key concepts:
 - Cost by calendar year.
 - Cost avoided if terminated.
 
-For ongoing trials, the calendar model should anchor on the simulation decision date. Costs before that date are incurred. Costs after that date are committed only if the participant continues, accelerates, or otherwise preserves the asset.
+For ongoing trials, the calendar model should anchor on the estimation date. Costs before that date are incurred. Costs after that date are forecast commitments derived from the operational estimate.
 
 Simple planned cost-curve structure:
 
@@ -522,8 +516,8 @@ The MVP does not need a complex cash-flow model. A deterministic curve is suffic
 
 This spend curve should be used to calculate:
 
-- Cost incurred before the portfolio committee date.
-- Remaining committed cost after the portfolio committee date.
+- Cost incurred before the missing-value review date.
+- Remaining committed cost after the missing-value review date.
 - Saveable cost in the current calendar year.
 - Saveable cost in the next calendar year.
 - Saveable cost in following years.
@@ -541,7 +535,7 @@ These weights are assumptions, not observed sponsor accounting data. They should
 
 ## 12. Downstream development commitment
 
-Continuing an asset may imply large future commitments beyond the currently visible trial. The game should make that future obligation visible without presenting it as observed truth.
+Continuing an asset may imply large future commitments beyond the currently visible trial. The estimation workflow should make that future obligation visible without presenting it as observed truth.
 
 Examples:
 
@@ -559,7 +553,7 @@ Examples:
 
 ### 12.1 Invented future phases
 
-Many assets in the source data will not have an explicit next-phase trial in the dataset. The serious game should therefore invent future phases as scenario estimates. These invented phases are not observed facts.
+Many assets in the source data will not have an explicit next-phase trial in the dataset. The estimation should therefore invent future phases as scenario estimates. These invented phases are not observed facts.
 
 Recommended first approach:
 
@@ -580,7 +574,7 @@ Suggested future-path templates:
 
 The future commitment engine should be framed as scenario logic, not as a claim that the exact future trial exists.
 
-The output should be "future-phase cost to reach market", not only "next-phase cost". For a Phase II asset, this may mean the estimated Phase III commitment. For a Phase I/II asset, this may include a Phase II continuation and a later Phase III commitment. The architecture should also estimate remaining time to market so that participants understand not only how much investment is required, but how long capital remains tied up before a possible launch or sale.
+The output should be "future-phase cost to reach market", not only "next-phase cost". For a Phase II asset, this may mean the estimated Phase III commitment. For a Phase I/II asset, this may include a Phase II continuation and a later Phase III commitment. This is later planning logic and should remain separate from the immediate missing-value estimation objective.
 
 Suggested outputs:
 
@@ -595,14 +589,14 @@ Suggested outputs:
 
 ### 12.2 Risk to market
 
-The existing XGBoost score estimates trial completion or early-termination risk. It is not a full probability of regulatory approval or market launch. For the serious-game MVP, this score can be used as one risk signal and combined with simple phase-level assumptions for future development risk.
+The existing XGBoost score estimates trial completion or early-termination risk. It is not a full probability of regulatory approval or market launch. For the estimation MVP, this score can be used as one risk signal and combined with simple phase-level assumptions for future development risk.
 
 Example MVP framing:
 
 ```text
 near_term_trial_risk = current XGBoost completion / termination score
 future_development_risk = phase-level scenario assumption
-portfolio_risk_signal = combination of near-term risk and future-stage assumption
+planning_risk_signal = combination of near-term risk and future-stage assumption
 ```
 
 This keeps the first version honest: the existing model informs operational continuation risk, while future market-reaching probability remains a transparent scenario assumption until a dedicated model exists.
@@ -617,7 +611,7 @@ If a later version needs validated market-reaching probabilities, it will requir
 
 ## 13. Notebook implementation plan
 
-The first implementation should be developed in `notebooks/serious_game.ipynb` as the analytical build notebook for the `simulation` module. It should follow the style of `notebooks/validation_clinpred.ipynb` and `notebooks/production_01.ipynb`: markdown explanation first, then focused code cells, with explicit audit checkpoints and reproducible outputs.
+The first implementation should be developed in `notebooks/estimation.ipynb` as the analytical build notebook for the `estimation` module. It should follow the style of `notebooks/validation_clinpred.ipynb` and `notebooks/production_01.ipynb`: markdown explanation first, then focused code cells, with explicit audit checkpoints and reproducible outputs.
 
 Recommended notebook structure:
 
@@ -638,7 +632,7 @@ Recommended notebook structure:
 | `<REF:COST_ENGINE>` | Calculate current-trial total, incurred, remaining, and saveable cost. | Current-trial cost table. |
 | `<REF:FUTURE_PHASES>` | Create synthetic future path to market and estimate future-phase cost and time. | Future commitment table. |
 | `<REF:RISK_TO_MARKET>` | Combine XGBoost trial risk with phase-level scenario assumptions. | Risk-to-market scenario fields. |
-| `<REF:PORTFOLIO_EXPORT>` | Produce reusable asset-level table for serious-game scenarios. | Portfolio-ready dataset. |
+| `<REF:PORTFOLIO_EXPORT>` | Produce reusable asset-level table for estimation scenarios. | Portfolio-ready dataset. |
 | `<REF:VALIDATION_AUDIT>` | Validate ranges, subgroup stability, and cost plausibility. | Audit summary and known limitations. |
 
 The notebook should be written as an analytical build notebook, not as a UI implementation. It should include markdown between code blocks explaining each decision, especially target definitions, model choices, assumptions, and limitations.
@@ -647,7 +641,7 @@ Until the notebook outputs are validated, future work should not wire these esti
 
 ## 14. Reproducible output contract
 
-The first serious-game dataset should produce one row per trial or asset with a small set of stable columns. This table should be reusable by future Streamlit work without requiring the UI to rerun model training.
+The first estimation dataset should produce one row per trial or asset with a small set of stable columns. This table should be reusable by future Streamlit work without requiring the UI to rerun model training.
 
 Recommended output groups:
 
@@ -657,13 +651,13 @@ Recommended output groups:
 - Current-trial cost: estimated total cost, incurred cost, remaining cost, saveable cost by year.
 - Future path: next required phase, future phases to market, future-phase cost to market, time to market.
 - Market potential: initial category and later GBD / rare-disease value signals.
-- Assumption metadata: cost-assumption version, model version, portfolio committee date if date-specific values are materialized.
+- Assumption metadata: cost-assumption version, model version, missing-value review date if date-specific values are materialized.
 
-The UI should consume this as a decision table. It should not expose training diagnostics, detailed model errors, or all raw cost-driver variables.
+The UI should consume this as an estimation table. It should not expose training diagnostics, detailed model errors, or all raw cost-driver variables.
 
 ## 15. Market potential module
 
-The market potential layer should estimate or categorize commercial and strategic value. It must remain separate from trial cost so users can distinguish operational affordability from potential portfolio value.
+The market potential layer should estimate or categorize commercial and strategic value. It must remain separate from trial cost so users can distinguish operational affordability from potential value.
 
 MVP fields may include:
 
@@ -686,57 +680,52 @@ Later versions may evolve into:
 - Peak sales estimate.
 - Risk-adjusted NPV.
 - Expected commercial value.
-- Probability-adjusted portfolio contribution.
+- Probability-adjusted planning contribution.
 
 Any future valuation model should explicitly document assumptions and should not be mixed into the completion-risk model without a clear reason.
 
-## 16. Portfolio decision engine
+## 16. Estimation output engine
 
-Participant decisions should be represented as explicit asset-level actions. Each decision should have budget, risk, value, and timing effects that are visible in the portfolio simulation.
+Each trial should receive explicit asset-level estimation outputs. These outputs should be stable enough for later UI, cost, planning, or forecasting layers without requiring the consumer to rerun model training.
 
-Decision options:
+Recommended output groups:
 
-- Continue.
-- Terminate.
-- Pause.
-- Accelerate.
-- Partner / out-license.
+- Source identifiers: `nct_id`, title, sponsor, phase, therapeutic area, indication.
+- Target availability flags: final target, observed lower bound, planned estimate, missing value.
+- Point estimates: duration, enrollment, site count, and country count.
+- Uncertainty ranges: low, expected, and high values where supported.
+- Reconciliation flags: countries greater than sites, implausible patients per site, implausible sites per country.
+- Model metadata: model family, version, feature mode, training cohort, validation metrics.
+- Source metadata: source fields used, target definition, estimation date if relevant.
 
-| Decision | Budget effect | Risk effect | Value effect | Timing effect |
-| -------- | ------------- | ----------- | ------------ | ------------- |
-| Continue | Commits remaining current-trial spend and may preserve downstream commitment. | Maintains exposure to completion and development risk. | Preserves full upside if the asset succeeds. | Keeps current timeline. |
-| Terminate | Avoids remaining current-trial spend and possible downstream spend. | Removes future development risk for the asset. | Gives up potential future value. | Ends program immediately in the scenario. |
-| Pause | Reduces or delays near-term spend. | May increase operational, competitive, or evidence-generation risk. | Preserves option value but may reduce strategic momentum. | Delays key milestones. |
-| Accelerate | Increases near-term spend. | May reduce timing risk but can increase execution pressure. | Pulls forward potential value if successful. | Shortens expected timeline in the scenario. |
-| Partner / out-license | Reduces internal spend and may share future costs. | Transfers or shares execution and commercial risk. | Preserves partial economics instead of full value. | May delay or stabilize development depending on partner assumptions. |
+The output table should make missingness and estimate provenance visible. A downstream user should be able to distinguish an observed final value, an observed lower bound, a planned estimate, and a modelled value without reading notebook code.
 
-## 17. Serious-game scoring engine
+## 17. Estimation validation engine
 
-The scoring engine should evaluate participant decisions across multiple dimensions. It should not simply reward selecting the lowest-risk trials. A good portfolio decision may preserve uncertain but strategically important assets while cutting high-cost, low-value programs.
+The validation engine should evaluate estimate quality across multiple dimensions. It should not only report global mean error; heavily skewed operational targets require robust metrics, subgroup checks, and plausibility audits.
 
-| Score dimension | What it measures | Possible calculation | MVP or later |
+| Validation dimension | What it measures | Possible calculation | MVP or later |
 | --------------- | ---------------- | -------------------- | ------------ |
-| Budget discipline | Whether the participant meets the budget or cost-reduction target. | Remaining annual budget, total spend reduction, avoided cost. | MVP |
-| Value preservation | Whether high-potential assets remain funded or strategically protected. | Retained market potential category, retained expected value, avoided cuts to transformational assets. | MVP |
-| Risk balance | Whether the portfolio avoids excessive concentration in high-risk assets. | Weighted completion-risk exposure across continued assets. | MVP |
-| Strategic coherence | Whether decisions align with stated therapeutic-area or business priorities. | Match between decisions and scenario priority weights. | Later |
-| Quality of rationale | Whether participant explanations are consistent with risk, cost, and value evidence. | Facilitator assessment or structured rationale checklist. | Later |
-| High-cost / low-value identification | Whether assets with weak value relative to cost are paused, partnered, or terminated. | Cost-value ratio, risk-adjusted value threshold, scenario rule comparison. | MVP |
-| High-potential preservation under uncertainty | Whether the participant keeps strategically valuable assets despite moderate uncertainty. | Continued assets with high market potential and acceptable risk-cost profile. | Later |
+| Point error | Absolute prediction error on original scale. | MAE, RMSE, median absolute error, p75 error. | MVP |
+| Log-scale error | Stability on skewed positive targets. | MAE and R2 on `log1p(target)`. | MVP |
+| Order-of-magnitude quality | Whether estimates land in the right size band. | Enrollment band accuracy, within-2x accuracy. | MVP |
+| Range calibration | Whether uncertainty intervals cover plausible truth. | Prediction interval coverage and width. | MVP |
+| Subgroup stability | Whether errors concentrate in specific trial types. | Metrics by phase, therapeutic area, rare disease flag, sponsor tier. | MVP |
+| Reconciliation quality | Whether estimated operational bundles are plausible. | Patients per site, sites per country, countries <= sites checks. | MVP |
 
-## 18. User experience principles
+## 18. Workflow principles
 
-Future serious-game UI work should follow these principles:
+Future estimation UI work should follow these principles:
 
-- The experience should feel like a portfolio review.
-- Avoid overwhelming the participant with too many variables at once.
-- Show cost, risk, and value together.
+- The experience should feel like a missing-value estimation review.
+- Avoid overwhelming the analyst with too many variables at once.
+- Show observed values, lower bounds, estimates, and uncertainty together.
 - Keep assumptions explainable.
-- Allow drill-down from portfolio view to asset detail.
+- Allow drill-down from cohort view to trial detail.
 - Maintain the clean professional CTPredict visual identity.
 - Preserve current app stability.
 - Avoid major redesign during early planning.
-- Add serious-game mode progressively.
+- Add estimation mode progressively.
 
 The early product should extend the existing architecture rather than replace it.
 
@@ -746,49 +735,42 @@ The following screens are possible future surfaces. They are not implemented yet
 
 | Screen | Purpose | Key information shown | MVP priority |
 | ------ | ------- | --------------------- | ------------ |
-| Serious Game Landing / Scenario Setup | Introduce the scenario and choose constraints. | Scenario name, participant role, budget target, asset set, time horizon. | High |
-| Portfolio Dashboard | Provide the main portfolio review surface. | Assets, stage, risk, cost, market potential, time to market, decision status, budget impact. | High |
-| Asset Detail | Support drill-down on a single asset. | Trial details, completion-risk score, operational estimates, cost drivers, market potential. | High |
-| Cost Breakdown | Explain total, spent, remaining, and avoided cost. | Cost driver table, assumptions, calendar-year spend. | High |
-| Decision Panel | Capture participant choices. | Continue, terminate, pause, accelerate, partner / out-license, rationale field. | High |
-| Budget Tracker | Show whether the participant is meeting constraints. | Annual budget, spend committed, savings achieved, remaining gap. | High |
-| Portfolio Impact View | Summarize the consequences of decisions. | Retained value, avoided cost, risk exposure, therapeutic-area mix. | Medium |
-| Final Debrief | Explain outcomes after decisions are locked. | Score summary, asset decisions, model-based or scenario-based comparison, learning points. | Medium |
-| Facilitator / Assumption Settings | Allow scenario owners to adjust assumptions. | Cost multipliers, market categories, budget targets, scoring weights. | Later |
+| Estimation Cohort Setup | Select the trial cohort and target quantities. | Filters, target selection, feature mode, estimation date if used. | High |
+| Missingness Dashboard | Show which operational values are missing, lower-bound only, or final. | Counts by target, status, phase, therapeutic area, data quality flags. | High |
+| Trial Estimate Detail | Support drill-down on a single trial estimate. | Source fields, lower bounds, model estimate, uncertainty range, reconciliation flags. | High |
+| Model Diagnostics | Explain validation performance and limitations. | Metrics by target, model family, phase, therapeutic area, and outlier group. | High |
+| Reconciliation View | Audit implausible operational bundles. | Enrollment/site/country ratios, flags, worst examples. | High |
+| Export Preview | Review the reusable estimation table before saving. | Output columns, metadata, row counts, version labels. | Medium |
+| Assumption Settings | Allow approved maintainers to adjust estimation assumptions. | Target cleaning thresholds, model choices, range policy, save paths. | Later |
 
 ## 20. MVP definition
 
-The first achievable version should be small, transparent, and scenario-driven.
+The first achievable version should be small, transparent, and estimation-driven.
 
 MVP should include:
 
-- A small portfolio of selected assets.
+- A reproducible cohort of selected trial records.
 - Existing completion-risk score.
-- Predicted final duration if continued.
-- Predicted final enrollment if continued.
-- Predicted final sites and countries if continued.
+- Predicted final duration.
+- Predicted final enrollment.
+- Predicted final sites and countries.
 - Lower-bound handling for ongoing observed patients, sites, countries, and elapsed duration.
-- Synthetic total cost.
-- Spent-to-date.
-- Remaining cost.
-- Saveable cost this year, next year, and following years.
-- Simple annual spend.
-- Synthetic future-phase commitment to market.
-- Estimated remaining research duration and time to market.
-- Simple market potential category.
-- Continue / terminate decision.
-- Budget reduction target.
-- Final scoring summary.
+- Model comparison against grouped-median baselines.
+- Dependency-pruned and sequenced benchmark modes.
+- Reconciliation checks for enrollment, sites, and countries.
+- Optional export of target datasets and estimates after validation.
+- Clear model and target metadata.
 
 Explicitly excluded from MVP:
 
 - Full rNPV model.
 - Real-world budget validation.
 - Complex commercial forecasting.
-- Complex multi-round game logic.
+- Complex multi-round scenario logic.
 - Advanced facilitator controls.
 - Automatic optimization engine.
 - Real-time multiplayer features.
+- Portfolio decision UI.
 
 ## 21. Future implementation phases
 
@@ -798,7 +780,7 @@ No code. Build this document and refine assumptions.
 
 ### Phase 1 - Data audit
 
-Identify available design-stage, observed-to-date, and final-observed variables. Confirm which variables are safe to use at each simulated decision point. Reconstruct country count from `data/countries.txt` if needed. Produce the simulation decision-date data contract before cost or UI implementation.
+Identify available design-stage, observed-to-date, and final-observed variables. Confirm which variables are safe to use for each estimation mode. Reconstruct country count from `data/countries.txt` if needed. Produce the estimation data contract before cost or UI implementation.
 
 ### Phase 2 - Operational estimation datasets
 
@@ -806,7 +788,7 @@ Create modelling datasets for duration, enrollment, sites, and countries. Train-
 
 ### Phase 3 - First operational models
 
-Train first models or rule-based estimators for missing operational quantities. Keep outputs interpretable enough for cost simulation and enforce lower-bound constraints for ongoing trials.
+Train first models or rule-based estimators for missing operational quantities. Keep outputs interpretable enough for optional cost translation and enforce lower-bound constraints for ongoing trials.
 
 ### Phase 4 - First cost engine
 
@@ -816,13 +798,13 @@ Create transparent assumption-driven cost calculations. Make assumptions configu
 
 Convert total cost into incurred cost, remaining committed cost, saveable cost by calendar year, and annual spend. Use a simple non-linear lifecycle spend curve rather than assuming linear spend.
 
-### Phase 6 - Portfolio simulation MVP
+### Phase 6 - Estimation output MVP
 
-Create a simple portfolio decision interface with a facilitator-selected asset set, budget target, portfolio committee date, and continue / terminate actions. Keep the visible cost language focused on incurred, committed, saveable, future commitment, and time to market.
+Create a reusable estimation output table with source fields, estimated values, lower bounds, uncertainty ranges, reconciliation flags, and model metadata.
 
-### Phase 7 - Serious-game scoring and debrief
+### Phase 7 - Estimation validation and review
 
-Add scoring, decision summary, and facilitator-friendly outputs.
+Add validation summaries, estimate-quality notes, and analyst-friendly outputs.
 
 ### Phase 8 - Market potential and downstream development
 
@@ -834,10 +816,10 @@ Validate assumptions with expert review and scenario testing. Refine scoring and
 
 ## 22. Open questions
 
-- What is the first target user: recruitment assessment center, pharma finance training, clinical operations training, or portfolio strategy workshop?
-- Should the game use real historical trials, fictionalized assets, or a mixture?
-- Should trial names and sponsor names be anonymized?
-- What level of financial realism is required for the MVP?
+- What is the first target user: data science, clinical operations, forecasting, or finance analytics?
+- Should the estimation workflow use all eligible historical trials or a curated modelling cohort?
+- Should trial names and sponsor names be anonymized in exported estimation tables?
+- Is optional financial translation needed in this branch, or should it remain out of scope?
 - Which therapeutic areas should be included first?
 - Should the first MVP focus only on Phase II / Phase III assets?
 - How should market potential be estimated initially?
@@ -845,11 +827,11 @@ Validate assumptions with expert review and scenario testing. Refine scoring and
 - Should next-phase cost use medians from similar completed trials, model-based estimates, or a hybrid?
 - Should ongoing actual enrollment, site count, and country count be used only as current-extract lower bounds, or should future versions attempt historical timestamp reconstruction?
 - Should terminated trials be used only for incurred-cost calibration, or also for partial-spend curve validation?
-- Should historical scenarios use current-extract approximations, manually curated scenario portfolios, or later reconstructed AACT snapshots?
-- What tolerance is acceptable if exact observed-to-date patient/site/country values are unavailable for the portfolio committee date?
-- What default non-linear spend curve should be used for the first version?
-- Should participant decisions be compared with a model recommendation or only with scenario rules?
-- Should the game include facilitator-adjustable assumptions?
+- Should historical estimation use current-extract approximations or later reconstructed AACT snapshots?
+- What tolerance is acceptable if exact observed-to-date patient/site/country values are unavailable for the missing-value review date?
+- What default uncertainty range policy should be used for the first version?
+- Should estimates be compared with a model recommendation, grouped median, or both?
+- Should the estimation workflow include maintainer-adjustable assumptions?
 
 ## 23. Non-goals for now
 
@@ -866,20 +848,20 @@ The following should not be done yet:
 - No authentication or user management planning unless separately requested.
 - No direct black-box prediction of total sponsor cost in the MVP.
 - No use of ongoing actual patient, site, or country counts as if they were final totals.
-- No participant-facing use of final observed outcomes in a historical scenario unless they were known at the simulation decision date.
+- No user-facing use of final observed outcomes in a historical scenario unless they were known at the estimation date.
 
 ## 24. Instructions for future coding assistants
 
-Gemini CLI, Codex CLI, or another assistant should use this document as the backbone for future serious-game development.
+Gemini CLI, Codex CLI, or another assistant should use this document as the backbone for future estimation development.
 
 Rules for future work:
 
-- Treat this document as the backbone for future serious-game development.
-- Before implementing any serious-game feature, update or reference the relevant section.
+- Treat this document as the backbone for future estimation development.
+- Before implementing any estimation feature, update or reference the relevant section.
 - Do not mix design-stage features with future-observed outcomes.
-- Anchor serious-game datasets to a portfolio committee date before estimating incurred, committed, and saveable costs.
-- Classify every participant-facing field as visible at decision date, observed-to-date lower bound, final observed only, prediction feature, synthetic estimate, or excluded for leakage.
-- Precompute reusable asset-level estimates where possible, then calculate date-dependent spend at scenario time.
+- Anchor estimation datasets to an estimation date when historical feature visibility matters.
+- Classify every user-facing field as visible at estimation date, observed-to-date lower bound, final observed only, prediction feature, synthetic estimate, or excluded for leakage.
+- Precompute reusable asset-level estimates where possible, then calculate date-dependent values only when required.
 - Treat completed trials as the preferred source for final operational scale.
 - Treat ongoing patient, site, country, and elapsed-duration values as lower bounds when estimating final scale.
 - Treat terminated and withdrawn trials as partial-spend evidence, not clean examples of completed-trial scale.

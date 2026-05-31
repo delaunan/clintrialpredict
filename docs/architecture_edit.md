@@ -73,7 +73,7 @@ Files changed in this phase:
 
 - `frontend/views/edit_trial.py`
 - `frontend/utils/plot.py`
-- `docs/edit_architecture.md`
+- `docs/architecture_edit.md`
 
 Files intentionally not changed:
 

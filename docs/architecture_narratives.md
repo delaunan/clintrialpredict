@@ -40,7 +40,7 @@ The current architecture provides the data needed for a later narrative layer:
 - `api/main.py` returns `score`, `pillar_impacts`, `subcat_impacts`, `mode`, and live probability for simulation calls.
 - `models/taxonomy_01.json` defines the structured feature labels, options, mappings, pillars, subgroups, and encodings used by the UI and API.
 - `src/prep/pipeline.py` defines the model-facing preprocessing registry and ColumnTransformer behavior for ordinal, target-encoded, and numeric features.
-- `docs/edit_architecture.md` records the current simulation contract, including baseline snapshot behavior, pending-change behavior, and parity requirements.
+- `docs/architecture_edit.md` records the current simulation contract, including baseline snapshot behavior, pending-change behavior, and parity requirements.
 
 The future narrative layer should consume these outputs and snapshots. It should not duplicate or reinterpret the model pipeline.
 
