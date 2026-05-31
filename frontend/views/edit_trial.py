@@ -6,6 +6,7 @@ import logging
 import re
 import uuid
 import hashlib
+from datetime import datetime, timezone
 from urllib.parse import quote, unquote
 from pathlib import Path
 from dotenv import load_dotenv
@@ -4191,6 +4192,23 @@ def inject_custom_styles():
                 pointer-events: none !important;
             }}
 
+            html body .simulation-stale-notice {{
+                position: absolute !important;
+                top: 54px !important;
+                left: 34px !important;
+                z-index: 8 !important;
+                padding: 5px 9px !important;
+                border-radius: 999px !important;
+                border: 1px solid rgba(137, 167, 201, 0.32) !important;
+                background: rgba(232, 240, 251, 0.72) !important;
+                color: #3f6f9f !important;
+                font-size: 0.78rem !important;
+                font-weight: 800 !important;
+                line-height: 1 !important;
+                white-space: nowrap !important;
+                pointer-events: none !important;
+            }}
+
             html body .st-key-header_action_buttons [data-testid="stWidgetLabel"] p,
             html body .st-key-header_action_buttons label p {{
                 font-size: 1.05rem !important;
@@ -4210,6 +4228,12 @@ def inject_custom_styles():
                     top: 46px !important;
                     right: 24px !important;
                     font-size: 0.98rem !important;
+                }}
+
+                html body .simulation-stale-notice {{
+                    top: 46px !important;
+                    left: 24px !important;
+                    font-size: 0.72rem !important;
                 }}
             }}
 
@@ -4403,6 +4427,7 @@ def init_session_state():
         "simulation_initial_score": None,
         "simulation_last_score": None,
         "simulation_has_edits": False,
+        "simulation_prediction_history": [],
 
     }
     for key, val in defaults.items():
@@ -4537,6 +4562,10 @@ def reset_detail_prediction_state():
 
 
 def reset_simulation_prediction_state():
+    selected_id = st.session_state.get("selected_nct_id")
+    if selected_id:
+        clear_simulation_state_for_trial(selected_id)
+
     st.session_state.simulation_prediction_result = None
     st.session_state.simulation_prediction_nct_id = None
     st.session_state.simulation_initial_result = None
@@ -4555,6 +4584,312 @@ def get_selected_trial_row():
         return None
 
     return selected_df.iloc[0]
+
+
+def get_simulation_snapshot_key(nct_id):
+    return f"simulation_latest_prediction_snapshot_{str(nct_id).strip()}"
+
+
+def _json_safe(value):
+    if isinstance(value, dict):
+        return {str(k): _json_safe(v) for k, v in value.items()}
+
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(v) for v in value]
+
+    if isinstance(value, (np.integer,)):
+        return int(value)
+
+    if isinstance(value, (np.floating,)):
+        if pd.isna(value):
+            return None
+        return float(value)
+
+    if isinstance(value, (np.bool_,)):
+        return bool(value)
+
+    try:
+        if pd.isna(value):
+            return None
+    except Exception:
+        pass
+
+    return value
+
+
+def get_latest_prediction_snapshot(nct_id):
+    return st.session_state.get(get_simulation_snapshot_key(nct_id))
+
+
+def _score_from_result(result):
+    if not result:
+        return None
+
+    score = pd.to_numeric(result.get("score"), errors="coerce")
+    return None if pd.isna(score) else round(float(score), 1)
+
+
+def _pillar_impacts_from_result(result):
+    if not result:
+        return []
+
+    return _json_safe(result.get("pillar_impacts") or [])
+
+
+def _changed_fields_between(previous_snapshot, submitted_values):
+    if not previous_snapshot:
+        return []
+
+    previous_values = (previous_snapshot or {}).get("submitted_values") or {}
+    changed = []
+
+    for field_id in SIMULATION_FEATURE_IDS:
+        if _values_equal_for_snapshot(
+            submitted_values.get(field_id),
+            previous_values.get(field_id),
+            field_id=field_id
+        ):
+            continue
+        changed.append(field_id)
+
+    return changed
+
+
+def set_latest_prediction_snapshot(nct_id, result, submitted_values, previous_snapshot=None, source="simulation_ptc"):
+    score = _score_from_result(result)
+    previous_score = _score_from_result((previous_snapshot or {}).get("result"))
+
+    score_delta_points = None
+    score_delta_percent = None
+    if score is not None and previous_score is not None:
+        score_delta_points = round(score - previous_score, 1)
+        if previous_score:
+            score_delta_percent = round(((score / previous_score) - 1.0) * 100.0, 1)
+
+    display_values = {
+        field_id: get_display_value_for_field(field_id, submitted_values.get(field_id))
+        for field_id in SIMULATION_FEATURE_IDS
+    }
+
+    snapshot = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "nct_id": str(nct_id),
+        "source": source,
+        "submitted_values": _json_safe(submitted_values),
+        "display_values": _json_safe(display_values),
+        "score": score,
+        "previous_score": previous_score,
+        "score_delta_points": score_delta_points,
+        "score_delta_percent": score_delta_percent,
+        "pillar_impacts": _pillar_impacts_from_result(result),
+        "previous_pillar_impacts": _pillar_impacts_from_result((previous_snapshot or {}).get("result")),
+        "feature_impacts": _json_safe(result.get("feature_impacts") or result.get("subcat_impacts") or []),
+        "subcat_impacts": _json_safe(result.get("subcat_impacts") or []),
+        "result": _json_safe(result),
+        "changed_fields": _changed_fields_between(previous_snapshot, submitted_values),
+    }
+
+    st.session_state[get_simulation_snapshot_key(nct_id)] = snapshot
+    st.session_state.simulation_prediction_result = snapshot["result"]
+    st.session_state.simulation_prediction_nct_id = str(nct_id)
+    st.session_state.simulation_last_score = score
+
+    if source == "prerecorded_baseline":
+        st.session_state.simulation_initial_result = snapshot["result"]
+        st.session_state.simulation_initial_score = score
+
+    append_simulation_prediction_history(snapshot)
+    return snapshot
+
+
+def clear_simulation_state_for_trial(nct_id):
+    key = get_simulation_snapshot_key(nct_id)
+    if key in st.session_state:
+        del st.session_state[key]
+
+
+def append_simulation_prediction_history(snapshot):
+    history = st.session_state.setdefault("simulation_prediction_history", [])
+    history.append({
+        "timestamp": snapshot.get("timestamp"),
+        "nct_id": snapshot.get("nct_id"),
+        "source": snapshot.get("source"),
+        "submitted_values": snapshot.get("submitted_values"),
+        "display_values": snapshot.get("display_values"),
+        "score": snapshot.get("score"),
+        "previous_score": snapshot.get("previous_score"),
+        "score_delta_points": snapshot.get("score_delta_points"),
+        "score_delta_percent": snapshot.get("score_delta_percent"),
+        "pillar_impacts": snapshot.get("pillar_impacts"),
+        "feature_impacts": snapshot.get("feature_impacts"),
+        "changed_fields": snapshot.get("changed_fields"),
+    })
+
+
+def _canonical_feature_value(field_id, value):
+    if field_id == "gbd_cause_id_3_ml":
+        numeric = pd.to_numeric(value, errors="coerce")
+        return 0 if pd.isna(numeric) else int(numeric)
+
+    numeric_fields = {"number_of_arms_ml", "primary_duration_months_ml"}
+    if field_id in numeric_fields:
+        numeric = pd.to_numeric(value, errors="coerce")
+        if pd.isna(numeric):
+            return None
+        return round(float(numeric), 2) if field_id == "primary_duration_months_ml" else int(round(float(numeric)))
+
+    meta = TAXONOMY.get(field_id, {})
+    options = meta.get("ui", {}).get("options") or []
+    mapping = meta.get("mapping", {})
+    value_text = str(value).strip()
+
+    for option_key, option_label in options:
+        if value == option_label or value_text == str(option_key):
+            return option_key
+
+    for option_key, mapped in mapping.items():
+        mapped_value = mapped[0] if isinstance(mapped, list) and mapped else mapped
+        mapped_label = mapped[1] if isinstance(mapped, list) and len(mapped) > 1 else option_key
+        if (
+            value_text == str(mapped_value)
+            or value_text.lower() == str(mapped_label).lower()
+            or value_text.upper() == str(option_key).upper()
+        ):
+            return mapped_value
+
+    if isinstance(value, bool):
+        return int(value)
+
+    return None if value in (None, "", "N/A") else value
+
+
+def get_display_value_for_field(field_id, value):
+    if field_id == "gbd_cause_id_3_ml":
+        numeric = pd.to_numeric(value, errors="coerce")
+        cause_id = 0 if pd.isna(numeric) else int(numeric)
+        matches = GBD_INDICATION_LOOKUP[
+            GBD_INDICATION_LOOKUP["gbd_cause_id_3_ml"].astype(int) == cause_id
+        ]
+        if not matches.empty:
+            return _format_indication_label(
+                matches.iloc[0].get("gbd_indication_name_3", "Other / Unclassified"),
+                cause_id
+            )
+        return _format_indication_label("Other / Unclassified", cause_id)
+
+    if field_id == "primary_duration_months_ml":
+        numeric = pd.to_numeric(value, errors="coerce")
+        return "N/A" if pd.isna(numeric) else f"{float(numeric):.2f}"
+
+    if field_id == "number_of_arms_ml":
+        numeric = pd.to_numeric(value, errors="coerce")
+        return "N/A" if pd.isna(numeric) else str(int(round(float(numeric))))
+
+    label = _option_label_for_state_value(field_id, value)
+    return "N/A" if label in (None, "") else str(label)
+
+
+def get_current_feature_values(row):
+    values = {}
+    trial_key = str(row.get(ID_COL, st.session_state.get("selected_nct_id", "no_trial")))
+
+    for field_id in SIMULATION_FEATURE_IDS:
+        state_key = f"input_{trial_key}_{field_id}"
+        initial_val = _get_initial_field_value(field_id, row)
+        values[field_id] = _canonical_feature_value(
+            field_id,
+            st.session_state.get(state_key, initial_val)
+        )
+
+    return values
+
+
+def _values_equal_for_snapshot(current, reference, field_id=None):
+    if field_id == "primary_duration_months_ml":
+        current_num = pd.to_numeric(current, errors="coerce")
+        reference_num = pd.to_numeric(reference, errors="coerce")
+        if pd.isna(current_num) and pd.isna(reference_num):
+            return True
+        if pd.isna(current_num) or pd.isna(reference_num):
+            return False
+        return round(float(current_num), 2) == round(float(reference_num), 2)
+
+    return _json_safe(current) == _json_safe(reference)
+
+
+def get_pending_feature_ids(row):
+    nct_id = str(row.get(ID_COL, st.session_state.get("selected_nct_id", "")))
+    snapshot = get_latest_prediction_snapshot(nct_id)
+    if not snapshot:
+        return []
+
+    current_values = get_current_feature_values(row)
+    reference_values = snapshot.get("submitted_values") or {}
+
+    return [
+        field_id
+        for field_id in SIMULATION_FEATURE_IDS
+        if not _values_equal_for_snapshot(
+            current_values.get(field_id),
+            reference_values.get(field_id),
+            field_id=field_id
+        )
+    ]
+
+
+def has_pending_changes(row):
+    return bool(get_pending_feature_ids(row))
+
+
+def ensure_simulation_baseline_snapshot(row):
+    nct_id = str(row.get(ID_COL, st.session_state.get("selected_nct_id", "")))
+    if not nct_id or get_latest_prediction_snapshot(nct_id):
+        return
+
+    if not API_URL:
+        st.error("Prediction service is not configured.")
+        return
+
+    with st.spinner("Loading baseline completion score..."):
+        payload = row.replace({np.nan: None}).to_dict()
+        payload["simulation_mode"] = False
+        try:
+            res = requests.post(API_URL, json=payload, timeout=API_TIMEOUT_SECONDS)
+        except requests.exceptions.Timeout:
+            st.error("API Error: request timed out.")
+            return
+        except requests.exceptions.RequestException:
+            logger.exception("Baseline prediction API request failed")
+            st.error("Prediction service is temporarily unavailable. Please try again later.")
+            return
+
+    if res.status_code != 200:
+        st.error(f"API Error: {res.status_code}")
+        return
+
+    try:
+        result = res.json()
+    except ValueError:
+        logger.exception("Baseline prediction API returned an invalid response")
+        st.error("Prediction service returned an invalid response. Please try again later.")
+        return
+
+    if result.get("error"):
+        st.error(result.get("error"))
+        return
+
+    submitted_values = get_current_feature_values(row)
+    set_latest_prediction_snapshot(
+        nct_id,
+        result,
+        submitted_values,
+        previous_snapshot=None,
+        source="prerecorded_baseline"
+    )
+    st.session_state.analysis_result = result
+    st.session_state.analysis_nct_id = nct_id
+    st.session_state.detail_completion_tab_visible = True
+    st.session_state.detail_prediction_notice = False
 
 
 def set_simulation_initial_score(row=None):
@@ -4679,6 +5014,10 @@ def sync_s_detail_text_input_to_memory():
 
 def handle_predict_trial_completion():
     if st.session_state.get("global_edit_mode", False):
+        row = get_selected_trial_row()
+        if row is None or not has_pending_changes(row):
+            return
+
         audit_log(
             "simulation_prediction_requested",
             **get_selected_trial_audit_fields(),
@@ -4686,9 +5025,6 @@ def handle_predict_trial_completion():
 
         st.session_state.analysis_result = None
         st.session_state.analysis_nct_id = None
-        st.session_state.simulation_prediction_result = None
-        st.session_state.simulation_prediction_nct_id = None
-        set_simulation_initial_score()
         start_prediction_request()
         return
 
@@ -4701,17 +5037,7 @@ def handle_predict_trial_completion():
 
 
 def queue_simulation_reprediction_if_score_visible():
-    if not (
-        st.session_state.get("global_edit_mode", False)
-        and st.session_state.get("detail_completion_tab_visible", False)
-    ):
-        return
-
-    st.session_state.analysis_result = None
-    st.session_state.analysis_nct_id = None
-    st.session_state.simulation_prediction_result = None
-    st.session_state.simulation_prediction_nct_id = None
-    st.session_state.trigger_prediction = True
+    return
 
 
 def reset_trial_editor_state():
@@ -5036,11 +5362,19 @@ def render_header(is_landing=True, show_predict_button=False, show_back_button=F
 
                 with c_predict:
                     if show_predict_button:
-                        predict_btn_type = (
-                            "secondary"
-                            if st.session_state.get("detail_completion_tab_visible", False)
-                            else "primary"
-                        )
+                        if st.session_state.get("global_edit_mode", False):
+                            selected_row = get_selected_trial_row()
+                            predict_btn_type = (
+                                "primary"
+                                if selected_row is not None and has_pending_changes(selected_row)
+                                else "secondary"
+                            )
+                        else:
+                            predict_btn_type = (
+                                "secondary"
+                                if st.session_state.get("detail_completion_tab_visible", False)
+                                else "primary"
+                            )
 
                         st.button(
                             "Predict Trial Completion",
@@ -5676,32 +6010,24 @@ def _sync_indication_widget_to_shared_state(row):
 
 
 def _feature_value_is_modified(field_id, row, state_key, initial_val, options):
-    """True when the current input differs from the trial's original value.
+    """True when current input differs from the latest prediction snapshot."""
+    return field_id in get_pending_feature_ids(row)
 
-    Used only to flag the control box with a soft-blue highlight in the
-    Trial Features tab. Mirrors the exact value resolution used to render
-    each control so the comparison stays faithful to what is shown.
-    """
-    if field_id == "gbd_cause_id_3_ml":
-        current_id = pd.to_numeric(st.session_state.get(state_key, initial_val), errors="coerce")
-        current_id = 0 if pd.isna(current_id) else int(current_id)
-        initial_id = pd.to_numeric(row.get("gbd_cause_id_3_ml", 0), errors="coerce")
-        initial_id = 0 if pd.isna(initial_id) else int(initial_id)
-        return current_id != initial_id
 
-    if options:
-        initial_label = str(_option_label_for_state_value(field_id, initial_val)).strip()
-        current_raw = st.session_state.get(state_key, initial_val)
-        current_label = str(_option_label_for_state_value(field_id, current_raw)).strip()
-        return current_label != initial_label
+def _label_with_previous_value(label, field_id, row):
+    nct_id = str(row.get(ID_COL, st.session_state.get("selected_nct_id", "")))
+    snapshot = get_latest_prediction_snapshot(nct_id) or {}
+    reference_values = snapshot.get("submitted_values") or {}
 
-    current_value = pd.to_numeric(st.session_state.get(state_key, initial_val), errors="coerce")
-    initial_value = pd.to_numeric(initial_val, errors="coerce")
-    if pd.isna(current_value) and pd.isna(initial_value):
-        return False
-    if pd.isna(current_value) or pd.isna(initial_value):
-        return True
-    return round(float(current_value), 6) != round(float(initial_value), 6)
+    if field_id not in get_pending_feature_ids(row):
+        return label
+
+    previous_value = snapshot.get("display_values", {}).get(field_id)
+    if previous_value in (None, ""):
+        previous_value = get_display_value_for_field(field_id, reference_values.get(field_id))
+
+    previous_value = str(previous_value or "N/A")
+    return f"{label}  \n:blue[(previous: {previous_value})]"
 
 
 def _render_trial_feature_control(field_id, row):
@@ -5711,6 +6037,7 @@ def _render_trial_feature_control(field_id, row):
     meta = TAXONOMY.get(field_id, {})
     ui = meta.get("ui", {})
     label = SIMULATION_FEATURE_LABEL_OVERRIDES.get(field_id, ui.get("label", field_id))
+    label = _label_with_previous_value(label, field_id, row)
 
     # Flag the wrapper when the value has been edited away from the original,
     # so the control box can render in a soft blue (see .st-key-simfield_chg_).
@@ -5767,7 +6094,7 @@ def _render_trial_feature_control(field_id, row):
         if pd.isna(current_value_raw):
             current_value = 0.0 if allows_decimal else 0
         elif allows_decimal:
-            current_value = round(float(current_value_raw), 1)
+            current_value = round(float(current_value_raw), 2)
         else:
             current_value = int(round(float(current_value_raw)))
 
@@ -5785,7 +6112,7 @@ def _render_trial_feature_control(field_id, row):
                     current_value
                     if pd.isna(repaired)
                     else (
-                        round(float(repaired), 1)
+                        round(float(repaired), 2)
                         if allows_decimal
                         else int(round(float(repaired)))
                     )
@@ -5795,8 +6122,8 @@ def _render_trial_feature_control(field_id, row):
             label,
             current_value,
             min_value=0.0 if allows_decimal else 0,
-            step=0.1 if allows_decimal else 1,
-            format="%.1f" if allows_decimal else "%d",
+            step=0.01 if allows_decimal else 1,
+            format="%.2f" if allows_decimal else "%d",
             key=widget_key,
             on_change=_sync_feature_widget_to_shared_state,
             args=(field_id,)
@@ -5861,15 +6188,19 @@ def _render_trial_feature_pillar(pillar, fields, row):
 
 
 def get_simulation_pillar_delta_map():
-    initial_result = st.session_state.get("simulation_initial_result")
-    simulation_result = st.session_state.get("simulation_prediction_result")
+    snapshot = get_latest_prediction_snapshot(st.session_state.get("selected_nct_id", ""))
+    if not snapshot or snapshot.get("source") == "prerecorded_baseline":
+        return {}
 
-    if not initial_result or not simulation_result:
+    initial_impacts_list = snapshot.get("previous_pillar_impacts") or []
+    simulation_result = snapshot.get("result")
+
+    if not initial_impacts_list or not simulation_result:
         return {}
 
     initial_impacts = {
         str(item.get("Pillar", "")).strip(): pd.to_numeric(item.get("Impact"), errors="coerce")
-        for item in initial_result.get("pillar_impacts", [])
+        for item in initial_impacts_list
     }
     deltas = {}
 
@@ -5888,8 +6219,11 @@ def get_simulation_pillar_delta_map():
 def render_trial_detail_tabs_refined(row):
     render_trial_top_strip_refined(row)
 
-    score_visible = st.session_state.get("detail_completion_tab_visible", False)
     simulation_mode = st.session_state.get("global_edit_mode", False)
+    if simulation_mode:
+        ensure_simulation_baseline_snapshot(row)
+
+    score_visible = st.session_state.get("detail_completion_tab_visible", False)
 
     with st.container(key="trial_detail_tabs"):
         if simulation_mode and score_visible:
@@ -6040,6 +6374,16 @@ def get_edited_row(row: pd.Series) -> pd.Series:
     return edited_row
 
 def get_analysis_result_for_selected_trial(row):
+    is_simulation_mode = bool(st.session_state.get("global_edit_mode", False))
+    if is_simulation_mode:
+        snapshot = get_latest_prediction_snapshot(st.session_state.get("selected_nct_id", ""))
+        if not st.session_state.trigger_prediction:
+            return (snapshot or {}).get("result")
+
+        if not has_pending_changes(row):
+            st.session_state.trigger_prediction = False
+            return (snapshot or {}).get("result")
+
     if not (st.session_state.trigger_prediction or st.session_state.get("analysis_result")):
         return None
 
@@ -6053,10 +6397,15 @@ def get_analysis_result_for_selected_trial(row):
                     st.error("Prediction service is not configured.")
                     return None
 
-                is_simulation_mode = bool(st.session_state.get("global_edit_mode", False))
                 row_to_predict: pd.Series = get_edited_row(row) if is_simulation_mode else row.copy()
                 prediction_payload = row_to_predict.replace({np.nan: None}).to_dict()
                 prediction_payload["simulation_mode"] = is_simulation_mode
+                previous_snapshot = (
+                    get_latest_prediction_snapshot(st.session_state.selected_nct_id)
+                    if is_simulation_mode
+                    else None
+                )
+                submitted_values = get_current_feature_values(row) if is_simulation_mode else None
 
                 res = requests.post(
                     API_URL,
@@ -6072,27 +6421,23 @@ def get_analysis_result_for_selected_trial(row):
                     st.session_state.trigger_prediction = False
 
                     if is_simulation_mode:
-                        st.session_state.simulation_prediction_result = result
-                        st.session_state.simulation_prediction_nct_id = st.session_state.selected_nct_id
-                        st.session_state.simulation_last_score = result.get("score")
-                        initial_payload = row.replace({np.nan: None}).to_dict()
-                        initial_payload["simulation_mode"] = False
-                        initial_res = requests.post(
-                            API_URL,
-                            json=initial_payload,
-                            timeout=API_TIMEOUT_SECONDS
+                        snapshot = set_latest_prediction_snapshot(
+                            st.session_state.selected_nct_id,
+                            result,
+                            submitted_values,
+                            previous_snapshot=previous_snapshot,
+                            source="simulation_ptc"
                         )
-                        st.session_state.simulation_initial_result = (
-                            initial_res.json()
-                            if initial_res.status_code == 200
-                            else None
-                        )
+                        st.session_state.analysis_result = snapshot["result"]
 
                     audit_log(
                         "prediction_success",
                         score=result.get("score"),
                         **get_selected_trial_audit_fields(),
                     )
+
+                    if is_simulation_mode:
+                        st.rerun()
                 else:
                     audit_log(
                         "prediction_api_error",
@@ -6174,21 +6519,36 @@ def render_completion_prediction_tab(row):
                 score = res.get("score", 0)
                 tier = get_risk_tier(score)
                 delta_html = ""
+                stale_html = ""
 
                 if st.session_state.get("global_edit_mode", False):
-                    initial_score = pd.to_numeric(
-                        st.session_state.get("simulation_initial_score", row.get("Clinical_Score")),
-                        errors="coerce"
-                    )
-                    new_score = pd.to_numeric(score, errors="coerce")
+                    snapshot = get_latest_prediction_snapshot(st.session_state.get("selected_nct_id", "")) or {}
+                    previous_score = pd.to_numeric(snapshot.get("previous_score"), errors="coerce")
+                    delta_pct = pd.to_numeric(snapshot.get("score_delta_percent"), errors="coerce")
 
-                    if pd.notna(initial_score) and pd.notna(new_score) and float(initial_score) > 0:
-                        delta_pct = (float(new_score) / float(initial_score) - 1.0) * 100.0
-                        delta_color = PLOT_BLUE_DEEP_RGB if delta_pct >= 0 else PLOT_RED_DEEP_RGB
+                    if has_pending_changes(row):
+                        stale_html = (
+                            '<div class="simulation-stale-notice">'
+                            'Click Predict to update'
+                            '</div>'
+                        )
+
+                    if (
+                        snapshot.get("source") == "simulation_ptc"
+                        and pd.notna(previous_score)
+                        and pd.notna(delta_pct)
+                    ):
+                        previous_color = PLOT_BLUE_DEEP_RGB if float(previous_score) >= 50 else PLOT_RED_DEEP_RGB
+                        if float(delta_pct) > 0:
+                            pct_color = PLOT_BLUE_DEEP_RGB
+                        elif float(delta_pct) < 0:
+                            pct_color = PLOT_RED_DEEP_RGB
+                        else:
+                            pct_color = "#64748b"
                         delta_html = (
-                            '<div class="simulation-score-delta" '
-                            f'style="color:{delta_color};">'
-                            f'{float(initial_score):.1f} pts, {delta_pct:+.1f}%'
+                            '<div class="simulation-score-delta">'
+                            f'<span style="color:{previous_color};">{float(previous_score):.1f} pts</span>'
+                            f'<span style="color:{pct_color}; margin-left:8px;">{float(delta_pct):+.1f}%</span>'
                             '</div>'
                         )
 
@@ -6201,6 +6561,7 @@ def render_completion_prediction_tab(row):
                         f'{COMPLETION_GAUGE_HELP_TOOLTIP}'
                         '</div>'
                         '</div>'
+                        f'{stale_html}'
                         f'{delta_html}'
                     ),
                     unsafe_allow_html=True
