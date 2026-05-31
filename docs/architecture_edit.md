@@ -1,10 +1,10 @@
 # Edit Mode Live Prediction Architecture
 
-This document started as the planning reference for turning the current read-only/audit demo into a simple, robust live simulation workflow. It now also records the implementation state of the isolated edit-mode variant so future sessions can resume without rediscovering the same decisions.
+This document started as the planning reference for turning the current read-only/audit demo into a simple, robust live simulation workflow. It now also records the implementation state of the isolated edit-trial variant so future sessions can resume without rediscovering the same decisions.
 
 ## Handoff Summary - Next Session
 
-The edit-mode Trial Features and simulation workflow are now functionally implemented. The next session should start from browser verification and then shift to the new product area: LLM comments on results and LLM-derived trial-quality scoring.
+The edit-trial Trial Features and simulation workflow are now functionally implemented. The next session should start from browser verification and then shift to the new product area: LLM comments on results and LLM-derived trial-quality scoring.
 
 Current state to carry forward:
 
@@ -33,7 +33,7 @@ Next product area:
 
 ## Implementation Status - 2026-05-31
 
-The current edit-mode implementation phase is complete. The next session should be refinement-only unless a new defect is found.
+The current edit-trial implementation phase is complete. The next session should be refinement-only unless a new defect is found.
 
 Implemented since the 2026-05-30 status:
 
@@ -73,7 +73,7 @@ Files changed in this phase:
 
 - `frontend/views/edit_trial.py`
 - `frontend/utils/plot.py`
-- `docs/edit_architecture.md`
+- `docs/architecture_edit.md`
 
 Files intentionally not changed:
 
@@ -82,12 +82,12 @@ Files intentionally not changed:
 
 ## Implementation Status - 2026-05-30
 
-The first edit-mode implementation is in place on branch `edit_mode`.
+The first edit-trial implementation is in place on branch `edit-trial`.
 
 Implemented:
 
 - `frontend/app.py` routes `APP_VARIANT=edit_trial` to a new isolated view, `frontend/views/edit_trial.py`.
-- `frontend/views/trial_audit.py` remains the stable deployed audit view and has not been modified for edit-mode UI work.
+- `frontend/views/trial_audit.py` remains the stable deployed audit view and has not been modified for edit-trial UI work.
 - `frontend/views/edit_trial.py` contains the simulation UI, including `Trial Features`, shared edited field state, live prediction workflow, mode-off reset handling, and simulation-only gauge/bar deltas.
 - `api/main.py` keeps the precomputed SHAP audit path for normal mode and adds a `simulation_mode` live path using the production pipeline, `predict_proba`, and native XGBoost `pred_contribs=True`.
 - The live simulation path normalizes submitted taxonomy labels/codes into model values, recomputes the TA calibration offset from edited `therapeutic_area_ml` / `therapeutic_area_ui`, and returns the existing chart response shape.
@@ -97,7 +97,7 @@ Important fixes already made:
 
 - Edited therapeutic area now takes priority over original row `therapeutic_area` in simulation scoring. This fixed the bug where the impact chart could move while the gauge score stayed unchanged after a TA edit.
 - Normal/audit mode prediction now uses the original selected row instead of edited session state, so toggling simulation mode off should return to prerecorded audit values.
-- Simulation-only KPIs disappear when edit mode is off.
+- Simulation-only KPIs disappear when edit-trial is off.
 - Trial Features widget state is reset on mode-off across all simulation fields, not only the original Trial Information fields.
 - Raw boolean-like values such as `TRUE`, `FALSE`, `YES`, and `NO` are normalized back to intended UI labels before dropdown rendering.
 
@@ -153,18 +153,18 @@ Verification completed:
 Remaining work before deployment or refinement release:
 
 - Manual browser smoke test of behavior when users change Trial Features values, including pending-change markers, stale-score notice, button state, explicit prediction, and score/chart consistency.
-- Confirm visually that normal/audit mode never carries edited values into gauge, treemap, or bar chart after toggling edit mode off.
-- Confirm simulation-only gauge and bar deltas disappear in edit mode off.
+- Confirm visually that normal/audit mode never carries edited values into gauge, treemap, or bar chart after toggling edit-trial off.
+- Confirm simulation-only gauge and bar deltas disappear in edit-trial off.
 - Re-run `python refresh_registry.py` and `python audit_parity.py` before deployment if any additional scoring/parity-sensitive edits are made.
 
 ## Final Implementation Rules
 
-These rules are the current edit-mode behavior contract. Future refinements should keep changes surgical and preserve this contract unless the refinement explicitly updates it.
+These rules are the current edit-trial behavior contract. Future refinements should keep changes surgical and preserve this contract unless the refinement explicitly updates it.
 
 ### Safety Boundary
 
 - Keep `frontend/views/trial_audit.py` as the stable audit/demo view.
-- Put edit-mode-only UI behavior in `frontend/views/edit_trial.py`.
+- Put edit-trial-only UI behavior in `frontend/views/edit_trial.py`.
 - Keep `APP_VARIANT=trial_audit` behavior unchanged unless a defect directly affects both variants.
 - Keep `/predict` audit behavior backward compatible for payloads without `simulation_mode: true`.
 - Do not modify model artifacts, taxonomy artifacts, SHAP artifacts, registry data, or notebooks for this pass.
@@ -270,7 +270,7 @@ Before considering future refinements complete:
 ## Current State
 
 - `frontend/views/trial_audit.py` remains the audit/demo view. It should continue to be treated as the stable deployed variant.
-- `frontend/views/edit_trial.py` is the current simulation/edit view. It owns the active edit-mode UI work.
+- `frontend/views/edit_trial.py` is the current simulation/edit view. It owns the active edit-trial UI work.
 - Clicking `Predict Trial Completion` works in simulation mode in the edit view and calls the live simulation path.
 - The `/predict` API in `api/main.py` behaves as an audit endpoint by default and as a live simulation endpoint when payloads include `simulation_mode: true`.
 - The production model is available in `models/model_prod_01.joblib` as a pipeline with `prep` plus XGBoost `clf`.
@@ -351,7 +351,7 @@ Live simulation cannot use `models/shap_values_01.joblib` after edits, because t
 
 Validation finding: XGBoost native `pred_contribs=True` reproduced the saved notebook SHAP feature vectors exactly for sampled unchanged rows (`max_abs_diff_features = 0.0`). Therefore live simulation can use native XGBoost contribution output without adding or persisting a separate SHAP explainer artifact.
 
-No model retraining is required. No model artifact should be modified for edit-mode refinements.
+No model retraining is required. No model artifact should be modified for edit-trial refinements.
 
 Important terminology:
 
@@ -790,7 +790,7 @@ A later blank-trial mode may start from no prerecorded audit baseline. In that m
 - Add `APP_VARIANT=edit_trial` routing in `frontend/app.py`.
 - Keep `frontend/views/trial_audit.py` unchanged for the deployed demo.
 - Verify `APP_VARIANT=trial_audit` still renders the current demo. Manual visual verification still recommended after latest edits.
-- Verify `APP_VARIANT=edit_trial` initially renders the copied view before simulation edits begin. Superseded by the current edit-mode implementation.
+- Verify `APP_VARIANT=edit_trial` initially renders the copied view before simulation edits begin. Superseded by the current edit-trial implementation.
 
 ### Phase 1 - Frontend contract and tab skeleton - Implemented
 
@@ -847,7 +847,7 @@ Completed verification includes py_compile, diff checks, lookup shape checks, ta
 
 ## Open Questions
 
-No open architecture questions remain for the first edit-mode implementation pass.
+No open architecture questions remain for the first edit-trial implementation pass.
 
 Open questions for the next product area:
 
