@@ -15,20 +15,55 @@ The future layer should help participants reason about this trade-off without gi
 The LLM layer is separate from the existing prediction system.
 
 - `Completion Score`: the existing XGBoost, SHAP, therapeutic-area calibrated score from `/predict`, shown in points from 0 to 100.
-- `Design Coherence Multiplier`: an LLM-derived percentage assessing whether the revised design remains coherent, rigorous, proportionate, and strategically defensible.
+- `Coherence Score`: the user-facing second score, from 0 to 100, assessing design defensibility and risk-mitigation quality.
+- `Coherence Adjustment`: a deterministic application calculation, bounded from `-20` to `+20` points.
 - `Adjusted Trial Value Score`: a deterministic application calculation.
 
 ```text
-Adjusted Trial Value Score = Completion Score x Design Coherence Multiplier
+coherence_adjustment = clamp(round((coherence_score - 70) * 0.67), -20, +20)
+
+adjusted_trial_value_score = clamp(
+    completion_score + coherence_adjustment,
+    0,
+    100
+)
 ```
 
 Example:
 
 - Completion Score: `72`
-- Design Coherence Multiplier: `82%`
-- Adjusted Trial Value Score: `59`
+- Coherence Score: `84`
+- Coherence Adjustment: `+9`
+- Adjusted Trial Value Score: `81`
 
-The application, not the LLM, calculates the adjusted score. The LLM must never modify the XGBoost completion score, SHAP values, pillar impacts, therapeutic-area calibration, prediction pipeline, or audit/demo parity behavior.
+Interpretation:
+
+- Coherence Score around `70` is neutral.
+- Coherence Score below `70` creates a negative adjustment.
+- Coherence Score above `70` creates a positive adjustment.
+- This allows the narrative layer to recognize trials that are inherently risky but well strengthened by the participant's design choices.
+- A trial below `50` on Completion Score can be boosted if the clinical operations design meaningfully mitigates risk.
+
+Terminology:
+
+- `Completion Score` = modelled likelihood of completion.
+- `Coherence Score` = design defensibility and risk-mitigation quality.
+- `Coherence Adjustment` = bounded point bonus or penalty.
+- `Adjusted Trial Value Score` = final serious-game score.
+- `Design Coherence Review` = narrative explanation.
+
+In plain scoring terms, `Adjusted Trial Value Score = Completion Score + Coherence Adjustment`, with application-level bounds applied.
+
+The application, not the LLM, calculates the Coherence Adjustment and Adjusted Trial Value Score. The LLM must never modify the XGBoost completion score, SHAP values, pillar impacts, therapeutic-area calibration, prediction pipeline, or audit/demo parity behavior.
+
+Core boundary:
+
+- The LLM never modifies XGBoost.
+- The LLM never modifies SHAP values.
+- The LLM never modifies therapeutic-area calibration.
+- The LLM never rewrites the prediction score.
+- The LLM returns Coherence Score and explanation.
+- The application calculates Coherence Adjustment and Adjusted Trial Value Score.
 
 ## 3. Current Technical Foundation
 
@@ -80,10 +115,11 @@ Scratch mode may require additional field completeness rules because there is no
 
 After each prediction, the participant view should display:
 
-- Completion Score.
-- Design Coherence Multiplier as a percentage.
-- Adjusted Trial Value Score, shown prominently with gauge or card treatment similar to the existing Completion Score.
-- Concise Design Coherence Review.
+- `Adjusted Trial Value Score`, shown in the main gauge.
+- `Completion Score` as a component score.
+- `Coherence Score` as a component score.
+- A short `Enrollment Assumption` note.
+- Concise `Design Coherence Review`.
 
 Participant narrative sections:
 
@@ -91,14 +127,26 @@ Participant narrative sections:
 - `Why the completion score may have moved`
 - `What the design may have gained`
 - `What the design may have sacrificed`
+- `Enrollment coherence note`
 - `One question for the team to debate`
+
+Suggested participant UI wording:
+
+```text
+Enrollment assumption:
+Current: 600 patients
+Benchmark: ambitious versus similar trials
+Support: partly supported by the current design choices
+```
+
+The main participant UI should not overexpose benchmark percentiles unless needed. The benchmark can be shown lightly as `below benchmark`, `typical`, `ambitious`, or `above benchmark high`. Detailed benchmark statistics can be reserved for development or facilitator view.
 
 The narrative must use conditional and analytical language:
 
 - "may suggest"
 - "could indicate"
 - "might have"
-- "would need to be justified"
+- "would need support from the selected trial profile"
 - "one possible interpretation is"
 
 The participant narrative must avoid direct instructions such as:
@@ -127,7 +175,7 @@ Potential facilitator fields:
 
 The facilitator view may be more direct, but it must still not override the model score or present itself as clinical truth. It should support discussion facilitation, not adjudicate trial validity.
 
-## 8. Design Coherence Multiplier Rubric
+## 8. Coherence Score Rubric
 
 The LLM should apply an internal rubric across at least these dimensions:
 
@@ -138,27 +186,47 @@ The LLM should apply an internal rubric across at least these dimensions:
 - Operational feasibility: whether the design appears proportionate and executable without becoming trivially easy at the expense of value.
 - Change integrity: whether participants genuinely improved the design or mainly gamed completion likelihood.
 
-The multiplier should reflect both current design coherence and change integrity:
+The Coherence Score should reflect both current design coherence and change integrity:
 
 - Current design coherence: whether the revised design is coherent and defensible now.
 - Change integrity: whether the path from baseline to current design appears like meaningful improvement, acceptable simplification, or score-seeking shortcut behavior.
 
-For v1, only one multiplier is shown to users. Internally, the LLM should still consider both final design coherence and quality of changes.
+For v1, one Coherence Score is shown to users. Internally, the LLM should still consider both final design coherence and quality of changes.
 
-Recommended multiplier range:
+The Coherence Score is bidirectional. It should reward:
 
-- Normal range: `60%` to `110%`
-- Exceptional range: `40%` to `120%`
+- Strong endpoint and comparator logic.
+- Coherent population definition.
+- Proportional safety oversight.
+- Appropriate biomarker strategy.
+- Enrollment assumptions supported by the design.
+- Operational choices that mitigate risk without trivializing the trial.
+- Difficult but strategically defensible designs.
 
-Interpretation:
+It should penalize:
 
-- `105%` to `120%`: difficult but highly coherent or rigorous design.
-- `95%` to `105%`: coherent and balanced design.
-- `80%` to `95%`: some trade-offs or unresolved weaknesses.
-- `60%` to `80%`: completion gain may come with meaningful evidence loss.
-- `40%` to `60%`: serious coherence problem or shortcut-driven design.
+- Score-seeking simplification.
+- Weakened endpoint rigor.
+- Weakened comparator logic.
+- Population narrowing that reduces relevance.
+- Unsupported enrollment assumptions.
+- Design changes that make completion easier but reduce evidence value.
 
-The multiplier should rarely exceed `110%`. It should only exceed `110%` when a challenging design appears particularly coherent, rigorous, and strategically justified.
+Principle:
+
+```text
+One weak feature creates a discussion point.
+Several weak or conflicting features create a Coherence Score penalty.
+A difficult design can receive a positive Coherence Adjustment if the participant strengthens it in a coherent and defensible way.
+```
+
+Recommended Coherence Score interpretation:
+
+- `85` to `100`: difficult but highly coherent, rigorous, and strategically defensible.
+- `70` to `84`: coherent and balanced, with strengths outweighing trade-offs.
+- `55` to `69`: unresolved weaknesses or simplifications that need discussion.
+- `40` to `54`: meaningful evidence, feasibility, or change-integrity concerns.
+- `0` to `39`: serious coherence problem or shortcut-driven design.
 
 ## 9. Shortcut Detection Concept
 
@@ -175,11 +243,195 @@ Examples:
 
 The LLM should use changed fields, SHAP/feature deltas, pillar deltas, and previous narrative memory to detect potential shortcut patterns. The output should frame shortcut concerns as hypotheses for discussion, not definitive findings.
 
-## 10. Input Payload Architecture
+## 10. Enrollment Assumption MVP
+
+For v1, only `Planned Enrollment` is added as an operational assumption. Sites, countries, total duration, cost, and market layers are postponed.
+
+Purpose:
+
+```text
+The enrollment assumption is the first operational stress test.
+It helps the narrative judge whether the selected patient number is coherent with the trial profile.
+It does not enter the XGBoost model.
+It does not directly change the Completion Score.
+It feeds the Coherence Score only.
+```
+
+Field:
+
+```text
+planned_enrollment_assumption
+```
+
+Source priority:
+
+```text
+1. Use planned/estimated enrollment if available.
+2. Use completed-trial actual enrollment only when it represents a final observed value.
+3. If missing, use a simple benchmark default from similar historical trials.
+4. If the user edits it, source becomes user scenario.
+```
+
+The user does not write a free-text justification for planned enrollment in the platform. Instead, the enrollment assumption is assessed against the current design choices. The enrollment assumption must be supported by the selected trial profile.
+
+If planned enrollment is missing and the system uses a benchmark-derived default, that default is neutral. It should not create a positive Coherence Score effect simply because it sits inside the benchmark range. It becomes an evaluated scenario assumption only when the user keeps it as the current assumption for a prediction snapshot or actively edits it.
+
+Practical behavior:
+
+- `model_default` inside benchmark = neutral.
+- `user_scenario` inside benchmark = usually neutral or lightly supportive if consistent with the design.
+- `user_scenario` outside benchmark = discussion signal, not automatic penalty.
+- `user_scenario` outside benchmark + conflicting design signals = possible Coherence Score penalty.
+
+### Enrollment Benchmark Classification
+
+The system should classify the enrollment assumption deterministically before sending it to the LLM.
+
+Benchmark cohort hierarchy, pragmatic v1 version:
+
+```text
+Level 1: same phase + same indication + rare disease flag
+Level 2: same phase + same therapeutic area + rare disease flag
+Level 3: same phase + same therapeutic area
+Level 4: same phase only
+```
+
+Additional features such as therapeutic modality, sponsor tier, administration complexity, line of therapy, or population subtype can be used as secondary support/conflict signals when sufficient historical coverage exists. However, v1 should avoid making the benchmark hierarchy overly granular, because excessive stratification can quickly reduce cohort sizes and create unstable percentile estimates. Sponsor tier is legitimate as a contextual support signal inside the Coherence Score logic, but it should not usually define the primary benchmark cohort unless enough comparable trials are available.
+
+Use the strictest level with enough historical trials. A simple minimum sample size threshold, such as `n >= 50`, is appropriate for v1; if the cohort is smaller, relax one level.
+
+For the first implementation, the benchmark can be based on the simple deterministic hierarchy:
+
+```text
+phase + indication / therapeutic area + rare disease flag
+```
+
+Calculate benchmark percentiles:
+
+```text
+P25 = low benchmark
+P50 = typical benchmark
+P75 = high benchmark
+P90 = very high benchmark
+```
+
+Classify user/current enrollment:
+
+```text
+if enrollment < P25:
+    enrollment_status = "below_benchmark"
+
+if P25 <= enrollment <= P75:
+    enrollment_status = "typical"
+
+if P75 < enrollment <= P90:
+    enrollment_status = "ambitious"
+
+if enrollment > P90:
+    enrollment_status = "above_benchmark_high"
+```
+
+The classification is deterministic. The LLM interprets the label but does not invent it.
+
+The deterministic enrollment label is a benchmark position, not a clinical judgment. Clinical interpretation belongs to the Coherence Score layer. For example, below-benchmark enrollment may become an evidence concern depending on phase, endpoint rigor, indication, and development intent, but the benchmark layer itself only reports position relative to similar trials.
+
+### Optional Calibration Analysis Before Hardening V1
+
+Later calibration may investigate within the existing system which trial features most strongly influence enrollment burden and enrollment feasibility:
+
+1. Start with exploratory analysis on historical trials.
+2. Identify which structured trial features correlate most with higher or lower enrollment sizes.
+3. Use deterministic/statistical logic first, not LLM inference.
+4. Use those findings to define the enrollment support/conflict signals used in the Coherence Score.
+
+Suggested investigation logic:
+
+- Analyze enrollment distributions by phase, indication, therapeutic area, rare disease status, sponsor class, modality, line of therapy, age group, endpoint type, endpoint duration, administration complexity, and comparator type.
+- Use feature importance analysis, an enrollment proxy model, SHAP on the enrollment proxy model, correlation analysis, percentile segmentation, and clustering of similar trials.
+- Determine which features consistently explain very high enrollment expectations, recruitment difficulty, operational feasibility, and realistic versus unrealistic enrollment assumptions.
+- Classify signals into supportive of large enrollment, neutral, and conflicting with large enrollment.
+
+This can ground the enrollment coherence layer in observed historical patterns, avoid arbitrary LLM reasoning, keep the system deterministic and auditable, and help define bounded enrollment effects inside the Coherence Score.
+
+V1 should work with a simple benchmark first. Optional calibration analysis can improve the benchmark later, but should not block the first serious-game narrative implementation.
+
+### Enrollment Support Signals
+
+The enrollment benchmark label alone is not enough. The platform should assess whether the selected trial profile supports the enrollment assumption.
+
+Therapeutic modality should influence whether an enrollment assumption is supported by the current design, but it should not usually define the primary benchmark cohort in v1. A complex cell or gene therapy may weaken support for very large enrollment, while an oral small-molecule therapy in a common adult condition may support a larger enrollment assumption.
+
+Supportive signals include:
+
+- Common indication.
+- Non-rare disease.
+- Adult population.
+- Broader patient profile.
+- Earlier line of therapy.
+- Larger sponsor tier.
+- Simpler administration.
+- Simple endpoint structure.
+- Sufficient primary endpoint duration.
+- Phase III context when a large confirmatory trial is expected.
+
+Conflicting signals include:
+
+- Rare disease.
+- Pediatric population.
+- Severe or fragile population.
+- Later-line population.
+- Complex therapeutic modality.
+- Complex administration.
+- Strict endpoint or hard clinical endpoint.
+- Short endpoint duration.
+- Niche indication.
+
+Examples:
+
+```text
+Common adult Phase III disease + 1,200 patients:
+high but potentially supported.
+
+Rare pediatric Phase II gene therapy + 1,200 patients:
+above benchmark high and weakly supported by the design.
+```
+
+Support level values:
+
+```text
+support_level = "supported_by_current_design | partly_supported_by_current_design | weakly_supported_by_current_design"
+```
+
+### Bounded Enrollment Effect
+
+Enrollment must not dominate the Coherence Score. It is one operational-feasibility signal among the broader rubric:
+
+- Development-question fit.
+- Population relevance.
+- Endpoint / evidence coherence.
+- Scientific rigor.
+- Operational feasibility.
+- Change integrity.
+
+Enrollment mainly affects:
+
+- Population relevance.
+- Operational feasibility.
+- Change integrity when the participant changes enrollment in a way that appears to game the score.
+
+Recommended cap:
+
+```text
+Enrollment should normally have a maximum standalone effect of about -10 to +4 points inside the Coherence Score logic.
+```
+
+This means high enrollment alone should not destroy the trial, low enrollment alone should not destroy the trial, enrollment becomes more important when combined with other conflicting choices, and several inconsistent design choices together can materially reduce Coherence Score.
+
+## 11. Input Payload Architecture
 
 The future LLM input object should be assembled after the existing prediction response has been received and after the application has created the latest prediction snapshot.
 
-The payload must preserve the separation between the existing prediction system and the LLM narrative layer. XGBoost/TreeSHAP outputs explain completion-score movement; structured serious-game fields define the broader design-reasoning space for the Design Coherence Multiplier.
+The payload must preserve the separation between the existing prediction system and the LLM narrative layer. XGBoost/TreeSHAP outputs explain completion-score movement; structured serious-game fields and operational assumptions define the broader design-reasoning space for the Coherence Score.
 
 This is conceptual JSON for planning only, not an implementation contract yet:
 
@@ -233,6 +485,23 @@ This is conceptual JSON for planning only, not an implementation contract yet:
     "sponsor_tier_ml": "...",
     "primary_duration_months_ml": "..."
   },
+  "operational_assumptions": {
+    "planned_enrollment": {
+      "value": 600,
+      "source": "planned_value | final_observed_value | model_default | user_scenario",
+      "benchmark_level_used": "phase_indication_rare | phase_ta_rare | phase_ta | phase_only",
+      "benchmark_n": 123,
+      "benchmark_p25": 120,
+      "benchmark_p50": 220,
+      "benchmark_p75": 420,
+      "benchmark_p90": 750,
+      "enrollment_status": "below_benchmark | typical | ambitious | above_benchmark_high",
+      "support_level": "supported_by_current_design | partly_supported_by_current_design | weakly_supported_by_current_design",
+      "supporting_signals": [],
+      "conflicting_signals": [],
+      "interpretation_hint": "Enrollment is above the usual benchmark and is only partly supported by the current design choices."
+    }
+  },
   "model_interpretation": {
     "completion_score": 72,
     "previous_completion_score": 65,
@@ -255,11 +524,13 @@ This is conceptual JSON for planning only, not an implementation contract yet:
 }
 ```
 
+Operational-assumption values are assembled after the latest prediction snapshot. If the user changes therapeutic area, indication, modality, patient profile, phase, or other relevant fields, the enrollment benchmark becomes stale until the next `Predict Trial Completion` action.
+
 Structured dropdown fields are the primary source of truth. Short text fields are secondary and should be used for coherence checking, contradiction detection, and narrative context rather than as the main source of scoring.
 
 Missing or brief free-text fields should not be heavily penalized unless they directly contradict structured trial features or make an otherwise important design claim impossible to interpret.
 
-## 11. Output JSON Contract
+## 12. Output JSON Contract
 
 The LLM should return structured JSON. The application should validate the response, apply bounds to numeric fields, and calculate the adjusted score deterministically.
 
@@ -267,26 +538,29 @@ Proposed contract:
 
 ```json
 {
-  "design_coherence_multiplier_percent": 82,
-  "multiplier_confidence": "medium",
+  "coherence_score": 84,
+  "coherence_confidence": "low | medium | high",
+  "coherence_summary": "short one-sentence explanation",
   "participant_narrative": {
     "what_changed": "...",
     "why_completion_score_may_have_moved": "...",
     "what_design_may_have_gained": "...",
     "what_design_may_have_sacrificed": "...",
+    "enrollment_coherence_note": "...",
     "question_for_team": "..."
   },
   "facilitator_view": {
     "shortcut_risk": "low | moderate | high",
     "change_integrity": "legitimate_improvement | acceptable_simplification | potential_shortcut | high_risk_shortcut | unclear",
     "main_tradeoff": "...",
-    "quality_concern": "...",
+    "coherence_concern": "...",
     "suggested_facilitator_probe": "...",
     "memory_update": "..."
   },
   "trace": {
     "main_features_considered": [],
     "main_pillars_considered": [],
+    "enrollment_status": "below_benchmark | typical | ambitious | above_benchmark_high | not_available",
     "compared_against": "previous_prediction",
     "should_repeat_prior_warning": false
   }
@@ -296,12 +570,32 @@ Proposed contract:
 The application calculates:
 
 ```text
-adjusted_trial_value_score = completion_score * (design_coherence_multiplier_percent / 100)
+coherence_adjustment = clamp(round((coherence_score - 70) * 0.67), -20, +20)
+
+adjusted_trial_value_score = clamp(
+    completion_score + coherence_adjustment,
+    0,
+    100
+)
 ```
 
 The adjusted score should be rounded by application logic using a documented UI rule. The LLM should not return the adjusted score as an authority.
 
-## 12. Narrative Tone Rules
+## 13. Plot Integration Guidance
+
+Plot integration should be conservative for v1:
+
+- Gauge: shows `Adjusted Trial Value Score`.
+- Small score cards: show `Completion Score` and `Coherence Score`.
+- For v1, the bar chart and treemap remain XGBoost-first.
+- Add one visible enrollment coherence note below or near the charts.
+- The enrollment coherence note should be shown as a separate narrative or small card, not redistributed into SHAP-style pillar or subcategory impacts.
+- Do not attempt pillar-level attribution for the Coherence Score in v1.
+- Do not create fake SHAP attribution.
+
+If a future version mixes coherence into the bar chart or treemap, rename the chart to `Adjusted Design Drivers` and clearly distinguish XGBoost impacts from coherence adjustments.
+
+## 14. Narrative Tone Rules
 
 Participant-facing writing rules:
 
@@ -316,7 +610,7 @@ Participant-facing writing rules:
 
 The narrative should say what a pattern may suggest, what trade-off may be present, and what question the team should debate. It should not claim clinical truth or prescribe the next design edit.
 
-## 13. Memory And Iteration Policy
+## 15. Memory And Iteration Policy
 
 The visible narrative should compare mainly against the previous prediction, because that is how participants experience iteration. The LLM must still receive enough memory to avoid contradictions across the full case.
 
@@ -326,7 +620,16 @@ Recommended stored state per serious-game session:
 - Each prediction snapshot.
 - Changed fields per iteration.
 - Completion score per iteration.
-- Design Coherence Multiplier per iteration.
+- Planned enrollment assumption per iteration.
+- Enrollment source per iteration.
+- Benchmark level used per iteration.
+- Benchmark percentiles per iteration.
+- Enrollment status per iteration.
+- Support level per iteration.
+- Supporting signals per iteration.
+- Conflicting signals per iteration.
+- Coherence Score per iteration.
+- Coherence Adjustment per iteration.
 - Adjusted Trial Value Score per iteration.
 - Pillar impacts and pillar deltas.
 - Feature drivers and deltas.
@@ -336,7 +639,7 @@ Recommended stored state per serious-game session:
 
 After several iterations, the system should pass a compact case memory summary rather than the full raw history every time. This avoids long context, repeated warnings, and drift in the narrative. Raw history can still be stored for audit, export, or facilitator debrief.
 
-## 14. Reproducibility And Provider Fallback
+## 16. Reproducibility And Provider Fallback
 
 The architecture should support OpenAI and Gemini provider calls later without binding product logic to one provider.
 
@@ -360,13 +663,13 @@ The goal is to make repeated runs as consistent as possible while acknowledging 
 
 Provider abstraction should be thin. The application should own payload construction, validation, adjusted-score calculation, persistence, and UI rendering. Provider-specific code should own only model invocation and response normalization.
 
-## 15. Fields And Source-Of-Truth Principle
+## 17. Fields And Source-Of-Truth Principle
 
 The structured feature registry remains the primary design source of truth for the narrative layer.
 
 The LLM narrative layer should treat structured dropdown and numeric fields as the primary source of truth. Short text fields are secondary. They should help detect contradiction, missing rationale, or narrative inconsistency. Missing or brief free-text fields should not be heavily penalized unless they directly contradict structured trial features.
 
-If structured fields and text fields conflict, the LLM should flag the inconsistency rather than silently penalize the Design Coherence Multiplier. For example, if the structured fields say `adult_ml` is adult-only but the summary says the intended treatment population includes elderly patients with high disease burden, the LLM may flag a population-relevance concern.
+If structured fields and text fields conflict, the LLM should flag the inconsistency rather than silently penalize the Coherence Score. For example, if the structured fields say `adult_ml` is adult-only but the summary says the intended treatment population includes elderly patients with high disease burden, the LLM may flag a population-relevance concern.
 
 ### Field Selection for LLM Narrative Layer
 
@@ -531,7 +834,7 @@ This list should help the LLM interpret why the Completion Score moved. It shoul
 
 #### Non-Direct Fields That Still Matter
 
-The following four fields are essential for the Design Coherence Multiplier even if they are not direct transformed XGBoost/SHAP fields:
+The following four fields are essential for the Coherence Score even if they are not direct transformed XGBoost/SHAP fields:
 
 - `therapeutic_area_ml`: essential for disease-setting context and therapeutic-area calibration.
 - `strategic_ambition_ml`: essential for development-question fit.
@@ -596,6 +899,8 @@ Always send:
 - `title`
 - `summary_ui`
 - All 31 structured Trial Features
+- `planned_enrollment_assumption`
+- `operational_assumptions.planned_enrollment` benchmark and support metadata
 - `completion_score`
 - `previous_completion_score`
 - `score_delta`
@@ -619,9 +924,9 @@ Do not rely heavily on:
 - Long eligibility text
 - Long protocol-style descriptions
 
-#### Role In The Design Coherence Multiplier
+#### Role In The Coherence Score
 
-The field set should support the Design Coherence Multiplier rubric by evaluating:
+The field set should support the Coherence Score rubric by evaluating:
 
 - Development-question fit.
 - Population relevance.
@@ -638,7 +943,7 @@ Examples:
 - Removing biomarker stratification may simplify operations but could weaken mechanistic coherence in a targeted development setting.
 - Simplifying comparator or masking may make execution easier but could weaken interpretability or evidentiary value.
 
-## 16. Storage And Persistence, Planning Only
+## 18. Storage And Persistence, Planning Only
 
 Each narrative pass and its context should be saved so future LLM calls can continue the story and so facilitators can review the decision path.
 
@@ -651,12 +956,29 @@ Implementation options to decide later:
 
 This document does not prescribe a database implementation. The implementation choice should be made later based on deployment environment, facilitator workflow, session privacy requirements, and export needs.
 
-## 17. Non-Goals For This Architecture Phase
+The stored serious-game snapshot should include:
+
+- Planned enrollment assumption.
+- Enrollment source.
+- Benchmark level used.
+- Benchmark percentiles.
+- Enrollment status.
+- Support level.
+- Supporting signals.
+- Conflicting signals.
+- Coherence Score.
+- Coherence Adjustment.
+- Adjusted Trial Value Score.
+
+Storage should keep `Coherence Score`, `Coherence Adjustment`, and `Adjusted Trial Value Score` as explicit fields rather than storing only a derived narrative explanation.
+
+## 19. Non-Goals For This Architecture Phase
 
 - No code implementation now.
 - No UI implementation now.
 - No new API endpoint now.
 - No model retraining.
+- No retraining of XGBoost for v1.
 - No change to XGBoost prediction logic.
 - No change to audit mode.
 - No change to SHAP computation.
@@ -664,16 +986,37 @@ This document does not prescribe a database implementation. The implementation c
 - No change to taxonomy unless later required.
 - No change to audit/demo parity behavior.
 - No portfolio mode yet.
-- No cost layer yet.
-- No market layer yet.
+- No site-count model in v1.
+- No country-count model in v1.
+- No total-duration estimator in v1.
+- No cost layer in v1.
+- No market layer in v1.
+- No full operational scale engine in v1.
+- No full operational-estimation engine in v1.
+- No pillar-level coherence redistribution in v1.
+- No feature-level LLM pseudo-SHAP in v1.
 
-## 18. Open Questions
+## 20. V1 Roadmap Summary
+
+V1 serious-game narrative layer:
+
+- Keep XGBoost unchanged.
+- Add planned enrollment as the first operational assumption.
+- Classify enrollment against similar-trial benchmarks.
+- Use enrollment as one bounded input into Coherence Score.
+- Make Coherence Score bidirectional.
+- Calculate a bounded Coherence Adjustment.
+- Calculate Adjusted Trial Value Score additively.
+- Keep bar chart and treemap XGBoost-first.
+- Show a narrative panel explaining design trade-offs.
+
+## 21. Open Questions
 
 - Whether later versions add, remove, or reorder fields beyond the v1 field-selection policy above.
 - Exact storage mechanism.
 - Exact participant versus facilitator UI placement.
 - Exact provider abstraction for OpenAI/Gemini.
 - Exact number of previous iterations to keep raw before summarization.
-- Exact multiplier calibration rules.
+- Exact Coherence Score calibration examples after v1 playtesting.
 - Whether facilitator view is hidden behind an expander or separate mode.
 - Whether final governance recommendation is generated by participants, LLM, or both.

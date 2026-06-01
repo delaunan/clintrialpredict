@@ -1,875 +1,891 @@
-# CTPredict Estimation Architecture
+# ClinTrialPredict Enrollment Estimation Architecture
 
-## 1. Purpose of this document
+## Purpose
 
-This document is the planning backbone for the future CTPredict estimation mode. It defines the strategic and technical architecture for turning the current trial prediction product into a missing operational value estimation workflow.
+This document defines the v1 enrollment estimation / benchmarking architecture for ClinTrialPredict serious-game mode. It now also records the Phase 1 implementation and QA state for the deterministic planned-enrollment benchmark layer.
 
-This is not an implementation specification yet. It does not prescribe immediate code edits, model training, database changes, or UI changes. It should guide future discussions with Gemini CLI, Codex CLI, or another coding assistant before implementation begins.
+The purpose is not to estimate all missing operational quantities. The purpose is to provide a simple, deterministic, auditable benchmark for `planned_enrollment_assumption`.
 
-## 2. Product vision
+The enrollment benchmark helps the narrative layer assess whether the selected patient number is coherent with the current simulated trial profile. It does not enter the XGBoost model, does not directly modify the Completion Score, and feeds the `Coherence Score` only.
 
-The estimation ambition is to fill missing operational values for clinical trials in a reproducible, auditable way. The immediate focus is final duration, enrollment, site count, and country count, with clear separation between observed values, lower bounds, and modelled estimates.
+```text
+V1 estimation scope = planned enrollment assumption only.
+Sites, countries, total duration, cost, market potential, downstream commitment, and full operational-scale estimation are postponed.
+```
 
-The workflow should feel like an estimation and data-quality workbench. The core question is: "Given the fields available for this trial, what operational values are missing, what can be estimated, and how reliable are those estimates?"
+This document should be read alongside [docs/architecture_narratives.md](/home/delaunan/code/delaunan/clintrialpredict/docs/architecture_narratives.md), which defines how the benchmark is interpreted through the serious-game narrative layer.
 
-## 3. Current foundation
+## Phase 1 Implementation Status - 2026-06-01
 
-CTPredict currently provides:
+Phase 1 is implemented as a deterministic, offline-built enrollment benchmark foundation. It does not add Simulation Mode UI, does not call an LLM, does not implement Coherence Score, and does not touch XGBoost, SHAP, therapeutic-area calibration, audit/demo parity, model artifacts, taxonomy files, API contracts, or deployment configuration.
+
+Implemented files:
+
+- `scripts/build_enrollment_benchmarks.py`: offline artifact builder and calibration report generator.
+- `scripts/check_enrollment_benchmarks.py`: lightweight validation for artifact schema, strict lookup, fallback lookup, missing artifact behavior, and classification boundaries.
+- `src/enrollment_benchmarks.py`: runtime lookup and metadata utility.
+- `frontend/data/enrollment_benchmarks_v1.csv`: compact production-friendly benchmark artifact.
+- `frontend/data/enrollment_benchmarks_v1_report.json`: practical audit/calibration report.
+- `notebooks/estimation.ipynb`: central reproducible analytical notebook for the v1 planned-enrollment benchmark layer.
+- `notebooks/archive/estimation_legacy_before_enrollment_benchmark.ipynb`: archived broad-estimation notebook retained for history.
+
+Reproducibility workflow:
+
+```bash
+python scripts/build_enrollment_benchmarks.py
+python scripts/check_enrollment_benchmarks.py
+```
+
+Then open/run:
+
+```text
+notebooks/estimation.ipynb
+```
+
+The notebook inspects and validates the artifact and also reproduces the main calculations in memory in the `BENCHMARK_COHORTS`, `BENCHMARK_PERCENTILES`, and `VALIDATION` sections. The build script remains the source of truth for writing the production-facing artifact.
+
+Current artifact summary:
+
+```text
+source records loaded: 34,066
+completed positive ACTUAL enrollment benchmark targets: 20,526
+artifact rows: 876
+minimum confident cohort threshold: n >= 50
+low-confidence benchmark rows: 667
+duplicate benchmark keys: 0
+```
+
+Rows by benchmark level:
+
+```text
+phase_indication_rare: 658
+phase_ta_rare:        138
+phase_ta:              76
+phase_only:             4
+```
+
+Phase-only fallback rows are all confident:
+
+```text
+PHASE1/PHASE2:  n=1,907, P25=24.0,  P50=48.0,  P75=108.0, P90=225.0
+PHASE2:         n=8,987, P25=41.0,  P50=92.0,  P75=190.0, P90=332.0
+PHASE2/PHASE3:  n=511,  P25=89.5,  P50=222.0, P75=454.0, P90=974.0
+PHASE3:         n=9,121, P25=150.0, P50=326.0, P75=606.0, P90=1,077.0
+```
+
+Coverage QA across all 34,066 source snapshots found no benchmark lookup gaps:
+
+```text
+phase_indication_rare: 23,299 rows
+phase_ta_rare:         7,361 rows
+phase_ta:              2,270 rows
+phase_only:            1,136 rows
+not_available:             0 rows
+low-confidence matches:    0 rows
+```
+
+When using each row's current enrollment as the planned value, `not_available` classifications came only from invalid enrollment input values:
+
+```text
+typical:               15,494
+below_benchmark:        9,088
+ambitious:              4,775
+above_benchmark_high:   3,463
+not_available:          1,246
+
+missing enrollment:        14
+zero/non-positive:       1,232
+```
+
+Therefore, with a valid phase, valid planned enrollment value, and present/correct artifact, runtime should return a benchmark. The broadest fallback is `phase_only`. `not_available` should normally mean missing/invalid planned enrollment, missing/corrupt artifact, unrecognized phase outside the artifact, or incomplete percentile values.
+
+Validation commands run during Phase 1 and QA:
+
+```bash
+python scripts/build_enrollment_benchmarks.py
+python scripts/check_enrollment_benchmarks.py
+python -m py_compile scripts/build_enrollment_benchmarks.py scripts/check_enrollment_benchmarks.py src/enrollment_benchmarks.py
+git diff --check
+```
+
+Audit parity was previously confirmed at `4,423/4,423` perfect parity and was not rerun during the final QA pass because no prediction, audit, preprocessing, model, SHAP, therapeutic-area calibration, API, taxonomy, or deployment files were touched.
+
+## Current Foundation
+
+ClinTrialPredict currently provides:
 
 - An AACT / ClinicalTrials.gov-based trial database.
-- A focus on industry-led Phase II / Phase III clinical trials.
+- Industry-led Phase II / Phase III trial data.
+- Existing structured Trial Features used in simulation mode.
 - An XGBoost completion / early-termination prediction engine.
-- A Streamlit application for trial search, trial detail review, and completion-risk scoring.
-- A scoring architecture aligned with the existing API, registry, and parity audit workflow.
-- A future product direction toward estimation and strategic forecasting modes.
+- SHAP-derived completion-score explanation artifacts.
+- Existing audit, parity, and therapeutic-area calibration behavior.
 
-## 4. Target estimation workflow
+The enrollment benchmark must consume existing trial fields and simulation snapshots without changing the completion model path.
 
-The future workflow should help analysts prepare trial-level operational estimates for downstream cost, planning, and forecasting work. Users start from existing trial records, identify missing or incomplete operational quantities, and generate auditable estimates with uncertainty ranges and validation flags.
+## Core Separation Principle
 
-Example users:
+Never mix design-stage inputs, observed-to-date lower bounds, final observed values, and synthetic estimates.
 
-- Data analyst.
-- Clinical operations analyst.
-- Forecasting analyst.
-- Business development analyst.
-- Finance partner.
-
-Example tasks:
-
-- Identify missing or unusable operational fields.
-- Reconstruct country count from source files.
-- Estimate final duration, enrollment, sites, and countries.
-- Preserve observed-to-date values as lower bounds.
-- Flag implausible operational bundles.
-- Export a reusable estimation table.
-
-Example constraints:
-
-- Avoid leakage from final observed values when forecasting from design-stage inputs.
-- Keep estimates reproducible from committed source data.
-- Label every estimate with its source, target definition, model family, and validation status.
-- Avoid writing derived outputs back into primary raw data.
-
-## 5. Main architecture overview
-
-| Module | Purpose | Input | Output | Implementation stage |
-| ------ | ------- | ----- | ------ | -------------------- |
-| Trial data layer | Provide structured trial records from AACT / ClinicalTrials.gov and existing registry artifacts. | Raw and processed trial data, sponsor data, design data, eligibility data, intervention data. | Trial-level records for search, scoring, and estimation. | Existing |
-| Design-stage feature layer | Represent information available at or near trial start. | Trial design, phase, sponsor, therapeutic area, condition, intervention, eligibility, planned dates. | Leakage-safe feature set for prediction and estimation. | Existing / Planned MVP |
-| Completion-risk engine | Estimate completion or early-termination risk using the current model. | Design-stage model features from the existing pipeline. | Completion-risk score, probability, and explanation components. | Existing |
-| Operational scale estimation engine | Estimate missing operational quantities. | Design-stage features, historical completed trials, active-trial censoring logic. | Predicted duration, enrollment, site count, country count, recruitment burden. | Planned MVP |
-| Reconciliation engine | Check whether estimated operational quantities are mutually plausible. | Estimated enrollment, sites, countries, duration, lower bounds, historical ratios. | Flags for impossible or suspicious bundles. | Planned MVP |
-| Cost translation layer | Optionally convert operational estimates into transparent cost estimates later. | Operational quantities, phase, therapeutic area, complexity assumptions, cost parameters. | Total trial cost, remaining cost, avoided cost, cost drivers. | Planned later |
-| Estimation output layer | Produce reusable trial-level estimation records. | Trial records, model outputs, validation flags, metadata. | Estimation-ready table for later UI, cost, or forecasting work. | Planned MVP |
-| Estimation validation engine | Evaluate model stability and estimate quality. | Validation folds, subgroup diagnostics, error metrics, reconciliation checks. | Champion model selection and known limitations. | Planned MVP |
-| Explanation layer | Explain estimate sources, target definitions, and uncertainty. | Model outputs, assumptions, diagnostics, source fields. | Human-readable estimation notes and audit metadata. | Planned later |
-
-## 6. Data layers
-
-The future system should distinguish between design-stage data, final observed operational data, and synthetic financial data. These layers should remain explicit in documentation, modelling datasets, and future implementation.
-
-### 6.1 Design-stage data
-
-Design-stage data is information known at or near trial start. It is appropriate for forecasting because it does not depend on future trial execution.
-
-Examples:
-
-- Phase.
-- Sponsor.
-- Therapeutic area.
-- Condition.
-- Intervention type.
-- Allocation.
-- Masking.
-- Intervention model.
-- Primary purpose.
-- Planned enrollment.
-- Planned start date.
-- Planned completion dates.
-- Number of arms.
-- Number of outcomes.
-- Eligibility complexity proxies.
-
-### 6.2 Final observed operational data
-
-Final observed operational data is known only once a trial has progressed or completed. These variables can be useful as prediction targets, validation data, or historical calibration inputs, but they must not be used incorrectly as design-stage model features.
-
-Examples:
-
-- Actual enrollment.
-- Final duration.
-- Final number of sites.
-- Final number of countries.
-- Final trial status.
-- Final completion or termination outcome.
-
-Using these variables as inputs to a design-stage forecast would create leakage if they were not available at the decision point.
-
-### 6.3 Synthetic financial data
-
-Synthetic financial data is created by the future cost engine. It is a estimation layer, not observed sponsor truth.
-
-Examples:
-
-- Estimated total cost.
-- Estimated cost spent to date.
-- Remaining cost.
-- Annual cost by year.
-- Avoided cost if terminated.
-- Downstream development cost.
-- Probability-weighted future investment.
-
-Cost outputs should be labelled as estimates derived from assumptions, not validated real-world sponsor costs.
-
-### 6.4 Available cost-driver fields in the current data
-
-The current `data/data_clinpred.csv` file already contains several fields that can support a first cost-reconstruction strategy. These fields should not all be treated as equally reliable. Some are design-stage fields, some are observed-to-date fields, and some are final observed fields only for completed trials.
-
-| Cost need | Available field or source | Initial interpretation |
-| --------- | ------------------------- | ---------------------- |
-| Trial identity | `nct_id`, `brief_title`, `official_title`, `ui_search_label` | Asset or trial identifier for portfolio display. |
-| Current status | `overall_status` | Determines whether operational values are final, partial, planned, or censored. |
-| Stage | `phase`, `phase_ui`, `phase_ml` | Core cost and future-commitment driver. |
-| Enrollment | `enrollment`, `enrollment_type` | Reliable final target mainly for completed trials with actual enrollment; ongoing actuals are lower bounds, not final totals. |
-| Duration | `start_date`, `completion_date`, `primary_completion_date`, `primary_duration_months`, `is_duration_unknown` | Completed trials should define total trial duration from start-to-completion dates. `primary_duration_months` should be treated as an endpoint/follow-up duration proxy, not the total cost-duration target. |
-| Sites | `number_of_facilities` | Final-ish for completed trials; observed-to-date lower bound for ongoing trials. |
-| Countries | Reconstruct from `data/countries.txt` by `nct_id` | Country count is not directly in `data_clinpred.csv`; ongoing country lists are observed-to-date lower bounds. The cost method should remain US-agnostic. |
-| Design complexity | `number_of_arms`, `allocation`, `masking`, `intervention_model`, `has_placebo`, `has_dmc` | Cost multipliers and operational-complexity proxies. |
-| Therapeutic context | `therapeutic_area`, `gbd_indication_name`, `gbd_cause_id_3`, `is_rare_disease` | Phase and TA cost calibration, rare-disease recruitment burden, future market logic. |
-| Product complexity | `therapeutic_modality`, `administration_complexity`, `primary_purpose` | Per-patient and protocol-complexity assumptions. |
-| Endpoint burden | `endpoint_rigor`, `endpoint_structure`, `primary_outcomes_ui` | Endpoint and follow-up complexity assumptions. |
-| Sponsor context | `sponsor_tier`, `lead_sponsor_canonical` | Optional calibration feature, not a direct cost claim. |
-| Market and pricing-power inputs | `daly_global`, `daly_high_income`, `yld_global`, `yll_global`, `chronic_ratio_global`, `market_skew_index`, `is_rare_disease` | Future value and pricing-power layer, separate from cost. |
-
-The first cost engine should use these fields to reconstruct realistic relative costs, not to claim access to true sponsor accounting data.
-
-## 7. Design-stage versus future-observed leakage principle
-
-Future models must preserve a strict separation between:
-
-- What is known at trial design stage.
-- What is observed after trial execution.
-- What is estimated synthetically by a model or scenario rule.
-
-This separation is critical because estimation mode may forecast from information available at a specific point in time. Inputs available after that point must not be treated as if they were available to the estimator.
-
-Rule: Any future model must document whether each input feature is available at design stage, observed after trial execution, or synthetically estimated.
-
-This rule applies to completion-risk modelling, operational scale estimation, optional cost translation, market potential estimation, downstream commitment estimation, and estimation validation.
-
-## 8. Estimation date data contract
-
-The estimation mode can be anchored to an estimation date. This is the date at which the model is assumed to forecast missing or incomplete operational values. A trial may later be completed, terminated, withdrawn, or still ongoing in the real dataset, but estimation features must only use information that would be available at or before the estimation date.
-
-For the first estimation version, the objective is not to reconstruct a perfect historical AACT snapshot. The objective is to build a robust modelling contract for missing operational values. Final completion or termination outcomes may be used as training targets for completed trials, but they must not leak into design-stage forecast features.
-
-### 8.1 Scenario date concepts
-
-| Concept | Meaning | Use |
-| ------- | ------- | --- |
-| Estimation date | Date at which missing or incomplete values are estimated. | Defines what is visible, observed-to-date, and forecast-only. |
-| Trial start date | Date trial activity begins. | Determines eligibility and elapsed duration. |
-| Known or planned completion date as of estimation date | Completion expectation visible at that point if available. | Input to duration estimate, subject to uncertainty. |
-| Final observed completion date | Completion date visible only after trial execution. | Training target or validation data, not an input for leakage-safe forecasts. |
-| Current extracted status | Trial status in the current source extract. | Useful for data audit, but not necessarily the status at a historical estimation date. |
-| Estimation status | Whether a record is completed, ongoing, censored, lower-bound only, or unsuitable for a target. | Keeps target construction and feature use explicit. |
-| Expected completion date | Estimated or planned end date. | Candidate duration feature or later cost input, subject to uncertainty. |
-
-### 8.2 Trial eligibility for estimation
-
-For a trial to appear in an estimation dataset, it should normally satisfy:
-
-- The trial start date is present when duration or elapsed-time features are needed.
-- The phase and therapeutic context are available.
-- The target field is either observed as a completed-trial final value or explicitly treated as an observed-to-date lower bound.
-- The record has enough design-stage features to support the selected estimator.
-- The target definition does not require using future-observed values as input features.
-
-The number of selected trials does not need to be fixed at architecture time. The same data contract should work for the full dataset, a filtered modelling cohort, or a manually curated validation subset.
-
-### 8.3 Field-use contract
-
-Each candidate field should be classified before use.
-
-| Field class | Description | Example | Allowed estimation use |
-| ----------- | ----------- | ------- | ------------------------------ |
-| Directly visible at estimation date | Known by the estimation date. | Phase, sponsor, therapeutic area, trial title, planned enrollment if available. | Yes. |
-| Observed-to-date lower bound | Current operational value visible by the estimation date but not necessarily final. | Patients enrolled to date, active/listed sites, listed countries, elapsed duration. | Yes, as lower bound and audit input. |
-| Final observed only | Known only after trial execution. | Final actual enrollment, final duration, final site count, final country count, final outcome. | No, except for training, validation, and retrospective audit. |
-| Prediction feature | Field allowed as input to an estimator. | Phase, TA, rare disease flag, modality, planned enrollment, number of arms. | Yes if available at estimation date. |
-| Synthetic estimate | Modelled or rule-based output. | Predicted final enrollment, site count, country count, or duration. | Yes, if labelled as estimate. |
-| Excluded for leakage | Field that reveals future knowledge relative to the estimation date. | Final completion outcome for an active historical trial. | No. |
-
-### 8.4 Precomputation versus runtime calculation
-
-Anchoring to an estimation date does not mean every value must be calculated interactively. Most asset-level estimates can be precomputed in advance. Date-dependent values are lightweight and can be calculated when an estimation date is selected.
-
-Precomputed asset-level estimates:
-
-- Predicted final duration.
-- Predicted final enrollment.
-- Predicted final site count.
-- Predicted final country count.
-- Estimated total current-trial cost.
-- Estimated future-phase cost to reach market.
-- Estimated remaining time to market.
-- Completion-risk score from the existing XGBoost engine.
-- Market potential category.
-
-Runtime date-dependent calculations:
-
-- Elapsed duration at the missing-value review date.
-- Cost incurred by the missing-value review date.
-- Remaining current-trial cost after the date.
-- Saveable cost this year.
-- Saveable cost next year.
-- Saveable cost in following years.
-- Whether the selected date is plausible for the selected asset.
-
-For a selected estimation cohort, these runtime calculations should be computationally light. They are mainly date arithmetic plus deterministic rules applied to precomputed operational estimates.
-
-### 8.5 First-stage implementation path
-
-The first implementation stage should follow this sequence:
-
-1. Identify and classify variables by field class.
-2. Build completed-trial training targets for final duration, enrollment, sites, and countries.
-3. Reconstruct observed-to-date and lower-bound fields for selected scenario assets where possible.
-4. Estimate missing or incomplete operational quantities for ongoing/actionable trials.
-5. Apply transparent cost assumptions to produce current-trial cost outputs.
-6. Invent next phases up to market using scenario templates and similar completed trials.
-7. Add next-phase cost and risk assumptions to estimate future development commitment.
-8. Produce a reusable asset-level table with precomputed estimates.
-9. At scenario time, apply the selected missing-value review date to calculate incurred, remaining, and saveable cost.
-
-This sequence should be completed before any estimation UI work beyond a minimal prototype.
-
-## 9. Operational scale estimation plan
-
-Future models should estimate the operational quantities required by the cost engine. These estimates should be separated from the current completion-risk model so that cost assumptions remain interpretable and modular.
-
-Completed trials should be the preferred training base for final operational scale. Active, recruiting, not-yet-recruiting, enrolling-by-invitation, and active-not-recruiting trials require careful treatment because duration, enrollment, site count, and country count may be censored, planned, revised, or incomplete.
-
-Terminated and withdrawn trials are useful for modelling partial spend and termination risk, but they should not be treated as clean examples of the final scale a trial would have reached if completed.
-
-### 9.1 Operational value types
-
-Future datasets should distinguish three operational values per trial and per quantity:
-
-| Value type | Meaning | Main use |
-| ---------- | ------- | -------- |
-| Observed-to-date | Value currently visible in AACT / ClinicalTrials.gov at the estimation date. | Lower bound for ongoing trials; partial-spend input. |
-| Predicted final value | Estimated final operational scale. | Main estimate used for missing-value completion. |
-| Partial observed value | Partial scale observed before completion, termination, or extraction. | Lower-bound and censoring audit. |
-
-For ongoing trials, observed patient, site, and country values should constrain the prediction but should not be assumed to be the final total. If an ongoing trial has already reported 120 patients, 20 sites, or 4 countries, the predicted final value should not be lower than those observed-to-date values.
+For enrollment v1, use these concepts:
 
 ```text
-predicted_final_if_continued = max(model_prediction, observed_to_date)
+planned_value = planned/estimated enrollment available at design stage or in the record.
+final_observed_value = actual enrollment from completed trials, usable as historical benchmark data or completed-trial display value.
+observed_lower_bound = actual enrollment for ongoing/actionable trials, not final truth.
+model_default = benchmark-derived default used when no planned value is available.
+user_scenario = participant-edited enrollment assumption.
+benchmark_distribution = historical comparable-trial distribution used for P25/P50/P75/P90.
 ```
 
-The same principle applies to duration:
-
-```text
-predicted_final_duration = max(model_prediction, elapsed_duration_to_decision_date)
-```
-
-For the first version, exact historical observed-to-date patient, site, and country values may not be available for a past estimation date. In that case, use the current extract as a pragmatic lower-bound approximation where appropriate and clearly label it as an approximation.
-
-Before building model-ready datasets, create explicit target-readiness flags. These flags make the operational modelling step auditable and prevent planned, ongoing, completed, and partial-stop values from being mixed accidentally.
-
-Required MVP flags:
-
-| Flag | Meaning | Use |
-| ---- | ------- | --- |
-| `is_completed_actual_enrollment_target` | Completed trial with positive `ACTUAL` enrollment. | Training target for final enrollment model. |
-| `is_ongoing_actual_enrollment_lower_bound` | Ongoing/actionable trial with positive `ACTUAL` enrollment. | Lower bound when estimating final enrollment. |
-| `is_estimated_planned_enrollment` | Trial with positive `ESTIMATED` enrollment. | Planned/expected scale feature, not final actual truth. |
-| `is_completed_site_count_target` | Completed trial with positive site/facility count. | Training target for final site-count model. |
-| `is_ongoing_site_count_lower_bound` | Ongoing/actionable trial with positive site/facility count. | Lower bound when estimating final site count. |
-| `is_completed_country_count_target` | Completed trial with reconstructed positive country count. | Training target for final country-count model. |
-| `is_ongoing_country_count_lower_bound` | Ongoing/actionable trial with reconstructed positive country count. | Lower bound when estimating final country count. |
-| `is_completed_duration_target` | Completed trial with positive known duration. | Training target for final duration model. |
-
-For duration, the MVP target should be date-derived total trial duration:
-
-```text
-total_duration_months_observed =
-    (completion_date or primary_completion_date - start_date) / average days per month
-```
-
-`primary_duration_months` can remain a useful endpoint-duration or follow-up-duration feature, but it should not be used as the total trial-duration target for cost modelling.
-
-### 9.2 Recommended MVP modelling approach
-
-For the MVP, avoid predicting total cost directly. Instead, estimate operational quantities and convert them into cost with transparent assumptions.
-
-Recommended first models:
-
-- Final duration model trained on completed trials.
-- Final enrollment model trained on completed trials with reliable actual enrollment.
-- Final site-count model trained on completed trials.
-- Final country-count model trained on completed trials after reconstructing country count from `data/countries.txt`.
-
-The preferred first algorithm family is gradient-boosted tabular regression because the project already uses XGBoost, the source data is structured and mixed-type, and the targets are nonlinear and right-skewed. The architecture should still select the best model per indicator using validation, not assume one algorithm always wins.
-
-Fallbacks should remain simple and explainable:
-
-- Phase + therapeutic area median.
-- Phase + rare disease flag median.
-- Phase + therapeutic modality median.
-- Global phase median when sample sizes are sparse.
-
-| Future model | Target variable | Why it matters | Possible features | MVP priority |
-| ------------ | --------------- | -------------- | ----------------- | ------------ |
-| Final duration model | Date-derived total duration in months for completed trials. | Drives monthly management cost, calendar spend, and time-to-next-decision. | Phase, therapeutic area, intervention type, endpoint-duration proxy, planned enrollment, number of arms, masking, allocation, endpoint proxies. | High |
-| Actual enrollment model | Final actual enrolled patients for completed trials. | Drives patient-level cost and recruitment burden. | Planned or observed-to-date enrollment, phase, condition, sponsor type, therapeutic area, rare disease proxy, eligibility complexity. | High |
-| Site count model | Final site count for completed trials. | Drives site startup, monitoring, and geography complexity. | Planned or observed-to-date sites, planned enrollment, phase, therapeutic area, sponsor tier, intervention model. | Medium |
-| Country count model | Final country count for completed trials. | Drives country startup cost and operational complexity. | Reconstructed country count, sponsor tier, trial size, therapeutic area, phase, planned enrollment. | Medium |
-| Recruitment complexity proxy | Relative difficulty of recruiting and retaining patients. | Modifies patient cost, duration risk, and operational burden. | Rare disease proxy, eligibility restrictions, age eligibility, condition severity, intervention type, trial duration. | High |
-| Downstream phase size estimate | Expected size of invented next phase. | Supports future commitment estimates beyond the current trial. | Current phase, next-phase template, therapeutic area, condition, historical similar completed trials, market category. | Later |
-
-### 9.3 Model selection protocol
-
-Each operational indicator should use the simplest model that is accurate enough and stable enough for optional cost translation. The first notebook should compare a small set of candidates, then choose a champion per target.
-
-| Target | Candidate models | Recommended first champion | Validation focus |
-| ------ | ---------------- | -------------------------- | ---------------- |
-| Final duration months | Phase/TA median baseline, `HistGradientBoostingRegressor`, `XGBRegressor` on `log1p(target)`. | `XGBRegressor` if it clearly improves over baselines; otherwise gradient boosting or median fallback. | MAE and RMSE on months after inverse transform; calibration by phase and TA; minimum duration sanity checks. |
-| Final enrollment | Phase/TA median baseline, `HistGradientBoostingRegressor`, `XGBRegressor` on `log1p(target)`, optional quantile model later. | `XGBRegressor` on `log1p(enrollment)` for MVP if validation is stable. | Error on log scale and original scale; high-enrollment outlier handling; phase-level calibration. |
-| Final site count | Phase/TA median baseline, `HistGradientBoostingRegressor`, `XGBRegressor` on `log1p(target)`. | Best validated gradient-boosting model, with median fallback for sparse groups. | Count plausibility, lower-bound enforcement, calibration by phase and multinational proxy. |
-| Final country count | Phase/TA median baseline, `HistGradientBoostingRegressor`, `XGBRegressor` on `log1p(target)`. | Best validated gradient-boosting model after reconstructing country count from `data/countries.txt`. | Count plausibility, US-agnostic geography handling, calibration by phase and sponsor tier. |
-| Recruitment complexity proxy | Rule-based score, shallow tree model, or gradient boosting if a target is defined. | Rule-based MVP score unless a strong supervised target is available. | Interpretability and directional plausibility. |
-| Future phase size | Similar-trials median, weighted nearest-neighbor median, optional model later. | Similar-trials median for MVP. | Explainability, stability, and reasonable future-phase scale. |
-
-General rules:
-
-- Train final-scale models primarily on completed trials.
-- Use `log1p` targets for positive, skewed quantities and inverse-transform predictions before cost calculation.
-- Compare every model against a simple grouped-median baseline.
-- Prefer the simpler model if performance is similar.
-- Enforce lower bounds after prediction for actionable ongoing assets.
-- Clip impossible values, such as negative duration, enrollment below 1, or country count below 1 when a country is known.
-- Validate by phase, therapeutic area, rare disease flag, and sponsor tier to catch unstable subgroup behavior.
-- Save model diagnostics and assumptions before using outputs in cost calculations.
-
-The UI should not expose the model-selection complexity. It should show concise estimates and clear assumption labels.
-
-### 9.4 Updated operational-size modelling direction
-
-Early notebook benchmarks showed that direct point estimates for enrollment, sites, and countries can look much better when the model is allowed to use final observed operational quantities from completed trials as features. Those scores are useful as an upper-bound or known-input benchmark, but they are too optimistic for a forecast unless those quantities are actually known at the estimation date.
-
-The recommended next approach is therefore:
-
-1. Keep three benchmark modes.
-   - **Dependency-pruned forecast**: exclude `enrollment_num`, `site_count_num`, and `country_count_num` when those values would have to be guessed. This is the cleanest design-stage forecast baseline.
-   - **Sequenced forecast**: predict one operational quantity first, then feed that prediction into the next model. Use out-of-fold upstream predictions during training so downstream models do not learn from true completed values that would not be known in practice.
-   - **Known-input mode**: allow enrollment, sites, or countries as features only when they are user-provided, planned, or observed-to-date lower bounds at the scenario date.
-2. Prioritize duration and enrollment accuracy.
-   - Duration is currently the most stable target because endpoint/follow-up duration, indication, sponsor, phase, and design features carry direct signal.
-   - Enrollment remains the most important operational-size target and needs a stronger approach than one direct regressor.
-3. Add supervised operational size bands before trying generic clustering.
-   - For enrollment, create bands such as `tiny`, `small`, `medium`, `large`, and `mega`.
-   - Train a classifier for enrollment band, then use band probabilities or band-specific priors alongside the log-enrollment regressor.
-   - Evaluate whether the model first gets the order of magnitude right before judging exact patient count.
-   - After this supervised baseline is established, run a controlled clustering/archetype experiment as an optional enhancement. Cluster trials using design, sponsor, indication, endpoint, and complexity features; add the cluster label as a candidate feature or cluster-specific prior; keep it only if it improves enrollment or duration validation metrics, not merely because the clusters look plausible.
-4. Use grouped priors as stabilizers.
-   - Blend or compare model outputs with historical medians and ranges by phase, therapeutic area, indication group, rare-disease flag, sponsor tier, and modality.
-   - This is especially important because median completed enrollment is much smaller than the mean, while a small number of very large trials dominate absolute error.
-5. Estimate sites from enrollment logic when appropriate.
-   - Site count should be checked against expected patients per site for similar trials.
-   - Independent site predictions can still be benchmarked, but the implementation should reconcile enrollment, sites, and countries as a bundle.
-6. Return ranges, not only point estimates.
-   - The estimation module should show expected value plus low/high scenario values for enrollment and duration.
-   - Point estimates alone are misleading for heavily skewed operational targets.
-7. Always run reconciliation checks before cost calculation.
-   - Flag impossible or suspicious combinations such as countries greater than sites, fewer than one patient per site, or a very low-enrollment trial spread across many sites.
-   - Reconciliation should not silently hide model uncertainty; it should make questionable operational bundles auditable.
-
-This direction came from comparing four benchmark families in `notebooks/estimation.ipynb`: grouped-median baselines, enhanced gradient-boosted regressors, dependency-pruned regressors, and sequenced y-to-y models. The key conclusion is that the strongest raw scores were partly driven by operational cross-target features, while dependency-pruned and sequenced results are more credible for forecasting. Future sessions should use the pruned and sequenced scores as the default implementation benchmark, and reserve the stronger known-input/oracle scores for scenarios where the user explicitly provides planned or current operational values.
-
-### 9.5 Required and optional data sources
-
-The primary source for the first notebook should be `data/data_clinpred.csv`.
-
-Recommended supporting source already present:
-
-- `data/countries.txt`: reconstruct country count by `nct_id`.
-
-Potentially useful existing sources if the notebook needs deeper audits:
-
-- `data/design_outcomes.txt`: outcome count or endpoint timing audit if existing derived fields are insufficient.
-- `data/interventions.txt`: intervention-type audit if `therapeutic_modality` requires validation.
-- `data/conditions.txt`: condition text audit if indication grouping needs review.
-
-Files not currently present but useful only for later versions:
-
-- Historical AACT snapshots by date, if exact observed-to-date reconstruction becomes important.
-- External phase-transition / likelihood-of-approval benchmarks, if the estimation workflow needs a true probability of reaching market rather than a scenario assumption.
-- External clinical trial cost benchmarks, if assumptions need validation against published or licensed cost data.
-
-The MVP does not require these external files. It can proceed with `data_clinpred.csv`, reconstructed country counts, transparent cost assumptions, and scenario-level future risk assumptions.
-
-## 10. Cost translation engine
-
-The cost model should be a transparent, assumption-driven finance engine. It should convert operational quantities into cost estimates using editable assumptions rather than a single black-box prediction.
-
-Conceptual formula:
-
-```text
-Total trial cost =
-    fixed setup cost
-  + country startup cost x number of countries
-  + site startup cost x number of sites
-  + patient cost x number of patients
-  + monthly trial management cost x duration in months
-  + monitoring / data / safety cost
-  + complexity multipliers
-  + closeout and reporting cost
-```
-
-The first version should be interpretable, editable, and easy to explain. It should be clear which costs are driven by phase, geography, trial size, therapeutic area, and protocol complexity.
-
-The cost engine should use `predicted_final_if_continued` values for total cost and remaining commitment. It should use `observed-to-date` values and elapsed duration for incurred cost. This allows the estimation workflow to estimate how much has already been spent, how much is committed if the trial continues, and how much can be saved by stopping or pausing.
-
-The MVP should not assume linear spend. Current-trial cost should be allocated over the expected trial lifecycle using a simple spend curve. This is sufficient for discussion-quality missing value estimation and avoids overcomplicating the UI.
-
-Cost calculation should be deterministic once the operational estimates and assumptions are fixed. This makes the output reproducible in a notebook and explainable in a workshop.
-
-Recommended first calculation order:
-
-1. Build final-if-continued operational estimates.
-2. Calculate estimated total current-trial cost.
-3. Apply the non-linear lifecycle spend curve to split cost before and after the missing-value review date.
-4. Calculate saveable cost by calendar bucket.
-5. Estimate future-phase cost to reach market.
-6. Combine current remaining cost and future-phase cost into total development commitment.
-
-Do not put every cost driver in the UI. Keep the UI focused on the decision variables; keep detailed assumptions in the notebook, documentation, and optional drill-down views.
-
-| Cost driver | Description | Possible data source or proxy | Adjustable assumption |
-| ----------- | ----------- | ----------------------------- | --------------------- |
-| Phase | Development phase affects baseline cost and required evidence burden. | AACT phase field, current registry phase feature. | Phase-specific base cost and multiplier. |
-| Therapeutic area | Different areas have different operational and endpoint cost structures. | Existing therapeutic area mapping. | Therapeutic-area multiplier. |
-| Oncology flag | Oncology trials may require more complex endpoints, monitoring, and site infrastructure. | Therapeutic area or condition mapping. | Oncology complexity multiplier. |
-| Rare disease proxy | Rare conditions can increase recruitment cost and duration uncertainty. | Existing rare disease status or indication proxy. | Recruitment and site activation multiplier. |
-| Number of patients | Patient count drives per-patient treatment, visit, and data costs. | Planned enrollment or predicted actual enrollment. | Cost per patient. |
-| Number of sites | Site count drives startup, monitoring, and management burden. | Observed site data or predicted site count. | Startup and monitoring cost per site. |
-| Number of countries | Country count drives regulatory, startup, translation, and vendor complexity. | Observed country data or predicted country count. | Startup cost per country and geography multiplier. |
-| Trial duration | Duration drives monthly management and vendor costs. | Planned duration or predicted final duration. | Monthly trial management cost. |
-| Randomization | Randomized trials may increase operational and statistical complexity. | Design-stage allocation field. | Randomization multiplier. |
-| Masking | Blinding can increase drug supply, monitoring, and operational burden. | Masking field. | Masking multiplier. |
-| Intervention model | Parallel, crossover, factorial, or single-group designs have different operational profiles. | Design-stage intervention model. | Intervention-model multiplier. |
-| Endpoint complexity | Complex endpoints may increase assessment and data management cost. | Outcome count, endpoint duration, endpoint proxies. | Endpoint complexity multiplier. |
-| Eligibility complexity | Restrictive criteria can slow recruitment and increase screening burden. | Eligibility text-derived proxies, age and population flags. | Screening and recruitment multiplier. |
-| Intervention type | Drug, biologic, device, procedure, or behavioral interventions may differ in cost. | Intervention type mapping. | Intervention-type multiplier. |
-| Recruitment burden | Captures expected difficulty of finding and retaining patients. | Recruitment complexity model or proxy. | Recruitment burden multiplier. |
-| Geography complexity | Multicountry and high-site-count trials increase coordination cost. | Country count, site count, region mix if available. | Geography complexity multiplier. |
-
-### 10.1 Optional cost outputs
-
-Cost outputs are downstream and optional for this branch. If later enabled, the first phase should produce a small set of estimate-derived cost outputs:
-
-| Output | Meaning | UI use |
-| ------ | ------- | ------ |
-| Estimated total current-trial cost | Full expected cost if the current trial is completed. | Asset detail and cost explanation. |
-| Cost incurred to decision date | Estimated spend already consumed. | Sunk-cost context, not a reason to continue by itself. |
-| Remaining committed cost | Estimated additional cost implied by remaining trial activity. | Later planning input. |
-| Saveable cost this year | Estimated cost that could be avoided in the current calendar year. | Budget-reduction exercise. |
-| Saveable cost next year | Estimated cost that could be avoided in the next calendar year. | Medium-term budget planning. |
-| Saveable cost in following years | Estimated later cost that could be avoided. | Long-horizon planning view. |
-| Future development commitment | Estimated cost of invented future phases needed to reach market. | Strategic continuation burden. |
-| Avoided future commitment | Future commitment avoided in a downstream scenario. | Later planning input. |
-
-Any future UI should show a simplified subset: source operational estimates, estimated total cost, estimate confidence, and major cost drivers.
-
-## 11. Calendar-year spend model
-
-Optional downstream planning may need costs over time, not only total cost. Analysts should understand both the total obligation and the near-term budget impact implied by the operational estimates.
-
-Key concepts:
-
-- Estimation date.
-- Trial start date.
-- Expected end date.
-- Elapsed duration.
-- Spent-to-date.
-- Remaining spend.
-- Cost by calendar year.
-- Cost avoided if terminated.
-
-For ongoing trials, the calendar model should anchor on the estimation date. Costs before that date are incurred. Costs after that date are forecast commitments derived from the operational estimate.
-
-Simple planned cost-curve structure:
-
-```text
-0-15% of duration: startup-heavy cost
-15-70% of duration: recruitment and treatment-heavy cost
-70-90% of duration: follow-up and data-cleaning cost
-90-100% of duration: closeout and reporting cost
-```
-
-The first version can use a deterministic curve. Later versions may use phase-specific curves, therapeutic-area-specific curves, or empirical calibration if suitable data becomes available.
-
-The MVP does not need a complex cash-flow model. A deterministic curve is sufficient if assumptions are visible and if the UI presents only decision-relevant totals.
-
-This spend curve should be used to calculate:
-
-- Cost incurred before the missing-value review date.
-- Remaining committed cost after the missing-value review date.
-- Saveable cost in the current calendar year.
-- Saveable cost in the next calendar year.
-- Saveable cost in following years.
-
-Suggested deterministic MVP spend weights:
-
-| Trial lifecycle segment | Share of duration | Suggested share of total cost | Rationale |
-| ----------------------- | ----------------- | ----------------------------- | --------- |
-| Startup | 0-15% | 20% | Country, site, vendor, protocol, and activation cost can be front-loaded. |
-| Recruitment and treatment | 15-70% | 55% | Patient cost, monitoring, drug supply, and operations dominate this period. |
-| Follow-up and data cleaning | 70-90% | 15% | Lower than recruitment, but still operationally meaningful. |
-| Closeout and reporting | 90-100% | 10% | Database lock, analysis, reporting, and closeout. |
-
-These weights are assumptions, not observed sponsor accounting data. They should be configurable in the notebook and later in facilitator settings if needed.
-
-## 12. Downstream development commitment
-
-Continuing an asset may imply large future commitments beyond the currently visible trial. The estimation workflow should make that future obligation visible without presenting it as observed truth.
-
-Examples:
-
-- Continuing a Phase II asset may imply a future Phase III program.
-- Continuing a Phase I/II asset may imply Phase II and Phase III development.
-- Terminating early may avoid large downstream investment.
-- Keeping a risky but high-potential asset may still be strategically rational.
-
-| Current asset stage | Current cost view | Future commitment view |
-| ------------------- | ----------------- | ---------------------- |
-| Phase I/II | Current early-stage study cost, remaining current-trial spend, and completion risk. | Potential Phase II expansion, future Phase III program, and larger evidence-generation commitment. |
-| Phase II | Current proof-of-concept or dose-finding trial cost. | Potential pivotal Phase III commitment, manufacturing scale-up, and regulatory preparation cost. |
-| Phase II/III | Current combined-stage or adaptive development cost. | Remaining pivotal-stage cost and possible post-approval or launch-readiness investment. |
-| Phase III | Current pivotal-trial remaining cost. | Regulatory submission, launch-readiness, post-marketing, or lifecycle-management cost if continued. |
-
-### 12.1 Invented future phases
-
-Many assets in the source data will not have an explicit next-phase trial in the dataset. The estimation should therefore invent future phases as scenario estimates. These invented phases are not observed facts.
-
-Recommended first approach:
-
-- Define a next-phase template from the current asset stage.
-- Find similar completed historical trials in the target next phase.
-- Estimate typical duration, enrollment, site count, and country count using median or model-based values.
-- Convert those operational estimates into cost using the same transparent cost engine.
-- Apply simple phase-level and completion-risk assumptions to show likelihood-adjusted future commitment.
-
-Suggested future-path templates:
-
-| Current asset stage | Synthetic path to market |
-| ------------------- | ------------------------ |
-| Phase I/II | Phase II estimate plus Phase III estimate. |
-| Phase II | Phase III estimate. |
-| Phase II/III | Remaining pivotal estimate plus regulatory / launch-readiness placeholder. |
-| Phase III | Remaining pivotal cost plus regulatory / launch-readiness placeholder. |
-
-The future commitment engine should be framed as scenario logic, not as a claim that the exact future trial exists.
-
-The output should be "future-phase cost to reach market", not only "next-phase cost". For a Phase II asset, this may mean the estimated Phase III commitment. For a Phase I/II asset, this may include a Phase II continuation and a later Phase III commitment. This is later planning logic and should remain separate from the immediate missing-value estimation objective.
-
-Suggested outputs:
-
-| Output | Meaning |
-| ------ | ------- |
-| Next required phase | Synthetic next development step implied by current stage. |
-| Future phases to market | Full estimated path from current stage to market. |
-| Future-phase cost to market | Estimated future development cost beyond the current trial. |
-| Remaining research duration | Estimated time needed to complete current and future development. |
-| Estimated time to market | Approximate years from committee date to potential launch / marketable asset. |
-| Probability-adjusted future commitment | Future spend adjusted by simple risk assumptions where useful. |
-
-### 12.2 Risk to market
-
-The existing XGBoost score estimates trial completion or early-termination risk. It is not a full probability of regulatory approval or market launch. For the estimation MVP, this score can be used as one risk signal and combined with simple phase-level assumptions for future development risk.
-
-Example MVP framing:
-
-```text
-near_term_trial_risk = current XGBoost completion / termination score
-future_development_risk = phase-level scenario assumption
-planning_risk_signal = combination of near-term risk and future-stage assumption
-```
-
-This keeps the first version honest: the existing model informs operational continuation risk, while future market-reaching probability remains a transparent scenario assumption until a dedicated model exists.
-
-The current dataset does not contain true regulatory approval or launch outcomes. Therefore, a real probability of reaching market cannot be learned directly from `data_clinpred.csv` alone. For the MVP, risk-to-market should be a scenario estimate based on:
-
-- The current XGBoost trial completion / termination risk.
-- Simple phase-level future risk assumptions.
-- Optional therapeutic-area or rare-disease adjustment if agreed later.
-
-If a later version needs validated market-reaching probabilities, it will require external phase-transition or likelihood-of-approval benchmark data.
-
-## 13. Notebook implementation plan
-
-The first implementation should be developed in `notebooks/estimation.ipynb` as the analytical build notebook for the `estimation` module. It should follow the style of `notebooks/validation_clinpred.ipynb` and `notebooks/production_01.ipynb`: markdown explanation first, then focused code cells, with explicit audit checkpoints and reproducible outputs.
-
-Recommended notebook structure:
-
-| Notebook block | Purpose | Output |
-| -------------- | ------- | ------ |
-| `<REF:ENV_CONFIG>` | Configure autoreload, warnings, display settings, and reproducibility seeds. | Stable notebook environment. |
-| `<REF:PATH_RESOLUTION>` | Resolve project root and data paths. | Portable paths to `data/`, `models/`, and future outputs. |
-| `<REF:LIB_INIT>` | Import pandas, numpy, sklearn, xgboost if available, plotting, and metrics. | Shared notebook imports. |
-| `<REF:DATA_LOAD>` | Load `data/data_clinpred.csv` and supporting `data/countries.txt`. | Base dataframe and country-count table. |
-| `<REF:DATA_AUDIT>` | Audit schema, missingness, status counts, phase counts, and key cost-driver distributions. | Data-quality summary. |
-| `<REF:FIELD_CONTRACT>` | Classify fields as direct, lower-bound, final target, feature, synthetic, or excluded. | Field contract table. |
-| `<REF:TARGET_READINESS_FLAGS>` | Create explicit flags for completed training targets, ongoing lower bounds, and planned estimates. | Auditable target/lower-bound flags. |
-| `<REF:TARGET_BUILD>` | Build completed-trial targets for duration, enrollment, sites, and countries. | Modelling dataset with target definitions. |
-| `<REF:FEATURE_BUILD>` | Build leakage-safe features for operational models. | Feature matrix and preprocessing plan. |
-| `<REF:MODEL_BENCHMARK>` | Compare baselines and candidate models per target. | Champion model selection per indicator. |
-| `<REF:PREDICT_OPERATIONAL>` | Generate final-if-continued operational estimates for all candidate assets. | Predicted duration, enrollment, sites, countries. |
-| `<REF:COST_ASSUMPTIONS>` | Define transparent cost assumptions and lifecycle spend weights. | Cost assumption table. |
-| `<REF:COST_ENGINE>` | Calculate current-trial total, incurred, remaining, and saveable cost. | Current-trial cost table. |
-| `<REF:FUTURE_PHASES>` | Create synthetic future path to market and estimate future-phase cost and time. | Future commitment table. |
-| `<REF:RISK_TO_MARKET>` | Combine XGBoost trial risk with phase-level scenario assumptions. | Risk-to-market scenario fields. |
-| `<REF:PORTFOLIO_EXPORT>` | Produce reusable asset-level table for estimation scenarios. | Portfolio-ready dataset. |
-| `<REF:VALIDATION_AUDIT>` | Validate ranges, subgroup stability, and cost plausibility. | Audit summary and known limitations. |
-
-The notebook should be written as an analytical build notebook, not as a UI implementation. It should include markdown between code blocks explaining each decision, especially target definitions, model choices, assumptions, and limitations.
-
-Until the notebook outputs are validated, future work should not wire these estimates into Streamlit. The notebook should first prove the data contract, target construction, model selection, cost assumptions, and output table.
-
-## 14. Reproducible output contract
-
-The first estimation dataset should produce one row per trial or asset with a small set of stable columns. This table should be reusable by future Streamlit work without requiring the UI to rerun model training.
-
-Recommended output groups:
-
-- Identity: `nct_id`, title, sponsor, phase, therapeutic area, indication.
-- Risk: existing XGBoost completion-risk score and simplified risk category.
-- Operational estimates: predicted final duration, enrollment, site count, country count.
-- Current-trial cost: estimated total cost, incurred cost, remaining cost, saveable cost by year.
-- Future path: next required phase, future phases to market, future-phase cost to market, time to market.
-- Market potential: initial category and later GBD / rare-disease value signals.
-- Assumption metadata: cost-assumption version, model version, missing-value review date if date-specific values are materialized.
-
-The UI should consume this as an estimation table. It should not expose training diagnostics, detailed model errors, or all raw cost-driver variables.
-
-## 15. Market potential module
-
-The market potential layer should estimate or categorize commercial and strategic value. It must remain separate from trial cost so users can distinguish operational affordability from potential value.
-
-MVP fields may include:
-
-- Market potential category.
-- Competitive intensity.
-- Strategic priority.
-- Unmet need proxy.
-- Indication size proxy.
-- Expected commercial value category.
-
-Initial market potential can be synthetic or categorical:
-
-- Low.
-- Medium.
-- High.
-- Transformational.
-
-Later versions may evolve into:
-
-- Peak sales estimate.
-- Risk-adjusted NPV.
-- Expected commercial value.
-- Probability-adjusted planning contribution.
-
-Any future valuation model should explicitly document assumptions and should not be mixed into the completion-risk model without a clear reason.
-
-## 16. Estimation output engine
-
-Each trial should receive explicit asset-level estimation outputs. These outputs should be stable enough for later UI, cost, planning, or forecasting layers without requiring the consumer to rerun model training.
-
-Recommended output groups:
-
-- Source identifiers: `nct_id`, title, sponsor, phase, therapeutic area, indication.
-- Target availability flags: final target, observed lower bound, planned estimate, missing value.
-- Point estimates: duration, enrollment, site count, and country count.
-- Uncertainty ranges: low, expected, and high values where supported.
-- Reconciliation flags: countries greater than sites, implausible patients per site, implausible sites per country.
-- Model metadata: model family, version, feature mode, training cohort, validation metrics.
-- Source metadata: source fields used, target definition, estimation date if relevant.
-
-The output table should make missingness and estimate provenance visible. A downstream user should be able to distinguish an observed final value, an observed lower bound, a planned estimate, and a modelled value without reading notebook code.
-
-## 17. Estimation validation engine
-
-The validation engine should evaluate estimate quality across multiple dimensions. It should not only report global mean error; heavily skewed operational targets require robust metrics, subgroup checks, and plausibility audits.
-
-| Validation dimension | What it measures | Possible calculation | MVP or later |
-| --------------- | ---------------- | -------------------- | ------------ |
-| Point error | Absolute prediction error on original scale. | MAE, RMSE, median absolute error, p75 error. | MVP |
-| Log-scale error | Stability on skewed positive targets. | MAE and R2 on `log1p(target)`. | MVP |
-| Order-of-magnitude quality | Whether estimates land in the right size band. | Enrollment band accuracy, within-2x accuracy. | MVP |
-| Range calibration | Whether uncertainty intervals cover plausible truth. | Prediction interval coverage and width. | MVP |
-| Subgroup stability | Whether errors concentrate in specific trial types. | Metrics by phase, therapeutic area, rare disease flag, sponsor tier. | MVP |
-| Reconciliation quality | Whether estimated operational bundles are plausible. | Patients per site, sites per country, countries <= sites checks. | MVP |
-
-## 18. Workflow principles
-
-Future estimation UI work should follow these principles:
-
-- The experience should feel like a missing-value estimation review.
-- Avoid overwhelming the analyst with too many variables at once.
-- Show observed values, lower bounds, estimates, and uncertainty together.
-- Keep assumptions explainable.
-- Allow drill-down from cohort view to trial detail.
-- Maintain the clean professional CTPredict visual identity.
-- Preserve current app stability.
-- Avoid major redesign during early planning.
-- Add estimation mode progressively.
-
-The early product should extend the existing architecture rather than replace it.
-
-## 19. Future screens
-
-The following screens are possible future surfaces. They are not implemented yet.
-
-| Screen | Purpose | Key information shown | MVP priority |
-| ------ | ------- | --------------------- | ------------ |
-| Estimation Cohort Setup | Select the trial cohort and target quantities. | Filters, target selection, feature mode, estimation date if used. | High |
-| Missingness Dashboard | Show which operational values are missing, lower-bound only, or final. | Counts by target, status, phase, therapeutic area, data quality flags. | High |
-| Trial Estimate Detail | Support drill-down on a single trial estimate. | Source fields, lower bounds, model estimate, uncertainty range, reconciliation flags. | High |
-| Model Diagnostics | Explain validation performance and limitations. | Metrics by target, model family, phase, therapeutic area, and outlier group. | High |
-| Reconciliation View | Audit implausible operational bundles. | Enrollment/site/country ratios, flags, worst examples. | High |
-| Export Preview | Review the reusable estimation table before saving. | Output columns, metadata, row counts, version labels. | Medium |
-| Assumption Settings | Allow approved maintainers to adjust estimation assumptions. | Target cleaning thresholds, model choices, range policy, save paths. | Later |
-
-## 20. MVP definition
-
-The first achievable version should be small, transparent, and estimation-driven.
-
-MVP should include:
-
-- A reproducible cohort of selected trial records.
-- Existing completion-risk score.
-- Predicted final duration.
-- Predicted final enrollment.
-- Predicted final sites and countries.
-- Lower-bound handling for ongoing observed patients, sites, countries, and elapsed duration.
-- Model comparison against grouped-median baselines.
-- Dependency-pruned and sequenced benchmark modes.
-- Reconciliation checks for enrollment, sites, and countries.
-- Optional export of target datasets and estimates after validation.
-- Clear model and target metadata.
+Clarifications:
+
+- Completed-trial actual enrollment can be used to build benchmark distributions.
+- Ongoing actual enrollment must not be treated as final total.
+- Estimated/planned enrollment can be used as the starting scenario value when available.
+- User scenario value is the participant's current assumption and should be compared against the benchmark.
+- The benchmark position is not clinical truth; it is a reference point.
+
+## Field-Use Contract
+
+Each enrollment-related value should be classified before use.
+
+| Field class | Meaning | Example | V1 use |
+| ----------- | ------- | ------- | ------ |
+| Design-stage / planned value | Known or intended near trial design time. | Estimated enrollment from the record. | Initial `planned_enrollment_assumption` when available. |
+| Final observed value | Known only after trial completion. | Completed-trial actual enrollment. | Historical benchmark data or completed-trial display context. |
+| Observed-to-date lower bound | Current partial operational value, not necessarily final. | Ongoing actual enrollment from current extract. | Lower-bound context only; not final truth. |
+| Model default | Synthetic benchmark-derived default. | P50 or other selected cohort default when no planned value exists. | Neutral starting assumption. |
+| User scenario | Participant-edited assumption. | User changes enrollment to 600. | Current scenario value evaluated against benchmark and design profile. |
+| Benchmark distribution | Historical comparable-trial enrollment values. | Cohort P25/P50/P75/P90. | Deterministic benchmark reference. |
+
+Rule: every stored enrollment benchmark output must preserve source, cohort, percentile, status, and snapshot metadata so future reviewers can tell which value was planned, observed, lower-bound, defaulted, or user-edited.
+
+## V1 MVP Definition
+
+The v1 estimation MVP is not a full missing-operational-value workbench. It is an enrollment-benchmark layer for serious-game simulation. It provides a neutral, auditable benchmark against which a user's planned enrollment assumption can be assessed.
+
+MVP includes:
+
+- `planned_enrollment_assumption`.
+- Enrollment source priority.
+- Deterministic benchmark hierarchy.
+- P25/P50/P75/P90 benchmark percentiles.
+- `enrollment_status` classification.
+- `support_level` classification.
+- Support/conflict signals.
+- Benchmark stale-state logic.
+- Snapshot metadata for the narrative payload.
+- Integration with Coherence Score through the narrative architecture.
 
 Explicitly excluded from MVP:
 
-- Full rNPV model.
-- Real-world budget validation.
-- Complex commercial forecasting.
-- Complex multi-round scenario logic.
-- Advanced facilitator controls.
-- Automatic optimization engine.
-- Real-time multiplayer features.
-- Portfolio decision UI.
+- Full operational-size estimation.
+- Site-count estimation.
+- Country-count estimation.
+- Total-duration estimation.
+- Cost engine.
+- Spend curve.
+- Calendar spend model.
+- Future phase modelling.
+- Future development commitment model.
+- Market potential.
+- Model training beyond optional later calibration.
+- Direct Completion Score adjustment.
+- Pillar-level Coherence attribution.
+- Pseudo-SHAP from LLM.
 
-## 21. Future implementation phases
+## Planned Enrollment Assumption Source Priority
 
-### Phase 0 - Architecture and planning only
+Use this source priority:
 
-No code. Build this document and refine assumptions.
+```text
+1. If planned/estimated enrollment is available, use it as the initial `planned_enrollment_assumption`.
+2. If the trial is completed and actual enrollment represents final observed value, it can be used as final observed context.
+3. If no usable planned value exists, use a benchmark-derived `model_default`.
+4. If the participant edits the value, source becomes `user_scenario`.
+```
 
-### Phase 1 - Data audit
+The enrollment assumption is assessed against the current design choices. The enrollment assumption must be supported by the selected trial profile.
 
-Identify available design-stage, observed-to-date, and final-observed variables. Confirm which variables are safe to use for each estimation mode. Reconstruct country count from `data/countries.txt` if needed. Produce the estimation data contract before cost or UI implementation.
+Practical behavior:
 
-### Phase 2 - Operational estimation datasets
+```text
+model_default inside benchmark = neutral.
+user_scenario inside benchmark = usually neutral or lightly supportive if consistent with the design.
+user_scenario outside benchmark = discussion signal, not automatic penalty.
+user_scenario outside benchmark + conflicting design signals = possible Coherence Score penalty.
+```
 
-Create modelling datasets for duration, enrollment, sites, and countries. Train-target construction should prefer completed trials for final scale. Ongoing values should be retained as lower bounds. Terminated and withdrawn trials should be flagged as partial-spend evidence rather than clean final-scale targets.
+If planned enrollment is missing and the system uses a benchmark-derived default, that default is neutral. It should not create a positive Coherence Score effect simply because it sits inside the benchmark range. It becomes an evaluated scenario assumption only when the user keeps it as the current assumption for a prediction snapshot or actively edits it.
 
-### Phase 3 - First operational models
+## Benchmark Snapshot Logic
 
-Train first models or rule-based estimators for missing operational quantities. Keep outputs interpretable enough for optional cost translation and enforce lower-bound constraints for ongoing trials.
+The enrollment benchmark belongs to the current prediction snapshot, not permanently to the original trial.
 
-### Phase 4 - First cost engine
+If the participant changes indication, therapeutic area, rare disease flag, phase, modality, patient profile, endpoint design, or other relevant design features, the old enrollment benchmark becomes stale. The benchmark should refresh only after the user clicks `Predict Trial Completion`, consistent with the existing simulation snapshot workflow.
 
-Create transparent assumption-driven cost calculations. Make assumptions configurable and clearly labelled as synthetic. Do not train a direct black-box cost model in the first phase.
+During editing, the UI may show:
 
-### Phase 5 - Calendar spend engine
+```text
+Enrollment benchmark will refresh after prediction
+```
 
-Convert total cost into incurred cost, remaining committed cost, saveable cost by calendar year, and annual spend. Use a simple non-linear lifecycle spend curve rather than assuming linear spend.
+Core rule:
 
-### Phase 6 - Estimation output MVP
+```text
+Current design snapshot -> benchmark cohort -> P25/P50/P75/P90 -> enrollment_status -> Coherence Score input.
+```
 
-Create a reusable estimation output table with source fields, estimated values, lower bounds, uncertainty ranges, reconciliation flags, and model metadata.
+## Benchmark Cohort Hierarchy
 
-### Phase 7 - Estimation validation and review
+Use this exact v1 hierarchy:
 
-Add validation summaries, estimate-quality notes, and analyst-friendly outputs.
+```text
+Level 1: same phase + same indication + rare disease flag
+Level 2: same phase + same therapeutic area + rare disease flag
+Level 3: same phase + same therapeutic area
+Level 4: same phase only
+```
 
-### Phase 8 - Market potential and downstream development
+Rules:
 
-Add future value and downstream cost logic. Keep market potential separate from cost and completion risk. Treat next phases as synthetic scenario estimates unless explicitly linked to observed successor trials.
+```text
+Use the strictest level with enough historical trials.
+Use the Phase 1 minimum sample threshold: n >= 50.
+If n is too small, relax one level.
+If all levels are sparse, return a low-confidence benchmark and avoid overinterpreting the enrollment status.
+```
 
-### Phase 9 - Refinement and validation
+Therapeutic modality, sponsor tier, administration complexity, line of therapy, patient subtype, endpoint rigor, and endpoint duration should not define the primary benchmark cohort in v1. They can be used as support/conflict signals for Coherence Score. This avoids excessive stratification and unstable percentiles.
 
-Validate assumptions with expert review and scenario testing. Refine scoring and user experience based on observed use.
+## Enrollment Benchmark Calibration Gate
 
-## 22. Open questions
+Before implementation, run an Enrollment Benchmark Calibration Gate to confirm that the selected cohort hierarchy provides stable percentile benchmarks and that excluded fields are better used as support/conflict signals rather than primary matching fields.
 
-- What is the first target user: data science, clinical operations, forecasting, or finance analytics?
-- Should the estimation workflow use all eligible historical trials or a curated modelling cohort?
-- Should trial names and sponsor names be anonymized in exported estimation tables?
-- Is optional financial translation needed in this branch, or should it remain out of scope?
-- Which therapeutic areas should be included first?
-- Should the first MVP focus only on Phase II / Phase III assets?
-- How should market potential be estimated initially?
-- How should downstream Phase III commitment be estimated?
-- Should next-phase cost use medians from similar completed trials, model-based estimates, or a hybrid?
-- Should ongoing actual enrollment, site count, and country count be used only as current-extract lower bounds, or should future versions attempt historical timestamp reconstruction?
-- Should terminated trials be used only for incurred-cost calibration, or also for partial-spend curve validation?
-- Should historical estimation use current-extract approximations or later reconstructed AACT snapshots?
-- What tolerance is acceptable if exact observed-to-date patient/site/country values are unavailable for the missing-value review date?
-- What default uncertainty range policy should be used for the first version?
-- Should estimates be compared with a model recommendation, grouped median, or both?
-- Should the estimation workflow include maintainer-adjustable assumptions?
+The goal is not primarily to prove statistical significance with p-values. The goal is to build stable and useful benchmark cohorts.
 
-## 23. Non-goals for now
+P-values can be misleading for this use case: with very large cohorts, tiny differences can become statistically significant; with small cohorts, useful operational patterns may not reach significance. The benchmark should therefore prioritize stability, coverage, effect size, and interpretability.
 
-The following should not be done yet:
+Calibration target:
 
-- No implementation.
-- No UI redesign.
-- No new model training yet.
-- No database schema changes yet.
-- No cost claims presented as real observed sponsor costs.
-- No automatic recommendation engine yet.
-- No complex commercial valuation yet.
-- No multiplayer logic.
-- No authentication or user management planning unless separately requested.
-- No direct black-box prediction of total sponsor cost in the MVP.
-- No use of ongoing actual patient, site, or country counts as if they were final totals.
-- No user-facing use of final observed outcomes in a historical scenario unless they were known at the estimation date.
+```text
+log1p(actual_enrollment) for completed trials with reliable final actual enrollment.
+```
 
-## 24. Instructions for future coding assistants
+Completed actual enrollment can be used for historical benchmark calibration. Ongoing actual enrollment should not be treated as final truth. Estimated/planned enrollment may be useful as a design-stage context field but should not replace completed actual enrollment when calibrating final historical benchmark distributions.
 
-Gemini CLI, Codex CLI, or another assistant should use this document as the backbone for future estimation development.
+Candidate benchmark or support-signal fields:
 
-Rules for future work:
+- Phase.
+- Indication / GBD L3 indication.
+- Therapeutic area.
+- Rare disease flag.
+- Therapeutic modality.
+- Sponsor tier.
+- Administration complexity.
+- Line of therapy.
+- Patient severity.
+- Adult / child / older adult flags.
+- Healthy volunteer status.
+- Endpoint rigor.
+- Endpoint structure.
+- Primary endpoint duration.
+- Number of arms.
+- Comparator benchmark.
+- Placebo control.
+- Allocation.
+- Masking.
 
-- Treat this document as the backbone for future estimation development.
-- Before implementing any estimation feature, update or reference the relevant section.
-- Do not mix design-stage features with future-observed outcomes.
-- Anchor estimation datasets to an estimation date when historical feature visibility matters.
-- Classify every user-facing field as visible at estimation date, observed-to-date lower bound, final observed only, prediction feature, synthetic estimate, or excluded for leakage.
-- Precompute reusable asset-level estimates where possible, then calculate date-dependent values only when required.
-- Treat completed trials as the preferred source for final operational scale.
-- Treat ongoing patient, site, country, and elapsed-duration values as lower bounds when estimating final scale.
-- Treat terminated and withdrawn trials as partial-spend evidence, not clean examples of completed-trial scale.
-- Treat future phases to market and time to market as synthetic scenario estimates unless an explicit observed successor path is being used.
-- Use a simple non-linear lifecycle spend curve for incurred and saveable cost; do not assume linear spend by default.
-- Keep cost assumptions transparent and configurable.
-- Prefer incremental implementation.
-- Preserve the existing CTPredict app architecture unless explicitly asked to refactor.
-- Do not redesign the visual identity unless explicitly requested.
-- When proposing code changes later, provide small, copy-paste-safe patches with filenames and exact locations.
-- Maintain a distinction between existing functionality, planned MVP functionality, and future extensions.
+Primary benchmark fields define the historical comparison cohort. Support/conflict signals help the Coherence Score interpret whether the selected enrollment is supported by the current design.
+
+Fields such as therapeutic modality, sponsor tier, administration complexity, line of therapy, patient subtype, endpoint rigor, endpoint duration, comparator, and number of arms may influence enrollment feasibility, but in v1 they should normally remain support/conflict signals unless the calibration gate proves they are stable enough for primary cohort matching.
+
+A field can enter the primary benchmark hierarchy only if it has:
+
+- Meaningful effect size on log enrollment.
+- Good coverage across the dataset.
+- Enough samples per group.
+- Stable P25/P50/P75/P90 percentiles.
+- Acceptable bootstrap confidence interval width.
+- Limited outlier sensitivity.
+- Stable `enrollment_status` labels.
+- Simple interpretation for users and facilitators.
+
+If a field has signal but weak coverage or unstable percentiles, it should remain a support/conflict signal for the Coherence Score rather than a primary benchmark matching field.
+
+Calibration checks:
+
+1. Coverage check:
+   - How many trials have non-missing values for each candidate field?
+
+2. Group size check:
+   - For each candidate field and candidate field combination, how many benchmark groups have `n >= 50`?
+   - How often would the system need to fall back to a broader cohort level?
+
+3. Distribution separation check:
+   - Compare median and interquartile range of `log1p(actual_enrollment)` across groups.
+   - Prefer effect sizes and distribution separation over p-values alone.
+
+4. Percentile stability check:
+   - Bootstrap P25/P50/P75/P90 for candidate cohorts.
+   - Flag cohorts where percentile estimates are unstable.
+
+5. Outlier sensitivity check:
+   - Test whether very large trials dominate the mean or distort percentiles.
+   - Prefer median and percentile logic over mean-only logic.
+
+6. Label stability check:
+   - Check how often the same trial would move between `below_benchmark`, `typical`, `ambitious`, and `above_benchmark_high` under small bootstrap variations.
+
+7. Fallback behavior check:
+   - Confirm that the four-level hierarchy produces a usable benchmark for most trials.
+   - Confirm that sparse groups fall back cleanly to broader levels.
+
+The default v1 hierarchy remains:
+
+```text
+Level 1: same phase + same indication + rare disease flag
+Level 2: same phase + same therapeutic area + rare disease flag
+Level 3: same phase + same therapeutic area
+Level 4: same phase only
+```
+
+The calibration gate can recommend changes later, but the first implementation should stay simple unless the analysis clearly shows that another field materially improves benchmark stability and relevance without creating sparse cohorts.
+
+### Phase 1 Calibration Findings
+
+The Phase 1 calibration gate used the benchmark-eligible population:
+
+```text
+overall_status == COMPLETED
+enrollment_type == ACTUAL
+enrollment > 0
+N = 20,526
+```
+
+The gate checked candidate-field coverage, group sample sizes, effect range on `log1p(actual_enrollment)`, percentile spread, outlier sensitivity, fallback behavior, and label stability. It did not use p-values as the main decision basis.
+
+Key group-size findings:
+
+```text
+phase:
+  groups=4, min=511, median=5,447, max=9,121, groups n>=50=4/4
+
+therapeutic_area:
+  groups=19, min=97, median=1,059, max=3,304, groups n>=50=19/19
+
+gbd_cause_id_3_ml:
+  groups=152, min=1, p25=14, median=52, p75=172, max=1,380, groups n>=50=77/152
+
+is_rare_disease_ml:
+  groups=2, group sizes 18,317 and 2,209, groups n>=50=2/2
+```
+
+Interpretation:
+
+- Phase is stable and belongs in every benchmark level.
+- Therapeutic area is stable and is a strong fallback dimension.
+- Indication / GBD L3 has useful clinical specificity and signal, but many groups are sparse. It is appropriate for the strictest level only when `n >= 50`; otherwise fallback is required.
+- Rare-disease flag is stable and clinically important for strict matching.
+
+Other candidate-field findings:
+
+```text
+primary_duration_months_ml:
+  groups=851, min=1, p25=1, median=1, p75=6, max=2,160, groups n>=50=59/851
+
+sponsor_tier_ml:
+  Top-Tier Pharma:              n=8,263,  P50=213, P90=921.8
+  Mid-Cap Pharma:               n=1,943,  P50=162, P90=675.6
+  Biotech and Emerging Pharma:  n=10,320, P50=120, P90=545
+
+biomarker_stratification_ml:
+  groups=2, group sizes 17,159 and 3,367, groups n>=50=2/2
+```
+
+Interpretation:
+
+- Exact primary duration is a continuous/high-cardinality value and fragments the data too heavily. It should not be used as an exact primary cohort key in v1. Future calibration may test duration bins, but adding duration bins to indication-level matching may still create sparse cohorts.
+- Sponsor tier clearly shifts enrollment distributions, but adding it to the primary hierarchy would over-stratify already sparse indication groups. It should be a Phase 2 support/conflict signal.
+- Biomarker stratification is stable as a binary field and should be explicitly included in future support/conflict-signal calibration, but it is not a v1 primary benchmark key.
+- Therapeutic modality and other design features may have meaningful signal, but they remain support/conflict candidates unless a future calibration proves they improve relevance without harming coverage and label stability.
+
+Outlier finding:
+
+```text
+median completed ACTUAL enrollment: 154
+P99 completed ACTUAL enrollment:    3,548.75
+max completed ACTUAL enrollment:    90,116
+```
+
+This supports percentile-based benchmarking rather than mean-based benchmarking. Large outlier trials exist, and P25/P50/P75/P90 are more robust and auditable for v1.
+
+## Deterministic Enrollment Classification
+
+Calculate benchmark percentiles:
+
+```text
+P25 = low benchmark
+P50 = typical benchmark
+P75 = high benchmark
+P90 = very high benchmark
+```
+
+Classification:
+
+```text
+if enrollment < P25:
+    enrollment_status = "below_benchmark"
+
+if P25 <= enrollment <= P75:
+    enrollment_status = "typical"
+
+if P75 < enrollment <= P90:
+    enrollment_status = "ambitious"
+
+if enrollment > P90:
+    enrollment_status = "above_benchmark_high"
+```
+
+The deterministic enrollment label is a benchmark position, not a clinical judgment. Clinical interpretation belongs to the Coherence Score layer.
+
+Examples:
+
+```text
+below_benchmark + Phase III + rigorous endpoint may suggest possible evidence-size concern.
+below_benchmark + rare disease + Phase II may be acceptable.
+above_benchmark_high + common adult Phase III may be plausible.
+above_benchmark_high + rare pediatric late-line therapy may signal recruitment burden.
+```
+
+## Enrollment Support And Conflict Signals
+
+The benchmark label alone is not enough. The system should check whether the current design profile supports the selected enrollment assumption.
+
+Supportive signals:
+
+```text
+- common indication,
+- non-rare disease,
+- adult population,
+- broad patient profile,
+- earlier line of therapy,
+- larger sponsor tier,
+- simpler therapeutic modality,
+- simpler administration,
+- simple endpoint structure,
+- sufficient primary endpoint duration,
+- Phase III context when a large confirmatory trial is expected.
+```
+
+Conflicting signals:
+
+```text
+- rare disease,
+- pediatric population,
+- severe or fragile population,
+- later-line population,
+- complex therapeutic modality,
+- complex administration,
+- strict endpoint or hard clinical endpoint,
+- short endpoint duration,
+- niche indication.
+```
+
+Support level values:
+
+```text
+support_level = "supported_by_current_design | partly_supported_by_current_design | weakly_supported_by_current_design"
+```
+
+Examples:
+
+```text
+Common adult Phase III disease + 1,200 patients:
+above benchmark but potentially supported.
+
+Rare pediatric Phase II gene therapy + 1,200 patients:
+above benchmark high and weakly supported by the design.
+```
+
+## Relationship To Coherence Score
+
+Enrollment is one input into Coherence Score, not the Coherence Score itself. It should mainly influence:
+
+- Operational feasibility.
+- Population relevance.
+- Change integrity.
+
+Enrollment must not dominate the broader rubric.
+
+```text
+Enrollment should normally have a maximum standalone effect of about -10 to +4 points inside the Coherence Score logic.
+```
+
+Interpretation principle:
+
+```text
+One weak enrollment signal creates a discussion point.
+Several weak or conflicting design signals create a Coherence Score penalty.
+A difficult design can still receive a positive Coherence Adjustment if the participant strengthens it coherently.
+```
+
+Alignment with the narrative architecture:
+
+```text
+Completion Score = untouched XGBoost score.
+Coherence Score = design defensibility and risk-mitigation quality.
+Coherence Adjustment = deterministic application calculation.
+Adjusted Trial Value Score = Completion Score + Coherence Adjustment.
+```
+
+The full serious-game scoring and narrative contract belongs in [docs/architecture_narratives.md](/home/delaunan/code/delaunan/clintrialpredict/docs/architecture_narratives.md). This document defines only the enrollment benchmark metadata that feeds that layer.
+
+## Enrollment Benchmark Metadata Object
+
+Planning JSON example:
+
+```json
+{
+  "planned_enrollment": {
+    "value": 600,
+    "source": "planned_value | final_observed_value | observed_lower_bound | model_default | user_scenario",
+    "benchmark_level_used": "phase_indication_rare | phase_ta_rare | phase_ta | phase_only | not_available",
+    "benchmark_n": 123,
+    "benchmark_p25": 120,
+    "benchmark_p50": 220,
+    "benchmark_p75": 420,
+    "benchmark_p90": 750,
+    "enrollment_status": "below_benchmark | typical | ambitious | above_benchmark_high | not_available",
+    "support_level": "not_evaluated",
+    "supporting_signals": [],
+    "conflicting_signals": [],
+    "benchmark_snapshot_id": "...",
+    "is_benchmark_stale": false,
+    "low_confidence_flag": false,
+    "interpretation_hint": "Enrollment is above the usual benchmark and is only partly supported by the current design choices."
+  }
+}
+```
+
+This object should be assembled after the latest prediction snapshot and passed to the narrative layer. It should be stored with the serious-game prediction snapshot so later iterations can compare the user's scenario path without recomputing historical context ambiguously.
+
+Phase 1 runtime returns `support_level = "not_evaluated"` and empty `supporting_signals` / `conflicting_signals`. Support/conflict logic is deferred to Phase 2.
+
+## Production Runtime Artifact Strategy
+
+The production app should not need to load the full historical `data_clinpred.csv` dataset in order to calculate enrollment benchmarks at runtime.
+
+The full historical dataset is used offline in the analytical notebook or build script to run the Enrollment Benchmark Calibration Gate and precompute a compact benchmark artifact.
+
+Phase 1 artifact path:
+
+```text
+frontend/data/enrollment_benchmarks_v1.csv
+```
+
+Phase 1 report path:
+
+```text
+frontend/data/enrollment_benchmarks_v1_report.json
+```
+
+This location was selected because `frontend/data/` is already copied into the app image and already holds compact app-loaded artifacts such as `search_registry.csv` and `gbd_l3_indication_lookup.csv`.
+
+The artifact should contain one row per benchmark cohort and fallback level.
+
+Recommended artifact fields:
+
+- `benchmark_version`
+- `source_data_version`
+- `benchmark_key`
+- `phase`
+- `indication_or_therapeutic_area`
+- `rare_disease_flag`
+- `benchmark_level_used`
+- `benchmark_n`
+- `benchmark_p25`
+- `benchmark_p50`
+- `benchmark_p75`
+- `benchmark_p90`
+- `low_confidence_flag`
+- `created_at`
+- `outlier_policy`
+- `calibration_notes`, optional
+
+Phase 1 artifact schema:
+
+```text
+benchmark_version
+source_data_version
+benchmark_key
+phase
+indication_or_therapeutic_area
+gbd_cause_id_3_ml
+therapeutic_area
+rare_disease_flag
+benchmark_level_used
+benchmark_n
+benchmark_p25
+benchmark_p50
+benchmark_p75
+benchmark_p90
+low_confidence_flag
+created_at
+outlier_policy
+calibration_notes
+```
+
+At runtime, the app uses the current prediction snapshot to look up the relevant benchmark row, apply deterministic fallback logic if needed, classify the current `planned_enrollment_assumption`, and pass the resulting metadata to the narrative layer.
+
+Runtime should require only:
+
+- The current trial prediction snapshot.
+- The compact enrollment benchmark artifact.
+- Deterministic fallback logic.
+
+Runtime should not require:
+
+- The full raw historical trial database.
+- Notebook-only calibration data.
+- Model retraining.
+- Recomputing all benchmark percentiles from scratch.
+
+This keeps the production app lighter, faster, more auditable, and less dependent on raw historical data.
+
+Current runtime utility:
+
+```text
+src/enrollment_benchmarks.py
+```
+
+Main functions:
+
+```text
+load_enrollment_benchmarks(...)
+lookup_enrollment_benchmark(...)
+classify_enrollment(...)
+planned_enrollment_metadata(...)
+```
+
+Runtime fallback behavior:
+
+```text
+1. Try phase + indication + rare disease.
+2. If missing or low confidence (n < 50), try phase + therapeutic area + rare disease.
+3. If missing or low confidence, try phase + therapeutic area.
+4. If missing or low confidence, try phase only.
+5. If no confident row exists, allow an available low-confidence row as a last-resort benchmark.
+6. Return not_available if the artifact is missing/corrupt, phase cannot be matched, planned enrollment is invalid/missing, or percentile values are incomplete.
+```
+
+## First Implementation Path
+
+Focused v1 path and Phase 1 status:
+
+1. Audit enrollment fields and enrollment_type values in `data/data_clinpred.csv`. Completed in notebook and report.
+2. Create enrollment source flags:
+   - `is_completed_actual_enrollment_target`.
+   - `is_estimated_planned_enrollment`.
+   - `is_ongoing_actual_enrollment_lower_bound`.
+3. Run the Enrollment Benchmark Calibration Gate:
+   - evaluate candidate fields,
+   - check coverage and sample size,
+   - test percentile and label stability proxies,
+   - confirm that the default hierarchy is acceptable,
+   - decide which fields remain support/conflict signals.
+4. Precompute and save a compact enrollment benchmark artifact:
+   - one row per benchmark cohort and fallback level,
+   - P25/P50/P75/P90,
+   - cohort size,
+   - benchmark level,
+   - confidence flag,
+   - benchmark version and source data version.
+5. Build a runtime benchmark lookup function using the approved v1 hierarchy and compact artifact.
+6. Calculate or retrieve P25/P50/P75/P90 for the selected current snapshot.
+7. Classify the current assumption as `below_benchmark`, `typical`, `ambitious`, `above_benchmark_high`, or `not_available`.
+8. Keep `support_level = "not_evaluated"` and support/conflict lists empty until Phase 2.
+9. Keep XGBoost, SHAP, therapeutic-area calibration, audit mode, and parity behavior unchanged.
+
+Do not require model training in v1. The first implementation should use deterministic cohort percentiles.
+
+Not yet implemented:
+
+- Simulation Mode Planned Enrollment UI field.
+- Initial planned-enrollment assumption selection in the UI/session state.
+- Storage of benchmark metadata in prediction snapshots.
+- Support/conflict signal generation from structured Trial Features.
+- Narrative / Coherence layer call.
+
+## Notebook Plan And Current Workbook
+
+The central notebook is:
+
+```text
+notebooks/estimation.ipynb
+```
+
+The previous broad missing-operational-value notebook was archived to:
+
+```text
+notebooks/archive/estimation_legacy_before_enrollment_benchmark.ipynb
+```
+
+The current notebook proves and documents the enrollment benchmark contract before UI or API integration. It is an analytical workbook, not the source of truth for writing the production-facing artifact. The source-of-truth artifact build command is:
+
+```bash
+python scripts/build_enrollment_benchmarks.py
+```
+
+That rebuilds:
+
+```text
+frontend/data/enrollment_benchmarks_v1.csv
+frontend/data/enrollment_benchmarks_v1_report.json
+```
+
+Then validate with:
+
+```bash
+python scripts/check_enrollment_benchmarks.py
+```
+
+Recommended v1 notebook / implementation blocks:
+
+```text
+<REF:DATA_LOAD> Load data/data_clinpred.csv.
+<REF:ENROLLMENT_AUDIT> Audit enrollment and enrollment_type.
+<REF:ENROLLMENT_FLAGS> Build enrollment source and target-readiness flags.
+<REF:CALIBRATION_GATE> Evaluate candidate enrollment benchmark fields for coverage, effect size, sample size, percentile stability, outlier sensitivity, fallback behavior, and label stability.
+<REF:BENCHMARK_COHORTS> Build phase/indication/TA/rare-disease benchmark cohorts.
+<REF:BENCHMARK_PERCENTILES> Calculate P25/P50/P75/P90.
+<REF:BENCHMARK_ARTIFACT> Load and inspect the compact enrollment benchmark artifact with cohort keys, fallback levels, P25/P50/P75/P90, cohort size, confidence flags, benchmark version, and source data version.
+<REF:ENROLLMENT_CLASSIFICATION> Classify enrollment assumptions.
+<REF:SNAPSHOT_METADATA> Define output metadata object for narrative payload.
+<REF:VALIDATION> Check sample sizes, sparse groups, outliers, and label stability.
+```
+
+Notebook blocks focused on cost, sites, countries, total duration, calendar spend, future market commitment, and portfolio views are not part of v1. They belong to later roadmap work.
+
+The notebook intentionally does not automatically overwrite the artifact when run end-to-end. It reproduces the calculations in memory and validates the already-built artifact. This prevents accidental production-facing artifact churn during analytical review.
+
+## Validation And Audit Checks
+
+Validation for v1 should focus on deterministic benchmark stability rather than predictive-model performance.
+
+Recommended checks:
+
+- Enrollment field availability by `enrollment_type`.
+- Completed actual enrollment counts by phase, indication, therapeutic area, and rare disease flag.
+- Candidate-field coverage.
+- Candidate-field effect size on `log1p(actual_enrollment)`.
+- Benchmark group size by candidate hierarchy.
+- Bootstrap stability of P25/P50/P75/P90.
+- Bootstrap stability of `enrollment_status` labels.
+- Fallback frequency from strict to broader benchmark levels.
+- Outlier sensitivity of benchmark percentiles.
+- Comparison between default hierarchy and any candidate refined hierarchy.
+- Sparse cohort frequency under the four-level hierarchy.
+- P25/P50/P75/P90 stability by cohort.
+- Outlier sensitivity for very large trials.
+- Frequency of each `enrollment_status`.
+- Consistency of source assignment across `planned_value`, `final_observed_value`, `observed_lower_bound`, `model_default`, and `user_scenario`.
+- Snapshot stale-state behavior when design fields change before the next prediction.
+
+Do not report deterministic benchmark labels as clinical recommendations.
+
+These checks are used to make the benchmark stable and auditable, not to turn v1 into a predictive enrollment model.
+
+Phase 1 QA checks already completed:
+
+- Artifact regenerated successfully at `frontend/data/enrollment_benchmarks_v1.csv`.
+- Report regenerated successfully at `frontend/data/enrollment_benchmarks_v1_report.json`.
+- Artifact schema matches the implementation and this document.
+- Artifact row count is 876.
+- Duplicate benchmark keys: 0.
+- Report values are consistent with the notebook summaries.
+- Runtime utility tested for strict lookup, fallback lookup, phase-only fallback, no-match behavior, missing artifact behavior, corrupt artifact behavior, missing/invalid planned enrollment, boundary behavior at P25/P75/P90, missing percentile behavior, all-low-confidence synthetic fallback behavior, and `not_available` metadata behavior.
+- Notebook contains all required `<REF:...>` sections and executed successfully with notebook magics stripped in the local QA harness.
+- Production runtime does not require full `data/data_clinpred.csv`; only the compact artifact and the current trial snapshot are needed.
+
+## V1 Non-Goals
+
+- No site-count estimator in v1.
+- No country-count estimator in v1.
+- No total-duration estimator in v1.
+- No cost layer in v1.
+- No calendar spend model in v1.
+- No future development commitment model in v1.
+- No market layer in v1.
+- No full operational-scale engine in v1.
+- No model retraining for XGBoost in v1.
+- No use of enrollment as an XGBoost feature in v1 unless it already exists safely in the current model path.
+- No direct adjustment of Completion Score from enrollment.
+- No pillar-level Coherence attribution in v1.
+- No LLM pseudo-SHAP in v1.
+
+## Future Estimation Roadmap, Not V1
+
+The previous broader estimation architecture remains useful as later roadmap thinking, but it is not part of the v1 serious-game enrollment benchmark.
+
+Future estimation roadmap topics:
+
+- Site-count estimation.
+- Country-count estimation.
+- Total-duration estimation.
+- Cost translation.
+- Calendar spend.
+- Future development commitment.
+- Market potential.
+- Full operational-scale estimation.
+- Reconciliation of enrollment/sites/countries/duration.
+
+Future versions may also explore model-based enrollment calibration, including feature importance analysis, an enrollment proxy model, SHAP on the proxy model, correlation analysis, percentile segmentation, and clustering of similar trials. These are optional hardening steps and should not block the deterministic v1 benchmark.
+
+## Future Coding Assistant Instructions
+
+- Use this document as the source of truth for v1 enrollment benchmarking.
+- Keep v1 implementation deterministic and auditable.
+- Before changing benchmark cohorts or adding primary benchmark fields, run/update the Enrollment Benchmark Calibration Gate.
+- Do not require the full historical `data_clinpred.csv` dataset at production runtime for enrollment benchmarking.
+- Precompute enrollment benchmark percentiles offline and ship a compact benchmark artifact.
+- Production runtime should use lookup plus deterministic fallback logic, not recompute historical percentiles from the full database.
+- Treat the benchmark artifact as versioned, auditable input to the narrative layer.
+- Do not train a model for v1 unless explicitly requested later.
+- Do not add sites, countries, total duration, cost, or market logic to v1.
+- Do not modify XGBoost, SHAP, therapeutic-area calibration, or audit/demo parity.
+- Do not add new primary benchmark fields merely because they sound clinically plausible.
+- Only add primary benchmark fields if they improve relevance while preserving sample size and percentile stability.
+- Prefer support/conflict signals over over-granular benchmark matching when sample size is limited.
+- Do not treat p-values alone as sufficient evidence for benchmark field selection.
+- Treat planned enrollment as a scenario assumption, not as clinical truth.
+- Treat benchmark percentiles as reference values, not recommendations.
+- Treat deterministic `enrollment_status` as benchmark position, not clinical judgment.
+- Let the narrative architecture interpret the benchmark through Coherence Score.
+- Preserve the separation between planned values, final observed values, observed-to-date lower bounds, model defaults, and user scenarios.
+
+## Next Phase Entry Point
+
+The next phase should start from the Phase 1 artifact and runtime utility, not from the full historical dataset.
+
+Expected Phase 2 sequence:
+
+1. Add the Planned Enrollment field to Simulation Mode without changing the XGBoost prediction payload or model-facing feature set.
+2. Select the initial planned enrollment assumption using the source-priority rules:
+   - estimated/planned value when available,
+   - completed final observed value only as completed-trial context,
+   - benchmark-derived model default when no usable planned value exists,
+   - `user_scenario` after participant edit.
+3. Attach `planned_enrollment_metadata(...)` output to the latest prediction snapshot.
+4. Mark benchmark metadata stale when relevant design fields change before the next `Predict Trial Completion`.
+5. Add support/conflict signal logic using structured Trial Features, starting with fields already identified as plausible Phase 2 signals: sponsor tier, biomarker stratification, therapeutic modality, administration complexity, line of therapy, patient profile, endpoint rigor/structure, duration bins if calibrated, number of arms, comparator/placebo, allocation, and masking.
+6. Only after snapshot metadata and support/conflict logic are stable, pass the metadata into the narrative / Coherence layer.
+
+Phase 2 must still preserve the completion model boundary:
+
+```text
+Completion Score = existing XGBoost/SHAP/TA-calibrated score.
+Enrollment benchmark = deterministic metadata for narrative/coherence reasoning.
+No enrollment benchmark value modifies XGBoost, SHAP values, TA calibration, audit parity, or the existing prediction API contract.
+```
