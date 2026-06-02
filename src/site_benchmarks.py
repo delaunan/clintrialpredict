@@ -93,6 +93,7 @@ def _empty_metadata(
     value: Any = None,
     source: str = "registry_facility_count_proxy",
     hint: str | None = None,
+    is_benchmark_stale: bool = False,
 ) -> dict[str, Any]:
     return {
         "planned_sites": {
@@ -109,7 +110,7 @@ def _empty_metadata(
             "supporting_signals": [],
             "conflicting_signals": [],
             "benchmark_snapshot_id": None,
-            "is_benchmark_stale": False,
+            "is_benchmark_stale": bool(is_benchmark_stale),
             "low_confidence_flag": True,
             "interpretation_hint": hint or "Site-count benchmark is not available for this snapshot.",
         }
@@ -228,18 +229,24 @@ def planned_sites_metadata(
     artifact: pd.DataFrame | None = None,
     artifact_path: str | Path = DEFAULT_ARTIFACT_PATH,
     source: str = "registry_facility_count_proxy",
+    is_benchmark_stale: bool = False,
 ) -> dict[str, Any]:
     numeric_value = pd.to_numeric(planned_sites, errors="coerce")
     if pd.isna(numeric_value) or float(numeric_value) <= 0:
-        return _empty_metadata(planned_sites, source, "Planned sites value is missing or invalid.")
+        return _empty_metadata(planned_sites, source, "Planned sites value is missing or invalid.", is_benchmark_stale)
 
     row = lookup_site_benchmark(snapshot, artifact=artifact, artifact_path=artifact_path)
     if row is None:
-        return _empty_metadata(float(numeric_value), source)
+        return _empty_metadata(float(numeric_value), source, is_benchmark_stale=is_benchmark_stale)
 
     status = classify_site_count(float(numeric_value), row)
     if status == "not_available":
-        return _empty_metadata(float(numeric_value), source, "Benchmark percentiles are incomplete for this snapshot.")
+        return _empty_metadata(
+            float(numeric_value),
+            source,
+            "Benchmark percentiles are incomplete for this snapshot.",
+            is_benchmark_stale,
+        )
 
     snapshot_id = f"{row.get('benchmark_version')}:{row.get('source_data_version')}:{row.get('benchmark_key')}"
     hint_map = {
@@ -263,7 +270,7 @@ def planned_sites_metadata(
             "supporting_signals": [],
             "conflicting_signals": [],
             "benchmark_snapshot_id": snapshot_id,
-            "is_benchmark_stale": False,
+            "is_benchmark_stale": bool(is_benchmark_stale),
             "low_confidence_flag": bool(row.get("low_confidence_flag", True)),
             "interpretation_hint": hint_map[status],
         }

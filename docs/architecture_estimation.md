@@ -4,22 +4,23 @@
 
 This document defines the v1 enrollment estimation / benchmarking architecture for ClinTrialPredict serious-game mode. It now also records the Phase 1 implementation and QA state for the deterministic planned-enrollment benchmark layer.
 
-The purpose is not to estimate all missing operational quantities. The purpose is to provide a simple, deterministic, auditable benchmark for `planned_enrollment_assumption`.
+The purpose is not to estimate all missing operational quantities. The purpose is to provide simple, deterministic, auditable benchmarks for active operational assumptions.
 
-The enrollment benchmark helps the future narrative layer assess whether the selected patient number is coherent with the current simulated trial profile. It does not enter the XGBoost model, does not directly modify the Completion Score, and should feed only structured narrative / Coherence payloads after those layers are implemented.
+The enrollment and site-count benchmarks help the future narrative layer assess whether selected operational assumptions are coherent with the current simulated trial profile. They do not enter the XGBoost model, do not directly modify the Completion Score, and should feed only structured narrative / Coherence payloads after those layers are implemented.
 
 ```text
-V1 estimation scope = planned enrollment assumption only.
-Sites, countries, total duration, cost, market potential, downstream commitment, and full operational-scale estimation are postponed.
+Current deterministic operational-assumption scope = planned enrollment + planned site count.
+Countries, total duration, cost, market potential, downstream commitment, and full operational-scale estimation are postponed.
 ```
 
 This document should be read alongside [docs/architecture_narratives.md](/home/delaunan/code/delaunan/clintrialpredict/docs/architecture_narratives.md), which defines how the benchmark is interpreted through the serious-game narrative layer.
 
 ## Active V1 Implementation Scope
 
-The active v1 implementation scope is narrow by design:
+The active implementation scope is narrow by design:
 
-- Planned Enrollment only.
+- Planned Enrollment.
+- Planned Site Count, using registry-derived aggregate facility-count proxy benchmarks.
 - Deterministic benchmark metadata.
 - Compact production artifact runtime.
 - No XGBoost changes.
@@ -30,7 +31,7 @@ The active v1 implementation scope is narrow by design:
 - No Coherence Score implementation.
 - No LLM narrative generation.
 
-The broader architecture may reserve names for future operational assumptions, but the current implementation remains enrollment-only. Reserved future keys must not imply active site, country, duration, cost, market, spend, or development-commitment estimates.
+The broader architecture may reserve names for future operational assumptions, but active implementation remains limited to planned enrollment and planned site count. Reserved future keys must not imply active country, duration, cost, market, spend, or development-commitment estimates.
 
 ## Phase 1 Implementation Status - 2026-06-01
 
@@ -138,7 +139,7 @@ Implemented behavior:
 - Planned Enrollment does not enter `SIMULATION_FEATURE_IDS`, taxonomy, the `/predict` payload, XGBoost, SHAP impacts, pillar impacts, impact bar, treemap, therapeutic-area calibration, or audit/demo parity behavior.
 - Baseline simulation snapshots, successful model-facing simulation predictions, operational-only updates, and simulation history records store `operational_assumptions`.
 - `operational_assumptions.planned_enrollment` stores deterministic metadata from `planned_enrollment_metadata(...)`.
-- `planned_sites`, `planned_countries`, and `planned_duration_months` are present only as inactive reserved keys with `benchmark_status = "not_implemented"`.
+- `planned_sites`, `planned_countries`, and `planned_duration_months` were present only as inactive reserved keys before S3. S3 later activated `planned_sites` in Simulation Mode only.
 - Operational-only changes refresh snapshot metadata through a generic `simulation_operational_update` path without calling `/predict` and without changing Completion Score or XGBoost chart data.
 - The Predict button and gauge-side `Click Predict to update` prompt now respond consistently to model-facing Trial Feature changes and active operational-assumption changes.
 - Planned Enrollment pending state shows a previous-value marker and clears after the operational update.
@@ -151,7 +152,7 @@ Current active operational assumption keys:
 planned_enrollment
 ```
 
-Reserved inactive operational assumption keys:
+Reserved inactive operational assumption keys before S3:
 
 ```text
 planned_sites
@@ -173,7 +174,7 @@ Still intentionally not implemented:
 - API contract changes.
 - Deployment changes.
 
-Planned Enrollment Phase 2A / 2B is implemented. The next operational-assumption work must follow the staged roadmap in `Next Operational Assumptions - Sites And Duration Planning`. S1B `planned_sites` benchmark-feasibility audit and S2 `planned_sites` compact benchmark artifact/runtime utility are now implemented, but this does not authorize `planned_sites` UI or Simulation Mode activation. Any future active operational assumption must follow the generic operational-assumption pending/update pattern and remain outside XGBoost until a separate architecture decision says otherwise.
+Planned Enrollment Phase 2A / 2B is implemented. S1B `planned_sites` benchmark-feasibility audit, S2 `planned_sites` compact benchmark artifact/runtime utility, and S3 `planned_sites` Simulation Mode integration are now implemented. Any future active operational assumption must follow the generic operational-assumption pending/update pattern and remain outside XGBoost until a separate architecture decision says otherwise.
 
 ## Current Foundation
 
@@ -219,7 +220,7 @@ Each enrollment-related value should be classified before use.
 | ----------- | ------- | ------- | ------ |
 | Design-stage / planned value | Known or intended near trial design time. | Estimated enrollment from the record. | Initial `planned_enrollment_assumption` when available. |
 | Final observed value | Known only after trial completion. | Completed-trial actual enrollment. | Historical benchmark data or completed-trial display context. |
-| Observed-to-date lower bound | Current partial operational value, not necessarily final. | Ongoing actual enrollment from current extract. | Lower-bound context only; not final truth. |
+| Observed-to-date lower bound | Current partial operational value, not necessarily final. | Ongoing or terminated actual enrollment from current extract. | Lower-bound candidate when no planned/estimated value exists; not final truth. |
 | Model default | Synthetic benchmark-derived default. | P50 or other selected cohort default when no planned value exists. | Neutral starting assumption. |
 | User scenario | Participant-edited assumption. | User changes enrollment to 600. | Current scenario value evaluated against benchmark and design profile. |
 | Benchmark distribution | Historical comparable-trial enrollment values. | Cohort P25/P50/P75/P90. | Deterministic benchmark reference. |
@@ -269,9 +270,13 @@ Use this source priority:
 ```text
 1. If planned/estimated enrollment is available, use it as the initial `planned_enrollment_assumption`.
 2. If the trial is completed and actual enrollment represents final observed value, it can be used as final observed context.
-3. If no usable planned value exists, use a benchmark-derived `model_default`.
-4. If the participant edits the value, source becomes `user_scenario`.
+3. If no usable planned value exists and the trial is not completed, treat actual/current enrollment as `observed_lower_bound` when available.
+4. If no usable planned value exists, look up benchmark P50 as `model_default`.
+5. For non-completed trials with both observed lower-bound and benchmark P50 available, initialize planned enrollment as `max(observed_lower_bound, model_default)`.
+6. If the participant edits the value, source becomes `user_scenario`.
 ```
+
+This prevents an active, terminated, or otherwise non-completed trial from defaulting to a benchmark P50 that is smaller than the enrollment already observed in the registry extract.
 
 The enrollment assumption is assessed against the current design choices. The enrollment assumption must be supported by the selected trial profile.
 
@@ -653,7 +658,7 @@ Current Planned Enrollment runtime returns `support_level = "not_evaluated"` and
 
 ## Revised Operational Assumptions Roadmap
 
-The estimation architecture evolves in staged, decision-gated increments. Planned Enrollment is already active. S1B and S2 for `planned_sites` are complete, but `planned_sites` remains inactive. `planned_duration_months` remains inactive. `planned_countries` remains excluded.
+The estimation architecture evolves in staged, decision-gated increments. Planned Enrollment is active. S1B, S2, and S3 for `planned_sites` are complete, and `planned_sites` is active in Simulation Mode only. `planned_duration_months` remains inactive. `planned_countries` remains excluded.
 
 Current roadmap:
 
@@ -663,8 +668,8 @@ Current roadmap:
    - Production runtime uses the compact enrollment benchmark artifact, not the full historical database.
 
 2. Completed: Phase 2A / 2B Planned Enrollment Simulation Mode integration and `operational_assumptions` container.
-   - `planned_enrollment` is the only active benchmarked operational assumption.
-   - `planned_sites`, `planned_countries`, and `planned_duration_months` are stored only as inactive reserved metadata keys.
+   - `planned_enrollment` was the first active benchmarked operational assumption.
+   - `planned_sites`, `planned_countries`, and `planned_duration_months` were initially stored only as inactive reserved metadata keys.
    - Planned Enrollment remains outside XGBoost, SHAP, therapeutic-area calibration, audit/demo parity, API contracts, model artifacts, and taxonomy artifacts.
 
 3. Completed: S1B `planned_sites` benchmark-feasibility audit.
@@ -674,46 +679,59 @@ Current roadmap:
 
 4. Completed: S2 `planned_sites` compact benchmark artifact and runtime utility.
    - Created `scripts/build_site_benchmarks.py`, `scripts/check_site_benchmarks.py`, `src/site_benchmarks.py`, `frontend/data/site_benchmarks_v1.csv`, and `frontend/data/site_benchmarks_v1_report.json`.
-   - Production-ready site-count benchmark data is compact and auditable, but not active in Simulation Mode.
+   - Production-ready site-count benchmark data is compact and auditable.
 
-5. Next: S2 QA checkpoint before S3.
+5. Completed: S2 QA checkpoint before S3.
    - Verify the S2 artifact, report, runtime utility, and check script cleanly before any UI/runtime integration.
-   - S3 Simulation Mode integration is not authorized until this QA checkpoint passes and a separate prompt authorizes S3.
+   - S2 QA returned GO and authorized the narrow S3 Simulation Mode integration prompt.
 
-6. Later, only after S2 QA passes and a separate prompt authorizes it: S3 `planned_sites` Simulation Mode integration.
-   - May activate `planned_sites` only after S2 QA passes and a separate implementation prompt authorizes S3.
+6. Completed: S3 `planned_sites` Simulation Mode integration.
+   - `planned_sites` is active in Simulation Mode only.
+   - `planned_sites` was first integrated with `src/site_benchmarks.py` and `frontend/data/site_benchmarks_v1.csv`; the active post-refactor runtime now uses `src/operational_benchmarks.py` and `frontend/data/operational_benchmarks_v1.csv`.
+   - Operational-only `planned_sites` changes update snapshot metadata without calling `/predict`.
    - Must preserve the current completion-model boundary unless a separate architecture decision changes it.
 
-7. Later: D1 `planned_duration_months` duration-definition validation and data audit.
+7. Implemented: Post-S3 `planned_sites` defaulting revision.
+   - Treat non-completed `number_of_facilities` as current registry facility-count proxy context and a lower-bound candidate.
+   - Add deterministic patients-per-site benchmark support from completed trials with positive enrollment and positive facility-count proxy values.
+   - Initialize non-completed editable `planned_sites` from the maximum of current registry facility-count proxy, site benchmark P50, and the enrollment-coherent patients-per-site candidate.
+   - Keep the revision outside XGBoost, SHAP, `/predict`, prediction payloads, calibration, audit parity, model artifacts, taxonomy artifacts, LLM narratives, Coherence Score, and Adjusted Trial Value Score.
+
+8. Next: Browser smoke testing and deployment readiness review for Planned Site Count.
+   - Confirm the operational-assumption card shows the revised lower-bound context and enrollment-coherent candidate.
+   - Confirm planned-sites operational-only updates still do not call `/predict`.
+
+9. Later: D1 `planned_duration_months` duration-definition validation and data audit.
    - Validate duration definitions and source quality before any artifact or runtime work.
    - Must join back to `data/studies.txt` for date-type qualifiers.
 
-8. Later, only if D1 passes: D2 duration compact benchmark artifact and runtime utility.
+10. Later, only if D1 passes: D2 duration compact benchmark artifact and runtime utility.
    - Requires D1 decision gates to pass first.
 
-9. Later, only if D2 passes: D3 duration Simulation Mode integration.
+11. Later, only if D2 passes: D3 duration Simulation Mode integration.
    - May activate `planned_duration_months` only after D2 passes and a separate implementation prompt authorizes D3.
 
-10. Future after stable deterministic payloads: narrative payload builder, LLM narrative, then Coherence Score.
+12. Future after stable deterministic payloads: narrative payload builder, LLM narrative, then Coherence Score.
    - Narrative and scoring work must consume deterministic payloads.
    - LLM text must not invent operational ranges or create hidden score changes.
    - Coherence Score must remain separate from the existing XGBoost Completion Score.
    - `planned_countries` remains excluded.
 
-Next required step: S2 QA checkpoint. S3 Simulation Mode integration is not authorized until the S2 artifact, report, runtime utility, and check script are verified cleanly.
+Next required step: validate S3 behavior in browser smoke testing before any deployment decision. Duration work remains separate and starts with D1 only after a separate authorization prompt.
 
 The detailed source contracts, methodology, metadata shapes, staged roadmap, and decision gates for S1B/S2/S3/D1/D2/D3 are defined in `Next Operational Assumptions - Sites And Duration Planning`.
 
 ## Next Operational Assumptions - Sites And Duration Planning
 
-This section is the source-of-truth plan for the next operational-assumption families after active Planned Enrollment. S1B `planned_sites` audit and S2 `planned_sites` artifact/runtime utility are complete. This section still does not activate `planned_sites`, `planned_duration_months`, or any new runtime behavior. S3 is not authorized yet.
+This section is the source-of-truth plan for the next operational-assumption families after active Planned Enrollment. S1B `planned_sites` audit, S2 `planned_sites` artifact/runtime utility, and S3 `planned_sites` Simulation Mode integration are complete. `planned_duration_months` remains inactive, and `planned_countries` remains excluded.
 
 ### Current Boundary
 
-- `planned_enrollment` is the only active operational assumption.
-- `planned_sites` and `planned_duration_months` remain inactive reserved keys.
+- `planned_enrollment` and `planned_sites` are the active operational assumptions.
+- `planned_sites` is active only in Simulation Mode and remains outside the prediction model.
+- `planned_duration_months` remains an inactive reserved key.
 - `planned_countries` remains explicitly excluded from this implementation plan.
-- S2 provides `frontend/data/site_benchmarks_v1.csv` and `src/site_benchmarks.py`, but `planned_sites` is not active in Simulation Mode or `operational_assumptions` runtime behavior.
+- The active runtime uses `frontend/data/operational_benchmarks_v1.csv` and `src/operational_benchmarks.py` for both `operational_assumptions.planned_enrollment` and `operational_assumptions.planned_sites`.
 - Future operational assumptions must preserve the current boundary unless a separate architecture decision changes it: no XGBoost changes, no `/predict` or API contract changes, no SHAP changes, no pillar impact changes, no impact bar or treemap changes, no therapeutic-area calibration changes, no audit/demo parity changes, no model artifact changes, and no taxonomy artifact changes.
 - Production runtime should continue to use compact benchmark artifacts and current trial snapshots, not the full raw historical database.
 - LLM narratives, Coherence Score, and Adjusted Trial Value Score remain out of scope.
@@ -763,9 +781,12 @@ Methodology rules:
 - Ongoing trials should be treated as current registry facility-count proxy values or lower-confidence lower-bound information, not final site counts.
 - The deterministic benchmark pattern mirrors Planned Enrollment because S1B confirmed source stability, target readiness, cohort coverage, and fallback reliability.
 - Initial confidence threshold should be `n >= 50`, mirroring enrollment unless later validation changes it.
-- Patients-per-site should be a future secondary coherence signal, not the primary `planned_sites` benchmark.
-- Patients-per-site is `planned_enrollment / planned_sites`.
-- Do not couple `planned_sites` to `planned_enrollment` too early. The site-count benchmark should first stand on its own registry-derived facility-count proxy distribution.
+- S2/S3 first implemented a standalone site-count benchmark using completed registry facility-count proxy distributions.
+- Post-S3 product review concluded that non-completed `number_of_facilities` should not initialize the editable `planned_sites` assumption directly, because ongoing or planned registry facility counts may be incomplete.
+- For ongoing and planned trials, `number_of_facilities` should become a current registry facility-count proxy context value and lower-bound candidate.
+- The next narrow revision should add an enrollment-coherent default for `planned_sites` using a patients-per-site benchmark derived from completed trials with positive enrollment and positive facility-count proxy values.
+- Patients-per-site for this revision should be computed as `enrollment / number_of_facilities`, not as a model prediction.
+- The enrollment-coherent default should remain deterministic benchmark metadata and must not modify XGBoost, SHAP, `/predict`, prediction payloads, calibration, audit parity, model artifacts, or taxonomy artifacts.
 
 Proposed benchmark hierarchy:
 
@@ -987,7 +1008,145 @@ S2 boundary confirmations:
 - `planned_duration_months` remains inactive.
 - `planned_countries` remains excluded.
 
-Next required step: S2 QA checkpoint. S3 Simulation Mode integration is not authorized until the S2 artifact, report, runtime utility, and check script are verified cleanly.
+S2 QA checkpoint returned GO. S3 Simulation Mode integration was separately authorized and is documented below.
+
+### Planned Site Count - Phase S3 Implementation Status
+
+S3 is implemented as a narrow Simulation Mode integration for `planned_sites`. `planned_sites` is now an active operational assumption in Simulation Mode only.
+
+Implemented behavior:
+
+- `planned_sites` appears in the Operational Assumption mini-card area near Planned Enrollment.
+- `planned_sites` originally used `src/site_benchmarks.py` and `frontend/data/site_benchmarks_v1.csv`.
+- After the single-artifact refactor, active Simulation Mode uses `src/operational_benchmarks.py` and `frontend/data/operational_benchmarks_v1.csv`.
+- `planned_sites` is stored under `operational_assumptions.planned_sites`.
+- `planned_sites` metadata is stored in baseline simulation snapshots, successful model-facing simulation prediction snapshots, operational-only updates, and simulation history.
+- Operational-only `planned_sites` changes refresh snapshot metadata through the generic `simulation_operational_update` path without calling `/predict`.
+- Changing only `planned_sites` does not change Completion Score, SHAP impacts, pillar impacts, impact bar, or treemap.
+- Changing `planned_sites` plus model-facing Trial Features calls `/predict` only because the model-facing fields changed; `planned_sites` is not sent as a prediction payload field.
+- Benchmark stale-state follows the same cohort fields as Planned Enrollment: `phase_ml`, `gbd_cause_id_3_ml`, `therapeutic_area_ml`, and `is_rare_disease_ml`.
+
+Source and wording:
+
+- Current S3 initializes positive `number_of_facilities` values as `completed_registry_facility_count` for completed trials and `current_registry_facility_count` otherwise.
+- Post-S3 product review decided this is too literal for ongoing/planned trials and should be revised before relying on the field for site planning.
+- Completed trials may continue to use positive `number_of_facilities` as completed registry facility-count proxy context.
+- Ongoing and planned trials should treat positive `number_of_facilities` as current registry facility-count proxy context and a lower-bound candidate, not as the editable planned-sites estimate by itself.
+- Missing or invalid site-count proxy values currently use `benchmark_default` from benchmark P50 when available.
+- Participant edits use `user_scenario`.
+- UI and metadata use conservative registry-derived facility-count proxy wording.
+- `number_of_facilities` remains a registry-derived aggregate facility-count proxy, not true planned sites, not true actual activated sites, and not true estimated sites.
+
+S3 boundary confirmations:
+
+- `planned_sites` remains outside XGBoost.
+- `planned_sites` remains outside `/predict`.
+- `planned_sites` remains outside SHAP, pillar impacts, impact bar, treemap, and Completion Score.
+- Therapeutic-area calibration, audit mode, model artifacts, taxonomy artifacts, API contracts, and prediction payload contracts were not changed.
+- `planned_duration_months` remains inactive.
+- `planned_countries` remains excluded.
+- No LLM narratives, Coherence Score, or Adjusted Trial Value Score were implemented.
+
+### Planned Site Count - Post-S3 Defaulting Revision Implementation Status
+
+This section records the implemented revision after S3 manual review.
+
+Problem statement:
+
+- For completed trials, `number_of_facilities` can remain useful as a completed registry facility-count proxy.
+- For ongoing, active-not-recruiting, recruiting, not-yet-recruiting, or otherwise non-completed trials, `number_of_facilities` may reflect currently listed or observed registry facilities rather than the final intended operating scale.
+- Therefore, current non-completed facility count should be shown as context and lower-bound evidence, not automatically treated as the planned-sites assumption.
+- The editable `planned_sites` assumption should be initialized from a simple deterministic default that stays coherent with the current planned enrollment assumption.
+
+Implemented rule:
+
+1. If the selected trial is completed and has positive `number_of_facilities`, initialize `planned_sites` from that value with source `completed_registry_facility_count`.
+2. If the selected trial is not completed and has positive `number_of_facilities`, store and display that value as `current_registry_facility_count_proxy` context and as a lower-bound candidate.
+3. Look up the combined operational benchmark row and use `site_count_p50` as the standalone site benchmark default candidate when available.
+4. Use compact patients-per-site benchmarks derived from completed trials with positive ACTUAL enrollment and positive `number_of_facilities`.
+5. Use the same fallback hierarchy as the site-count benchmark: `phase_indication_rare`, `phase_ta_rare`, `phase_ta`, then `phase_only`.
+6. Compute an enrollment-coherent candidate as `planned_enrollment / patients_per_site_p50` when both values are available.
+7. For non-completed trials with patients-per-site P50 available, initialize the editable `planned_sites` value as:
+
+```text
+max(
+    current_registry_facility_count_proxy,
+    planned_enrollment / patients_per_site_p50
+)
+```
+
+8. Use pure `site_count_benchmark_p50` only as a fallback when the patients-per-site candidate is unavailable.
+
+Round the selected default to a practical positive integer. If no candidate is available, leave the value unavailable.
+
+Recommended source labels for the revised behavior:
+
+- `completed_registry_facility_count`
+- `current_registry_facility_count_proxy`
+- `benchmark_default`
+- `enrollment_coherent_benchmark_default`
+- `user_scenario`
+
+Example: `NCT02615184`
+
+- Current registry facility-count proxy: 25.
+- Planned enrollment assumption: 76.
+- Matched site-count benchmark: `phase_indication_rare`, `n=58`, P50 10.
+- Matched completed-trial patients-per-site P50 observed during analysis: approximately 7.31.
+- Enrollment-coherent site candidate: `76 / 7.31 = 10.4`.
+- Revised non-completed default: `max(25, 10.4) = 25`.
+- The resulting value is still 25, but the interpretation changes: 25 is the current registry facility-count proxy lower-bound/context that already exceeds the benchmark and enrollment-coherent default candidates, not a claim that 25 is the true planned or final site count.
+
+Example: planned-stage trial with 2 listed registry facilities and 200 planned enrollment:
+
+- Current registry facility-count proxy: 2.
+- If patients-per-site P50 for the matched cohort is approximately 8, the enrollment-coherent candidate is `200 / 8 = 25`.
+- The revised default becomes `max(2, 25)`, so the editable planned-sites assumption would not default to only 2 unless the user explicitly chooses that scenario.
+
+Implemented files and artifacts:
+
+- Builder: `scripts/build_operational_benchmarks.py`.
+- Checker: `scripts/check_operational_benchmarks.py`.
+- Runtime utility: `src/operational_benchmarks.py`.
+- Compact artifact: `frontend/data/operational_benchmarks_v1.csv`.
+- Report: `frontend/data/operational_benchmarks_v1_report.json`.
+- Simulation Mode integration: `frontend/views/edit_trial.py`.
+- Active UI/runtime source: the single combined operational artifact. The older enrollment-only and site-only artifacts remain historical/QA references unless a later cleanup removes them.
+
+Combined artifact summary:
+
+- Source records loaded: 34,066.
+- Completed ACTUAL enrollment targets: 20,526.
+- Completed positive site-count proxy targets: 19,880.
+- Completed patients-per-site targets: 19,689.
+- Artifact rows: 878.
+- Duplicate benchmark keys: 0.
+- Source data version: `0a97519bd78f561a`.
+- Rows by benchmark level: `phase_indication_rare` 660, `phase_ta_rare` 138, `phase_ta` 76, `phase_only` 4.
+- Low-confidence rows by metric: enrollment 667, site_count 667, patients_per_site 666.
+- Coverage QA not available: enrollment 0, site_count 0, patients_per_site 0.
+- Coverage QA low-confidence matches: enrollment 0, site_count 0, patients_per_site 0.
+
+Single-artifact runtime rule:
+
+- `frontend/views/edit_trial.py` imports benchmark metadata and defaulting from `src/operational_benchmarks.py`.
+- Planned Enrollment and Planned Site Count both use `frontend/data/operational_benchmarks_v1.csv`.
+- The runtime keeps metric-specific evidence fields: `enrollment_n`, `site_count_n`, and `patients_per_site_n`.
+- The runtime keeps metric-specific confidence flags.
+- If a matched cohort has at least one relevant operational metric with `n >= 50`, the app keeps that specific cohort row and does not jump to a broader fallback only because another metric is near-threshold.
+- Metrics with `20 <= n < 50` are usable but low confidence.
+- Metrics with `n < 20` are considered too sparse and fall back when needed.
+
+Implementation boundaries:
+
+- Do not load `data/data_clinpred.csv` at production runtime to compute patients-per-site.
+- Patients-per-site distributions are precomputed into the compact combined operational benchmark artifact.
+- Keep `planned_sites` outside XGBoost, `/predict`, SHAP, pillar impacts, impact bar, treemap, Completion Score, therapeutic-area calibration, audit mode, model artifacts, taxonomy artifacts, API contracts, and prediction payloads.
+- Keep `planned_duration_months` inactive.
+- Keep `planned_countries` excluded.
+- Do not implement LLM narratives, Coherence Score, or Adjusted Trial Value Score as part of this revision.
+
+Next required step: browser-smoke-test the revised planned-sites initialization and card metadata before deployment readiness review.
 
 ### Planned Site Count - Future Metadata Shape
 
@@ -996,7 +1155,9 @@ Future `operational_assumptions.planned_sites` metadata should use cautious sour
 - `registry_facility_count_proxy`
 - `completed_registry_facility_count`
 - `current_registry_facility_count`
+- `current_registry_facility_count_proxy`
 - `benchmark_default`
+- `enrollment_coherent_benchmark_default`
 - `user_scenario`
 
 Avoid source labels that imply unsupported precision:
@@ -1011,7 +1172,11 @@ Suggested future metadata shape:
 {
   "planned_sites": {
     "value": 80,
-    "source": "registry_facility_count_proxy | completed_registry_facility_count | current_registry_facility_count | benchmark_default | user_scenario",
+    "source": "registry_facility_count_proxy | completed_registry_facility_count | current_registry_facility_count | current_registry_facility_count_proxy | benchmark_default | enrollment_coherent_benchmark_default | user_scenario",
+    "current_registry_facility_count_proxy": 25,
+    "site_default_basis": "completed_registry_facility_count | current_registry_facility_count_proxy | enrollment_coherent_benchmark_default | benchmark_default | user_scenario | not_available",
+    "patients_per_site_p50": 7.31,
+    "enrollment_coherent_site_candidate": 10.4,
     "benchmark_level_used": "phase_indication_rare | phase_ta_rare | phase_ta | phase_only | not_available",
     "benchmark_n": 123,
     "benchmark_p25": 12,
@@ -1138,15 +1303,16 @@ Suggested future metadata shape:
 Recommended order:
 
 ```text
-S1B completed -> S2 implemented -> S2 QA checkpoint -> S3 only if separately authorized -> D1 -> D2 -> D3
+S1B completed -> S2 implemented -> S2 QA checkpoint GO -> S3 implemented -> post-S3 planned_sites defaulting revision implemented -> browser QA -> D1 -> D2 -> D3
 ```
 
 Site-count stages:
 
 - S1B: `planned_sites` architecture formalization and benchmark-feasibility audit. Completed.
 - S2: `planned_sites` compact benchmark artifact and runtime utility. Implemented.
-- S2 QA checkpoint: next required step before any S3 work.
-- S3: `planned_sites` Simulation Mode integration. Not authorized yet.
+- S2 QA checkpoint: completed with GO before S3.
+- S3: `planned_sites` Simulation Mode integration. Implemented.
+- Post-S3 defaulting revision: implemented. It treats non-completed registry facility counts as lower-bound context and initializes editable `planned_sites` from an enrollment-coherent deterministic benchmark default.
 
 Duration stages:
 
@@ -1154,7 +1320,7 @@ Duration stages:
 - D2: `planned_duration_months` compact benchmark artifact and runtime utility.
 - D3: `planned_duration_months` Simulation Mode integration.
 
-Each stage should be implemented separately. Completing S1B authorized only S2 after a separate prompt. Implementing S2 does not authorize S3, runtime activation, API changes, model changes, UI activation, LLM narratives, or scoring changes. D1 does not authorize duration artifact creation or runtime activation unless a later prompt explicitly authorizes D2/D3.
+Each stage should be implemented separately. Completing S1B authorized only S2 after a separate prompt. S2 QA authorized S3 through a separate prompt, and S3 is now implemented. The post-S3 planned-sites defaulting revision is implemented. D1 does not authorize duration artifact creation or runtime activation unless a later prompt explicitly authorizes D2/D3.
 
 ### Decision Gates
 
@@ -1169,14 +1335,14 @@ S1B completed and authorized S2 because it confirmed:
 - Low-confidence rows are acceptable and flagged.
 - Wording clearly avoids "actual site count" overclaiming.
 
-S3 may begin only after a dedicated S2 QA checkpoint verifies:
+S2 QA completed with GO before S3 by verifying:
 
 - `frontend/data/site_benchmarks_v1.csv` exists, is non-empty, and has the required schema.
 - `frontend/data/site_benchmarks_v1_report.json` exists and matches the artifact/report summary values.
 - `scripts/check_site_benchmarks.py` passes.
 - `src/site_benchmarks.py` returns schema-safe missing-artifact metadata and deterministic lookup behavior.
 - Boundary classification at P25/P75/P90 matches the S2 check script.
-- `planned_sites` remains inactive, with no UI, API, model, SHAP, calibration, taxonomy, audit/demo parity, or prediction-payload changes.
+- Before S3, `planned_sites` remained inactive, with no UI, API, model, SHAP, calibration, taxonomy, audit/demo parity, or prediction-payload changes.
 
 D1 must confirm:
 
@@ -1204,13 +1370,13 @@ This staged plan explicitly excludes:
 - Model retraining.
 - Prediction-pipeline changes.
 - API changes.
-- Frontend activation.
+- Frontend activation outside the documented Simulation Mode operational-assumption path.
 
 ## Operational Assumptions Snapshot Container
 
-The runtime now stores operational assumptions in a structured `operational_assumptions` object. `planned_enrollment` is currently the only active benchmarked operational assumption. `planned_sites` and `planned_duration_months` remain inactive reserved keys until their staged implementation phases. `planned_countries` remains excluded.
+The runtime stores operational assumptions in a structured `operational_assumptions` object. `planned_enrollment` and `planned_sites` are currently the active benchmarked operational assumptions. `planned_duration_months` remains inactive until D3. `planned_countries` remains excluded.
 
-S2 now provides a compact site-count benchmark artifact and `src/site_benchmarks.py`, but this does not make `planned_sites` active in the `operational_assumptions` runtime container. `planned_sites` remains a reserved inactive key until S3 is separately authorized and implemented.
+S3 activates `planned_sites` in the `operational_assumptions` runtime container for Simulation Mode only. It remains outside XGBoost, `/predict`, SHAP, therapeutic-area calibration, audit/demo parity behavior, model artifacts, taxonomy artifacts, and API contracts.
 
 Current active/reserved shape:
 
@@ -1235,9 +1401,26 @@ operational_assumptions = {
         "interpretation_hint": "..."
     },
     "planned_sites": {
-        "status": "future_reserved",
-        "value": None,
-        "benchmark_status": "not_implemented"
+        "value": 80,
+        "source": "enrollment_coherent_benchmark_default",
+        "current_registry_facility_count_proxy": 25,
+        "site_default_basis": "enrollment_coherent_benchmark_default",
+        "patients_per_site_p50": 7.31,
+        "enrollment_coherent_site_candidate": 10.4,
+        "benchmark_level_used": "phase_ta",
+        "benchmark_n": 123,
+        "benchmark_p25": 12,
+        "benchmark_p50": 35,
+        "benchmark_p75": 90,
+        "benchmark_p90": 160,
+        "site_count_status": "typical",
+        "support_level": "not_evaluated",
+        "supporting_signals": [],
+        "conflicting_signals": [],
+        "benchmark_snapshot_id": "...",
+        "is_benchmark_stale": False,
+        "low_confidence_flag": False,
+        "interpretation_hint": "..."
     },
     "planned_countries": {
         "status": "future_reserved",
@@ -1255,11 +1438,12 @@ operational_assumptions = {
 Current and future container rules:
 
 - `planned_enrollment` is currently active and benchmarked.
-- `planned_sites` remains inactive until S3.
+- `planned_sites` is currently active and benchmarked in Simulation Mode only.
 - `planned_duration_months` remains inactive until D3.
 - `planned_countries` remains excluded.
 - Reserved future keys must not appear as user-editable assumptions until their own staged implementation phase.
 - Reserved future keys should not drive score, narrative, charts, or model behavior.
+- Active operational assumptions should not drive Completion Score, SHAP, pillar impacts, impact bar, treemap, therapeutic-area calibration, or `/predict` payloads unless a separate architecture decision changes that boundary.
 - Cost, market potential, spend curve, and future development commitment should not be added to this object.
 
 ## Why LLM Scoring Comes Later
@@ -1318,9 +1502,9 @@ S1B is a benchmark-feasibility audit and architecture-hardening step only. It sh
 
 S1B only validated and documented whether `number_of_facilities` could support a compact `planned_sites` benchmark. S1B is complete, and S2 was later authorized and implemented through a separate prompt.
 
-## Explicit Non-Goals Before S3
+## Historical Non-Goals Before S3
 
-Before S3 is explicitly authorized:
+Before S3 was explicitly authorized:
 
 - Do not activate `planned_sites`.
 - Do not add `planned_sites` UI.
@@ -1341,21 +1525,72 @@ Before S3 is explicitly authorized:
 - Do not implement Adjusted Trial Value Score.
 - Do not deploy based only on documentation.
 
-S3 Simulation Mode integration is not authorized until the S2 QA checkpoint verifies the S2 artifact, report, runtime utility, and check script cleanly and a separate implementation prompt explicitly authorizes S3.
+S2 QA returned GO and S3 was separately authorized. These historical non-goals were superseded only for narrow `planned_sites` Simulation Mode activation. They remain active boundaries for all other excluded capabilities.
+
+## Explicit Non-Goals After S3
+
+After S3:
+
+- Do not add `planned_sites` to `SIMULATION_FEATURE_IDS`.
+- Do not add `planned_sites` to model-facing Trial Features.
+- Do not send `planned_sites` to `/predict`.
+- Do not include `planned_sites` in SHAP, pillar impacts, impact bar, treemap, therapeutic-area calibration, audit/demo parity behavior, model artifacts, taxonomy artifacts, API contracts, or prediction payload contracts.
+- Do not implement `planned_duration_months`.
+- Do not implement `planned_countries`.
+- Do not implement LLM narratives.
+- Do not implement Coherence Score.
+- Do not implement Adjusted Trial Value Score.
+- Do not deploy based only on S3 integration.
 
 ## Production Runtime Artifact Strategy
 
-The production app should not need to load the full historical `data_clinpred.csv` dataset in order to calculate enrollment benchmarks at runtime.
+The production app should not need to load the full historical `data_clinpred.csv` dataset in order to calculate operational benchmarks at runtime.
 
-The full historical dataset is used offline in the analytical notebook or build script to run the Enrollment Benchmark Calibration Gate and precompute a compact benchmark artifact.
+The full historical dataset is used offline in the analytical notebook or build script to precompute compact benchmark artifacts.
 
-Phase 1 artifact path:
+Active runtime artifact path:
 
 ```text
-frontend/data/enrollment_benchmarks_v1.csv
+frontend/data/operational_benchmarks_v1.csv
 ```
 
-Phase 1 report path:
+Active runtime report path:
+
+```text
+frontend/data/operational_benchmarks_v1_report.json
+```
+
+Active runtime utility:
+
+```text
+src/operational_benchmarks.py
+```
+
+Main active runtime functions:
+
+```text
+load_operational_benchmarks(...)
+lookup_operational_benchmark(...)
+classify_enrollment(...)
+classify_site_count(...)
+planned_enrollment_metadata(...)
+planned_sites_metadata(...)
+planned_sites_default_from_operational_benchmark(...)
+```
+
+The active artifact contains one row per benchmark cohort and fallback level with metric-specific evidence:
+
+```text
+enrollment_n / enrollment_p25 / enrollment_p50 / enrollment_p75 / enrollment_p90
+site_count_n / site_count_p25 / site_count_p50 / site_count_p75 / site_count_p90
+patients_per_site_n / patients_per_site_p25 / patients_per_site_p50 / patients_per_site_p75 / patients_per_site_p90
+```
+
+The runtime must keep metric-specific counts and confidence flags. It must not collapse them into one shared `benchmark_n`.
+
+Historical Phase 1 enrollment-only artifact path:
+
+Historical Phase 1 enrollment-only report path:
 
 ```text
 frontend/data/enrollment_benchmarks_v1_report.json
@@ -1407,12 +1642,12 @@ outlier_policy
 calibration_notes
 ```
 
-At runtime, the app uses the current prediction snapshot to look up the relevant benchmark row, apply deterministic fallback logic if needed, classify the current `planned_enrollment_assumption`, and pass the resulting metadata to the narrative layer.
+At runtime, the app uses the current prediction snapshot to look up the relevant combined operational benchmark row, apply deterministic fallback logic if needed, classify the current operational assumptions, and store the resulting metadata in the simulation snapshot.
 
 Runtime should require only:
 
 - The current trial prediction snapshot.
-- The compact enrollment benchmark artifact.
+- The compact combined operational benchmark artifact.
 - Deterministic fallback logic.
 
 Runtime should not require:
@@ -1424,29 +1659,14 @@ Runtime should not require:
 
 This keeps the production app lighter, faster, more auditable, and less dependent on raw historical data.
 
-Current runtime utility:
-
-```text
-src/enrollment_benchmarks.py
-```
-
-Main functions:
-
-```text
-load_enrollment_benchmarks(...)
-lookup_enrollment_benchmark(...)
-classify_enrollment(...)
-planned_enrollment_metadata(...)
-```
-
-S2 inactive site-count artifact paths:
+Historical site-count artifact paths:
 
 ```text
 frontend/data/site_benchmarks_v1.csv
 frontend/data/site_benchmarks_v1_report.json
 ```
 
-S2 inactive site-count runtime utility:
+Historical site-count runtime utility:
 
 ```text
 src/site_benchmarks.py
@@ -1461,22 +1681,23 @@ classify_site_count(...)
 planned_sites_metadata(...)
 ```
 
-These S2 site-count artifacts and utilities are implemented for future S3 work only. They are not imported into Simulation Mode, do not activate `planned_sites`, and do not change `/predict`, XGBoost, SHAP, therapeutic-area calibration, audit/demo parity, API contracts, model artifacts, taxonomy artifacts, or prediction payloads.
+These older enrollment-only and site-only artifacts/utilities remain useful QA references. The active Simulation Mode runtime now uses the combined operational artifact and utility.
 
 Enrollment and site-count runtime fallback behavior:
 
 ```text
 1. Try phase + indication + rare disease.
-2. If missing or low confidence (n < 50), try phase + therapeutic area + rare disease.
-3. If missing or low confidence, try phase + therapeutic area.
-4. If missing or low confidence, try phase only.
-5. If no confident row exists, allow an available low-confidence row as a last-resort benchmark.
-6. Return not_available if the artifact is missing/corrupt, phase cannot be matched, planned enrollment is invalid/missing, or percentile values are incomplete.
+2. If missing or too sparse (metric n < 20), try phase + therapeutic area + rare disease.
+3. If missing or too sparse, try phase + therapeutic area.
+4. If missing or too sparse, try phase only.
+5. If a matched row has at least one relevant operational metric with n >= 50, keep that row even when another metric is near-threshold low confidence.
+6. Mark metric confidence separately.
+7. Return not_available if the artifact is missing/corrupt, phase cannot be matched, the operational value is invalid/missing, or percentile values are incomplete.
 ```
 
 ## Completed Planned Enrollment Implementation Path
 
-This section is historical and describes the completed Planned Enrollment implementation path. It is not the next action. The next operational-assumption action is S1B `planned_sites` benchmark-feasibility audit under `Next Operational Assumptions - Sites And Duration Planning`.
+This section is historical and describes the completed Planned Enrollment implementation path. It is not the next action. S1B, S2, and S3 for `planned_sites` are now complete under `Next Operational Assumptions - Sites And Duration Planning`.
 
 Focused v1 path and current status:
 
@@ -1626,8 +1847,8 @@ The previous broader estimation architecture remains useful as later roadmap thi
 
 Current future estimation roadmap topics:
 
-- S2 QA checkpoint for the implemented Planned Site Count benchmark layer.
-- Planned Site Count Simulation Mode integration only after S2 QA passes and S3 is separately authorized.
+- Post-S3 `planned_sites` defaulting revision using current registry facility-count proxy as lower-bound context plus an enrollment-coherent patients-per-site benchmark default.
+- Post-S3 browser smoke testing and deployment readiness review for Planned Site Count.
 - Planned Duration Months benchmark layer, only if duration source quality supports it.
 - Reconciliation of enrollment/sites/duration, only after those layers exist.
 
@@ -1650,12 +1871,16 @@ Future versions may also explore model-based enrollment calibration, including f
 - Do not add active sites, countries, total duration, cost, or market logic to v1.
 - For the next operational-assumption work, use `Next Operational Assumptions - Sites And Duration Planning` as the source of truth.
 - Treat S1B `planned_sites` audit as complete.
-- Treat S2 `planned_sites` compact benchmark artifact/runtime utility as implemented but inactive.
-- Before S3, run a dedicated S2 QA checkpoint covering the artifact, report, runtime utility, and check script.
-- Use the S2 site benchmark artifact and `src/site_benchmarks.py` only in future S3 work.
-- Do not import or activate `src/site_benchmarks.py` in `frontend/views/edit_trial.py` before S3.
-- Do not add `planned_sites` to `ACTIVE_OPERATIONAL_ASSUMPTION_KEYS` before S3.
-- During S3, `planned_sites` integration must follow the existing operational-only update pattern and must not call `/predict` for operational-only changes.
+- Treat S2 `planned_sites` compact benchmark artifact/runtime utility as implemented.
+- Treat S3 `planned_sites` Simulation Mode integration as implemented.
+- Treat the post-S3 planned-sites defaulting revision as the next implementation task.
+- For non-completed trials, do not initialize the editable `planned_sites` assumption directly from `number_of_facilities`.
+- Treat non-completed `number_of_facilities` as `current_registry_facility_count_proxy` context and a lower-bound candidate.
+- Add deterministic patients-per-site benchmark support from completed trials with positive enrollment and positive registry facility-count proxy values.
+- Use the enrollment-coherent default rule documented in `Planned Site Count - Post-S3 Defaulting Revision Implementation Status`.
+- `planned_sites` integration must follow the existing operational-only update pattern and must not call `/predict` for operational-only changes.
+- Do not add `planned_sites` to `SIMULATION_FEATURE_IDS`.
+- Do not send `planned_sites` to `/predict`.
 - Do not modify XGBoost, SHAP, therapeutic-area calibration, or audit/demo parity.
 - Do not add new primary benchmark fields merely because they sound clinically plausible.
 - Only add primary benchmark fields if they improve relevance while preserving sample size and percentile stability.
@@ -1669,7 +1894,7 @@ Future versions may also explore model-based enrollment calibration, including f
 
 ## Historical Phase 2 Entry Point
 
-This Phase 2 entry point is historical. It describes the already implemented Planned Enrollment foundation and is not the next implementation instruction. The next operational-assumption work must follow `Next Operational Assumptions - Sites And Duration Planning`: S1B is complete, S2 is implemented, and the next required step is the S2 QA checkpoint before any separately authorized S3 work.
+This Phase 2 entry point is historical. It describes the already implemented Planned Enrollment foundation and is not the next implementation instruction. The next operational-assumption work must follow `Next Operational Assumptions - Sites And Duration Planning`: S1B is complete, S2 is implemented, S2 QA returned GO, and S3 Simulation Mode integration is implemented. The next implementation task is the post-S3 planned-sites defaulting revision documented above.
 
 Historical Planned Enrollment implementation sequence:
 
