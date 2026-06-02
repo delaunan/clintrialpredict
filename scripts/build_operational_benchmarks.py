@@ -22,7 +22,8 @@ OUTLIER_POLICY = (
 )
 CALIBRATION_NOTES = (
     "Deterministic combined operational benchmark for planned enrollment, site-count proxy, "
-    "and enrollment-coherent patients-per-site defaults; no operational ML model."
+    "and enrollment-coherent patients-per-site defaults; same-level therapeutic modality refinement "
+    "is used for enrollment and patients-per-site only; no operational ML model."
 )
 
 MIN_N_DEFAULT = 50
@@ -41,9 +42,10 @@ REQUIRED_COLUMNS = [
     "gbd_indication_name_3",
     "is_rare_disease_ml",
     "is_rare_disease",
+    "therapeutic_modality_ui",
 ]
 
-LEVELS = [
+GENERAL_LEVELS = [
     {
         "name": "phase_indication_rare",
         "group_cols": ["phase", "gbd_cause_id_3_ml", "is_rare_disease_ml"],
@@ -61,6 +63,38 @@ LEVELS = [
         "group_cols": ["phase"],
     },
 ]
+
+MODALITY_REFINEMENT_LEVELS = [
+    {
+        "name": "phase_indication_rare_modality",
+        "group_cols": ["phase", "gbd_cause_id_3_ml", "is_rare_disease_ml", "therapeutic_modality"],
+    },
+    {
+        "name": "phase_ta_rare_modality",
+        "group_cols": ["phase", "therapeutic_area", "is_rare_disease_ml", "therapeutic_modality"],
+    },
+    {
+        "name": "phase_ta_modality",
+        "group_cols": ["phase", "therapeutic_area", "therapeutic_modality"],
+    },
+]
+
+NON_VACCINE_INFECTIONS_LEVELS = [
+    {
+        "name": "phase_indication_rare_non_vaccine_infections",
+        "group_cols": ["phase", "gbd_cause_id_3_ml", "is_rare_disease_ml"],
+    },
+    {
+        "name": "phase_ta_rare_non_vaccine_infections",
+        "group_cols": ["phase", "therapeutic_area", "is_rare_disease_ml"],
+    },
+    {
+        "name": "phase_ta_non_vaccine_infections",
+        "group_cols": ["phase", "therapeutic_area"],
+    },
+]
+
+LEVELS = GENERAL_LEVELS + MODALITY_REFINEMENT_LEVELS + NON_VACCINE_INFECTIONS_LEVELS
 
 PERCENTILES = [0.25, 0.5, 0.75, 0.9]
 PERCENTILE_SUFFIXES = {
@@ -101,10 +135,34 @@ def _available_usecols(path: Path, requested_columns: list[str]) -> list[str]:
 def _benchmark_key(level: str, row: pd.Series) -> str:
     if level == "phase_indication_rare":
         return f"{level}|phase={row['phase']}|indication={_as_int(row['gbd_cause_id_3_ml'])}|rare={_as_int(row['rare_disease_flag'])}"
+    if level == "phase_indication_rare_modality":
+        return (
+            f"{level}|phase={row['phase']}|indication={_as_int(row['gbd_cause_id_3_ml'])}"
+            f"|rare={_as_int(row['rare_disease_flag'])}|modality={row['therapeutic_modality']}"
+        )
+    if level == "phase_indication_rare_non_vaccine_infections":
+        return (
+            f"{level}|phase={row['phase']}|indication={_as_int(row['gbd_cause_id_3_ml'])}"
+            f"|rare={_as_int(row['rare_disease_flag'])}|modality=NON_VACCINE"
+        )
     if level == "phase_ta_rare":
         return f"{level}|phase={row['phase']}|ta={row['therapeutic_area']}|rare={_as_int(row['rare_disease_flag'])}"
+    if level == "phase_ta_rare_modality":
+        return (
+            f"{level}|phase={row['phase']}|ta={row['therapeutic_area']}"
+            f"|rare={_as_int(row['rare_disease_flag'])}|modality={row['therapeutic_modality']}"
+        )
+    if level == "phase_ta_rare_non_vaccine_infections":
+        return (
+            f"{level}|phase={row['phase']}|ta={row['therapeutic_area']}"
+            f"|rare={_as_int(row['rare_disease_flag'])}|modality=NON_VACCINE"
+        )
     if level == "phase_ta":
         return f"{level}|phase={row['phase']}|ta={row['therapeutic_area']}"
+    if level == "phase_ta_modality":
+        return f"{level}|phase={row['phase']}|ta={row['therapeutic_area']}|modality={row['therapeutic_modality']}"
+    if level == "phase_ta_non_vaccine_infections":
+        return f"{level}|phase={row['phase']}|ta={row['therapeutic_area']}|modality=NON_VACCINE"
     return f"{level}|phase={row['phase']}"
 
 
@@ -131,6 +189,10 @@ def load_source(path: Path = DATA_CLINPRED_PATH) -> pd.DataFrame:
     df["overall_status"] = df["overall_status"].map(_clean_text)
     df["phase"] = df["phase"].map(_clean_text)
     df["therapeutic_area"] = df["therapeutic_area"].map(_clean_text)
+    if "therapeutic_modality_ui" in df.columns:
+        df["therapeutic_modality"] = df["therapeutic_modality_ui"].map(_clean_text)
+    else:
+        df["therapeutic_modality"] = "UNKNOWN"
     df["gbd_cause_id_3_ml"] = pd.to_numeric(df["gbd_cause_id_3_ml"], errors="coerce").fillna(0).astype(int)
     df["is_rare_disease_ml"] = pd.to_numeric(df["is_rare_disease_ml"], errors="coerce").fillna(0).astype(int)
     return df
@@ -174,9 +236,15 @@ def _metric_summary(series: pd.Series, prefix: str, min_n: int) -> dict[str, obj
     return summary
 
 
-def _summaries_by_level(target: pd.DataFrame, value_column: str, prefix: str, min_n: int) -> dict[str, dict[str, object]]:
+def _summaries_by_level(
+    target: pd.DataFrame,
+    value_column: str,
+    prefix: str,
+    min_n: int,
+    levels: list[dict[str, object]],
+) -> dict[str, dict[str, object]]:
     summaries: dict[str, dict[str, object]] = {}
-    for level in LEVELS:
+    for level in levels:
         for keys, group in target.groupby(level["group_cols"], dropna=False):
             if not isinstance(keys, tuple):
                 keys = (keys,)
@@ -187,6 +255,7 @@ def _summaries_by_level(target: pd.DataFrame, value_column: str, prefix: str, mi
                 "gbd_cause_id_3_ml": key_data.get("gbd_cause_id_3_ml", ""),
                 "therapeutic_area": key_data.get("therapeutic_area", ""),
                 "rare_disease_flag": key_data.get("is_rare_disease_ml", ""),
+                "therapeutic_modality": key_data.get("therapeutic_modality", ""),
             }
             benchmark_key = _benchmark_key(level["name"], pd.Series(base))
             summaries[benchmark_key] = _metric_summary(group[value_column], prefix, min_n)
@@ -205,9 +274,32 @@ def build_benchmarks(
     site_target = df[df["is_completed_positive_site_count_target"]].copy()
     pps_target = df[df["is_completed_patients_per_site_target"]].copy()
 
-    enrollment = _summaries_by_level(enrollment_target, "enrollment", "enrollment", min_n)
-    site_count = _summaries_by_level(site_target, "number_of_facilities", "site_count", min_n)
-    patients_per_site = _summaries_by_level(pps_target, "patients_per_site", "patients_per_site", min_n)
+    infection_non_vaccine = (
+        df["therapeutic_area"].eq("INFECTIONS") & ~df["therapeutic_modality"].eq("VACCINE")
+    )
+
+    enrollment = _summaries_by_level(enrollment_target, "enrollment", "enrollment", min_n, GENERAL_LEVELS + MODALITY_REFINEMENT_LEVELS)
+    site_count = _summaries_by_level(site_target, "number_of_facilities", "site_count", min_n, GENERAL_LEVELS)
+    patients_per_site = _summaries_by_level(pps_target, "patients_per_site", "patients_per_site", min_n, GENERAL_LEVELS + MODALITY_REFINEMENT_LEVELS)
+
+    enrollment.update(
+        _summaries_by_level(
+            enrollment_target[infection_non_vaccine.loc[enrollment_target.index]],
+            "enrollment",
+            "enrollment",
+            min_n,
+            NON_VACCINE_INFECTIONS_LEVELS,
+        )
+    )
+    patients_per_site.update(
+        _summaries_by_level(
+            pps_target[infection_non_vaccine.loc[pps_target.index]],
+            "patients_per_site",
+            "patients_per_site",
+            min_n,
+            NON_VACCINE_INFECTIONS_LEVELS,
+        )
+    )
 
     rows: list[dict[str, object]] = []
     for level in LEVELS:
@@ -227,6 +319,7 @@ def build_benchmarks(
                 "gbd_cause_id_3_ml": _as_int(parts["indication"]) if "indication" in parts else "",
                 "therapeutic_area": parts.get("ta", ""),
                 "rare_disease_flag": _as_int(parts["rare"]) if "rare" in parts else "",
+                "therapeutic_modality": parts.get("modality", ""),
                 "benchmark_level_used": level["name"],
                 "created_at": created_at,
                 "outlier_policy": OUTLIER_POLICY,
@@ -249,6 +342,7 @@ def build_benchmarks(
         "gbd_cause_id_3_ml",
         "therapeutic_area",
         "rare_disease_flag",
+        "therapeutic_modality",
         "benchmark_level_used",
         "enrollment_n",
         "enrollment_p25",

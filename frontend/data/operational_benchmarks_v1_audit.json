@@ -1,0 +1,248 @@
+{
+  "artifact": {
+    "columns": [
+      "benchmark_version",
+      "source_data_version",
+      "benchmark_key",
+      "phase",
+      "gbd_cause_id_3_ml",
+      "therapeutic_area",
+      "rare_disease_flag",
+      "therapeutic_modality",
+      "benchmark_level_used",
+      "enrollment_n",
+      "enrollment_p25",
+      "enrollment_p50",
+      "enrollment_p75",
+      "enrollment_p90",
+      "enrollment_low_confidence_flag",
+      "site_count_n",
+      "site_count_p25",
+      "site_count_p50",
+      "site_count_p75",
+      "site_count_p90",
+      "site_count_low_confidence_flag",
+      "patients_per_site_n",
+      "patients_per_site_p25",
+      "patients_per_site_p50",
+      "patients_per_site_p75",
+      "patients_per_site_p90",
+      "patients_per_site_low_confidence_flag",
+      "created_at",
+      "outlier_policy",
+      "calibration_notes"
+    ],
+    "duplicate_benchmark_keys": 0,
+    "low_confidence_rows_by_metric": {
+      "enrollment": 3578,
+      "patients_per_site": 3568,
+      "site_count": 667
+    },
+    "modality_rows": 3085,
+    "path": "/home/delaunan/code/delaunan/clintrialpredict/frontend/data/operational_benchmarks_v1.csv",
+    "phase_only_modality_rows": 0,
+    "rows": 4056,
+    "rows_by_level": {
+      "phase_indication_rare": 660,
+      "phase_indication_rare_modality": 1958,
+      "phase_indication_rare_non_vaccine_infections": 81,
+      "phase_only": 4,
+      "phase_ta": 76,
+      "phase_ta_modality": 453,
+      "phase_ta_non_vaccine_infections": 4,
+      "phase_ta_rare": 138,
+      "phase_ta_rare_modality": 674,
+      "phase_ta_rare_non_vaccine_infections": 8
+    },
+    "site_count_modality_rows_with_values": 0,
+    "site_count_non_vaccine_infections_rows_with_values": 0
+  },
+  "created_at": "2026-06-02T20:45:51+00:00",
+  "defaulting": {
+    "completed_site_proxy_not_used": 0,
+    "enrollment_default_sources": {
+      "model_default": 2717,
+      "observed_lower_bound": 1706
+    },
+    "examples": [
+      {
+        "current_registry_facility_count_proxy": 2.0,
+        "enrollment": 2.0,
+        "modality": "Cell Gene Therapy",
+        "nct_id": "NCT04394286",
+        "patients_per_site_level": "phase_indication_rare",
+        "patients_per_site_p50": 3.2,
+        "site_default_basis": "enrollment_coherent_benchmark_default",
+        "site_default_value": 6,
+        "status": "TERMINATED"
+      },
+      {
+        "current_registry_facility_count_proxy": 1.0,
+        "enrollment": 90.0,
+        "modality": "Biologic Mab",
+        "nct_id": "NCT06639347",
+        "patients_per_site_level": "phase_ta_rare_modality",
+        "patients_per_site_p50": 6.55,
+        "site_default_basis": "enrollment_coherent_benchmark_default",
+        "site_default_value": 15,
+        "status": "RECRUITING"
+      },
+      {
+        "current_registry_facility_count_proxy": 278.0,
+        "enrollment": 1950.0,
+        "modality": "Small Molecule",
+        "nct_id": "NCT06550076",
+        "patients_per_site_level": "phase_indication_rare_modality",
+        "patients_per_site_p50": 12.69,
+        "site_default_basis": "current_registry_facility_count_proxy",
+        "site_default_value": 278,
+        "status": "ACTIVE_NOT_RECRUITING"
+      },
+      {
+        "current_registry_facility_count_proxy": 58.0,
+        "enrollment": 136.0,
+        "modality": "Small Molecule",
+        "nct_id": "NCT04946318",
+        "patients_per_site_level": "phase_indication_rare_modality",
+        "patients_per_site_p50": 7.84,
+        "site_default_basis": "current_registry_facility_count_proxy",
+        "site_default_value": 58,
+        "status": "TERMINATED"
+      },
+      {
+        "current_registry_facility_count_proxy": 1.0,
+        "enrollment": 155.0,
+        "modality": "Small Molecule",
+        "nct_id": "NCT06790862",
+        "patients_per_site_level": "phase_indication_rare_modality",
+        "patients_per_site_p50": 11.32,
+        "site_default_basis": "enrollment_coherent_benchmark_default",
+        "site_default_value": 14,
+        "status": "ACTIVE_NOT_RECRUITING"
+      },
+      {
+        "current_registry_facility_count_proxy": 2.0,
+        "enrollment": 510.0,
+        "modality": "Biologic Mab",
+        "nct_id": "NCT06601335",
+        "patients_per_site_level": "phase_ta_rare_modality",
+        "patients_per_site_p50": 5.17,
+        "site_default_basis": "enrollment_coherent_benchmark_default",
+        "site_default_value": 99,
+        "status": "RECRUITING"
+      },
+      {
+        "current_registry_facility_count_proxy": 1.0,
+        "enrollment": 349.0,
+        "modality": "Peptide Hormones",
+        "nct_id": "NCT06184568",
+        "patients_per_site_level": "phase_indication_rare_modality",
+        "patients_per_site_p50": 7.66,
+        "site_default_basis": "enrollment_coherent_benchmark_default",
+        "site_default_value": 63,
+        "status": "ACTIVE_NOT_RECRUITING"
+      },
+      {
+        "current_registry_facility_count_proxy": 138.0,
+        "enrollment": 3127.0,
+        "modality": "Peptide Hormones",
+        "nct_id": "NCT05869903",
+        "patients_per_site_level": "phase_indication_rare",
+        "patients_per_site_p50": 9.97,
+        "site_default_basis": "enrollment_coherent_benchmark_default",
+        "site_default_value": 314,
+        "status": "ACTIVE_NOT_RECRUITING"
+      }
+    ],
+    "non_completed_site_defaults_below_current_proxy": 0,
+    "non_completed_with_positive_current_proxy": 2768,
+    "site_default_basis": {
+      "completed_registry_facility_count": 1500,
+      "current_registry_facility_count_proxy": 1515,
+      "enrollment_coherent_benchmark_default": 1408
+    },
+    "site_default_sources": {
+      "completed_registry_facility_count": 1500,
+      "current_registry_facility_count_proxy": 1515,
+      "enrollment_coherent_benchmark_default": 1408
+    }
+  },
+  "failures": [],
+  "lookup_coverage": {
+    "enrollment": {
+      "level_counts": {
+        "phase_indication_rare": 1216,
+        "phase_indication_rare_modality": 1710,
+        "phase_indication_rare_non_vaccine_infections": 62,
+        "phase_only": 112,
+        "phase_ta": 114,
+        "phase_ta_modality": 248,
+        "phase_ta_non_vaccine_infections": 2,
+        "phase_ta_rare": 299,
+        "phase_ta_rare_modality": 584,
+        "phase_ta_rare_non_vaccine_infections": 76
+      },
+      "low_confidence_matches": 0,
+      "modality_refined_matches": 2542,
+      "non_vaccine_infections_matches": 140,
+      "not_available": 0,
+      "too_sparse_matches": 0
+    },
+    "patients_per_site": {
+      "level_counts": {
+        "phase_indication_rare": 1305,
+        "phase_indication_rare_modality": 1598,
+        "phase_indication_rare_non_vaccine_infections": 85,
+        "phase_only": 112,
+        "phase_ta": 117,
+        "phase_ta_modality": 245,
+        "phase_ta_non_vaccine_infections": 2,
+        "phase_ta_rare": 305,
+        "phase_ta_rare_modality": 578,
+        "phase_ta_rare_non_vaccine_infections": 76
+      },
+      "low_confidence_matches": 0,
+      "modality_refined_matches": 2421,
+      "non_vaccine_infections_matches": 163,
+      "not_available": 0,
+      "too_sparse_matches": 0
+    },
+    "site_count": {
+      "level_counts": {
+        "phase_indication_rare": 3056,
+        "phase_only": 112,
+        "phase_ta": 357,
+        "phase_ta_rare": 898
+      },
+      "low_confidence_matches": 0,
+      "modality_refined_matches": 0,
+      "non_vaccine_infections_matches": 0,
+      "not_available": 0,
+      "too_sparse_matches": 0
+    }
+  },
+  "model_boundary": {
+    "number_of_facilities_in_simulation_feature_ids": false,
+    "planned_enrollment_in_simulation_feature_ids": false,
+    "planned_sites_in_simulation_feature_ids": false
+  },
+  "registry_modality_assignment": {
+    "assigned": 4423,
+    "assigned_pct": 100.0,
+    "counts": {
+      "Biologic Adc": 233,
+      "Biologic Mab": 1369,
+      "Biologic Other": 231,
+      "Cell Gene Therapy": 96,
+      "Other Modality": 65,
+      "Peptide Hormones": 260,
+      "Radiopharmaceutical": 29,
+      "Rna Therapy": 122,
+      "Small Molecule": 1751,
+      "Vaccine": 267
+    },
+    "not_assigned": 0,
+    "rows": 4423
+  },
+  "status": "PASS"
+}

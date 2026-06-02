@@ -30,6 +30,14 @@ def main() -> None:
     _assert(not artifact.empty, "Operational artifact has no rows")
     _assert(REQUIRED_ARTIFACT_COLUMNS.issubset(artifact.columns), "Operational artifact is missing expected columns")
     _assert(artifact["benchmark_key"].duplicated().sum() == 0, "Operational artifact has duplicate benchmark keys")
+    _assert(
+        artifact["benchmark_level_used"].eq("phase_only_modality").sum() == 0,
+        "Artifact should not include phase-only modality rows",
+    )
+    _assert(
+        artifact.loc[artifact["benchmark_level_used"].str.endswith("_modality"), "site_count_n"].fillna(0).eq(0).all(),
+        "Raw site-count benchmarks should not use modality refinement rows",
+    )
 
     for prefix in ("enrollment", "site_count", "patients_per_site"):
         for suffix in ("n", "p25", "p50", "p75", "p90"):
@@ -69,6 +77,83 @@ def main() -> None:
     _assert(
         mismatch_lookup is not None and mismatch_lookup["benchmark_key"] == mismatch_row["benchmark_key"],
         "Near-threshold row should be used instead of falling back",
+    )
+
+    modality_snapshot = {
+        "phase": "PHASE3",
+        "gbd_cause_id_3_ml": 302,
+        "therapeutic_area": "INFECTIONS",
+        "is_rare_disease_ml": 0,
+        "therapeutic_modality_ui": "Vaccine",
+    }
+    modality_enrollment = lookup_operational_benchmark(modality_snapshot, artifact, metric_prefix="enrollment")
+    _assert(modality_enrollment is not None, "Modality enrollment lookup failed")
+    _assert(
+        modality_enrollment["benchmark_level_used"] == "phase_ta_rare_modality",
+        "Enrollment should use same-level modality refinement when confident",
+    )
+    _assert(
+        int(modality_enrollment["enrollment_n"]) >= 50,
+        "Confident enrollment modality refinement should have n >= 50",
+    )
+    modality_pps = lookup_operational_benchmark(modality_snapshot, artifact, metric_prefix="patients_per_site")
+    _assert(modality_pps is not None, "Modality patients-per-site lookup failed")
+    _assert(
+        modality_pps["benchmark_level_used"] == "phase_ta_rare_modality",
+        "Patients-per-site should use same-level modality refinement when confident",
+    )
+    _assert(
+        int(modality_pps["patients_per_site_n"]) >= 50,
+        "Confident patients-per-site modality refinement should have n >= 50",
+    )
+    modality_site = lookup_operational_benchmark(modality_snapshot, artifact, metric_prefix="site_count")
+    _assert(modality_site is not None, "Modality site-count lookup failed")
+    _assert(
+        modality_site["benchmark_level_used"] == "phase_ta_rare",
+        "Raw site-count lookup should remain on the clinical cohort, not modality refinement",
+    )
+
+    registry = pd.read_csv("frontend/data/search_registry.csv", low_memory=False)
+    non_vaccine_infections_trial = registry[registry["nct_id"].eq("NCT04938830")].iloc[0].to_dict()
+    non_vaccine_infections_trial["phase"] = non_vaccine_infections_trial.get("phase_ml")
+    if not non_vaccine_infections_trial.get("therapeutic_area"):
+        non_vaccine_infections_trial["therapeutic_area"] = non_vaccine_infections_trial.get("therapeutic_area_ml")
+    non_vaccine_enrollment = lookup_operational_benchmark(
+        non_vaccine_infections_trial,
+        artifact,
+        metric_prefix="enrollment",
+    )
+    _assert(
+        non_vaccine_enrollment is not None
+        and non_vaccine_enrollment["benchmark_level_used"] == "phase_ta_rare_non_vaccine_infections",
+        "Non-vaccine Infections enrollment should fall back to non-vaccine Infections cohort",
+    )
+    _assert(
+        int(non_vaccine_enrollment["enrollment_n"]) >= 50,
+        "Non-vaccine Infections enrollment fallback should require n >= 50",
+    )
+    non_vaccine_pps = lookup_operational_benchmark(
+        non_vaccine_infections_trial,
+        artifact,
+        metric_prefix="patients_per_site",
+    )
+    _assert(
+        non_vaccine_pps is not None
+        and non_vaccine_pps["benchmark_level_used"] == "phase_ta_rare_non_vaccine_infections",
+        "Non-vaccine Infections patients-per-site should fall back to non-vaccine Infections cohort",
+    )
+    _assert(
+        int(non_vaccine_pps["patients_per_site_n"]) >= 50,
+        "Non-vaccine Infections patients-per-site fallback should require n >= 50",
+    )
+    non_vaccine_site = lookup_operational_benchmark(
+        non_vaccine_infections_trial,
+        artifact,
+        metric_prefix="site_count",
+    )
+    _assert(
+        non_vaccine_site is not None and not str(non_vaccine_site["benchmark_level_used"]).endswith("_non_vaccine_infections"),
+        "Raw site-count should not use non-vaccine Infections fallback",
     )
 
     fallback_row = artifact[
@@ -126,7 +211,6 @@ def main() -> None:
         "Non-completed default basis is invalid",
     )
 
-    registry = pd.read_csv("frontend/data/search_registry.csv", low_memory=False)
     small_planned = registry[registry["nct_id"].eq("NCT07543380")].iloc[0]
     small_snapshot = small_planned.to_dict()
     small_snapshot["phase"] = small_snapshot.get("phase_ml")

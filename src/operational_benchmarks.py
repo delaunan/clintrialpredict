@@ -17,8 +17,24 @@ LEVEL_ORDER = [
     "phase_only",
 ]
 
+MODALITY_REFINEMENT_LEVELS = {
+    "phase_indication_rare": "phase_indication_rare_modality",
+    "phase_ta_rare": "phase_ta_rare_modality",
+    "phase_ta": "phase_ta_modality",
+}
+
+NON_VACCINE_INFECTIONS_LEVELS = {
+    "phase_indication_rare": "phase_indication_rare_non_vaccine_infections",
+    "phase_ta_rare": "phase_ta_rare_non_vaccine_infections",
+    "phase_ta": "phase_ta_non_vaccine_infections",
+}
+
+MODALITY_REFINED_METRICS = {"enrollment", "patients_per_site"}
+
 METRIC_PREFIXES = ("enrollment", "site_count", "patients_per_site")
 MIN_USABLE_METRIC_N = 20
+MIN_MODALITY_REFINEMENT_N = 50
+MIN_NON_VACCINE_INFECTIONS_N = 50
 
 REQUIRED_ARTIFACT_COLUMNS = {
     "benchmark_version",
@@ -28,6 +44,7 @@ REQUIRED_ARTIFACT_COLUMNS = {
     "gbd_cause_id_3_ml",
     "therapeutic_area",
     "rare_disease_flag",
+    "therapeutic_modality",
     "benchmark_level_used",
     "created_at",
     "outlier_policy",
@@ -72,6 +89,13 @@ def _clean_phase(value: Any) -> str | None:
 
 
 def _clean_ta(value: Any) -> str | None:
+    if _is_missing(value):
+        return None
+    text = str(value).strip()
+    return text.upper() if text else None
+
+
+def _clean_modality(value: Any) -> str | None:
     if _is_missing(value):
         return None
     text = str(value).strip()
@@ -129,6 +153,7 @@ def load_operational_benchmarks(path: str | Path = DEFAULT_ARTIFACT_PATH) -> pd.
 
     artifact["phase"] = artifact["phase"].map(_clean_phase)
     artifact["therapeutic_area"] = artifact["therapeutic_area"].map(_clean_ta)
+    artifact["therapeutic_modality"] = artifact["therapeutic_modality"].map(_clean_modality)
     artifact["gbd_cause_id_3_ml"] = pd.to_numeric(artifact["gbd_cause_id_3_ml"], errors="coerce")
     artifact["rare_disease_flag"] = pd.to_numeric(artifact["rare_disease_flag"], errors="coerce")
     for prefix in METRIC_PREFIXES:
@@ -160,6 +185,112 @@ def _candidate_keys(snapshot: dict[str, Any]) -> list[tuple[str, dict[str, Any]]
         candidates.append(("phase_ta", {"phase": phase, "therapeutic_area": therapeutic_area}))
     candidates.append(("phase_only", {"phase": phase}))
     return candidates
+
+
+def _snapshot_modality(snapshot: dict[str, Any]) -> str | None:
+    return _clean_modality(
+        _first_present(
+            snapshot.get("therapeutic_modality"),
+            snapshot.get("therapeutic_modality_ui"),
+            snapshot.get("therapeutic_modality_ml"),
+        )
+    )
+
+
+def _same_level_modality_refinement(
+    snapshot: dict[str, Any],
+    benchmarks: pd.DataFrame,
+    base_row: pd.Series,
+    metric_prefix: str | None,
+) -> pd.Series:
+    if metric_prefix not in MODALITY_REFINED_METRICS:
+        return base_row
+
+    base_level = str(base_row.get("benchmark_level_used") or "")
+    refined_level = MODALITY_REFINEMENT_LEVELS.get(base_level)
+    modality = _snapshot_modality(snapshot)
+    if not refined_level or not modality:
+        return base_row
+
+    mask = benchmarks["benchmark_level_used"].eq(refined_level)
+    mask &= benchmarks["phase"].eq(base_row.get("phase"))
+    if base_level in {"phase_indication_rare", "phase_ta_rare"}:
+        mask &= benchmarks["rare_disease_flag"].eq(base_row.get("rare_disease_flag"))
+    if base_level == "phase_indication_rare":
+        mask &= benchmarks["gbd_cause_id_3_ml"].eq(base_row.get("gbd_cause_id_3_ml"))
+    if base_level in {"phase_ta_rare", "phase_ta"}:
+        mask &= benchmarks["therapeutic_area"].eq(base_row.get("therapeutic_area"))
+    mask &= benchmarks["therapeutic_modality"].eq(modality)
+    mask &= pd.to_numeric(benchmarks[f"{metric_prefix}_n"], errors="coerce").fillna(0).ge(MIN_MODALITY_REFINEMENT_N)
+
+    refined = benchmarks[mask].copy()
+    if refined.empty:
+        return base_row
+    return refined.sort_values(f"{metric_prefix}_n", ascending=False).iloc[0]
+
+
+def _is_non_vaccine_infections_snapshot(snapshot: dict[str, Any]) -> bool:
+    therapeutic_area = _clean_ta(
+        _first_present(snapshot.get("therapeutic_area"), snapshot.get("therapeutic_area_ui"), snapshot.get("therapeutic_area_ml"))
+    )
+    modality = _snapshot_modality(snapshot)
+    return therapeutic_area == "INFECTIONS" and modality not in {None, "VACCINE"}
+
+
+def _infection_non_vaccine_key_values(base_row: pd.Series, level: str) -> dict[str, Any]:
+    values: dict[str, Any] = {"phase": base_row.get("phase")}
+    if level == "phase_indication_rare":
+        values["gbd_cause_id_3_ml"] = base_row.get("gbd_cause_id_3_ml")
+        values["rare_disease_flag"] = base_row.get("rare_disease_flag")
+    elif level == "phase_ta_rare":
+        values["therapeutic_area"] = "INFECTIONS"
+        values["rare_disease_flag"] = base_row.get("rare_disease_flag")
+    elif level == "phase_ta":
+        values["therapeutic_area"] = "INFECTIONS"
+    return values
+
+
+def _infection_non_vaccine_fallback(
+    snapshot: dict[str, Any],
+    benchmarks: pd.DataFrame,
+    base_row: pd.Series,
+    metric_prefix: str | None,
+) -> pd.Series:
+    if metric_prefix not in MODALITY_REFINED_METRICS or not _is_non_vaccine_infections_snapshot(snapshot):
+        return base_row
+
+    base_level = str(base_row.get("benchmark_level_used") or "")
+    clinical_levels = ("phase_indication_rare", "phase_ta_rare", "phase_ta")
+    if base_level not in clinical_levels:
+        return base_row
+
+    start_index = clinical_levels.index(base_level)
+    for clinical_level in clinical_levels[start_index:]:
+        non_vaccine_level = NON_VACCINE_INFECTIONS_LEVELS[clinical_level]
+        values = _infection_non_vaccine_key_values(base_row, clinical_level)
+        mask = benchmarks["benchmark_level_used"].eq(non_vaccine_level)
+        for column, expected in values.items():
+            if column in {"gbd_cause_id_3_ml", "rare_disease_flag"}:
+                mask &= benchmarks[column].eq(float(expected))
+            else:
+                mask &= benchmarks[column].eq(expected)
+        mask &= pd.to_numeric(benchmarks[f"{metric_prefix}_n"], errors="coerce").fillna(0).ge(MIN_NON_VACCINE_INFECTIONS_N)
+        candidates = benchmarks[mask].copy()
+        if not candidates.empty:
+            return candidates.sort_values(f"{metric_prefix}_n", ascending=False).iloc[0]
+    return base_row
+
+
+def _refine_operational_row(
+    snapshot: dict[str, Any],
+    benchmarks: pd.DataFrame,
+    base_row: pd.Series,
+    metric_prefix: str | None,
+) -> pd.Series:
+    modality_row = _same_level_modality_refinement(snapshot, benchmarks, base_row, metric_prefix)
+    if modality_row.get("benchmark_key") != base_row.get("benchmark_key"):
+        return modality_row
+    return _infection_non_vaccine_fallback(snapshot, benchmarks, base_row, metric_prefix)
 
 
 def lookup_operational_benchmark(
@@ -201,7 +332,8 @@ def lookup_operational_benchmark(
                 cohort_confident_mask |= ~candidates[f"{prefix}_low_confidence_flag"]
             confident = candidates[cohort_confident_mask]
             if not confident.empty:
-                return confident.sort_values(f"{metric_prefix}_n", ascending=False).iloc[0]
+                base_row = confident.sort_values(f"{metric_prefix}_n", ascending=False).iloc[0]
+                return _refine_operational_row(snapshot, benchmarks, base_row, metric_prefix)
         elif require_confident:
             confidence_columns = [f"{prefix}_low_confidence_flag" for prefix in METRIC_PREFIXES]
             confident = candidates[~candidates[confidence_columns].all(axis=1)]
@@ -210,7 +342,8 @@ def lookup_operational_benchmark(
         else:
             sort_columns = [f"{metric_prefix}_low_confidence_flag", f"{metric_prefix}_n"] if metric_prefix else ["benchmark_key"]
             ascending = [True, False] if metric_prefix else [True]
-            return candidates.sort_values(sort_columns, ascending=ascending).iloc[0]
+            base_row = candidates.sort_values(sort_columns, ascending=ascending).iloc[0]
+            return _refine_operational_row(snapshot, benchmarks, base_row, metric_prefix)
 
     if require_confident:
         return lookup_operational_benchmark(
@@ -242,6 +375,9 @@ def planned_sites_default_from_operational_benchmark(
             "current_registry_facility_count_proxy": current_proxy,
             "site_count_benchmark_p50": None,
             "patients_per_site_p50": None,
+            "patients_per_site_benchmark_level_used": None,
+            "patients_per_site_n": None,
+            "patients_per_site_low_confidence_flag": None,
             "enrollment_coherent_site_candidate": None,
             "operational_benchmark_snapshot_id": None,
         }
@@ -272,6 +408,11 @@ def planned_sites_default_from_operational_benchmark(
             "current_registry_facility_count_proxy": current_proxy,
             "site_count_benchmark_p50": site_p50,
             "patients_per_site_p50": pps_p50,
+            "patients_per_site_benchmark_level_used": pps_row.get("benchmark_level_used") if pps_row is not None else None,
+            "patients_per_site_n": _metric_n(pps_row, "patients_per_site") if pps_row is not None else None,
+            "patients_per_site_low_confidence_flag": (
+                bool(pps_row.get("patients_per_site_low_confidence_flag", True)) if pps_row is not None else None
+            ),
             "enrollment_coherent_site_candidate": enrollment_candidate,
             "operational_benchmark_snapshot_id": None,
         }
@@ -298,6 +439,11 @@ def planned_sites_default_from_operational_benchmark(
         "current_registry_facility_count_proxy": current_proxy,
         "site_count_benchmark_p50": site_p50,
         "patients_per_site_p50": pps_p50,
+        "patients_per_site_benchmark_level_used": pps_row.get("benchmark_level_used") if pps_row is not None else None,
+        "patients_per_site_n": _metric_n(pps_row, "patients_per_site") if pps_row is not None else None,
+        "patients_per_site_low_confidence_flag": (
+            bool(pps_row.get("patients_per_site_low_confidence_flag", True)) if pps_row is not None else None
+        ),
         "enrollment_coherent_site_candidate": enrollment_candidate,
         "operational_benchmark_snapshot_id": snapshot_id,
     }
@@ -564,8 +710,9 @@ def planned_sites_metadata(
             "benchmark_snapshot_id": _benchmark_snapshot_id(row),
             "is_benchmark_stale": bool(is_benchmark_stale),
             "low_confidence_flag": bool(row.get("site_count_low_confidence_flag", True)),
-            "patients_per_site_n": _metric_n(row, "patients_per_site"),
-            "patients_per_site_low_confidence_flag": bool(row.get("patients_per_site_low_confidence_flag", True)),
+            "patients_per_site_benchmark_level_used": default_context.get("patients_per_site_benchmark_level_used"),
+            "patients_per_site_n": default_context.get("patients_per_site_n"),
+            "patients_per_site_low_confidence_flag": default_context.get("patients_per_site_low_confidence_flag"),
             "current_registry_facility_count_proxy": default_context.get("current_registry_facility_count_proxy"),
             "site_default_basis": default_context.get("site_default_basis"),
             "site_count_benchmark_p50": default_context.get("site_count_benchmark_p50"),

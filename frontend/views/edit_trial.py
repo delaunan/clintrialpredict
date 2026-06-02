@@ -5087,6 +5087,7 @@ def get_enrollment_benchmark_stale_fields():
         "gbd_cause_id_3_ml",
         "therapeutic_area_ml",
         "is_rare_disease_ml",
+        "therapeutic_modality_ml",
     }
 
 
@@ -7161,7 +7162,7 @@ def render_enrollment_assumption_card(row):
             source_line,
             "<div class='enrollment-assumption-line'>Enrollment benchmark will refresh after prediction.</div>",
         ]
-        muted = "Benchmark cohort refresh is limited to phase, indication, therapeutic area, and rare-disease flag."
+        muted = "Benchmark cohort refresh is limited to phase, indication, therapeutic area, rare-disease flag, and modality."
     elif enrollment_pending:
         body_lines = [
             f"<div class='enrollment-assumption-line'><strong>Current:</strong> {html.escape(current_text)}</div>",
@@ -7242,7 +7243,7 @@ def render_site_assumption_card(row):
             source_line,
             "<div class='enrollment-assumption-line'>Site-count benchmark position will refresh after prediction.</div>",
         ]
-        muted = "Benchmark cohort refresh is limited to phase, indication, therapeutic area, and rare-disease flag."
+        muted = "Benchmark cohort refresh is limited to phase, indication, therapeutic area, rare-disease flag, and modality."
     elif site_pending:
         body_lines = [
             f"<div class='enrollment-assumption-line'><strong>Current:</strong> {html.escape(current_text)}</div>",

@@ -144,7 +144,7 @@ Implemented behavior:
 - The Predict button and gauge-side `Click Predict to update` prompt now respond consistently to model-facing Trial Feature changes and active operational-assumption changes.
 - Planned Enrollment pending state shows a previous-value marker and clears after the operational update.
 - The Enrollment Assumption card shows the assumption source, for example `planned value`, `final observed enrollment`, `benchmark default`, or `user scenario`.
-- Benchmark stale-state is limited to the active lookup cohort fields: `phase_ml`, `gbd_cause_id_3_ml`, `therapeutic_area_ml`, and `is_rare_disease_ml`.
+- Benchmark stale-state is limited to the active lookup cohort fields: `phase_ml`, `gbd_cause_id_3_ml`, `therapeutic_area_ml`, `is_rare_disease_ml`, and `therapeutic_modality_ml`.
 
 Current active operational assumption keys:
 
@@ -301,10 +301,11 @@ For the active Planned Enrollment runtime, benchmark stale-state should be trigg
 - `gbd_cause_id_3_ml`
 - `therapeutic_area_ml`
 - `is_rare_disease_ml`
+- `therapeutic_modality_ml`
 
-If the participant changes one of those cohort fields, the old enrollment benchmark becomes stale. The benchmark should refresh only after the user clicks `Predict Trial Completion`, consistent with the existing simulation snapshot workflow.
+If the participant changes one of those cohort fields, the old operational benchmark becomes stale. The benchmark should refresh only after the user clicks `Predict Trial Completion`, consistent with the existing simulation snapshot workflow.
 
-Other design fields such as modality, patient profile, endpoint design, sponsor tier, administration complexity, comparator logic, endpoint duration, number of arms, and population profile are future support/conflict-signal candidates. They may later influence narrative or Coherence interpretation, but they should not trigger benchmark-cohort refresh until that support/conflict layer exists.
+Other design fields such as patient profile, endpoint design, sponsor tier, administration complexity, comparator logic, endpoint duration, number of arms, and population profile are future support/conflict-signal candidates. They may later influence narrative or Coherence interpretation, but they should not trigger benchmark-cohort refresh until that support/conflict layer exists.
 
 Later, once support/conflict signal generation exists, additional design fields may affect interpretation and may require a more nuanced stale-state rule.
 
@@ -694,24 +695,30 @@ Current roadmap:
 7. Implemented: Post-S3 `planned_sites` defaulting revision.
    - Treat non-completed `number_of_facilities` as current registry facility-count proxy context and a lower-bound candidate.
    - Add deterministic patients-per-site benchmark support from completed trials with positive enrollment and positive facility-count proxy values.
-   - Initialize non-completed editable `planned_sites` from the maximum of current registry facility-count proxy, site benchmark P50, and the enrollment-coherent patients-per-site candidate.
+   - Initialize non-completed editable `planned_sites` from the maximum of current registry facility-count proxy and the enrollment-coherent patients-per-site candidate when patients-per-site P50 is available.
+   - Use pure site-count P50 only as a fallback when the enrollment-coherent patients-per-site candidate is unavailable.
    - Keep the revision outside XGBoost, SHAP, `/predict`, prediction payloads, calibration, audit parity, model artifacts, taxonomy artifacts, LLM narratives, Coherence Score, and Adjusted Trial Value Score.
 
 8. Next: Browser smoke testing and deployment readiness review for Planned Site Count.
    - Confirm the operational-assumption card shows the revised lower-bound context and enrollment-coherent candidate.
    - Confirm planned-sites operational-only updates still do not call `/predict`.
 
-9. Later: D1 `planned_duration_months` duration-definition validation and data audit.
+9. Next architecture analysis before changing cohorts: modality-aware operational benchmark evaluation.
+   - Completed analysis showed that full modality-first fallback is too risky because it can trade disease relevance for broad modality relevance.
+   - Implemented same-level `therapeutic_modality_ui` refinement for Planned Enrollment and patients-per-site only.
+   - Current four-level clinical fallback remains the backbone; modality can refine a selected clinical level but cannot replace it.
+
+10. Later: D1 `planned_duration_months` duration-definition validation and data audit.
    - Validate duration definitions and source quality before any artifact or runtime work.
    - Must join back to `data/studies.txt` for date-type qualifiers.
 
-10. Later, only if D1 passes: D2 duration compact benchmark artifact and runtime utility.
+11. Later, only if D1 passes: D2 duration compact benchmark artifact and runtime utility.
    - Requires D1 decision gates to pass first.
 
-11. Later, only if D2 passes: D3 duration Simulation Mode integration.
+12. Later, only if D2 passes: D3 duration Simulation Mode integration.
    - May activate `planned_duration_months` only after D2 passes and a separate implementation prompt authorizes D3.
 
-12. Future after stable deterministic payloads: narrative payload builder, LLM narrative, then Coherence Score.
+13. Future after stable deterministic payloads: narrative payload builder, LLM narrative, then Coherence Score.
    - Narrative and scoring work must consume deterministic payloads.
    - LLM text must not invent operational ranges or create hidden score changes.
    - Coherence Score must remain separate from the existing XGBoost Completion Score.
@@ -1024,15 +1031,14 @@ Implemented behavior:
 - Operational-only `planned_sites` changes refresh snapshot metadata through the generic `simulation_operational_update` path without calling `/predict`.
 - Changing only `planned_sites` does not change Completion Score, SHAP impacts, pillar impacts, impact bar, or treemap.
 - Changing `planned_sites` plus model-facing Trial Features calls `/predict` only because the model-facing fields changed; `planned_sites` is not sent as a prediction payload field.
-- Benchmark stale-state follows the same cohort fields as Planned Enrollment: `phase_ml`, `gbd_cause_id_3_ml`, `therapeutic_area_ml`, and `is_rare_disease_ml`.
+- Benchmark stale-state follows the same cohort fields as Planned Enrollment: `phase_ml`, `gbd_cause_id_3_ml`, `therapeutic_area_ml`, `is_rare_disease_ml`, and `therapeutic_modality_ml`.
 
 Source and wording:
 
-- Current S3 initializes positive `number_of_facilities` values as `completed_registry_facility_count` for completed trials and `current_registry_facility_count` otherwise.
-- Post-S3 product review decided this is too literal for ongoing/planned trials and should be revised before relying on the field for site planning.
-- Completed trials may continue to use positive `number_of_facilities` as completed registry facility-count proxy context.
-- Ongoing and planned trials should treat positive `number_of_facilities` as current registry facility-count proxy context and a lower-bound candidate, not as the editable planned-sites estimate by itself.
-- Missing or invalid site-count proxy values currently use `benchmark_default` from benchmark P50 when available.
+- Completed trials may use positive `number_of_facilities` as completed registry facility-count proxy context.
+- Ongoing and planned trials treat positive `number_of_facilities` as current registry facility-count proxy context and a lower-bound candidate, not as the editable planned-sites estimate by itself.
+- Active Simulation Mode now initializes non-completed `planned_sites` from the post-S3 enrollment-coherent defaulting rule documented below.
+- Missing or invalid site-count proxy values use `benchmark_default` from site-count P50 only when the enrollment-coherent patients-per-site candidate is unavailable.
 - Participant edits use `user_scenario`.
 - UI and metadata use conservative registry-derived facility-count proxy wording.
 - `number_of_facilities` remains a registry-derived aggregate facility-count proxy, not true planned sites, not true actual activated sites, and not true estimated sites.
@@ -1107,9 +1113,11 @@ Implemented files and artifacts:
 
 - Builder: `scripts/build_operational_benchmarks.py`.
 - Checker: `scripts/check_operational_benchmarks.py`.
+- Systemic audit: `scripts/audit_operational_benchmarks.py`.
 - Runtime utility: `src/operational_benchmarks.py`.
 - Compact artifact: `frontend/data/operational_benchmarks_v1.csv`.
 - Report: `frontend/data/operational_benchmarks_v1_report.json`.
+- Audit report: `frontend/data/operational_benchmarks_v1_audit.json`.
 - Simulation Mode integration: `frontend/views/edit_trial.py`.
 - Active UI/runtime source: the single combined operational artifact. The older enrollment-only and site-only artifacts remain historical/QA references unless a later cleanup removes them.
 
@@ -1119,11 +1127,11 @@ Combined artifact summary:
 - Completed ACTUAL enrollment targets: 20,526.
 - Completed positive site-count proxy targets: 19,880.
 - Completed patients-per-site targets: 19,689.
-- Artifact rows: 878.
+- Artifact rows: 4,056.
 - Duplicate benchmark keys: 0.
 - Source data version: `0a97519bd78f561a`.
-- Rows by benchmark level: `phase_indication_rare` 660, `phase_ta_rare` 138, `phase_ta` 76, `phase_only` 4.
-- Low-confidence rows by metric: enrollment 667, site_count 667, patients_per_site 666.
+- Rows by benchmark level: `phase_indication_rare` 660, `phase_indication_rare_modality` 1,958, `phase_indication_rare_non_vaccine_infections` 81, `phase_ta_rare` 138, `phase_ta_rare_modality` 674, `phase_ta_rare_non_vaccine_infections` 8, `phase_ta` 76, `phase_ta_modality` 453, `phase_ta_non_vaccine_infections` 4, `phase_only` 4.
+- Low-confidence rows by metric: enrollment 3,578, site_count 667, patients_per_site 3,568.
 - Coverage QA not available: enrollment 0, site_count 0, patients_per_site 0.
 - Coverage QA low-confidence matches: enrollment 0, site_count 0, patients_per_site 0.
 
@@ -1136,6 +1144,107 @@ Single-artifact runtime rule:
 - If a matched cohort has at least one relevant operational metric with `n >= 50`, the app keeps that specific cohort row and does not jump to a broader fallback only because another metric is near-threshold.
 - Metrics with `20 <= n < 50` are usable but low confidence.
 - Metrics with `n < 20` are considered too sparse and fall back when needed.
+- Same-level therapeutic modality refinement can override enrollment and patients-per-site percentiles when the matching refined metric has `n >= 50`.
+- Non-vaccine Infections fallback can override vaccine-heavy clinical fallback rows for enrollment and patients-per-site when the non-vaccine Infections row has `n >= 50`.
+- Raw site-count benchmark rows do not use modality refinement.
+- There are no `phase_only_modality` rows in the active artifact.
+
+Current cohort confidence decision:
+
+- The operational benchmark row is selected once, then metric-specific evidence is evaluated separately for enrollment, site count, and patients-per-site.
+- `n >= 50` means high-confidence evidence for that metric.
+- `20 <= n < 50` means usable low-confidence evidence for that metric.
+- `n < 20` is too sparse for that metric and should fall back when a broader row is available.
+- If one metric is high confidence and another is just below 50 on the same specific cohort, keep the specific row and expose the weaker metric as low confidence. Do not automatically broaden the whole cohort only because one metric is near-threshold.
+- The current known near-threshold mismatch is small: the specific `PHASE1/PHASE2` Leukemia non-rare cohort has `enrollment_n=49`, `site_count_n=51`, and `patients_per_site_n=49`. This is a low-confidence warning, not a reason to discard the clinically specific row.
+
+Current defaulting rules:
+
+- Planned Enrollment uses a positive planned/estimated enrollment value when present.
+- For completed trials without a planned/estimated value, Planned Enrollment may use the final observed enrollment value.
+- For non-completed trials without a planned/estimated value, current/observed enrollment is treated as a lower bound and the default is `max(observed_enrollment_lower_bound, enrollment_p50)`.
+- Completed trials with positive `number_of_facilities` initialize Planned Sites from the completed registry facility-count proxy.
+- Non-completed trials treat positive `number_of_facilities` as current registry facility-count proxy context and lower-bound evidence.
+- For non-completed trials, if planned enrollment and patients-per-site P50 are available, the default Planned Sites value is `max(current_registry_facility_count_proxy, planned_enrollment / patients_per_site_p50)`.
+- Pure site-count P50 is used only when the enrollment-coherent patients-per-site candidate cannot be calculated.
+- User edits override defaults and use `user_scenario` source labels.
+
+### Modality-Aware Cohort Refinement Implementation
+
+Recent review showed that therapeutic modality can materially change operational scale, especially for vaccines. Full modality-first fallback was rejected because it caused material clinical-specificity loss. Same-level modality refinement is now implemented in the active combined operational artifact and runtime utility.
+
+Observed directional findings from completed trials with positive enrollment and positive facility-count proxy values:
+
+- Vaccine trials have much higher enrollment and patients-per-site medians than the all-trial baseline.
+- In the RSV/lower respiratory Phase 3 cohort, vaccine-like trials had a much higher patients-per-site median than non-vaccine trials.
+- Other modalities also differ: monoclonal antibodies, cell/gene therapy, peptide hormones, RNA therapy, ADCs, and small molecules have materially different enrollment, site-count, and patients-per-site profiles.
+
+Implemented decision:
+
+- Add same-level modality refinement to the active benchmark artifact for Planned Enrollment and patients-per-site only.
+- Add narrow non-vaccine Infections fallback rows for Planned Enrollment and patients-per-site only.
+- Keep raw site-count P50 clinical-only. It remains useful reference/fallback evidence, but site count is also affected by geography, registry completeness, and operational logistics.
+- Because the main non-completed site default uses `planned_enrollment / patients_per_site_p50`, modality-aware patients-per-site improves the site default without making raw site-count P50 the primary driver.
+- Protect smaller modalities by using modality only when the exact same selected clinical level plus modality has `n >= 50`.
+- If modality-specific `n < 50`, keep the original clinical benchmark unless the narrow non-vaccine Infections rule applies.
+- For non-vaccine Infections trials, if same-level modality refinement is unavailable, try non-vaccine Infections cohorts up the clinical hierarchy before using all-modality Infections cohorts.
+- Do not use `phase + modality`.
+- Do not use `phase_only_modality`.
+- Do not let modality replace clinical context.
+
+Implemented same-level refinement sequence:
+
+```text
+1. Select the current clinical benchmark exactly as before:
+   phase + indication + rare disease
+   phase + therapeutic area + rare disease
+   phase + therapeutic area
+   phase only
+
+2. If the selected clinical level is phase + indication + rare disease:
+   use phase + indication + rare disease + therapeutic modality only if that metric n >= 50.
+
+3. If the selected clinical level is phase + therapeutic area + rare disease:
+   use phase + therapeutic area + rare disease + therapeutic modality only if that metric n >= 50.
+
+4. If the selected clinical level is phase + therapeutic area:
+   use phase + therapeutic area + therapeutic modality only if that metric n >= 50.
+
+5. If the selected clinical level is phase only:
+   do not apply modality refinement.
+```
+
+Narrow non-vaccine Infections fallback sequence:
+
+```text
+For trials where therapeutic area is Infections and therapeutic modality is not Vaccine:
+
+1. Try same-level modality refinement first, using n >= 50.
+2. If unavailable and the selected clinical level is phase + indication + rare disease:
+   try phase + indication + rare disease excluding Vaccine, then phase + TA + rare disease excluding Vaccine, then phase + TA excluding Vaccine.
+3. If unavailable and the selected clinical level is phase + TA + rare disease:
+   try phase + TA + rare disease excluding Vaccine, then phase + TA excluding Vaccine.
+4. If unavailable and the selected clinical level is phase + TA:
+   try phase + TA excluding Vaccine.
+5. Use a non-vaccine Infections row only if n >= 50.
+6. If no non-vaccine Infections row is usable, keep the original all-modality clinical fallback.
+```
+
+Analysis result before implementation:
+
+- Full modality-first fallback selected modality for approximately 97% of rows but caused clinical-specificity loss for approximately 34-36% of rows.
+- Earlier constrained fallback selected modality for approximately 75-76% of rows but still caused clinical-specificity loss for approximately 16-17% of rows.
+- Same-level refinement selected modality for 60.3% of enrollment rows and 58.1% of patients-per-site rows with 0% clinical-specificity loss.
+- Same-level refinement changed enrollment P50 by more than 2x for approximately 1.1% of rows.
+- Same-level refinement changed patients-per-site P50 by more than 2x for approximately 3.3% of rows.
+- Follow-up vaccine-dominance review showed that some Infections clinical fallback cohorts were vaccine-heavy and materially inflated patients-per-site for non-vaccine trials. The approved implementation keeps modality refinement at `n >= 50` and adds the narrow non-vaccine Infections fallback above.
+- Current `search_registry` audit coverage: enrollment modality-refined 2,542 rows, enrollment non-vaccine Infections fallback 140 rows, patients-per-site modality-refined 2,421 rows, patients-per-site non-vaccine Infections fallback 163 rows, site-count non-vaccine Infections fallback 0 rows.
+
+Confidence rules preserve the current thresholds:
+
+- `n >= 50`: confident.
+- `20 <= n < 50`: usable low confidence for clinical fallback rows, but too sparse for modality override and too sparse for non-vaccine Infections fallback.
+- `n < 20`: too sparse; fallback.
 
 Implementation boundaries:
 
@@ -1147,6 +1256,83 @@ Implementation boundaries:
 - Do not implement LLM narratives, Coherence Score, or Adjusted Trial Value Score as part of this revision.
 
 Next required step: browser-smoke-test the revised planned-sites initialization and card metadata before deployment readiness review.
+
+### Current Operational Benchmark Handoff
+
+This is the current source-of-truth handoff for the active operational benchmark layer.
+
+Active files:
+
+- Builder: `scripts/build_operational_benchmarks.py`.
+- Checker: `scripts/check_operational_benchmarks.py`.
+- Systemic audit: `scripts/audit_operational_benchmarks.py`.
+- Runtime utility: `src/operational_benchmarks.py`.
+- Active artifact: `frontend/data/operational_benchmarks_v1.csv`.
+- Active report: `frontend/data/operational_benchmarks_v1_report.json`.
+- Active audit report: `frontend/data/operational_benchmarks_v1_audit.json`.
+- Simulation Mode integration: `frontend/views/edit_trial.py`.
+
+Current benchmark sources:
+
+- Benchmark statistics are built from `data/data_clinpred.csv`, not from `frontend/data/search_registry.csv`.
+- `frontend/data/search_registry.csv` is used for UI trial selection and selectable-trial audit coverage.
+- Production runtime uses only the compact artifact `frontend/data/operational_benchmarks_v1.csv`; it must not load `data/data_clinpred.csv`.
+
+Current operational benchmark rules:
+
+- Planned Enrollment and Planned Site Count are active in Simulation Mode only.
+- Planned Enrollment and Planned Site Count both use the combined operational artifact through `src/operational_benchmarks.py`.
+- Planned Enrollment defaulting uses a positive planned/estimated value when present.
+- Non-completed trials without a planned/estimated enrollment use `max(observed_lower_bound, enrollment_p50)`.
+- Completed trials with positive `number_of_facilities` use completed registry facility-count proxy for Planned Sites.
+- Non-completed trials treat `number_of_facilities` as current registry facility-count proxy lower-bound/context.
+- Non-completed Planned Sites default to `max(current_registry_facility_count_proxy, planned_enrollment / patients_per_site_p50)` when patients-per-site P50 is available.
+- Pure site-count P50 is only a fallback when the enrollment-coherent patients-per-site candidate is unavailable.
+- Raw site-count percentiles remain clinical-only. They do not use modality refinement or non-vaccine Infections fallback.
+
+Current cohort and refinement rules:
+
+- First select the clinical cohort: `phase_indication_rare`, then `phase_ta_rare`, then `phase_ta`, then `phase_only`.
+- Keep a selected clinical row if at least one relevant operational metric has `n >= 50`; do not discard the row only because another metric is near-threshold low confidence.
+- Same-level therapeutic modality refinement applies only to enrollment and patients-per-site.
+- Same-level modality refinement requires `n >= 50`.
+- No `phase + modality` fallback exists.
+- No `phase_only_modality` rows exist.
+- For non-vaccine Infections trials only, if same-level modality refinement is unavailable, the runtime tries non-vaccine Infections fallback rows up the clinical hierarchy.
+- Non-vaccine Infections fallback applies only to enrollment and patients-per-site and requires `n >= 50`.
+- If no non-vaccine Infections row is usable, the runtime keeps the original all-modality clinical fallback.
+
+Current artifact and audit values:
+
+- Artifact rows: 4,056.
+- Duplicate benchmark keys: 0.
+- Source data version: `0a97519bd78f561a`.
+- Rows by level: `phase_indication_rare` 660, `phase_indication_rare_modality` 1,958, `phase_indication_rare_non_vaccine_infections` 81, `phase_ta_rare` 138, `phase_ta_rare_modality` 674, `phase_ta_rare_non_vaccine_infections` 8, `phase_ta` 76, `phase_ta_modality` 453, `phase_ta_non_vaccine_infections` 4, `phase_only` 4.
+- `search_registry` modality assignment: 4,423 assigned, 0 not assigned.
+- Audit lookup coverage: enrollment `not_available=0`, patients-per-site `not_available=0`, site-count `not_available=0`.
+- Audit modality/non-vaccine coverage: enrollment modality-refined 2,542 and non-vaccine Infections fallback 140; patients-per-site modality-refined 2,421 and non-vaccine Infections fallback 163; site-count modality-refined 0 and non-vaccine Infections fallback 0.
+- Audit defaulting safety: site defaults below current proxy 0; completed site proxy not used 0.
+
+Validation commands:
+
+```bash
+python scripts/build_operational_benchmarks.py
+python scripts/check_operational_benchmarks.py
+python scripts/audit_operational_benchmarks.py
+python scripts/check_enrollment_benchmarks.py
+python scripts/check_site_benchmarks.py
+python -m py_compile scripts/build_operational_benchmarks.py scripts/check_operational_benchmarks.py scripts/audit_operational_benchmarks.py src/operational_benchmarks.py frontend/views/edit_trial.py
+git diff --check
+```
+
+Manual/browser validation still needed before deployment readiness:
+
+- Open Simulation Mode in the edit-trial app.
+- Confirm Enrollment and Site Count cards render.
+- Confirm vaccine examples such as `NCT05035212` still use modality-refined enrollment and patients-per-site.
+- Confirm non-vaccine Infections examples such as `NCT04938830` use non-vaccine Infections fallback for enrollment and patients-per-site but not for raw site-count.
+- Confirm operational-only changes still do not call `/predict`.
+- Confirm Completion Score, SHAP, impact bar, treemap, pillar impacts, therapeutic-area calibration, audit behavior, API contracts, model artifacts, and taxonomy artifacts are unchanged.
 
 ### Planned Site Count - Future Metadata Shape
 
@@ -1462,7 +1648,7 @@ This keeps the benchmark layer auditable. It also prevents the first LLM impleme
 
 ## Deterministic Benchmark Pattern For Future Operational Assumptions
 
-Any future duration layer should follow the enrollment and S2 site-count pattern only after its data validation passes. The site-count S2 artifact/runtime layer already follows this pattern, but remains inactive until S3. Country-count planning is excluded from the current staged roadmap.
+Any future duration layer should follow the enrollment and site-count pattern only after its data validation passes. Planned Site Count is now active in Simulation Mode only, using the combined operational benchmark artifact and runtime utility. Country-count planning is excluded from the current staged roadmap.
 
 Required pattern:
 
@@ -1581,14 +1767,20 @@ planned_sites_default_from_operational_benchmark(...)
 The active artifact contains one row per benchmark cohort and fallback level with metric-specific evidence:
 
 ```text
+phase / indication / therapeutic area / rare disease / therapeutic modality where applicable
 enrollment_n / enrollment_p25 / enrollment_p50 / enrollment_p75 / enrollment_p90
 site_count_n / site_count_p25 / site_count_p50 / site_count_p75 / site_count_p90
 patients_per_site_n / patients_per_site_p25 / patients_per_site_p50 / patients_per_site_p75 / patients_per_site_p90
 ```
 
 The runtime must keep metric-specific counts and confidence flags. It must not collapse them into one shared `benchmark_n`.
+Same-level modality rows are available only for enrollment and patients-per-site refinement. Raw site-count evidence remains clinical-only.
 
 Historical Phase 1 enrollment-only artifact path:
+
+```text
+frontend/data/enrollment_benchmarks_v1.csv
+```
 
 Historical Phase 1 enrollment-only report path:
 
@@ -1847,8 +2039,7 @@ The previous broader estimation architecture remains useful as later roadmap thi
 
 Current future estimation roadmap topics:
 
-- Post-S3 `planned_sites` defaulting revision using current registry facility-count proxy as lower-bound context plus an enrollment-coherent patients-per-site benchmark default.
-- Post-S3 browser smoke testing and deployment readiness review for Planned Site Count.
+- Browser smoke testing and deployment readiness review for the implemented Planned Site Count Simulation Mode layer.
 - Planned Duration Months benchmark layer, only if duration source quality supports it.
 - Reconciliation of enrollment/sites/duration, only after those layers exist.
 
@@ -1873,7 +2064,7 @@ Future versions may also explore model-based enrollment calibration, including f
 - Treat S1B `planned_sites` audit as complete.
 - Treat S2 `planned_sites` compact benchmark artifact/runtime utility as implemented.
 - Treat S3 `planned_sites` Simulation Mode integration as implemented.
-- Treat the post-S3 planned-sites defaulting revision as the next implementation task.
+- Treat the post-S3 planned-sites defaulting revision as implemented.
 - For non-completed trials, do not initialize the editable `planned_sites` assumption directly from `number_of_facilities`.
 - Treat non-completed `number_of_facilities` as `current_registry_facility_count_proxy` context and a lower-bound candidate.
 - Add deterministic patients-per-site benchmark support from completed trials with positive enrollment and positive registry facility-count proxy values.
@@ -1894,7 +2085,7 @@ Future versions may also explore model-based enrollment calibration, including f
 
 ## Historical Phase 2 Entry Point
 
-This Phase 2 entry point is historical. It describes the already implemented Planned Enrollment foundation and is not the next implementation instruction. The next operational-assumption work must follow `Next Operational Assumptions - Sites And Duration Planning`: S1B is complete, S2 is implemented, S2 QA returned GO, and S3 Simulation Mode integration is implemented. The next implementation task is the post-S3 planned-sites defaulting revision documented above.
+This Phase 2 entry point is historical. It describes the already implemented Planned Enrollment foundation and is not the next implementation instruction. The next operational-assumption work must follow `Next Operational Assumptions - Sites And Duration Planning`: S1B is complete, S2 is implemented, S2 QA returned GO, S3 Simulation Mode integration is implemented, and the post-S3 planned-sites defaulting revision is implemented. The next step is browser smoke testing and deployment readiness review for the active operational benchmark layer.
 
 Historical Planned Enrollment implementation sequence:
 
