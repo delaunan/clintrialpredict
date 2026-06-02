@@ -35,6 +35,21 @@ Next product area:
 
 The current edit-mode implementation phase is complete. The next session should be refinement-only unless a new defect is found.
 
+### Operational Assumptions Update - 2026-06-01
+
+Simulation Mode now includes the first Operational Assumption foundation:
+
+- Planned Enrollment appears as a compact Simulation Mode-only mini-card separate from model-facing Trial Features.
+- Planned Enrollment is stored in session state with operational-assumption keys, not the model-facing `input_{nct_id}_{field_id}` feature pattern.
+- Changing Planned Enrollment marks Simulation Mode pending, turns `Predict Trial Completion` blue, shows the gauge-side `Click Predict to update` prompt, and displays the previous enrollment value.
+- Clicking `Predict Trial Completion` for an operational-only change refreshes the latest snapshot metadata through `simulation_operational_update`, does not call `/predict`, and does not change Completion Score, impact bar, treemap, SHAP impacts, or pillar impacts.
+- Snapshots and simulation history now include `operational_assumptions`.
+- `planned_enrollment` is the only active operational assumption. `planned_sites`, `planned_countries`, and `planned_duration_months` are reserved inactive keys only.
+- The Enrollment Assumption card shows benchmark position, reference cohort, and source metadata such as `planned value`, `final observed enrollment`, `benchmark default`, or `user scenario`.
+- The generic operational-assumption pending/update path is intended to support future validated fields, but sites, countries, and duration are not implemented yet.
+
+This update did not modify `frontend/views/trial_audit.py`, `api/main.py`, model artifacts, SHAP artifacts, taxonomy artifacts, benchmark artifacts, notebooks, or deployment files.
+
 Implemented since the 2026-05-30 status:
 
 - `frontend/views/edit_trial.py` now uses a latest-prediction snapshot workflow for simulation mode.

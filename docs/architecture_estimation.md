@@ -6,7 +6,7 @@ This document defines the v1 enrollment estimation / benchmarking architecture f
 
 The purpose is not to estimate all missing operational quantities. The purpose is to provide a simple, deterministic, auditable benchmark for `planned_enrollment_assumption`.
 
-The enrollment benchmark helps the narrative layer assess whether the selected patient number is coherent with the current simulated trial profile. It does not enter the XGBoost model, does not directly modify the Completion Score, and feeds the `Coherence Score` only.
+The enrollment benchmark helps the future narrative layer assess whether the selected patient number is coherent with the current simulated trial profile. It does not enter the XGBoost model, does not directly modify the Completion Score, and should feed only structured narrative / Coherence payloads after those layers are implemented.
 
 ```text
 V1 estimation scope = planned enrollment assumption only.
@@ -14,6 +14,23 @@ Sites, countries, total duration, cost, market potential, downstream commitment,
 ```
 
 This document should be read alongside [docs/architecture_narratives.md](/home/delaunan/code/delaunan/clintrialpredict/docs/architecture_narratives.md), which defines how the benchmark is interpreted through the serious-game narrative layer.
+
+## Active V1 Implementation Scope
+
+The active v1 implementation scope is narrow by design:
+
+- Planned Enrollment only.
+- Deterministic benchmark metadata.
+- Compact production artifact runtime.
+- No XGBoost changes.
+- No SHAP changes.
+- No therapeutic-area calibration changes.
+- No audit/demo parity changes.
+- No API contract changes.
+- No Coherence Score implementation.
+- No LLM narrative generation.
+
+The broader architecture may reserve names for future operational assumptions, but the current implementation remains enrollment-only. Reserved future keys must not imply active site, country, duration, cost, market, spend, or development-commitment estimates.
 
 ## Phase 1 Implementation Status - 2026-06-01
 
@@ -110,6 +127,54 @@ git diff --check
 
 Audit parity was previously confirmed at `4,423/4,423` perfect parity and was not rerun during the final QA pass because no prediction, audit, preprocessing, model, SHAP, therapeutic-area calibration, API, taxonomy, or deployment files were touched.
 
+## Phase 2A / 2B Implementation Status - 2026-06-01
+
+The narrow Operational Assumptions foundation is implemented in Simulation Mode.
+
+Implemented behavior:
+
+- Planned Enrollment appears only in Simulation Mode as a separate Operational Assumption mini-card.
+- Planned Enrollment uses the compact benchmark artifact through `src/enrollment_benchmarks.py`.
+- Planned Enrollment does not enter `SIMULATION_FEATURE_IDS`, taxonomy, the `/predict` payload, XGBoost, SHAP impacts, pillar impacts, impact bar, treemap, therapeutic-area calibration, or audit/demo parity behavior.
+- Baseline simulation snapshots, successful model-facing simulation predictions, operational-only updates, and simulation history records store `operational_assumptions`.
+- `operational_assumptions.planned_enrollment` stores deterministic metadata from `planned_enrollment_metadata(...)`.
+- `planned_sites`, `planned_countries`, and `planned_duration_months` are present only as inactive reserved keys with `benchmark_status = "not_implemented"`.
+- Operational-only changes refresh snapshot metadata through a generic `simulation_operational_update` path without calling `/predict` and without changing Completion Score or XGBoost chart data.
+- The Predict button and gauge-side `Click Predict to update` prompt now respond consistently to model-facing Trial Feature changes and active operational-assumption changes.
+- Planned Enrollment pending state shows a previous-value marker and clears after the operational update.
+- The Enrollment Assumption card shows the assumption source, for example `planned value`, `final observed enrollment`, `benchmark default`, or `user scenario`.
+- Benchmark stale-state is limited to the active lookup cohort fields: `phase_ml`, `gbd_cause_id_3_ml`, `therapeutic_area_ml`, and `is_rare_disease_ml`.
+
+Current active operational assumption keys:
+
+```text
+planned_enrollment
+```
+
+Reserved inactive operational assumption keys:
+
+```text
+planned_sites
+planned_countries
+planned_duration_months
+```
+
+Still intentionally not implemented:
+
+- Site-count estimation.
+- Country-count estimation.
+- Duration estimation.
+- Cost, market potential, spend curve, or future development commitment logic.
+- LLM narrative generation.
+- Coherence Score.
+- Adjusted Trial Value Score.
+- XGBoost retraining or score adjustment from Planned Enrollment.
+- SHAP or pillar attribution for Planned Enrollment.
+- API contract changes.
+- Deployment changes.
+
+Next session should start with a focused code review / cleanup pass or commit preparation, not new scope. If a new operational assumption is added later, it should follow the generic operational-assumption pending/update pattern and remain outside XGBoost until a separate architecture decision says otherwise.
+
 ## Current Foundation
 
 ClinTrialPredict currently provides:
@@ -165,20 +230,20 @@ Rule: every stored enrollment benchmark output must preserve source, cohort, per
 
 The v1 estimation MVP is not a full missing-operational-value workbench. It is an enrollment-benchmark layer for serious-game simulation. It provides a neutral, auditable benchmark against which a user's planned enrollment assumption can be assessed.
 
-MVP includes:
+Active v1 scope includes:
 
 - `planned_enrollment_assumption`.
 - Enrollment source priority.
 - Deterministic benchmark hierarchy.
 - P25/P50/P75/P90 benchmark percentiles.
 - `enrollment_status` classification.
-- `support_level` classification.
-- Support/conflict signals.
+- `support_level = "not_evaluated"` until a later implementation phase.
+- Empty support/conflict signal lists until a later implementation phase.
 - Benchmark stale-state logic.
 - Snapshot metadata for the narrative payload.
-- Integration with Coherence Score through the narrative architecture.
+- A future path for narrative / Coherence consumption after the structured payload is stable.
 
-Explicitly excluded from MVP:
+Explicitly excluded from active v1:
 
 - Full operational-size estimation.
 - Site-count estimation.
@@ -194,6 +259,8 @@ Explicitly excluded from MVP:
 - Direct Completion Score adjustment.
 - Pillar-level Coherence attribution.
 - Pseudo-SHAP from LLM.
+- LLM narrative generation.
+- Coherence Score implementation.
 
 ## Planned Enrollment Assumption Source Priority
 
@@ -223,7 +290,18 @@ If planned enrollment is missing and the system uses a benchmark-derived default
 
 The enrollment benchmark belongs to the current prediction snapshot, not permanently to the original trial.
 
-If the participant changes indication, therapeutic area, rare disease flag, phase, modality, patient profile, endpoint design, or other relevant design features, the old enrollment benchmark becomes stale. The benchmark should refresh only after the user clicks `Predict Trial Completion`, consistent with the existing simulation snapshot workflow.
+For the next implementation phase, benchmark stale-state should be triggered only by fields that change the active benchmark lookup cohort:
+
+- `phase_ml`
+- `gbd_cause_id_3_ml`
+- `therapeutic_area_ml`
+- `is_rare_disease_ml`
+
+If the participant changes one of those cohort fields, the old enrollment benchmark becomes stale. The benchmark should refresh only after the user clicks `Predict Trial Completion`, consistent with the existing simulation snapshot workflow.
+
+Other design fields such as modality, patient profile, endpoint design, sponsor tier, administration complexity, comparator logic, endpoint duration, number of arms, and population profile are future support/conflict-signal candidates. They may later influence narrative or Coherence interpretation, but they should not trigger benchmark-cohort refresh until that support/conflict layer exists.
+
+Later, once support/conflict signal generation exists, additional design fields may affect interpretation and may require a more nuanced stale-state rule.
 
 During editing, the UI may show:
 
@@ -234,7 +312,7 @@ Enrollment benchmark will refresh after prediction
 Core rule:
 
 ```text
-Current design snapshot -> benchmark cohort -> P25/P50/P75/P90 -> enrollment_status -> Coherence Score input.
+Current design snapshot -> benchmark cohort -> P25/P50/P75/P90 -> enrollment_status -> future narrative / Coherence payload input.
 ```
 
 ## Benchmark Cohort Hierarchy
@@ -257,7 +335,7 @@ If n is too small, relax one level.
 If all levels are sparse, return a low-confidence benchmark and avoid overinterpreting the enrollment status.
 ```
 
-Therapeutic modality, sponsor tier, administration complexity, line of therapy, patient subtype, endpoint rigor, and endpoint duration should not define the primary benchmark cohort in v1. They can be used as support/conflict signals for Coherence Score. This avoids excessive stratification and unstable percentiles.
+Therapeutic modality, sponsor tier, administration complexity, line of therapy, patient subtype, endpoint rigor, and endpoint duration should not define the primary benchmark cohort in v1. They can be evaluated later as support/conflict signals for narrative / Coherence reasoning. This avoids excessive stratification and unstable percentiles.
 
 ## Enrollment Benchmark Calibration Gate
 
@@ -297,7 +375,7 @@ Candidate benchmark or support-signal fields:
 - Allocation.
 - Masking.
 
-Primary benchmark fields define the historical comparison cohort. Support/conflict signals help the Coherence Score interpret whether the selected enrollment is supported by the current design.
+Primary benchmark fields define the historical comparison cohort. Future support/conflict signals can help narrative / Coherence logic interpret whether the selected enrollment is supported by the current design.
 
 Fields such as therapeutic modality, sponsor tier, administration complexity, line of therapy, patient subtype, endpoint rigor, endpoint duration, comparator, and number of arms may influence enrollment feasibility, but in v1 they should normally remain support/conflict signals unless the calibration gate proves they are stable enough for primary cohort matching.
 
@@ -312,7 +390,7 @@ A field can enter the primary benchmark hierarchy only if it has:
 - Stable `enrollment_status` labels.
 - Simple interpretation for users and facilitators.
 
-If a field has signal but weak coverage or unstable percentiles, it should remain a support/conflict signal for the Coherence Score rather than a primary benchmark matching field.
+If a field has signal but weak coverage or unstable percentiles, it should remain a future support/conflict signal rather than a primary benchmark matching field.
 
 Calibration checks:
 
@@ -511,27 +589,27 @@ above benchmark high and weakly supported by the design.
 
 ## Relationship To Coherence Score
 
-Enrollment is one input into Coherence Score, not the Coherence Score itself. It should mainly influence:
+Coherence Score is not implemented in the active Phase 1 benchmark layer or the next implementation phase. When a future Coherence Score exists, enrollment should be one input into it, not the score itself. It should mainly influence:
 
 - Operational feasibility.
 - Population relevance.
 - Change integrity.
 
-Enrollment must not dominate the broader rubric.
+Enrollment must not dominate the future broader rubric.
 
 ```text
-Enrollment should normally have a maximum standalone effect of about -10 to +4 points inside the Coherence Score logic.
+Enrollment should normally have a maximum standalone effect of about -10 to +4 points inside a future Coherence Score rubric.
 ```
 
 Interpretation principle:
 
 ```text
 One weak enrollment signal creates a discussion point.
-Several weak or conflicting design signals create a Coherence Score penalty.
-A difficult design can still receive a positive Coherence Adjustment if the participant strengthens it coherently.
+Several weak or conflicting design signals may create a future Coherence Score penalty.
+A difficult design can still receive a positive future Coherence Adjustment if the participant strengthens it coherently.
 ```
 
-Alignment with the narrative architecture:
+Future alignment with the narrative architecture:
 
 ```text
 Completion Score = untouched XGBoost score.
@@ -571,7 +649,159 @@ Planning JSON example:
 
 This object should be assembled after the latest prediction snapshot and passed to the narrative layer. It should be stored with the serious-game prediction snapshot so later iterations can compare the user's scenario path without recomputing historical context ambiguously.
 
-Phase 1 runtime returns `support_level = "not_evaluated"` and empty `supporting_signals` / `conflicting_signals`. Support/conflict logic is deferred to Phase 2.
+Phase 1 runtime returns `support_level = "not_evaluated"` and empty `supporting_signals` / `conflicting_signals`. Support/conflict logic is deferred until after the base Simulation Mode integration and snapshot container are stable.
+
+## Revised Operational Assumptions Roadmap
+
+The estimation architecture should evolve in stages. The important boundary is that Planned Enrollment is active now; sites, countries, and duration are reserved future assumption families that require separate validation before implementation.
+
+Roadmap:
+
+1. Phase 2A: active Planned Enrollment integration in Simulation Mode.
+   - Add the current planned enrollment assumption to the simulation workflow.
+   - Attach deterministic enrollment benchmark metadata to prediction snapshots.
+   - Keep XGBoost, SHAP, therapeutic-area calibration, audit/demo parity, API contracts, and artifacts outside the enrollment benchmark unchanged.
+
+2. Phase 2B: generic `operational_assumptions` snapshot container.
+   - Store `planned_enrollment` as the only active benchmarked operational assumption.
+   - Reserve `planned_sites`, `planned_countries`, and `planned_duration_months` as inactive metadata keys.
+   - Do not add active estimates, UI inputs, model logic, or narrative claims for reserved keys.
+
+3. Phase 3A: exploratory notebook validation for Site Count, Country Count, and Duration feasibility.
+   - Evaluate whether each candidate assumption has reliable source fields, target definitions, cohort sizes, percentile stability, and useful fallback behavior.
+   - Treat each candidate as a separate validation problem.
+   - Do not assume the enrollment benchmark pattern automatically transfers to sites, countries, or duration.
+
+4. Phase 3B: deterministic benchmark artifacts one by one, only if data quality is sufficient.
+   - Build a site-count benchmark only after site-count validation passes.
+   - Build a country-count benchmark only after country-count validation passes.
+   - Build a duration benchmark only if duration data quality supports it.
+   - Keep cost, market potential, spend curve, and future development commitment out of scope.
+
+5. Phase 4: narrative payload builder that consumes operational assumptions.
+   - Convert prediction snapshots plus operational assumptions into a stable structured payload.
+   - Keep the payload deterministic and inspectable.
+   - Do not let narrative text invent operational ranges that are absent from the payload.
+
+6. Phase 5: LLM narrative only.
+   - Use the LLM to explain structured benchmarked assumptions.
+   - Do not use the LLM as the source of benchmark percentiles, operational estimates, or score changes.
+
+7. Phase 6: Coherence Score only after the payload and rubric are stable.
+   - Implement scoring only when the payload fields, support/conflict rubric, stale-state behavior, and narrative interpretation are stable enough to audit.
+   - Keep Coherence Score separate from the existing XGBoost Completion Score.
+
+## Operational Assumptions Snapshot Container
+
+Future serious-game narrative generation should consume a structured `operational_assumptions` object. In the next phase, only `planned_enrollment` should carry active benchmark metadata. The other keys may exist only as reserved inactive metadata.
+
+Example shape:
+
+```python
+operational_assumptions = {
+    "planned_enrollment": {
+        "value": 600,
+        "source": "user_scenario",
+        "benchmark_level_used": "phase_ta_rare",
+        "benchmark_n": 123,
+        "benchmark_p25": 120,
+        "benchmark_p50": 280,
+        "benchmark_p75": 520,
+        "benchmark_p90": 900,
+        "enrollment_status": "ambitious",
+        "support_level": "not_evaluated",
+        "supporting_signals": [],
+        "conflicting_signals": [],
+        "benchmark_snapshot_id": "...",
+        "is_benchmark_stale": False,
+        "low_confidence_flag": False,
+        "interpretation_hint": "..."
+    },
+    "planned_sites": {
+        "status": "future_reserved",
+        "value": None,
+        "benchmark_status": "not_implemented"
+    },
+    "planned_countries": {
+        "status": "future_reserved",
+        "value": None,
+        "benchmark_status": "not_implemented"
+    },
+    "planned_duration_months": {
+        "status": "future_reserved",
+        "value": None,
+        "benchmark_status": "not_implemented"
+    }
+}
+```
+
+Rules for the next implementation phase:
+
+- `planned_enrollment` may be shown and benchmarked.
+- `planned_sites`, `planned_countries`, and `planned_duration_months` must remain inactive reserved keys.
+- Reserved future keys should not appear as user-editable assumptions.
+- Reserved future keys should not drive score, narrative, charts, or model behavior.
+- Cost, market potential, spend curve, and future development commitment should not be added to this object.
+
+## Why LLM Scoring Comes Later
+
+LLM narrative generation and Coherence Score should wait until the structured operational assumptions are stable. The system needs a deterministic payload before it asks an LLM to explain trial-design coherence.
+
+The future narrative layer should consume benchmarked assumptions. It should not invent operational ranges in free text, infer missing site/country/duration values without validated artifacts, or convert narrative phrasing into hidden score changes.
+
+Order of work:
+
+```text
+deterministic assumptions -> structured payload -> narrative explanation -> scoring rubric
+```
+
+This keeps the benchmark layer auditable. It also prevents the first LLM implementation from becoming an implicit estimator for sites, countries, duration, cost, market size, or feasibility.
+
+## Deterministic Benchmark Pattern For Future Operational Assumptions
+
+Any future site-count, country-count, or duration layer should follow the enrollment pattern only after its data validation passes.
+
+Required pattern:
+
+- Offline artifact builder.
+- Compact production artifact.
+- Runtime lookup utility.
+- P25/P50/P75/P90 benchmark percentiles.
+- Benchmark classification.
+- Support/conflict signals later, after the base benchmark is stable.
+- Snapshot metadata.
+- No direct XGBoost score modification.
+- No SHAP modification.
+- No therapeutic-area calibration modification.
+- No audit/demo parity behavior modification.
+
+Each future layer should define its own source priority, target-readiness flags, cohort hierarchy, fallback behavior, confidence threshold, and invalid-value handling. Site count, country count, and duration should not inherit enrollment assumptions by default.
+
+## Explicit Non-Goals For The Next Implementation Phase
+
+The next implementation phase should not:
+
+- Estimate sites.
+- Estimate countries.
+- Estimate duration.
+- Estimate cost.
+- Estimate market potential.
+- Call an LLM.
+- Implement Coherence Score.
+- Retrain XGBoost.
+- Modify SHAP.
+- Modify therapeutic-area calibration.
+- Modify audit/demo parity behavior.
+- Modify API contracts.
+- Deploy.
+
+The next implementation phase should only:
+
+- Add Planned Enrollment to Simulation Mode.
+- Create the `operational_assumptions` snapshot container.
+- Attach planned enrollment benchmark metadata to snapshots.
+- Show a small Enrollment Assumption note/card.
+- Reserve future assumption keys only as inactive metadata or documentation, not as UI inputs.
 
 ## Production Runtime Artifact Strategy
 
@@ -705,7 +935,7 @@ Focused v1 path and Phase 1 status:
 5. Build a runtime benchmark lookup function using the approved v1 hierarchy and compact artifact.
 6. Calculate or retrieve P25/P50/P75/P90 for the selected current snapshot.
 7. Classify the current assumption as `below_benchmark`, `typical`, `ambitious`, `above_benchmark_high`, or `not_available`.
-8. Keep `support_level = "not_evaluated"` and support/conflict lists empty until Phase 2.
+8. Keep `support_level = "not_evaluated"` and support/conflict lists empty until a later phase.
 9. Keep XGBoost, SHAP, therapeutic-area calibration, audit mode, and parity behavior unchanged.
 
 Do not require model training in v1. The first implementation should use deterministic cohort percentiles.
@@ -831,15 +1061,12 @@ The previous broader estimation architecture remains useful as later roadmap thi
 
 Future estimation roadmap topics:
 
-- Site-count estimation.
-- Country-count estimation.
-- Total-duration estimation.
-- Cost translation.
-- Calendar spend.
-- Future development commitment.
-- Market potential.
-- Full operational-scale estimation.
-- Reconciliation of enrollment/sites/countries/duration.
+- Planned Site Count benchmark layer, if separate data validation supports it.
+- Planned Country Count benchmark layer, if separate data validation supports it.
+- Planned Duration Months benchmark layer, only if duration source quality supports it.
+- Reconciliation of enrollment/sites/countries/duration, only after those layers exist.
+
+Cost translation, calendar spend, future development commitment, market potential, and full operational-scale estimation remain out of scope. They should not be added to the current operational assumptions container.
 
 Future versions may also explore model-based enrollment calibration, including feature importance analysis, an enrollment proxy model, SHAP on the proxy model, correlation analysis, percentile segmentation, and clustering of similar trials. These are optional hardening steps and should not block the deterministic v1 benchmark.
 
@@ -862,14 +1089,14 @@ Future versions may also explore model-based enrollment calibration, including f
 - Treat planned enrollment as a scenario assumption, not as clinical truth.
 - Treat benchmark percentiles as reference values, not recommendations.
 - Treat deterministic `enrollment_status` as benchmark position, not clinical judgment.
-- Let the narrative architecture interpret the benchmark through Coherence Score.
+- Let the future narrative / Coherence architecture interpret the benchmark after the structured payload is stable.
 - Preserve the separation between planned values, final observed values, observed-to-date lower bounds, model defaults, and user scenarios.
 
 ## Next Phase Entry Point
 
 The next phase should start from the Phase 1 artifact and runtime utility, not from the full historical dataset.
 
-Expected Phase 2 sequence:
+Expected next implementation sequence:
 
 1. Add the Planned Enrollment field to Simulation Mode without changing the XGBoost prediction payload or model-facing feature set.
 2. Select the initial planned enrollment assumption using the source-priority rules:
@@ -877,12 +1104,15 @@ Expected Phase 2 sequence:
    - completed final observed value only as completed-trial context,
    - benchmark-derived model default when no usable planned value exists,
    - `user_scenario` after participant edit.
-3. Attach `planned_enrollment_metadata(...)` output to the latest prediction snapshot.
-4. Mark benchmark metadata stale when relevant design fields change before the next `Predict Trial Completion`.
-5. Add support/conflict signal logic using structured Trial Features, starting with fields already identified as plausible Phase 2 signals: sponsor tier, biomarker stratification, therapeutic modality, administration complexity, line of therapy, patient profile, endpoint rigor/structure, duration bins if calibrated, number of arms, comparator/placebo, allocation, and masking.
-6. Only after snapshot metadata and support/conflict logic are stable, pass the metadata into the narrative / Coherence layer.
+3. Create the `operational_assumptions` snapshot container.
+4. Attach `planned_enrollment_metadata(...)` output to the latest prediction snapshot.
+5. Mark benchmark metadata stale when relevant design fields change before the next `Predict Trial Completion`.
+6. Show a small Enrollment Assumption note/card that uses the deterministic metadata.
+7. Reserve `planned_sites`, `planned_countries`, and `planned_duration_months` as inactive metadata or documentation only.
 
-Phase 2 must still preserve the completion model boundary:
+Do not add support/conflict signal generation, LLM calls, Coherence Score, sites, countries, duration, cost, market potential, API contract changes, deployment changes, model retraining, SHAP changes, therapeutic-area calibration changes, or audit/demo parity changes in the next implementation phase.
+
+The next phase must still preserve the completion model boundary:
 
 ```text
 Completion Score = existing XGBoost/SHAP/TA-calibrated score.

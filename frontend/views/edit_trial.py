@@ -19,6 +19,7 @@ import requests
 
 # IMPORT PLOTTING UTILS
 from frontend.utils.plot import plot_success_gauge, plot_impact_bar, plot_treemap
+from src.enrollment_benchmarks import load_enrollment_benchmarks, planned_enrollment_metadata
 
 # Load environment variables
 load_dotenv()
@@ -45,8 +46,21 @@ ASSETS_DIR = FRONTEND_DIR / "assets"
 DATA_PATH = FRONTEND_DIR / "data" / "search_registry.csv"
 DATA_CLINPRED_PATH = PROJECT_ROOT / "data" / "data_clinpred.csv"
 GBD_L3_LOOKUP_PATH = FRONTEND_DIR / "data" / "gbd_l3_indication_lookup.csv"
+ENROLLMENT_BENCHMARK_PATH = FRONTEND_DIR / "data" / "enrollment_benchmarks_v1.csv"
 TAXONOMY_PATH = PROJECT_ROOT / "models" / "taxonomy_01.json"
 IS_CLOUD_RUN = bool(os.getenv("K_SERVICE"))
+ACTIVE_OPERATIONAL_ASSUMPTION_KEYS = ("planned_enrollment",)
+FUTURE_RESERVED_OPERATIONAL_ASSUMPTION_KEYS = (
+    "planned_sites",
+    "planned_countries",
+    "planned_duration_months",
+)
+OPERATIONAL_ASSUMPTION_UPDATE_SOURCE = "simulation_operational_update"
+SIMULATION_SNAPSHOT_SCORE_DELTA_SOURCES = {
+    "simulation_ptc",
+    OPERATIONAL_ASSUMPTION_UPDATE_SOURCE,
+    "simulation_enrollment_update",
+}
 
 API_URL = os.getenv("API_URL", "").strip()
 if not API_URL and not IS_CLOUD_RUN:
@@ -4134,6 +4148,76 @@ def inject_custom_styles():
                             var(--ui-control-shadow) !important;
             }}
 
+            html body [class*="st-key-operational_assumption_"] {{
+                background-color: #ffffff !important;
+                border: 1px solid #e2e8f0 !important;
+                border-radius: 14px !important;
+                box-shadow: var(--ui-shell-shadow) !important;
+                margin-top: 4px !important;
+                padding: 16px 18px 14px 18px !important;
+                max-width: 420px !important;
+            }}
+
+            html body [class*="st-key-operational_assumption_"] .operational-assumption-head {{
+                margin-bottom: 8px !important;
+            }}
+
+            html body [class*="st-key-operational_assumption_"] .highlight-title {{
+                margin: 0 0 4px 0 !important;
+                font-size: 1.0rem !important;
+                line-height: 1.1 !important;
+            }}
+
+            html body [class*="st-key-operational_assumption_"] .operational-assumption-help {{
+                color: #64748b !important;
+                font-size: 0.78rem !important;
+                line-height: 1.28 !important;
+                font-weight: 500 !important;
+            }}
+
+            html body [class*="st-key-operational_assumption_"] [data-testid="stNumberInput"] {{
+                max-width: 250px !important;
+            }}
+
+            html body [class*="st-key-operational_assumption_chg_"] div[data-baseweb="input"] > div {{
+                background-color: #e8f0fb !important;
+                border-color: #9bbbe2 !important;
+                box-shadow: inset 0 0 0 1px rgba(47,98,166,0.10),
+                            var(--ui-control-shadow) !important;
+            }}
+
+            html body .enrollment-assumption-card {{
+                border: 1px solid #e2e8f0 !important;
+                border-radius: 12px !important;
+                background: #ffffff !important;
+                padding: 10px 12px !important;
+                margin-top: 4px !important;
+                font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
+                color: #475569 !important;
+            }}
+
+            html body .enrollment-assumption-title {{
+                color: #334155 !important;
+                font-size: 0.82rem !important;
+                font-weight: 800 !important;
+                line-height: 1.1 !important;
+                margin-bottom: 5px !important;
+            }}
+
+            html body .enrollment-assumption-line {{
+                font-size: 0.77rem !important;
+                line-height: 1.32 !important;
+                margin: 2px 0 !important;
+                font-weight: 500 !important;
+            }}
+
+            html body .enrollment-assumption-muted {{
+                color: #64748b !important;
+                font-size: 0.72rem !important;
+                line-height: 1.3 !important;
+                margin-top: 5px !important;
+            }}
+
             /* Resolution scaling — mirrors the app's existing breakpoints so the
                Trial Features grid grows with the screen like every other view. */
             @media (min-width: 1800px) and (min-height: 950px) {{
@@ -4369,6 +4453,15 @@ def load_gbd_indication_lookup():
     lookup = pd.concat([lookup, fallback], ignore_index=True)
     lookup = lookup.drop_duplicates(["gbd_cause_id_3_ml"], keep="first")
     return lookup.sort_values(["sort_order", "gbd_cause_id_3_ml"]).reset_index(drop=True)
+
+
+@st.cache_data
+def load_enrollment_benchmark_artifact():
+    try:
+        return load_enrollment_benchmarks(ENROLLMENT_BENCHMARK_PATH)
+    except Exception:
+        logger.exception("Enrollment benchmark artifact could not be loaded")
+        return pd.DataFrame()
 
 
 X_ALL, TAXONOMY = load_data()
@@ -4689,6 +4782,204 @@ def get_latest_prediction_snapshot(nct_id):
     return st.session_state.get(get_simulation_snapshot_key(nct_id))
 
 
+def get_operational_assumption_state_key(nct_id, assumption_key):
+    return f"{assumption_key}_assumption_{str(nct_id).strip()}"
+
+
+def get_operational_assumption_source_state_key(nct_id, assumption_key):
+    return f"{assumption_key}_source_{str(nct_id).strip()}"
+
+
+def get_operational_assumption_baseline_state_key(nct_id, assumption_key):
+    return f"{assumption_key}_baseline_{str(nct_id).strip()}"
+
+
+def get_operational_assumption_widget_key(nct_id, assumption_key):
+    return f"{assumption_key}_widget_{str(nct_id).strip()}"
+
+
+def get_planned_enrollment_state_key(nct_id):
+    return get_operational_assumption_state_key(nct_id, "planned_enrollment")
+
+
+def get_planned_enrollment_source_state_key(nct_id):
+    return get_operational_assumption_source_state_key(nct_id, "planned_enrollment")
+
+
+def get_planned_enrollment_baseline_state_key(nct_id):
+    return get_operational_assumption_baseline_state_key(nct_id, "planned_enrollment")
+
+
+def _positive_number(value):
+    numeric = pd.to_numeric(value, errors="coerce")
+    if pd.isna(numeric) or float(numeric) <= 0:
+        return None
+    return float(numeric)
+
+
+def _row_value(row, *columns):
+    for column in columns:
+        if column not in row.index:
+            continue
+        value = row.get(column)
+        try:
+            if pd.isna(value):
+                continue
+        except Exception:
+            pass
+        if str(value).strip() == "":
+            continue
+        return value
+    return None
+
+
+def _is_completed_trial(row):
+    status = str(_row_value(row, "overall_status", "status") or "").strip().upper()
+    return status == "COMPLETED"
+
+
+def _enrollment_type(row):
+    return str(_row_value(row, "enrollment_type", "enrollment_type_ui") or "").strip().upper()
+
+
+def _benchmark_snapshot_from_values(row, snapshot_values=None):
+    snapshot = row.replace({np.nan: None}).to_dict()
+    if "phase_ml" in snapshot:
+        snapshot["phase"] = snapshot.get("phase_ml")
+    for key, value in (snapshot_values or {}).items():
+        snapshot[key] = value
+    if snapshot_values:
+        if "phase_ml" in snapshot_values:
+            snapshot["phase"] = snapshot_values.get("phase_ml")
+            snapshot["phase_ui"] = snapshot_values.get("phase_ml")
+        if "therapeutic_area_ml" in snapshot_values:
+            snapshot["therapeutic_area"] = snapshot_values.get("therapeutic_area_ml")
+            snapshot["therapeutic_area_ui"] = snapshot_values.get("therapeutic_area_ml")
+        if "is_rare_disease_ml" in snapshot_values:
+            snapshot["is_rare_disease"] = snapshot_values.get("is_rare_disease_ml")
+    return snapshot
+
+
+def get_initial_planned_enrollment_assumption(row):
+    enrollment_type = _enrollment_type(row)
+
+    planned_value = _positive_number(_row_value(row, "planned_enrollment", "estimated_enrollment"))
+    if planned_value is None and enrollment_type in {"ESTIMATED", "PLANNED"}:
+        planned_value = _positive_number(_row_value(row, "enrollment_count", "enrollment"))
+    if planned_value is not None:
+        return int(round(planned_value)), "planned_value"
+
+    actual_value = _positive_number(_row_value(row, "actual_enrollment", "enrollment"))
+    if actual_value is not None and _is_completed_trial(row) and enrollment_type in {"ACTUAL", ""}:
+        return int(round(actual_value)), "final_observed_value"
+
+    try:
+        metadata = planned_enrollment_metadata(
+            _benchmark_snapshot_from_values(row),
+            1,
+            artifact=load_enrollment_benchmark_artifact(),
+        ).get("planned_enrollment", {})
+        p50 = _positive_number(metadata.get("benchmark_p50"))
+        if p50 is not None:
+            return int(round(p50)), "model_default"
+    except Exception:
+        logger.exception("Initial planned enrollment benchmark lookup failed")
+
+    return 0, "planned_value"
+
+
+def ensure_planned_enrollment_state(row):
+    nct_id = str(row.get(ID_COL, st.session_state.get("selected_nct_id", "")))
+    value_key = get_planned_enrollment_state_key(nct_id)
+    source_key = get_planned_enrollment_source_state_key(nct_id)
+    baseline_key = get_planned_enrollment_baseline_state_key(nct_id)
+
+    if value_key not in st.session_state or source_key not in st.session_state:
+        value, source = get_initial_planned_enrollment_assumption(row)
+        st.session_state[value_key] = value
+        st.session_state[source_key] = source
+        st.session_state[baseline_key] = value
+
+
+def get_current_planned_enrollment_assumption(row):
+    ensure_planned_enrollment_state(row)
+    nct_id = str(row.get(ID_COL, st.session_state.get("selected_nct_id", "")))
+    return st.session_state.get(get_planned_enrollment_state_key(nct_id), 0)
+
+
+def get_current_planned_enrollment_source(row):
+    ensure_planned_enrollment_state(row)
+    nct_id = str(row.get(ID_COL, st.session_state.get("selected_nct_id", "")))
+    return st.session_state.get(get_planned_enrollment_source_state_key(nct_id), "planned_value")
+
+
+def get_current_operational_assumption_value(row, assumption_key):
+    if assumption_key == "planned_enrollment":
+        return get_current_planned_enrollment_assumption(row)
+    return None
+
+
+def get_operational_assumption_value_from_snapshot(snapshot, assumption_key):
+    assumption = ((snapshot or {}).get("operational_assumptions") or {}).get(assumption_key) or {}
+    return assumption.get("value")
+
+
+def _operational_assumption_values_equal(current, previous):
+    current_num = pd.to_numeric(current, errors="coerce")
+    previous_num = pd.to_numeric(previous, errors="coerce")
+
+    if pd.isna(current_num) and pd.isna(previous_num):
+        return True
+    if pd.isna(current_num) or pd.isna(previous_num):
+        return False
+    return int(round(float(current_num))) == int(round(float(previous_num)))
+
+
+def build_future_reserved_operational_assumptions():
+    return {
+        assumption_key: {
+            "status": "future_reserved",
+            "value": None,
+            "benchmark_status": "not_implemented",
+        }
+        for assumption_key in FUTURE_RESERVED_OPERATIONAL_ASSUMPTION_KEYS
+    }
+
+
+def build_operational_assumptions(row, snapshot_values=None, is_benchmark_stale=False):
+    try:
+        metadata = planned_enrollment_metadata(
+            _benchmark_snapshot_from_values(row, snapshot_values=snapshot_values),
+            get_current_planned_enrollment_assumption(row),
+            source=get_current_planned_enrollment_source(row),
+            artifact=load_enrollment_benchmark_artifact(),
+            is_benchmark_stale=is_benchmark_stale,
+        )
+    except Exception:
+        logger.exception("Planned enrollment metadata generation failed")
+        metadata = planned_enrollment_metadata(
+            {},
+            None,
+            source=get_current_planned_enrollment_source(row),
+            artifact=pd.DataFrame(),
+        )
+
+    operational_assumptions = {
+        "planned_enrollment": _json_safe(metadata.get("planned_enrollment", {})),
+    }
+    operational_assumptions.update(build_future_reserved_operational_assumptions())
+    return _json_safe(operational_assumptions)
+
+
+def get_enrollment_benchmark_stale_fields():
+    return {
+        "phase_ml",
+        "gbd_cause_id_3_ml",
+        "therapeutic_area_ml",
+        "is_rare_disease_ml",
+    }
+
+
 def _score_from_result(result):
     if not result:
         return None
@@ -4730,6 +5021,7 @@ def set_latest_prediction_snapshot(
     previous_snapshot=None,
     source="simulation_ptc",
     compare_values=None,
+    operational_assumptions=None,
 ):
     score = _score_from_result(result)
     previous_score = _score_from_result((previous_snapshot or {}).get("result"))
@@ -4764,6 +5056,7 @@ def set_latest_prediction_snapshot(
         "subcat_impacts": _json_safe(result.get("subcat_impacts") or []),
         "result": _json_safe(result),
         "changed_fields": _changed_fields_between(previous_snapshot, compare_values),
+        "operational_assumptions": _json_safe(operational_assumptions or {}),
     }
 
     st.session_state[get_simulation_snapshot_key(nct_id)] = snapshot
@@ -4801,6 +5094,7 @@ def append_simulation_prediction_history(snapshot):
         "pillar_impacts": snapshot.get("pillar_impacts"),
         "feature_impacts": snapshot.get("feature_impacts"),
         "changed_fields": snapshot.get("changed_fields"),
+        "operational_assumptions": snapshot.get("operational_assumptions"),
     })
 
 
@@ -4925,7 +5219,34 @@ def get_display_value_for_field(field_id, value):
     return "N/A" if label in (None, "") else str(label)
 
 
+def sync_rendered_simulation_widgets_to_shared_state(row):
+    trial_key = str(row.get(ID_COL, st.session_state.get("selected_nct_id", "no_trial")))
+
+    for field_id in SIMULATION_FEATURE_IDS:
+        widget_key = f"feature_{trial_key}_{field_id}"
+        if widget_key not in st.session_state:
+            continue
+
+        state_key = f"input_{trial_key}_{field_id}"
+        widget_value = st.session_state.get(widget_key)
+
+        if field_id == "gbd_cause_id_3_ml":
+            selected_id = 0
+            selected_name = "Other / Unclassified"
+            for option_id, option_name in _get_indication_options(row):
+                if _format_indication_label(option_name, option_id) == widget_value:
+                    selected_id = option_id
+                    selected_name = option_name
+                    break
+            st.session_state[state_key] = selected_id
+            st.session_state[f"input_{trial_key}_gbd_indication_name_3"] = selected_name
+            continue
+
+        st.session_state[state_key] = widget_value
+
+
 def get_current_feature_values(row):
+    sync_rendered_simulation_widgets_to_shared_state(row)
     values = {}
     trial_key = str(row.get(ID_COL, st.session_state.get("selected_nct_id", "no_trial")))
 
@@ -4941,6 +5262,7 @@ def get_current_feature_values(row):
 
 
 def get_current_compare_values(row):
+    sync_rendered_simulation_widgets_to_shared_state(row)
     values = {}
     trial_key = str(row.get(ID_COL, st.session_state.get("selected_nct_id", "no_trial")))
 
@@ -4971,6 +5293,25 @@ def _values_equal_for_snapshot(current, reference, field_id=None):
     return _json_safe(current) == _json_safe(reference)
 
 
+def is_enrollment_benchmark_stale(row):
+    nct_id = str(row.get(ID_COL, st.session_state.get("selected_nct_id", "")))
+    snapshot = get_latest_prediction_snapshot(nct_id)
+    if not snapshot:
+        return False
+
+    current_values = get_current_compare_values(row)
+    reference_values = snapshot.get("compare_values") or snapshot.get("submitted_values") or {}
+
+    for field_id in get_enrollment_benchmark_stale_fields():
+        if not _values_equal_for_snapshot(
+            current_values.get(field_id),
+            reference_values.get(field_id),
+            field_id=field_id,
+        ):
+            return True
+    return False
+
+
 def get_pending_feature_ids(row):
     nct_id = str(row.get(ID_COL, st.session_state.get("selected_nct_id", "")))
     snapshot = get_latest_prediction_snapshot(nct_id)
@@ -4995,10 +5336,51 @@ def has_pending_changes(row):
     return bool(get_pending_feature_ids(row))
 
 
+def get_pending_operational_assumption_keys(row):
+    nct_id = str(row.get(ID_COL, st.session_state.get("selected_nct_id", "")))
+    snapshot = get_latest_prediction_snapshot(nct_id)
+    if not snapshot:
+        return []
+
+    pending_keys = []
+    for assumption_key in ACTIVE_OPERATIONAL_ASSUMPTION_KEYS:
+        current = get_current_operational_assumption_value(row, assumption_key)
+        previous = get_operational_assumption_value_from_snapshot(snapshot, assumption_key)
+        if not _operational_assumption_values_equal(current, previous):
+            pending_keys.append(assumption_key)
+    return pending_keys
+
+
+def has_pending_operational_assumptions(row):
+    return bool(get_pending_operational_assumption_keys(row))
+
+
+def has_pending_enrollment_assumption(row):
+    return "planned_enrollment" in get_pending_operational_assumption_keys(row)
+
+
+def get_previous_operational_assumption_value(row, assumption_key):
+    nct_id = str(row.get(ID_COL, st.session_state.get("selected_nct_id", "")))
+    snapshot = get_latest_prediction_snapshot(nct_id) or {}
+    previous = pd.to_numeric(get_operational_assumption_value_from_snapshot(snapshot, assumption_key), errors="coerce")
+    if pd.isna(previous) or float(previous) <= 0:
+        return None
+    return int(round(float(previous)))
+
+
+def get_previous_planned_enrollment_assumption(row):
+    return get_previous_operational_assumption_value(row, "planned_enrollment")
+
+
+def has_pending_simulation_changes(row):
+    return has_pending_changes(row) or has_pending_operational_assumptions(row)
+
+
 def ensure_simulation_baseline_snapshot(row):
     nct_id = str(row.get(ID_COL, st.session_state.get("selected_nct_id", "")))
     if not nct_id or get_latest_prediction_snapshot(nct_id):
         return
+    ensure_planned_enrollment_state(row)
 
     if not API_URL:
         st.error("Prediction service is not configured.")
@@ -5034,13 +5416,19 @@ def ensure_simulation_baseline_snapshot(row):
 
     submitted_values = get_current_feature_values(row)
     compare_values = get_current_compare_values(row)
+    operational_assumptions = build_operational_assumptions(
+        row,
+        snapshot_values=compare_values,
+        is_benchmark_stale=False,
+    )
     set_latest_prediction_snapshot(
         nct_id,
         result,
         submitted_values,
         previous_snapshot=None,
         source="prerecorded_baseline",
-        compare_values=compare_values
+        compare_values=compare_values,
+        operational_assumptions=operational_assumptions,
     )
     st.session_state.analysis_result = result
     st.session_state.analysis_nct_id = nct_id
@@ -5171,7 +5559,7 @@ def sync_s_detail_text_input_to_memory():
 def handle_predict_trial_completion():
     if st.session_state.get("global_edit_mode", False):
         row = get_selected_trial_row()
-        if row is None or not has_pending_changes(row):
+        if row is None or not has_pending_simulation_changes(row):
             return
 
         audit_log(
@@ -5213,6 +5601,16 @@ def reset_trial_editor_state():
         _safe_delete_session_value(widget_key)
 
     st.session_state[_indication_attention_key()] = False
+
+    for assumption_key in ACTIVE_OPERATIONAL_ASSUMPTION_KEYS:
+        for key in (
+            get_operational_assumption_state_key(trial_key, assumption_key),
+            get_operational_assumption_source_state_key(trial_key, assumption_key),
+            get_operational_assumption_baseline_state_key(trial_key, assumption_key),
+            get_operational_assumption_widget_key(trial_key, assumption_key),
+        ):
+            _safe_delete_session_value(key)
+    ensure_planned_enrollment_state(row)
 
     for suffix, candidates in TRIAL_EDITOR_TEXT_FIELDS.items():
         state_key = f"text_{trial_key}_{suffix}"
@@ -5519,7 +5917,7 @@ def render_header(is_landing=True, show_predict_button=False, show_back_button=F
                             selected_row = get_selected_trial_row()
                             predict_btn_type = (
                                 "primary"
-                                if selected_row is not None and has_pending_changes(selected_row)
+                                if selected_row is not None and has_pending_simulation_changes(selected_row)
                                 else "secondary"
                             )
                         else:
@@ -6251,6 +6649,16 @@ def _sync_indication_widget_to_shared_state(row):
     queue_simulation_reprediction_if_score_visible()
 
 
+def _sync_planned_enrollment_widget(row):
+    nct_id = str(row.get(ID_COL, st.session_state.get("selected_nct_id", "")))
+    widget_key = get_operational_assumption_widget_key(nct_id, "planned_enrollment")
+    value_key = get_planned_enrollment_state_key(nct_id)
+    source_key = get_planned_enrollment_source_state_key(nct_id)
+    st.session_state[value_key] = st.session_state.get(widget_key, 0)
+    st.session_state[source_key] = "user_scenario"
+    st.session_state.simulation_has_edits = True
+
+
 def _feature_value_is_modified(field_id, row, state_key, initial_val, options):
     """True when current input differs from the latest prediction snapshot."""
     return field_id in get_pending_feature_ids(row)
@@ -6445,9 +6853,142 @@ def _render_trial_feature_pillar(pillar, fields, row):
                     _render_trial_feature_control(field_id, row)
 
 
+def render_planned_enrollment_input(row):
+    ensure_planned_enrollment_state(row)
+    nct_id = str(row.get(ID_COL, st.session_state.get("selected_nct_id", "")))
+    widget_key = get_operational_assumption_widget_key(nct_id, "planned_enrollment")
+    current_value = pd.to_numeric(get_current_planned_enrollment_assumption(row), errors="coerce")
+    current_value = 0 if pd.isna(current_value) or float(current_value) < 0 else int(round(float(current_value)))
+
+    if widget_key in st.session_state:
+        stored = pd.to_numeric(st.session_state.get(widget_key), errors="coerce")
+        if pd.isna(stored) or float(stored) < 0:
+            st.session_state[widget_key] = current_value
+
+    enrollment_pending = has_pending_enrollment_assumption(row)
+    previous_enrollment = get_previous_planned_enrollment_assumption(row)
+    enrollment_label = "Planned Enrollment"
+    if enrollment_pending and previous_enrollment is not None:
+        enrollment_label = f"Planned Enrollment :blue[(previous: {previous_enrollment:,})]"
+
+    state_token = "chg" if enrollment_pending else "base"
+    with st.container(key=f"operational_assumption_{state_token}_{_field_token('planned_enrollment')}"):
+        st.markdown(
+            """
+            <div class="operational-assumption-head">
+                <div class="highlight-title">Operational Assumption</div>
+                <div class="operational-assumption-help">
+                    Operational assumption only. Does not enter the XGBoost Completion Score.
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        input_kwargs = {
+            "label": enrollment_label,
+            "min_value": 0,
+            "step": 1,
+            "key": widget_key,
+            "on_change": _sync_planned_enrollment_widget,
+            "args": (row,),
+            "help": "Operational assumption only. Does not enter the XGBoost Completion Score.",
+        }
+        if widget_key not in st.session_state:
+            input_kwargs["value"] = current_value
+        st.number_input(**input_kwargs)
+
+
+def _enrollment_status_label(status):
+    labels = {
+        "below_benchmark": "below benchmark",
+        "typical": "typical",
+        "ambitious": "ambitious",
+        "above_benchmark_high": "above benchmark high",
+        "not_available": "not available",
+    }
+    return labels.get(str(status or "not_available"), "not available")
+
+
+def _enrollment_source_label(source):
+    labels = {
+        "planned_value": "planned value",
+        "final_observed_value": "final observed enrollment",
+        "observed_to_date_lower_bound": "observed-to-date lower bound",
+        "model_default": "benchmark default",
+        "user_scenario": "user scenario",
+    }
+    return labels.get(str(source or "").strip(), "not available")
+
+
+def render_enrollment_assumption_card(row):
+    if not st.session_state.get("global_edit_mode", False):
+        return
+
+    nct_id = str(row.get(ID_COL, st.session_state.get("selected_nct_id", "")))
+    snapshot = get_latest_prediction_snapshot(nct_id) or {}
+    assumptions = snapshot.get("operational_assumptions") or {}
+    metadata = assumptions.get("planned_enrollment") or {}
+
+    current_value = pd.to_numeric(get_current_planned_enrollment_assumption(row), errors="coerce")
+    current_text = "not set" if pd.isna(current_value) or float(current_value) <= 0 else f"{int(round(float(current_value))):,} patients"
+
+    stale = is_enrollment_benchmark_stale(row) or bool(metadata.get("is_benchmark_stale"))
+    enrollment_pending = has_pending_enrollment_assumption(row)
+    source = get_current_planned_enrollment_source(row) if enrollment_pending else metadata.get("source")
+    source_line = f"<div class='enrollment-assumption-line'><strong>Source:</strong> {html.escape(_enrollment_source_label(source))}</div>"
+
+    if stale:
+        body_lines = [
+            f"<div class='enrollment-assumption-line'><strong>Current:</strong> {html.escape(current_text)}</div>",
+            source_line,
+            "<div class='enrollment-assumption-line'>Enrollment benchmark will refresh after prediction.</div>",
+        ]
+        muted = "Benchmark cohort refresh is limited to phase, indication, therapeutic area, and rare-disease flag."
+    elif enrollment_pending:
+        body_lines = [
+            f"<div class='enrollment-assumption-line'><strong>Current:</strong> {html.escape(current_text)}</div>",
+            source_line,
+            "<div class='enrollment-assumption-line'>Click Predict to update enrollment assumption.</div>",
+        ]
+        muted = "Completion Score and XGBoost charts remain unchanged until model-facing Trial Features are predicted."
+    elif metadata.get("enrollment_status") == "not_available" or not metadata:
+        body_lines = [
+            f"<div class='enrollment-assumption-line'><strong>Current:</strong> {html.escape(current_text)}</div>",
+            source_line,
+            "<div class='enrollment-assumption-line'>Enrollment benchmark is not available for this snapshot.</div>",
+        ]
+        muted = "Enrollment benchmark is a reference, not a recommendation."
+    else:
+        status = _enrollment_status_label(metadata.get("enrollment_status"))
+        n_value = metadata.get("benchmark_n")
+        level = str(metadata.get("benchmark_level_used") or "not_available")
+        try:
+            n_text = f"{int(n_value):,}"
+        except (TypeError, ValueError):
+            n_text = "not available"
+        body_lines = [
+            f"<div class='enrollment-assumption-line'><strong>Current:</strong> {html.escape(current_text)}</div>",
+            source_line,
+            f"<div class='enrollment-assumption-line'><strong>Benchmark:</strong> {html.escape(status)} versus similar trials</div>",
+            f"<div class='enrollment-assumption-line'><strong>Reference:</strong> n={html.escape(n_text)}, {html.escape(level)}</div>",
+        ]
+        muted = "Enrollment benchmark is a reference, not a recommendation."
+
+    st.markdown(
+        (
+            "<div class='enrollment-assumption-card'>"
+            "<div class='enrollment-assumption-title'>Enrollment assumption</div>"
+            f"{''.join(body_lines)}"
+            f"<div class='enrollment-assumption-muted'>{html.escape(muted)}</div>"
+            "</div>"
+        ),
+        unsafe_allow_html=True,
+    )
+
+
 def get_simulation_pillar_delta_map():
     snapshot = get_latest_prediction_snapshot(st.session_state.get("selected_nct_id", ""))
-    if not snapshot or snapshot.get("source") == "prerecorded_baseline":
+    if not snapshot or snapshot.get("source") != "simulation_ptc":
         return {}
 
     initial_impacts_list = snapshot.get("previous_pillar_impacts") or []
@@ -6480,6 +7021,8 @@ def render_trial_detail_tabs_refined(row):
     simulation_mode = st.session_state.get("global_edit_mode", False)
     if simulation_mode:
         ensure_simulation_baseline_snapshot(row)
+        if st.session_state.get("trigger_prediction", False):
+            get_analysis_result_for_selected_trial(row)
 
     score_visible = st.session_state.get("detail_completion_tab_visible", False)
 
@@ -6589,12 +7132,14 @@ def render_trial_detail_tabs_refined(row):
         if simulation_mode and tab_features is not None:
             with tab_features:
                 render_trial_features_tab(row)
+                render_planned_enrollment_input(row)
 
         if score_visible and tab_score is not None:
             with tab_score:
                 render_completion_prediction_tab(row)
 
 def get_edited_row(row: pd.Series) -> pd.Series:
+    sync_rendered_simulation_widgets_to_shared_state(row)
     edited_row = row.copy()
     trial_key = st.session_state.get("selected_nct_id", "no_trial")
 
@@ -6645,7 +7190,34 @@ def get_analysis_result_for_selected_trial(row):
         if not st.session_state.trigger_prediction:
             return (snapshot or {}).get("result")
 
-        if not has_pending_changes(row):
+        if not has_pending_simulation_changes(row):
+            st.session_state.trigger_prediction = False
+            return (snapshot or {}).get("result")
+
+        if has_pending_operational_assumptions(row) and not has_pending_changes(row):
+            previous_snapshot = snapshot or {}
+            if previous_snapshot.get("result"):
+                compare_values = previous_snapshot.get("compare_values") or get_current_compare_values(row)
+                submitted_values = previous_snapshot.get("submitted_values") or get_current_feature_values(row)
+                operational_assumptions = build_operational_assumptions(
+                    row,
+                    snapshot_values=compare_values,
+                    is_benchmark_stale=False,
+                )
+                updated_snapshot = set_latest_prediction_snapshot(
+                    st.session_state.selected_nct_id,
+                    previous_snapshot["result"],
+                    submitted_values,
+                    previous_snapshot=previous_snapshot,
+                    source=OPERATIONAL_ASSUMPTION_UPDATE_SOURCE,
+                    compare_values=compare_values,
+                    operational_assumptions=operational_assumptions,
+                )
+                st.session_state.analysis_result = updated_snapshot["result"]
+                st.session_state.analysis_nct_id = st.session_state.selected_nct_id
+                st.session_state.trigger_prediction = False
+                st.rerun()
+                return updated_snapshot["result"]
             st.session_state.trigger_prediction = False
             return (snapshot or {}).get("result")
 
@@ -6672,6 +7244,15 @@ def get_analysis_result_for_selected_trial(row):
                 )
                 submitted_values = get_current_feature_values(row) if is_simulation_mode else None
                 compare_values = get_current_compare_values(row) if is_simulation_mode else None
+                operational_assumptions = (
+                    build_operational_assumptions(
+                        row,
+                        snapshot_values=compare_values,
+                        is_benchmark_stale=False,
+                    )
+                    if is_simulation_mode
+                    else None
+                )
 
                 res = requests.post(
                     API_URL,
@@ -6693,7 +7274,8 @@ def get_analysis_result_for_selected_trial(row):
                             submitted_values,
                             previous_snapshot=previous_snapshot,
                             source="simulation_ptc",
-                            compare_values=compare_values
+                            compare_values=compare_values,
+                            operational_assumptions=operational_assumptions,
                         )
                         st.session_state.analysis_result = snapshot["result"]
 
@@ -6793,7 +7375,7 @@ def render_completion_prediction_tab(row):
                     previous_score = pd.to_numeric(snapshot.get("previous_score"), errors="coerce")
                     delta_pct = pd.to_numeric(snapshot.get("score_delta_percent"), errors="coerce")
 
-                    if has_pending_changes(row):
+                    if has_pending_simulation_changes(row):
                         stale_html = (
                             '<div class="simulation-stale-notice">'
                             'Click Predict to update'
@@ -6801,7 +7383,7 @@ def render_completion_prediction_tab(row):
                         )
 
                     if (
-                        snapshot.get("source") == "simulation_ptc"
+                        snapshot.get("source") in SIMULATION_SNAPSHOT_SCORE_DELTA_SOURCES
                         and pd.notna(previous_score)
                         and pd.notna(delta_pct)
                     ):
@@ -6865,6 +7447,7 @@ def render_completion_prediction_tab(row):
                     ),
                     unsafe_allow_html=True
                 )
+                render_enrollment_assumption_card(row)
 
             render_summary_plot_shell_panel(
                 panel_suffix="completion_prediction_left_top_block",
