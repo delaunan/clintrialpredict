@@ -173,7 +173,7 @@ Still intentionally not implemented:
 - API contract changes.
 - Deployment changes.
 
-Next session should start with a focused code review / cleanup pass or commit preparation, not new scope. If a new operational assumption is added later, it should follow the generic operational-assumption pending/update pattern and remain outside XGBoost until a separate architecture decision says otherwise.
+Planned Enrollment Phase 2A / 2B is implemented. The next operational-assumption work should follow the staged roadmap in `Next Operational Assumptions - Sites And Duration Planning`, starting with the S1B `planned_sites` benchmark-feasibility audit. This does not authorize runtime or UI activation. Any future active operational assumption must follow the generic operational-assumption pending/update pattern and remain outside XGBoost until a separate architecture decision says otherwise.
 
 ## Current Foundation
 
@@ -290,7 +290,7 @@ If planned enrollment is missing and the system uses a benchmark-derived default
 
 The enrollment benchmark belongs to the current prediction snapshot, not permanently to the original trial.
 
-For the next implementation phase, benchmark stale-state should be triggered only by fields that change the active benchmark lookup cohort:
+For the active Planned Enrollment runtime, benchmark stale-state should be triggered only by fields that change the active benchmark lookup cohort:
 
 - `phase_ml`
 - `gbd_cause_id_3_ml`
@@ -429,7 +429,7 @@ Level 3: same phase + same therapeutic area
 Level 4: same phase only
 ```
 
-The calibration gate can recommend changes later, but the first implementation should stay simple unless the analysis clearly shows that another field materially improves benchmark stability and relevance without creating sparse cohorts.
+The completed v1 implementation stays simple unless later analysis clearly shows that another field materially improves benchmark stability and relevance without creating sparse cohorts.
 
 ### Phase 1 Calibration Findings
 
@@ -589,7 +589,7 @@ above benchmark high and weakly supported by the design.
 
 ## Relationship To Coherence Score
 
-Coherence Score is not implemented in the active Phase 1 benchmark layer or the next implementation phase. When a future Coherence Score exists, enrollment should be one input into it, not the score itself. It should mainly influence:
+Coherence Score is not implemented. When a future Coherence Score exists, enrollment should be one input into it, not the score itself. It should mainly influence:
 
 - Operational feasibility.
 - Population relevance.
@@ -649,53 +649,434 @@ Planning JSON example:
 
 This object should be assembled after the latest prediction snapshot and passed to the narrative layer. It should be stored with the serious-game prediction snapshot so later iterations can compare the user's scenario path without recomputing historical context ambiguously.
 
-Phase 1 runtime returns `support_level = "not_evaluated"` and empty `supporting_signals` / `conflicting_signals`. Support/conflict logic is deferred until after the base Simulation Mode integration and snapshot container are stable.
+Current Planned Enrollment runtime returns `support_level = "not_evaluated"` and empty `supporting_signals` / `conflicting_signals`. Support/conflict logic remains deferred until a separate architecture decision and implementation phase.
 
 ## Revised Operational Assumptions Roadmap
 
-The estimation architecture should evolve in stages. The important boundary is that Planned Enrollment is active now; sites, countries, and duration are reserved future assumption families that require separate validation before implementation.
+The estimation architecture evolves in staged, decision-gated increments. Planned Enrollment is already active. `planned_sites` and `planned_duration_months` remain inactive reserved keys. `planned_countries` remains excluded.
 
-Roadmap:
+Current roadmap:
 
-1. Phase 2A: active Planned Enrollment integration in Simulation Mode.
-   - Add the current planned enrollment assumption to the simulation workflow.
-   - Attach deterministic enrollment benchmark metadata to prediction snapshots.
-   - Keep XGBoost, SHAP, therapeutic-area calibration, audit/demo parity, API contracts, and artifacts outside the enrollment benchmark unchanged.
+1. Completed: Phase 1 enrollment benchmark artifact and runtime utility.
+   - Offline compact artifact builder is implemented.
+   - Runtime lookup and metadata utility are implemented.
+   - Production runtime uses the compact enrollment benchmark artifact, not the full historical database.
 
-2. Phase 2B: generic `operational_assumptions` snapshot container.
-   - Store `planned_enrollment` as the only active benchmarked operational assumption.
-   - Reserve `planned_sites`, `planned_countries`, and `planned_duration_months` as inactive metadata keys.
-   - Do not add active estimates, UI inputs, model logic, or narrative claims for reserved keys.
+2. Completed: Phase 2A / 2B Planned Enrollment Simulation Mode integration and `operational_assumptions` container.
+   - `planned_enrollment` is the only active benchmarked operational assumption.
+   - `planned_sites`, `planned_countries`, and `planned_duration_months` are stored only as inactive reserved metadata keys.
+   - Planned Enrollment remains outside XGBoost, SHAP, therapeutic-area calibration, audit/demo parity, API contracts, model artifacts, and taxonomy artifacts.
 
-3. Phase 3A: exploratory notebook validation for Site Count, Country Count, and Duration feasibility.
-   - Evaluate whether each candidate assumption has reliable source fields, target definitions, cohort sizes, percentile stability, and useful fallback behavior.
-   - Treat each candidate as a separate validation problem.
-   - Do not assume the enrollment benchmark pattern automatically transfers to sites, countries, or duration.
+3. Next: S1B `planned_sites` benchmark-feasibility audit.
+   - Validate whether `number_of_facilities` can support a cautious registry-derived facility-count benchmark.
+   - Do not create runtime utilities, production artifacts, UI, prediction payload changes, or model changes in S1B.
 
-4. Phase 3B: deterministic benchmark artifacts one by one, only if data quality is sufficient.
-   - Build a site-count benchmark only after site-count validation passes.
-   - Build a country-count benchmark only after country-count validation passes.
-   - Build a duration benchmark only if duration data quality supports it.
-   - Keep cost, market potential, spend curve, and future development commitment out of scope.
+4. Later, only if S1B passes: S2 `planned_sites` compact benchmark artifact and runtime utility.
+   - Requires S1B decision gates to pass first.
+   - Must keep production runtime compact and auditable.
 
-5. Phase 4: narrative payload builder that consumes operational assumptions.
-   - Convert prediction snapshots plus operational assumptions into a stable structured payload.
-   - Keep the payload deterministic and inspectable.
-   - Do not let narrative text invent operational ranges that are absent from the payload.
+5. Later, only if S2 passes: S3 `planned_sites` Simulation Mode integration.
+   - May activate `planned_sites` only after S2 passes and a separate implementation prompt authorizes S3.
+   - Must preserve the current completion-model boundary unless a separate architecture decision changes it.
 
-6. Phase 5: LLM narrative only.
-   - Use the LLM to explain structured benchmarked assumptions.
-   - Do not use the LLM as the source of benchmark percentiles, operational estimates, or score changes.
+6. Later: D1 `planned_duration_months` duration-definition validation and data audit.
+   - Validate duration definitions and source quality before any artifact or runtime work.
+   - Must join back to `data/studies.txt` for date-type qualifiers.
 
-7. Phase 6: Coherence Score only after the payload and rubric are stable.
-   - Implement scoring only when the payload fields, support/conflict rubric, stale-state behavior, and narrative interpretation are stable enough to audit.
-   - Keep Coherence Score separate from the existing XGBoost Completion Score.
+7. Later, only if D1 passes: D2 duration compact benchmark artifact and runtime utility.
+   - Requires D1 decision gates to pass first.
+
+8. Later, only if D2 passes: D3 duration Simulation Mode integration.
+   - May activate `planned_duration_months` only after D2 passes and a separate implementation prompt authorizes D3.
+
+9. Future after stable deterministic payloads: narrative payload builder, LLM narrative, then Coherence Score.
+   - Narrative and scoring work must consume deterministic payloads.
+   - LLM text must not invent operational ranges or create hidden score changes.
+   - Coherence Score must remain separate from the existing XGBoost Completion Score.
+
+The detailed source contracts, methodology, metadata shapes, staged roadmap, and decision gates for S1B/S2/S3/D1/D2/D3 are defined in `Next Operational Assumptions - Sites And Duration Planning`.
+
+## Next Operational Assumptions - Sites And Duration Planning
+
+This section is the source-of-truth plan for the next operational-assumption families after active Planned Enrollment. It is architecture-only. It does not activate `planned_sites`, `planned_duration_months`, or any new runtime behavior.
+
+### Current Boundary
+
+- `planned_enrollment` is the only active operational assumption.
+- `planned_sites` and `planned_duration_months` remain inactive reserved keys.
+- `planned_countries` remains explicitly excluded from this implementation plan.
+- Future operational assumptions must preserve the current boundary unless a separate architecture decision changes it: no XGBoost changes, no `/predict` or API contract changes, no SHAP changes, no pillar impact changes, no impact bar or treemap changes, no therapeutic-area calibration changes, no audit/demo parity changes, no model artifact changes, and no taxonomy artifact changes.
+- Production runtime should continue to use compact benchmark artifacts and current trial snapshots, not the full raw historical database.
+- LLM narratives, Coherence Score, and Adjusted Trial Value Score remain out of scope.
+
+### Planned Site Count - Source Contract
+
+The confirmed candidate field for a future site-count benchmark is `number_of_facilities`.
+
+Source contract:
+
+- `data/data_clinpred.csv` has 34,066 rows and 157 fields.
+- The final CSV does not contain detailed per-site records.
+- The final CSV does not contain site names, site addresses, cities, investigators, facility-level rows, per-site status, planned-vs-actual site labels, or estimated-vs-actual site labels.
+- Site-relevant final CSV fields are `number_of_facilities`, `includes_us`, `includes_us_ml`, and `includes_us_ui`.
+- `number_of_facilities` comes from `data/calculated_values.txt`.
+- `data/calculated_values.txt` also includes fields such as `actual_duration`, `were_results_reported`, `months_to_report_results`, `has_us_facility`, and `has_single_facility`.
+- The current prep loader merges the candidate field through `_engineer_facilities(...)` with `['nct_id', 'number_of_facilities']`.
+- There is no accompanying `facility_type`, `site_type`, `number_of_facilities_type`, `planned_facilities`, `actual_facilities`, or `estimated_facilities` field.
+
+Interpretation:
+
+- `number_of_facilities` is a registry-derived aggregate facility-count proxy.
+- It must not be described as true planned sites.
+- It must not be described as true actual activated sites.
+- It must not be described as true estimated sites.
+- No detailed site-level production data is available locally.
+- `includes_us` is a derived geography/facility-presence flag and is not a primary site-count benchmark input.
+- The current loader may derive `includes_us` without filtering the `countries.txt` `removed` flag, so it should not be used as a primary benchmark key for `planned_sites`.
+- `planned_countries` remains excluded.
+
+Previously observed site-count audit values for `data/data_clinpred.csv`:
+
+- `number_of_facilities` present: 34,066 rows.
+- Positive facility count: 31,824 rows.
+- Zero facility count: 2,242 rows.
+- Minimum: 0.
+- Median: 12.
+- Maximum: 1,745.
+
+### Planned Site Count - First-Estimate Methodology
+
+The first benchmark target should be completed trials with `number_of_facilities > 0`.
+
+Methodology rules:
+
+- Completed trials can support historical facility-count benchmark distributions, but only as completed registry facility-count proxy values.
+- Ongoing trials should be treated as current registry facility-count proxy values or lower-confidence lower-bound information, not final site counts.
+- The deterministic benchmark pattern should mirror Planned Enrollment only if the S1B audit confirms source stability, target readiness, cohort coverage, and fallback reliability.
+- Initial confidence threshold should be `n >= 50`, mirroring enrollment unless later validation changes it.
+- Patients-per-site should be a future secondary coherence signal, not the primary `planned_sites` benchmark.
+- Patients-per-site is `planned_enrollment / planned_sites`.
+- Do not couple `planned_sites` to `planned_enrollment` too early. The site-count benchmark should first stand on its own registry-derived facility-count proxy distribution.
+
+Proposed benchmark hierarchy:
+
+1. `phase + indication + rare disease flag`
+2. `phase + therapeutic area + rare disease flag`
+3. `phase + therapeutic area`
+4. `phase only`
+
+### Planned Site Count - Phase S1B Audit Result
+
+S1B was completed as an audit, notebook, and documentation phase only. It did not create production benchmark artifacts, runtime utilities, UI, API changes, model changes, SHAP changes, therapeutic-area calibration changes, audit/demo parity changes, taxonomy changes, or deployment changes.
+
+Audit materials:
+
+- Reproducible notebook: `notebooks/estimation_sites.ipynb`.
+- Non-production audit report: `notebooks/outputs/site_count_s1b_audit.json`.
+
+Source contract result:
+
+- Source field confirmed: `number_of_facilities`.
+- Source origin confirmed: `data/calculated_values.txt`, merged by `src/prep/data_loader_clinpred.py::_engineer_facilities(...)`.
+- Numeric parsing confirmed for all 34,066 `data/data_clinpred.csv` rows.
+- No planned/actual/estimated qualifier exists for `number_of_facilities`.
+- No detailed local production facility table was found for site names, site addresses, cities, investigators, facility-level rows, per-site status, planned-vs-actual site labels, or estimated-vs-actual site labels.
+- The field remains a registry-derived aggregate facility-count proxy, not true planned sites, true actual activated sites, or true estimated sites.
+- `includes_us` remains excluded from the primary site-count benchmark hierarchy.
+
+Overall `number_of_facilities` quality statistics:
+
+```text
+total rows: 34,066
+present:    34,066
+missing:         0
+zero:        2,242
+negative:        0
+positive:   31,824
+min:             0
+p25:             1
+median:         12
+p75:            40
+p90:            93
+p95:           149
+p99:           302.35
+max:         1,745
+```
+
+Benchmark target result:
+
+- Provisional target: completed trials with `number_of_facilities > 0`.
+- Target population: 19,880 rows.
+- Interpretation: completed registry facility-count proxy values, not true actual activated site count.
+- Ongoing trials were treated only as descriptive current registry facility-count proxy / lower-confidence lower-bound values.
+
+Exploratory hierarchy result with `min_n >= 50`:
+
+```text
+phase_indication_rare: rows=659, confident=105, low_confidence=554, duplicate_keys=0, p50 range=1-277
+phase_ta_rare:         rows=138, confident=53,  low_confidence=85,  duplicate_keys=0, p50 range=1-78
+phase_ta:              rows=76,  confident=48,  low_confidence=28,  duplicate_keys=0, p50 range=1-75
+phase_only:            rows=4,   confident=4,   low_confidence=0,   duplicate_keys=0, p50 range=5-28
+```
+
+Fallback coverage across all 34,066 source rows:
+
+```text
+phase_indication_rare: 23,439
+phase_ta_rare:          7,260
+phase_ta:               2,231
+phase_only:             1,136
+not_available:              0
+low_confidence matches:     0
+```
+
+Outlier caveat:
+
+- The largest observed value was 1,745 facilities.
+- The top observed values are large multicenter/global trials, including cardiovascular and respiratory Phase III programs.
+- This upper tail supports percentile-based benchmarks and argues against mean-based site-count benchmarks.
+
+Decision gate result:
+
+S2 is recommended, narrowly, because:
+
+- `number_of_facilities` is available and numeric.
+- Completed positive facility-count rows are sufficient.
+- Phase-only fallback is robust and confident.
+- Duplicate benchmark keys are zero.
+- Low-confidence behavior can be flagged.
+- Outliers are documented.
+- Architecture wording clearly prevents overclaiming true site-count precision.
+
+Exact S2 scope, if separately authorized:
+
+- Create `scripts/build_site_benchmarks.py`.
+- Create `scripts/check_site_benchmarks.py`.
+- Create `src/site_benchmarks.py`.
+- Create compact production artifact `frontend/data/site_benchmarks_v1.csv`.
+- Create production report `frontend/data/site_benchmarks_v1_report.json`.
+- Keep `planned_sites` inactive in UI until S3.
+- Do not touch `/predict`, XGBoost, SHAP, therapeutic-area calibration, audit mode, taxonomy, model artifacts, `planned_duration_months`, or `planned_countries`.
+
+Post-S1B status:
+
+- `planned_sites` remains inactive.
+- `planned_duration_months` remains inactive and outside S1B scope.
+- `planned_countries` remains excluded.
+- No runtime, UI, API, model, SHAP, therapeutic-area calibration, audit/demo parity, taxonomy, or deployment behavior changed.
+
+### Planned Site Count - Future Metadata Shape
+
+Future `operational_assumptions.planned_sites` metadata should use cautious source labels:
+
+- `registry_facility_count_proxy`
+- `completed_registry_facility_count`
+- `current_registry_facility_count`
+- `benchmark_default`
+- `user_scenario`
+
+Avoid source labels that imply unsupported precision:
+
+- `actual_sites`
+- `final_actual_sites`
+- `planned_sites_from_registry`
+
+Suggested future metadata shape:
+
+```json
+{
+  "planned_sites": {
+    "value": 80,
+    "source": "registry_facility_count_proxy | completed_registry_facility_count | current_registry_facility_count | benchmark_default | user_scenario",
+    "benchmark_level_used": "phase_indication_rare | phase_ta_rare | phase_ta | phase_only | not_available",
+    "benchmark_n": 123,
+    "benchmark_p25": 12,
+    "benchmark_p50": 35,
+    "benchmark_p75": 90,
+    "benchmark_p90": 160,
+    "site_count_status": "below_benchmark | typical | ambitious | above_benchmark_high | not_available",
+    "support_level": "not_evaluated",
+    "supporting_signals": [],
+    "conflicting_signals": [],
+    "benchmark_snapshot_id": "...",
+    "is_benchmark_stale": false,
+    "low_confidence_flag": false,
+    "interpretation_hint": "Site count is above the usual registry facility-count benchmark for similar completed trials."
+  }
+}
+```
+
+### Planned Duration - Source Contract
+
+`planned_duration_months` must not be implemented from `data/data_clinpred.csv` alone.
+
+Source contract:
+
+- `data/data_clinpred.csv` contains `start_date`, `completion_date`, `primary_completion_date`, and `start_year`.
+- `data/data_clinpred.csv` does not retain `start_date_type`, `completion_date_type`, or `primary_completion_date_type`.
+- `data/studies.txt` contains date fields and matching `*_date_type` qualifiers.
+- Important date/type pairs include `start_date -> start_date_type`, `completion_date -> completion_date_type`, `primary_completion_date -> primary_completion_date_type`, `study_first_posted_date -> study_first_posted_date_type`, `results_first_posted_date -> results_first_posted_date_type`, `disposition_first_posted_date -> disposition_first_posted_date_type`, and `last_update_posted_date -> last_update_posted_date_type`.
+- `data/studies.txt` also contains `start_month_year`, `verification_month_year`, `completion_month_year`, and `primary_completion_month_year`.
+- `*_date_type` fields are current registry qualifiers with values such as `ACTUAL`, `ESTIMATED`, or blank/missing. They are not historical planned-vs-actual pairs.
+- The raw `studies.txt` file does not preserve both original estimated dates and later actual dates side by side. The current date value is replaced over time as the registry changes.
+- Duration validation must join back to `data/studies.txt` by `nct_id` to recover the date-type qualifiers.
+- Do not use `actual_duration` blindly unless the architecture first documents how it is computed and whether it is reliable for the selected duration definition.
+
+### Planned Duration - First-Estimate Methodology
+
+The safest first deterministic definition is:
+
+```text
+completed full trial duration = completion_date - start_date, in months
+```
+
+Initial benchmark population:
+
+- Completed trials.
+- Valid `start_date`.
+- Valid `completion_date`.
+- Positive duration.
+- `completion_date_type = ACTUAL`.
+
+D1 must quantify whether requiring `start_date_type = ACTUAL` is too restrictive, because many completed trials may have blank `start_date_type`.
+
+Endpoint-focused duration based on `primary_completion_date` must be audited separately and must not be mixed with full completion duration without a clear documented rule. `primary_completion_date - start_date` may serve as an operational lower-range duration proxy because primary endpoint milestones often occur before full administrative study completion.
+
+Endpoint-focused duration should therefore be interpreted as:
+
+- Lower-bound operational duration proxy.
+- Not equivalent to final study duration.
+- Potentially more reflective of protocol burden and interim milestone timing than administrative closeout duration.
+
+Benchmark comparisons using endpoint-focused duration must remain separated from full completion-duration benchmarks unless a deterministic normalization rule is validated in D1.
+
+Additional methodology rules:
+
+- Ongoing trials should be treated as elapsed-to-date or censored lower-bound information only.
+- No survival model or censoring model is part of this staged rollout.
+- Deterministic historical medians and percentiles should be tested first.
+
+Proposed benchmark hierarchy:
+
+1. `phase + indication + rare disease flag`
+2. `phase + therapeutic area + rare disease flag`
+3. `phase + therapeutic area`
+4. `phase only`
+
+Important data-quality risks:
+
+- Missing dates.
+- Partial dates.
+- Blank date types.
+- Estimated completion dates.
+- Future dates.
+- Negative durations.
+- Implausibly short durations.
+- Administrative lag.
+- Terminated trials.
+- Completed trials with stale estimated labels.
+- Confusion between primary completion and full completion.
+
+### Planned Duration - Future Metadata Shape
+
+Suggested future metadata shape:
+
+```json
+{
+  "planned_duration_months": {
+    "value": 36.0,
+    "source": "completed_actual_duration_proxy | current_elapsed_duration_lower_bound | benchmark_default | user_scenario",
+    "duration_definition": "start_date_to_completion_date_months",
+    "date_basis": {
+      "start_date_type": "ACTUAL | ESTIMATED | blank | unknown",
+      "completion_date_type": "ACTUAL | ESTIMATED | blank | unknown"
+    },
+    "benchmark_level_used": "phase_indication_rare | phase_ta_rare | phase_ta | phase_only | not_available",
+    "benchmark_n": 123,
+    "benchmark_p25": 18.0,
+    "benchmark_p50": 30.0,
+    "benchmark_p75": 48.0,
+    "benchmark_p90": 72.0,
+    "duration_status": "shorter_than_benchmark | typical | long | very_long | not_available",
+    "support_level": "not_evaluated",
+    "supporting_signals": [],
+    "conflicting_signals": [],
+    "benchmark_snapshot_id": "...",
+    "is_benchmark_stale": false,
+    "low_confidence_flag": false,
+    "interpretation_hint": "Duration is longer than the usual completed-trial benchmark for similar trials."
+  }
+}
+```
+
+### Staged Roadmap
+
+Recommended order:
+
+```text
+S1B -> S2 -> S3 -> D1 -> D2 -> D3
+```
+
+Site-count stages:
+
+- S1B: `planned_sites` architecture formalization and benchmark-feasibility audit.
+- S2: `planned_sites` compact benchmark artifact and runtime utility.
+- S3: `planned_sites` Simulation Mode integration.
+
+Duration stages:
+
+- D1: `planned_duration_months` duration-definition validation and data audit.
+- D2: `planned_duration_months` compact benchmark artifact and runtime utility.
+- D3: `planned_duration_months` Simulation Mode integration.
+
+Each stage should be implemented separately. Completing S1B or D1 does not authorize runtime activation, artifact creation, API changes, model changes, UI activation, LLM narratives, or scoring changes.
+
+### Decision Gates
+
+S2 may begin only after S1B confirms:
+
+- `number_of_facilities` source contract is confirmed.
+- Completed positive facility-count population is large enough.
+- Benchmark hierarchy has acceptable fallback coverage.
+- Extreme outliers are documented.
+- Phase-only fallback is reliable.
+- There are no duplicate benchmark keys.
+- Low-confidence rows are acceptable and flagged.
+- Wording clearly avoids "actual site count" overclaiming.
+
+D1 must confirm:
+
+- `studies.txt` date-type join is reliable.
+- Completed actual completion-date population is quantified.
+- `start_date_type` restrictiveness is quantified.
+- Duration definition is selected.
+- Duration outliers are documented.
+- `completion_date` versus `primary_completion_date` boundary is documented.
+- Endpoint-focused duration remains clearly separated as a lower-range operational milestone proxy unless a deterministic normalization rule is validated.
+
+### Explicit Non-Goals
+
+This staged plan explicitly excludes:
+
+- `planned_countries`.
+- Cost estimation.
+- Country-count estimation.
+- Site-level modelling.
+- Recruitment modelling.
+- Survival modelling.
+- LLM narratives.
+- Coherence Score.
+- Adjusted Trial Value Score.
+- Model retraining.
+- Prediction-pipeline changes.
+- API changes.
+- Frontend activation.
 
 ## Operational Assumptions Snapshot Container
 
-Future serious-game narrative generation should consume a structured `operational_assumptions` object. In the next phase, only `planned_enrollment` should carry active benchmark metadata. The other keys may exist only as reserved inactive metadata.
+The runtime now stores operational assumptions in a structured `operational_assumptions` object. `planned_enrollment` is currently the only active benchmarked operational assumption. `planned_sites` and `planned_duration_months` remain inactive reserved keys until their staged implementation phases. `planned_countries` remains excluded.
 
-Example shape:
+Current active/reserved shape:
 
 ```python
 operational_assumptions = {
@@ -735,11 +1116,13 @@ operational_assumptions = {
 }
 ```
 
-Rules for the next implementation phase:
+Current and future container rules:
 
-- `planned_enrollment` may be shown and benchmarked.
-- `planned_sites`, `planned_countries`, and `planned_duration_months` must remain inactive reserved keys.
-- Reserved future keys should not appear as user-editable assumptions.
+- `planned_enrollment` is currently active and benchmarked.
+- `planned_sites` remains inactive until S3.
+- `planned_duration_months` remains inactive until D3.
+- `planned_countries` remains excluded.
+- Reserved future keys must not appear as user-editable assumptions until their own staged implementation phase.
 - Reserved future keys should not drive score, narrative, charts, or model behavior.
 - Cost, market potential, spend curve, and future development commitment should not be added to this object.
 
@@ -759,7 +1142,7 @@ This keeps the benchmark layer auditable. It also prevents the first LLM impleme
 
 ## Deterministic Benchmark Pattern For Future Operational Assumptions
 
-Any future site-count, country-count, or duration layer should follow the enrollment pattern only after its data validation passes.
+Any future site-count or duration layer should follow the enrollment pattern only after its data validation passes. Country-count planning is excluded from the current staged roadmap.
 
 Required pattern:
 
@@ -775,17 +1158,19 @@ Required pattern:
 - No therapeutic-area calibration modification.
 - No audit/demo parity behavior modification.
 
-Each future layer should define its own source priority, target-readiness flags, cohort hierarchy, fallback behavior, confidence threshold, and invalid-value handling. Site count, country count, and duration should not inherit enrollment assumptions by default.
+Each future layer should define its own source priority, target-readiness flags, cohort hierarchy, fallback behavior, confidence threshold, and invalid-value handling. Site count and duration should not inherit enrollment assumptions by default.
 
-## Explicit Non-Goals For The Next Implementation Phase
+## Explicit Non-Goals For S1B Planned Sites Audit
 
-The next implementation phase should not:
+S1B is a benchmark-feasibility audit and architecture-hardening step only. It should not:
 
-- Estimate sites.
-- Estimate countries.
-- Estimate duration.
-- Estimate cost.
-- Estimate market potential.
+- Activate `planned_sites`.
+- Create production site benchmark artifacts.
+- Create `src/site_benchmarks.py`.
+- Add `planned_sites` UI.
+- Implement `planned_duration_months`.
+- Implement `planned_countries`.
+- Estimate cost, market potential, spend curve, or future development commitment.
 - Call an LLM.
 - Implement Coherence Score.
 - Retrain XGBoost.
@@ -795,13 +1180,7 @@ The next implementation phase should not:
 - Modify API contracts.
 - Deploy.
 
-The next implementation phase should only:
-
-- Add Planned Enrollment to Simulation Mode.
-- Create the `operational_assumptions` snapshot container.
-- Attach planned enrollment benchmark metadata to snapshots.
-- Show a small Enrollment Assumption note/card.
-- Reserve future assumption keys only as inactive metadata or documentation, not as UI inputs.
+S1B should only validate and document whether `number_of_facilities` can support a future compact `planned_sites` benchmark. S2, S3, D1, D2, and D3 still require their own prompts and decision gates.
 
 ## Production Runtime Artifact Strategy
 
@@ -910,9 +1289,11 @@ Runtime fallback behavior:
 6. Return not_available if the artifact is missing/corrupt, phase cannot be matched, planned enrollment is invalid/missing, or percentile values are incomplete.
 ```
 
-## First Implementation Path
+## Completed Planned Enrollment Implementation Path
 
-Focused v1 path and Phase 1 status:
+This section is historical and describes the completed Planned Enrollment implementation path. It is not the next action. The next operational-assumption action is S1B `planned_sites` benchmark-feasibility audit under `Next Operational Assumptions - Sites And Duration Planning`.
+
+Focused v1 path and current status:
 
 1. Audit enrollment fields and enrollment_type values in `data/data_clinpred.csv`. Completed in notebook and report.
 2. Create enrollment source flags:
@@ -932,21 +1313,20 @@ Focused v1 path and Phase 1 status:
    - benchmark level,
    - confidence flag,
    - benchmark version and source data version.
-5. Build a runtime benchmark lookup function using the approved v1 hierarchy and compact artifact.
-6. Calculate or retrieve P25/P50/P75/P90 for the selected current snapshot.
-7. Classify the current assumption as `below_benchmark`, `typical`, `ambitious`, `above_benchmark_high`, or `not_available`.
-8. Keep `support_level = "not_evaluated"` and support/conflict lists empty until a later phase.
-9. Keep XGBoost, SHAP, therapeutic-area calibration, audit mode, and parity behavior unchanged.
+5. Build a runtime benchmark lookup function using the approved v1 hierarchy and compact artifact. Implemented in `src/enrollment_benchmarks.py`.
+6. Calculate or retrieve P25/P50/P75/P90 for the selected current snapshot. Implemented through the compact artifact lookup path.
+7. Classify the current assumption as `below_benchmark`, `typical`, `ambitious`, `above_benchmark_high`, or `not_available`. Implemented.
+8. Add the Simulation Mode Planned Enrollment UI field and session-state assumption handling. Implemented in Phase 2A / 2B.
+9. Store benchmark metadata in prediction snapshots and operational-only updates through `operational_assumptions.planned_enrollment`. Implemented in Phase 2A / 2B.
+10. Keep `support_level = "not_evaluated"` and support/conflict lists empty until a later phase. Still deferred.
+11. Keep XGBoost, SHAP, therapeutic-area calibration, audit mode, and parity behavior unchanged. Preserved.
 
-Do not require model training in v1. The first implementation should use deterministic cohort percentiles.
+The completed v1 foundation does not require model training. It uses deterministic cohort percentiles.
 
-Not yet implemented:
+Deferred after completed Planned Enrollment foundation:
 
-- Simulation Mode Planned Enrollment UI field.
-- Initial planned-enrollment assumption selection in the UI/session state.
-- Storage of benchmark metadata in prediction snapshots.
 - Support/conflict signal generation from structured Trial Features.
-- Narrative / Coherence layer call.
+- Narrative / Coherence layer calls.
 
 ## Notebook Plan And Current Workbook
 
@@ -1059,14 +1439,15 @@ Phase 1 QA checks already completed:
 
 The previous broader estimation architecture remains useful as later roadmap thinking, but it is not part of the v1 serious-game enrollment benchmark.
 
-Future estimation roadmap topics:
+Current future estimation roadmap topics:
 
 - Planned Site Count benchmark layer, if separate data validation supports it.
-- Planned Country Count benchmark layer, if separate data validation supports it.
 - Planned Duration Months benchmark layer, only if duration source quality supports it.
-- Reconciliation of enrollment/sites/countries/duration, only after those layers exist.
+- Reconciliation of enrollment/sites/duration, only after those layers exist.
 
 Cost translation, calendar spend, future development commitment, market potential, and full operational-scale estimation remain out of scope. They should not be added to the current operational assumptions container.
+
+Planned Country Count remains excluded from the current staged roadmap. Reopen it only after a separate architecture decision and source audit.
 
 Future versions may also explore model-based enrollment calibration, including feature importance analysis, an enrollment proxy model, SHAP on the proxy model, correlation analysis, percentile segmentation, and clustering of similar trials. These are optional hardening steps and should not block the deterministic v1 benchmark.
 
@@ -1080,7 +1461,8 @@ Future versions may also explore model-based enrollment calibration, including f
 - Production runtime should use lookup plus deterministic fallback logic, not recompute historical percentiles from the full database.
 - Treat the benchmark artifact as versioned, auditable input to the narrative layer.
 - Do not train a model for v1 unless explicitly requested later.
-- Do not add sites, countries, total duration, cost, or market logic to v1.
+- Do not add active sites, countries, total duration, cost, or market logic to v1.
+- For the next operational-assumption work, use `Next Operational Assumptions - Sites And Duration Planning` as the source of truth.
 - Do not modify XGBoost, SHAP, therapeutic-area calibration, or audit/demo parity.
 - Do not add new primary benchmark fields merely because they sound clinically plausible.
 - Only add primary benchmark fields if they improve relevance while preserving sample size and percentile stability.
@@ -1092,11 +1474,11 @@ Future versions may also explore model-based enrollment calibration, including f
 - Let the future narrative / Coherence architecture interpret the benchmark after the structured payload is stable.
 - Preserve the separation between planned values, final observed values, observed-to-date lower bounds, model defaults, and user scenarios.
 
-## Next Phase Entry Point
+## Historical Phase 2 Entry Point
 
-The next phase should start from the Phase 1 artifact and runtime utility, not from the full historical dataset.
+This Phase 2 entry point is historical. It describes the already implemented Planned Enrollment foundation and is not the next implementation instruction. The next operational-assumption work must follow `Next Operational Assumptions - Sites And Duration Planning`, with S1B `planned_sites` benchmark-feasibility audit as the first next action.
 
-Expected next implementation sequence:
+Historical Planned Enrollment implementation sequence:
 
 1. Add the Planned Enrollment field to Simulation Mode without changing the XGBoost prediction payload or model-facing feature set.
 2. Select the initial planned enrollment assumption using the source-priority rules:
@@ -1110,9 +1492,9 @@ Expected next implementation sequence:
 6. Show a small Enrollment Assumption note/card that uses the deterministic metadata.
 7. Reserve `planned_sites`, `planned_countries`, and `planned_duration_months` as inactive metadata or documentation only.
 
-Do not add support/conflict signal generation, LLM calls, Coherence Score, sites, countries, duration, cost, market potential, API contract changes, deployment changes, model retraining, SHAP changes, therapeutic-area calibration changes, or audit/demo parity changes in the next implementation phase.
+Do not add support/conflict signal generation, LLM calls, Coherence Score, active sites, countries, active duration, cost, market potential, API contract changes, deployment changes, model retraining, SHAP changes, therapeutic-area calibration changes, or audit/demo parity changes without a separate architecture decision.
 
-The next phase must still preserve the completion model boundary:
+Future operational-assumption phases must still preserve the completion model boundary unless a separate architecture decision changes it:
 
 ```text
 Completion Score = existing XGBoost/SHAP/TA-calibrated score.
