@@ -1210,18 +1210,17 @@ Suggested future metadata shape:
 
 ### Planned Duration - Source Contract
 
-`planned_duration_months` must not be implemented from `data/data_clinpred.csv` alone.
+`planned_duration_months` must not be implemented without date-type-aware source rules.
 
 Source contract:
 
-- `data/data_clinpred.csv` contains `start_date`, `completion_date`, `primary_completion_date`, and `start_year`.
-- `data/data_clinpred.csv` does not retain `start_date_type`, `completion_date_type`, or `primary_completion_date_type`.
+- Rebuilt `data/data_clinpred.csv` contains `start_date`, `completion_date`, `primary_completion_date`, `completion_date_type`, `primary_completion_date_type`, `primary_completion_duration_months`, `completion_duration_months`, and `start_year`.
 - `data/studies.txt` contains date fields and matching `*_date_type` qualifiers.
 - Important date/type pairs include `start_date -> start_date_type`, `completion_date -> completion_date_type`, `primary_completion_date -> primary_completion_date_type`, `study_first_posted_date -> study_first_posted_date_type`, `results_first_posted_date -> results_first_posted_date_type`, `disposition_first_posted_date -> disposition_first_posted_date_type`, and `last_update_posted_date -> last_update_posted_date_type`.
 - `data/studies.txt` also contains `start_month_year`, `verification_month_year`, `completion_month_year`, and `primary_completion_month_year`.
 - `*_date_type` fields are current registry qualifiers with values such as `ACTUAL`, `ESTIMATED`, or blank/missing. They are not historical planned-vs-actual pairs.
 - The raw `studies.txt` file does not preserve both original estimated dates and later actual dates side by side. The current date value is replaced over time as the registry changes.
-- Duration validation must join back to `data/studies.txt` by `nct_id` to recover the date-type qualifiers.
+- If future source fields are needed beyond the exported CSV columns, duration validation must join back to `data/studies.txt` by `nct_id`.
 - Do not use `actual_duration` blindly unless the architecture first documents how it is computed and whether it is reliable for the selected duration definition.
 
 ### Planned Duration - First-Estimate Methodology
@@ -1242,11 +1241,11 @@ Initial benchmark population:
 
 D1 must quantify whether requiring `start_date_type = ACTUAL` is too restrictive, because many completed trials may have blank `start_date_type`.
 
-Endpoint-focused duration based on `primary_completion_date` must be audited separately and must not be mixed with full completion duration without a clear documented rule. `primary_completion_date - start_date` may serve as an operational lower-range duration proxy because primary endpoint milestones often occur before full administrative study completion.
+Endpoint-focused duration based on `primary_completion_date` must be audited separately and must not be mixed with full completion duration without a clear documented rule. `primary_completion_date - start_date` should serve as readout-timing context and consistency support because primary endpoint milestones often occur before full administrative study completion.
 
 Endpoint-focused duration should therefore be interpreted as:
 
-- Lower-bound operational duration proxy.
+- Primary readout timing context.
 - Not equivalent to final study duration.
 - Potentially more reflective of protocol burden and interim milestone timing than administrative closeout duration.
 
@@ -1254,16 +1253,118 @@ Benchmark comparisons using endpoint-focused duration must remain separated from
 
 Additional methodology rules:
 
-- Ongoing trials should be treated as elapsed-to-date or censored lower-bound information only.
+- Ongoing trials should not use `today - start_date`, `verification_date - start_date`, `last_update_posted_date - start_date`, or extract/update timestamps as elapsed-duration lower bounds.
+- Non-completed `ESTIMATED` completion and primary completion dates can be direct planned candidates when the trial is active/non-stopped.
+- Non-completed `ACTUAL` dates from stopped/interrupted trials are lower-bound or early-stop context only.
 - No survival model or censoring model is part of this staged rollout.
 - Deterministic historical medians and percentiles should be tested first.
 
-Proposed benchmark hierarchy:
+Status groups:
 
-1. `phase + indication + rare disease flag`
-2. `phase + therapeutic area + rare disease flag`
-3. `phase + therapeutic area`
-4. `phase only`
+```text
+completed = COMPLETED
+stopped_interrupted = TERMINATED, WITHDRAWN, SUSPENDED
+active_nonstopped = RECRUITING, ACTIVE_NOT_RECRUITING, ENROLLING_BY_INVITATION, NOT_YET_RECRUITING
+```
+
+Validated source-priority logic:
+
+1. Use trusted direct date-derived values when available.
+2. Use completed-trial benchmark P50 when direct dates are missing or untrustworthy.
+3. Apply floors only in fallback / untrusted cases so the estimate is not shorter than known lower-bound evidence.
+4. Preserve metadata explaining which source was used and which values acted only as floors.
+5. Completed trials with missing date types and valid date-derived durations may use those durations directly for the individual trial default with warning metadata, but must remain excluded from completed benchmark construction.
+
+Primary completion logic:
+
+```text
+If active/non-stopped and primary_completion_date_type = ACTUAL:
+    use actual primary completion duration directly
+
+Else if active/non-stopped and primary_completion_date_type = ESTIMATED:
+    use estimated primary completion duration directly
+
+Else if completed and primary_completion_date_type = ACTUAL:
+    use actual primary completion duration directly
+
+Else if completed and primary_completion_date_type is missing and duration is valid:
+    use primary completion duration directly for this individual trial
+    exclude from benchmark construction
+    add warning metadata
+
+Else:
+    planned_primary_completion_months =
+    max(
+      benchmark_primary_completion_p50,
+      primary_duration_months_ml if available,
+      actual_primary_completion_duration if stopped/interrupted and available,
+      estimated_primary_completion_duration if stopped/interrupted and available,
+      missing_type_primary_completion_duration if stopped/interrupted and available
+    )
+```
+
+Do not force `primary_duration_months_ml` as a floor when a trusted active/non-stopped or completed `ACTUAL`, `ESTIMATED`, or completed missing-type primary completion date is available. If the trusted date-derived primary completion duration is shorter than `primary_duration_months_ml`, preserve the trusted value and add a warning flag.
+
+Total duration logic:
+
+```text
+First calculate planned_primary_completion_months.
+
+If completed and completion_date_type = ACTUAL:
+    use actual total completion duration directly
+
+Else if completed and completion_date_type is missing and duration is valid:
+    use total completion duration directly for this individual trial
+    exclude from benchmark construction
+    add warning metadata
+
+Else if active/non-stopped and completion_date_type = ACTUAL:
+    use actual total completion duration, but mark status-lag / lower-confidence source
+
+Else if active/non-stopped and completion_date_type = ESTIMATED:
+    use estimated total completion duration directly
+
+Else:
+    planned_duration_months =
+    max(
+      benchmark_total_duration_p50,
+      planned_primary_completion_months,
+      actual_total_completion_duration if stopped/interrupted and available,
+      estimated_total_completion_duration if stopped/interrupted and available,
+      missing_type_total_completion_duration if stopped/interrupted and available,
+      primary_duration_months_ml if no trusted primary completion exists
+    )
+```
+
+If a trusted total duration is shorter than `planned_primary_completion_months`, preserve this as a warning/QA condition rather than silently overwriting the direct date-derived value.
+
+Approved benchmark hierarchy:
+
+1. `phase + indication + rare disease flag + endpoint duration bin`
+2. `phase + therapeutic area + rare disease flag + endpoint duration bin`
+3. `phase + therapeutic area + endpoint duration bin`
+4. `phase + endpoint duration bin`
+5. `phase + indication + rare disease flag`
+6. `phase + therapeutic area + rare disease flag`
+7. `phase + therapeutic area`
+8. `phase only`
+
+Use a cohort only when `n >= 50`. `endpoint duration bin` is derived from `primary_duration_months_ml`, for example `<=3`, `3-6`, `6-12`, `12-18`, `18-24`, `24-36`, `36-60`, and `>60` months.
+
+Placeholder cohort values must not become specific duration benchmark identities:
+
+```text
+If gbd_cause_id_3_ml is 0, missing, or otherwise invalid:
+  skip indication-level duration cohorts and continue to TA-level cohorts if TA is valid.
+
+If therapeutic area is missing, UNKNOWN, UNCLASSIFIED, OTHER, or OTHER/UNCLASSIFIED:
+  skip TA-level duration cohorts and continue to phase-level cohorts.
+
+If primary_duration_months_ml is missing, non-positive, or cannot be assigned to a valid endpoint duration bin:
+  skip endpoint-duration-bin cohorts and continue to the same clinical hierarchy without the endpoint-duration bin.
+```
+
+Do not use therapeutic modality, sponsor tier, administration complexity, endpoint rigor, masking, placebo, number of arms, allocation, or comparator benchmark as primary duration benchmark keys in v1. These may later become support/conflict signals after separate calibration.
 
 Important data-quality risks:
 
@@ -1287,13 +1388,26 @@ Suggested future metadata shape:
 {
   "planned_duration_months": {
     "value": 36.0,
-    "source": "completed_actual_duration_proxy | current_elapsed_duration_lower_bound | benchmark_default | user_scenario",
+    "source": "final_observed_total_duration | completed_missing_completion_date_type_duration | actual_completion_noncompleted_status_lag | estimated_planned_total_duration | benchmark_default_with_floors | user_scenario",
     "duration_definition": "start_date_to_completion_date_months",
     "date_basis": {
       "start_date_type": "ACTUAL | ESTIMATED | blank | unknown",
       "completion_date_type": "ACTUAL | ESTIMATED | blank | unknown"
     },
-    "benchmark_level_used": "phase_indication_rare | phase_ta_rare | phase_ta | phase_only | not_available",
+    "status_group": "completed | active_nonstopped | stopped_interrupted",
+    "trusted_direct_date_used": true,
+    "benchmark_default_used": false,
+    "floors_applied": [],
+    "warning_flags": [],
+    "planned_primary_completion_months": 24.0,
+    "primary_completion_source": "actual_primary_completion | estimated_primary_completion | completed_actual_primary_completion | completed_missing_primary_date_type_duration | benchmark_default_with_floors | not_available",
+    "primary_completion_duration_months_context": 24.0,
+    "endpoint_duration_months_context": 18.0,
+    "actual_total_duration_lower_bound": null,
+    "actual_primary_completion_lower_bound": null,
+    "estimated_total_duration_candidate": null,
+    "estimated_primary_completion_candidate": null,
+    "benchmark_level_used": "phase_indication_rare_endpoint_bin | phase_ta_rare_endpoint_bin | phase_ta_endpoint_bin | phase_endpoint_bin | phase_indication_rare | phase_ta_rare | phase_ta | phase_only | not_available",
     "benchmark_n": 123,
     "benchmark_p25": 18.0,
     "benchmark_p50": 30.0,
@@ -1309,6 +1423,20 @@ Suggested future metadata shape:
     "interpretation_hint": "Duration is longer than the usual completed-trial benchmark for similar trials."
   }
 }
+```
+
+Expected warning flags include:
+
+```text
+primary_completion_shorter_than_primary_duration_ml
+total_duration_shorter_than_primary_completion
+noncompleted_actual_completion_date_used
+stopped_actual_date_used_as_lower_bound
+completed_missing_completion_date_type_assumed_actual
+completed_missing_primary_date_type_assumed_actual
+stopped_missing_completion_date_type_used_as_lower_bound
+stopped_missing_primary_date_type_used_as_lower_bound
+benchmark_low_confidence
 ```
 
 ### Staged Roadmap
@@ -1359,13 +1487,16 @@ S2 QA completed with GO before S3 by verifying:
 
 D1 must confirm:
 
-- `studies.txt` date-type join is reliable.
+- rebuilt `data/data_clinpred.csv` date/date-type fields are reliable for duration planning, with `studies.txt` as the fallback source if more qualifiers are needed.
 - Completed actual completion-date population is quantified.
 - `start_date_type` restrictiveness is quantified.
 - Duration definition is selected.
 - Duration outliers are documented.
 - `completion_date` versus `primary_completion_date` boundary is documented.
-- Endpoint-focused duration remains clearly separated as a lower-range operational milestone proxy unless a deterministic normalization rule is validated.
+- Primary completion timing remains clearly separated as readout context and consistency support, not the total-duration target.
+- Trusted active/non-stopped or completed date-derived values are not silently overwritten by `primary_duration_months_ml` floors.
+- Stopped/interrupted actual dates are lower-bound or early-stop context only.
+- The endpoint-duration-bin + clinical fallback hierarchy remains acceptable at `n >= 50`.
 
 ### Explicit Non-Goals
 
