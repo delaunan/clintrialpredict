@@ -33,100 +33,28 @@ The active implementation scope is narrow by design:
 
 The broader architecture may reserve names for future operational assumptions, but active implementation remains limited to planned enrollment and planned site count. Reserved future keys must not imply active country, duration, cost, market, spend, or development-commitment estimates.
 
-## Phase 1 Implementation Status - 2026-06-01
+## Current Implementation Status - 2026-06-03
 
-Phase 1 is implemented as a deterministic, offline-built enrollment benchmark foundation. It does not add Simulation Mode UI, does not call an LLM, does not implement Coherence Score, and does not touch XGBoost, SHAP, therapeutic-area calibration, audit/demo parity, model artifacts, taxonomy files, API contracts, or deployment configuration.
+The active estimation layer is the combined deterministic operational benchmark. Historical enrollment-only and site-only benchmark scripts, runtime utilities, artifacts, and reports have been removed to keep one source of truth.
 
-Implemented files:
+Active files:
 
-- `scripts/build_enrollment_benchmarks.py`: offline artifact builder and calibration report generator.
-- `scripts/check_enrollment_benchmarks.py`: lightweight validation for artifact schema, strict lookup, fallback lookup, missing artifact behavior, and classification boundaries.
-- `src/enrollment_benchmarks.py`: runtime lookup and metadata utility.
-- `frontend/data/enrollment_benchmarks_v1.csv`: compact production-friendly benchmark artifact.
-- `frontend/data/enrollment_benchmarks_v1_report.json`: practical audit/calibration report.
-- `notebooks/estimation.ipynb`: central reproducible analytical notebook for the v1 planned-enrollment benchmark layer.
-- `notebooks/archive/estimation_legacy_before_enrollment_benchmark.ipynb`: archived broad-estimation notebook retained for history.
+- `scripts/build_operational_benchmarks.py`: the only benchmark builder.
+- `scripts/check_operational_benchmarks.py`: the only benchmark checker. It includes schema checks, lookup checks, registry-wide coverage checks, defaulting safety checks, and model-boundary checks.
+- `src/operational_benchmarks.py`: the only benchmark runtime utility.
+- `frontend/data/operational_benchmarks_v1.csv`: active compact runtime artifact.
+- `frontend/data/operational_benchmarks_v1_report.json`: active build report.
+- `frontend/data/operational_benchmarks_v1.xlsx`: analyst inspection export only; the app does not read it.
+- `notebooks/estimation.ipynb`: current explanatory notebook aligned to the combined operational artifact.
 
 Reproducibility workflow:
 
 ```bash
-python scripts/build_enrollment_benchmarks.py
-python scripts/check_enrollment_benchmarks.py
+python scripts/build_operational_benchmarks.py
+python scripts/check_operational_benchmarks.py
 ```
 
-Then open/run:
-
-```text
-notebooks/estimation.ipynb
-```
-
-The notebook inspects and validates the artifact and also reproduces the main calculations in memory in the `BENCHMARK_COHORTS`, `BENCHMARK_PERCENTILES`, and `VALIDATION` sections. The build script remains the source of truth for writing the production-facing artifact.
-
-Current artifact summary:
-
-```text
-source records loaded: 34,066
-completed positive ACTUAL enrollment benchmark targets: 20,526
-artifact rows: 876
-minimum confident cohort threshold: n >= 50
-low-confidence benchmark rows: 667
-duplicate benchmark keys: 0
-```
-
-Rows by benchmark level:
-
-```text
-phase_indication_rare: 658
-phase_ta_rare:        138
-phase_ta:              76
-phase_only:             4
-```
-
-Phase-only fallback rows are all confident:
-
-```text
-PHASE1/PHASE2:  n=1,907, P25=24.0,  P50=48.0,  P75=108.0, P90=225.0
-PHASE2:         n=8,987, P25=41.0,  P50=92.0,  P75=190.0, P90=332.0
-PHASE2/PHASE3:  n=511,  P25=89.5,  P50=222.0, P75=454.0, P90=974.0
-PHASE3:         n=9,121, P25=150.0, P50=326.0, P75=606.0, P90=1,077.0
-```
-
-Coverage QA across all 34,066 source snapshots found no benchmark lookup gaps:
-
-```text
-phase_indication_rare: 23,299 rows
-phase_ta_rare:         7,361 rows
-phase_ta:              2,270 rows
-phase_only:            1,136 rows
-not_available:             0 rows
-low-confidence matches:    0 rows
-```
-
-When using each row's current enrollment as the planned value, `not_available` classifications came only from invalid enrollment input values:
-
-```text
-typical:               15,494
-below_benchmark:        9,088
-ambitious:              4,775
-above_benchmark_high:   3,463
-not_available:          1,246
-
-missing enrollment:        14
-zero/non-positive:       1,232
-```
-
-Therefore, with a valid phase, valid planned enrollment value, and present/correct artifact, runtime should return a benchmark. The broadest fallback is `phase_only`. `not_available` should normally mean missing/invalid planned enrollment, missing/corrupt artifact, unrecognized phase outside the artifact, or incomplete percentile values.
-
-Validation commands run during Phase 1 and QA:
-
-```bash
-python scripts/build_enrollment_benchmarks.py
-python scripts/check_enrollment_benchmarks.py
-python -m py_compile scripts/build_enrollment_benchmarks.py scripts/check_enrollment_benchmarks.py src/enrollment_benchmarks.py
-git diff --check
-```
-
-Audit parity was previously confirmed at `4,423/4,423` perfect parity and was not rerun during the final QA pass because no prediction, audit, preprocessing, model, SHAP, therapeutic-area calibration, API, taxonomy, or deployment files were touched.
+The production runtime uses only `frontend/data/operational_benchmarks_v1.csv` through `src/operational_benchmarks.py`. It must not load `data/data_clinpred.csv`.
 
 ## Phase 2A / 2B Implementation Status - 2026-06-01
 
@@ -663,10 +591,9 @@ The estimation architecture evolves in staged, decision-gated increments. Planne
 
 Current roadmap:
 
-1. Completed: Phase 1 enrollment benchmark artifact and runtime utility.
-   - Offline compact artifact builder is implemented.
-   - Runtime lookup and metadata utility are implemented.
-   - Production runtime uses the compact enrollment benchmark artifact, not the full historical database.
+1. Superseded: Phase 1 enrollment-only benchmark artifact and runtime utility.
+   - The historical enrollment-only implementation was merged into the combined operational benchmark.
+   - Standalone enrollment benchmark scripts, runtime utility, artifact, and report have been removed.
 
 2. Completed: Phase 2A / 2B Planned Enrollment Simulation Mode integration and `operational_assumptions` container.
    - `planned_enrollment` was the first active benchmarked operational assumption.
@@ -676,11 +603,11 @@ Current roadmap:
 3. Completed: S1B `planned_sites` benchmark-feasibility audit.
    - Confirmed that `number_of_facilities` can support a cautious registry-derived aggregate facility-count proxy benchmark.
    - Confirmed that `number_of_facilities` is not true planned sites, not true actual activated sites, and not true estimated sites.
-   - Created `notebooks/estimation_sites.ipynb`, `notebooks/outputs/site_count_s1b_audit.json`, and the S1B audit result documentation.
+   - The site-specific exploratory notebook was removed after consolidation into `notebooks/estimation.ipynb`.
 
-4. Completed: S2 `planned_sites` compact benchmark artifact and runtime utility.
-   - Created `scripts/build_site_benchmarks.py`, `scripts/check_site_benchmarks.py`, `src/site_benchmarks.py`, `frontend/data/site_benchmarks_v1.csv`, and `frontend/data/site_benchmarks_v1_report.json`.
-   - Production-ready site-count benchmark data is compact and auditable.
+4. Superseded: S2 `planned_sites` compact benchmark artifact and runtime utility.
+   - The historical site-only implementation was merged into the combined operational benchmark.
+   - Standalone site benchmark scripts, runtime utility, artifact, and report have been removed.
 
 5. Completed: S2 QA checkpoint before S3.
    - Verify the S2 artifact, report, runtime utility, and check script cleanly before any UI/runtime integration.
@@ -688,7 +615,7 @@ Current roadmap:
 
 6. Completed: S3 `planned_sites` Simulation Mode integration.
    - `planned_sites` is active in Simulation Mode only.
-   - `planned_sites` was first integrated with `src/site_benchmarks.py` and `frontend/data/site_benchmarks_v1.csv`; the active post-refactor runtime now uses `src/operational_benchmarks.py` and `frontend/data/operational_benchmarks_v1.csv`.
+   - Active runtime uses `src/operational_benchmarks.py` and `frontend/data/operational_benchmarks_v1.csv`.
    - Operational-only `planned_sites` changes update snapshot metadata without calling `/predict`.
    - Must preserve the current completion-model boundary unless a separate architecture decision changes it.
 
@@ -808,7 +735,7 @@ S1B was completed as an audit, notebook, and documentation phase only. It did no
 
 Audit materials:
 
-- Reproducible notebook: `notebooks/estimation_sites.ipynb`.
+- Site-specific notebook: removed after consolidation into the current `notebooks/estimation.ipynb`.
 - Non-production audit report: `notebooks/outputs/site_count_s1b_audit.json`.
 
 Source contract result:
@@ -887,11 +814,8 @@ S2 is recommended, narrowly, because:
 
 Historical S2 scope authorized after S1B:
 
-- Create `scripts/build_site_benchmarks.py`.
-- Create `scripts/check_site_benchmarks.py`.
-- Create `src/site_benchmarks.py`.
-- Create compact production artifact `frontend/data/site_benchmarks_v1.csv`.
-- Create production report `frontend/data/site_benchmarks_v1_report.json`.
+- Create a site-count benchmark builder, checker, runtime utility, compact artifact, and report.
+- These standalone site-only files were later superseded by the combined operational benchmark and deleted.
 - Keep `planned_sites` inactive in UI until S3.
 - Do not touch `/predict`, XGBoost, SHAP, therapeutic-area calibration, audit mode, taxonomy, model artifacts, `planned_duration_months`, or `planned_countries`.
 
@@ -904,118 +828,15 @@ Post-S1B status:
 
 ### Planned Site Count - Phase S2 Implementation Status
 
-S2 is implemented as a deterministic compact benchmark artifact and runtime utility for future `planned_sites` use. It does not activate `planned_sites` in Simulation Mode, does not change UI behavior, and does not change operational-assumption runtime behavior.
+S2 originally created a standalone site-count benchmark builder, checker, runtime utility, CSV artifact, and report. That standalone implementation has been superseded by the combined operational benchmark. The historical site-only files were deleted during the 2026-06-03 cleanup.
 
-Implemented files:
+Active site-count benchmark support now lives in:
 
-- `scripts/build_site_benchmarks.py`: offline builder for the compact site-count benchmark artifact and report.
-- `scripts/check_site_benchmarks.py`: lightweight validation for artifact schema, strict lookup, fallback lookup, missing artifact behavior, classification boundaries, metadata shape, and inactive support level.
-- `src/site_benchmarks.py`: runtime artifact loader, deterministic lookup utility, classifier, and metadata wrapper.
-- `frontend/data/site_benchmarks_v1.csv`: compact production-friendly benchmark artifact.
-- `frontend/data/site_benchmarks_v1_report.json`: practical S2 benchmark QA report.
-
-Artifact paths:
-
-```text
-frontend/data/site_benchmarks_v1.csv
-frontend/data/site_benchmarks_v1_report.json
-```
-
-Benchmark target definition:
-
-```text
-overall_status == COMPLETED
-number_of_facilities > 0
-```
-
-This target represents completed registry facility-count proxy values. It is not true planned sites, not true actual activated sites, and not true estimated sites.
-
-Benchmark hierarchy:
-
-```text
-phase_indication_rare: phase + gbd_cause_id_3_ml + is_rare_disease_ml
-phase_ta_rare:         phase + therapeutic_area + is_rare_disease_ml
-phase_ta:              phase + therapeutic_area
-phase_only:            phase
-```
-
-Runtime utility functions:
-
-- `load_site_benchmarks(...)`
-- `lookup_site_benchmark(...)`
-- `classify_site_count(...)`
-- `planned_sites_metadata(...)`
-
-Current S2 artifact/report summary:
-
-```text
-source records loaded: 34,066
-completed positive site-count proxy targets: 19,880
-artifact rows: 877
-minimum confident cohort threshold: n >= 50
-low-confidence benchmark rows: 667
-duplicate benchmark keys: 0
-source data version: 0a97519bd78f561a
-```
-
-Rows by benchmark level:
-
-```text
-phase_indication_rare: 659
-phase_ta_rare:         138
-phase_ta:               76
-phase_only:              4
-```
-
-Coverage QA across all 34,066 source snapshots:
-
-```text
-phase_indication_rare: 23,439 rows
-phase_ta_rare:          7,260 rows
-phase_ta:               2,231 rows
-phase_only:             1,136 rows
-not_available:              0 rows
-low-confidence matches:     0 rows
-```
-
-Quality statistics regenerated in S2:
-
-```text
-present: 34,066
-missing: 0
-zero: 2,242
-positive: 31,824
-median: 12
-p90: 93
-p95: 149
-p99: 302.35
-max: 1,745
-```
-
-Validation commands:
-
-```bash
-python scripts/build_site_benchmarks.py
-python scripts/check_site_benchmarks.py
-python -m py_compile scripts/build_site_benchmarks.py scripts/check_site_benchmarks.py src/site_benchmarks.py
-git diff --check
-```
-
-S2 boundary confirmations:
-
-- `planned_sites` remains inactive in Simulation Mode.
-- No `planned_sites` UI was added.
-- `ACTIVE_OPERATIONAL_ASSUMPTION_KEYS` was not changed.
-- `frontend/views/edit_trial.py` was not changed.
-- S2 does not attach `planned_sites` metadata to Simulation Mode snapshots or operational-only updates.
-- S2 does not change UI/runtime activation behavior.
-- S3 remains the first phase where `planned_sites` may become active in Simulation Mode, and only after a separate authorization prompt.
-- `/predict`, XGBoost, SHAP, therapeutic-area calibration, audit mode, model artifacts, taxonomy artifacts, and API contracts were not changed.
-- LLM narratives, Coherence Score, and Adjusted Trial Value Score were not changed.
-- `planned_duration_months` remains inactive.
-- `planned_countries` remains excluded.
-
-S2 QA checkpoint returned GO. S3 Simulation Mode integration was separately authorized and is documented below.
+- `scripts/build_operational_benchmarks.py`
+- `scripts/check_operational_benchmarks.py`
+- `src/operational_benchmarks.py`
+- `frontend/data/operational_benchmarks_v1.csv`
+- `frontend/data/operational_benchmarks_v1_report.json`
 
 ### Planned Site Count - Phase S3 Implementation Status
 
@@ -1024,7 +845,7 @@ S3 is implemented as a narrow Simulation Mode integration for `planned_sites`. `
 Implemented behavior:
 
 - `planned_sites` appears in the Operational Assumption mini-card area near Planned Enrollment.
-- `planned_sites` originally used `src/site_benchmarks.py` and `frontend/data/site_benchmarks_v1.csv`.
+- `planned_sites` originally used a standalone site-only benchmark utility and artifact, now deleted after consolidation.
 - After the single-artifact refactor, active Simulation Mode uses `src/operational_benchmarks.py` and `frontend/data/operational_benchmarks_v1.csv`.
 - `planned_sites` is stored under `operational_assumptions.planned_sites`.
 - `planned_sites` metadata is stored in baseline simulation snapshots, successful model-facing simulation prediction snapshots, operational-only updates, and simulation history.
@@ -1113,13 +934,11 @@ Implemented files and artifacts:
 
 - Builder: `scripts/build_operational_benchmarks.py`.
 - Checker: `scripts/check_operational_benchmarks.py`.
-- Systemic audit: `scripts/audit_operational_benchmarks.py`.
 - Runtime utility: `src/operational_benchmarks.py`.
 - Compact artifact: `frontend/data/operational_benchmarks_v1.csv`.
 - Report: `frontend/data/operational_benchmarks_v1_report.json`.
-- Audit report: `frontend/data/operational_benchmarks_v1_audit.json`.
 - Simulation Mode integration: `frontend/views/edit_trial.py`.
-- Active UI/runtime source: the single combined operational artifact. The older enrollment-only and site-only artifacts remain historical/QA references unless a later cleanup removes them.
+- Active UI/runtime source: the single combined operational artifact. The older enrollment-only and site-only artifacts were removed after consolidation.
 
 Combined artifact summary:
 
@@ -1127,11 +946,11 @@ Combined artifact summary:
 - Completed ACTUAL enrollment targets: 20,526.
 - Completed positive site-count proxy targets: 19,880.
 - Completed patients-per-site targets: 19,689.
-- Artifact rows: 4,056.
+- Artifact rows: 4,006.
 - Duplicate benchmark keys: 0.
 - Source data version: `0a97519bd78f561a`.
-- Rows by benchmark level: `phase_indication_rare` 660, `phase_indication_rare_modality` 1,958, `phase_indication_rare_non_vaccine_infections` 81, `phase_ta_rare` 138, `phase_ta_rare_modality` 674, `phase_ta_rare_non_vaccine_infections` 8, `phase_ta` 76, `phase_ta_modality` 453, `phase_ta_non_vaccine_infections` 4, `phase_only` 4.
-- Low-confidence rows by metric: enrollment 3,578, site_count 667, patients_per_site 3,568.
+- Rows by benchmark level: `phase_indication_rare` 656, `phase_indication_rare_modality` 1,948, `phase_indication_rare_non_vaccine_infections` 81, `phase_ta_rare` 133, `phase_ta_rare_modality` 660, `phase_ta_rare_non_vaccine_infections` 8, `phase_ta` 72, `phase_ta_modality` 440, `phase_ta_non_vaccine_infections` 4, `phase_only` 4.
+- Low-confidence rows by metric: enrollment 3,530, site_count 656, patients_per_site 3,520.
 - Coverage QA not available: enrollment 0, site_count 0, patients_per_site 0.
 - Coverage QA low-confidence matches: enrollment 0, site_count 0, patients_per_site 0.
 
@@ -1142,19 +961,20 @@ Single-artifact runtime rule:
 - The runtime keeps metric-specific evidence fields: `enrollment_n`, `site_count_n`, and `patients_per_site_n`.
 - The runtime keeps metric-specific confidence flags.
 - If a matched cohort has at least one relevant operational metric with `n >= 50`, the app keeps that specific cohort row and does not jump to a broader fallback only because another metric is near-threshold.
-- Metrics with `20 <= n < 50` are usable but low confidence.
-- Metrics with `n < 20` are considered too sparse and fall back when needed.
+- Metrics with `30 <= n < 50` are usable but low confidence.
+- Metrics with `n < 30` are considered too sparse and fall back when needed.
 - Same-level therapeutic modality refinement can override enrollment and patients-per-site percentiles when the matching refined metric has `n >= 50`.
 - Non-vaccine Infections fallback can override vaccine-heavy clinical fallback rows for enrollment and patients-per-site when the non-vaccine Infections row has `n >= 50`.
 - Raw site-count benchmark rows do not use modality refinement.
 - There are no `phase_only_modality` rows in the active artifact.
+- Placeholder cohort values are not allowed to become specific benchmark identities: unclassified indication id `0` is skipped for indication-level rows, unclassified/unknown therapeutic areas are skipped for TA-level rows, and unknown/unclassified modality is skipped for modality-refinement rows.
 
 Current cohort confidence decision:
 
 - The operational benchmark row is selected once, then metric-specific evidence is evaluated separately for enrollment, site count, and patients-per-site.
 - `n >= 50` means high-confidence evidence for that metric.
-- `20 <= n < 50` means usable low-confidence evidence for that metric.
-- `n < 20` is too sparse for that metric and should fall back when a broader row is available.
+- `30 <= n < 50` means usable low-confidence evidence for that metric.
+- `n < 30` is too sparse for that metric and should fall back when a broader row is available.
 - If one metric is high confidence and another is just below 50 on the same specific cohort, keep the specific row and expose the weaker metric as low confidence. Do not automatically broaden the whole cohort only because one metric is near-threshold.
 - The current known near-threshold mismatch is small: the specific `PHASE1/PHASE2` Leukemia non-rare cohort has `enrollment_n=49`, `site_count_n=51`, and `patients_per_site_n=49`. This is a low-confidence warning, not a reason to discard the clinically specific row.
 
@@ -1183,6 +1003,7 @@ Implemented decision:
 
 - Add same-level modality refinement to the active benchmark artifact for Planned Enrollment and patients-per-site only.
 - Add narrow non-vaccine Infections fallback rows for Planned Enrollment and patients-per-site only.
+- Do not create or use modality-refinement rows for unknown/unclassified modality. Unknown modality can contribute to the broad non-vaccine Infections exclusion pool when vaccine classification is reliable, but it must not become its own modality benchmark.
 - Keep raw site-count P50 clinical-only. It remains useful reference/fallback evidence, but site count is also affected by geography, registry completeness, and operational logistics.
 - Because the main non-completed site default uses `planned_enrollment / patients_per_site_p50`, modality-aware patients-per-site improves the site default without making raw site-count P50 the primary driver.
 - Protect smaller modalities by using modality only when the exact same selected clinical level plus modality has `n >= 50`.
@@ -1230,6 +1051,15 @@ For trials where therapeutic area is Infections and therapeutic modality is not 
 6. If no non-vaccine Infections row is usable, keep the original all-modality clinical fallback.
 ```
 
+Placeholder fallback safeguards:
+
+```text
+1. If gbd_cause_id_3_ml is 0 or missing, skip indication-level cohorts and continue with TA-level cohorts when TA is valid.
+2. If therapeutic area is OTHER/UNCLASSIFIED, UNCLASSIFIED, UNKNOWN, OTHER, or missing, skip TA-level cohorts and keep any valid indication-level cohort before falling back to phase only.
+3. If therapeutic modality is UNKNOWN, UNCLASSIFIED, or missing, do not create or use same-level modality-refinement rows.
+4. For Infections only, the non-vaccine fallback remains INFECTIONS excluding VACCINE; unknown modality may be included in that broad non-vaccine pool, but not as an UNKNOWN modality row.
+```
+
 Analysis result before implementation:
 
 - Full modality-first fallback selected modality for approximately 97% of rows but caused clinical-specificity loss for approximately 34-36% of rows.
@@ -1243,8 +1073,8 @@ Analysis result before implementation:
 Confidence rules preserve the current thresholds:
 
 - `n >= 50`: confident.
-- `20 <= n < 50`: usable low confidence for clinical fallback rows, but too sparse for modality override and too sparse for non-vaccine Infections fallback.
-- `n < 20`: too sparse; fallback.
+- `30 <= n < 50`: usable low confidence for clinical fallback rows, but too sparse for modality override and too sparse for non-vaccine Infections fallback.
+- `n < 30`: too sparse; fallback.
 
 Implementation boundaries:
 
@@ -1265,11 +1095,9 @@ Active files:
 
 - Builder: `scripts/build_operational_benchmarks.py`.
 - Checker: `scripts/check_operational_benchmarks.py`.
-- Systemic audit: `scripts/audit_operational_benchmarks.py`.
 - Runtime utility: `src/operational_benchmarks.py`.
 - Active artifact: `frontend/data/operational_benchmarks_v1.csv`.
 - Active report: `frontend/data/operational_benchmarks_v1_report.json`.
-- Active audit report: `frontend/data/operational_benchmarks_v1_audit.json`.
 - Simulation Mode integration: `frontend/views/edit_trial.py`.
 
 Current benchmark sources:
@@ -1293,9 +1121,11 @@ Current operational benchmark rules:
 Current cohort and refinement rules:
 
 - First select the clinical cohort: `phase_indication_rare`, then `phase_ta_rare`, then `phase_ta`, then `phase_only`.
+- Invalid indication disables only indication-level cohorts; invalid therapeutic area disables only TA-level cohorts. The runtime still uses the strongest remaining valid cohort before falling back to `phase_only`.
 - Keep a selected clinical row if at least one relevant operational metric has `n >= 50`; do not discard the row only because another metric is near-threshold low confidence.
 - Same-level therapeutic modality refinement applies only to enrollment and patients-per-site.
 - Same-level modality refinement requires `n >= 50`.
+- Same-level modality refinement does not use unknown/unclassified modality.
 - No `phase + modality` fallback exists.
 - No `phase_only_modality` rows exist.
 - For non-vaccine Infections trials only, if same-level modality refinement is unavailable, the runtime tries non-vaccine Infections fallback rows up the clinical hierarchy.
@@ -1304,10 +1134,10 @@ Current cohort and refinement rules:
 
 Current artifact and audit values:
 
-- Artifact rows: 4,056.
+- Artifact rows: 4,006.
 - Duplicate benchmark keys: 0.
 - Source data version: `0a97519bd78f561a`.
-- Rows by level: `phase_indication_rare` 660, `phase_indication_rare_modality` 1,958, `phase_indication_rare_non_vaccine_infections` 81, `phase_ta_rare` 138, `phase_ta_rare_modality` 674, `phase_ta_rare_non_vaccine_infections` 8, `phase_ta` 76, `phase_ta_modality` 453, `phase_ta_non_vaccine_infections` 4, `phase_only` 4.
+- Rows by level: `phase_indication_rare` 656, `phase_indication_rare_modality` 1,948, `phase_indication_rare_non_vaccine_infections` 81, `phase_ta_rare` 133, `phase_ta_rare_modality` 660, `phase_ta_rare_non_vaccine_infections` 8, `phase_ta` 72, `phase_ta_modality` 440, `phase_ta_non_vaccine_infections` 4, `phase_only` 4.
 - `search_registry` modality assignment: 4,423 assigned, 0 not assigned.
 - Audit lookup coverage: enrollment `not_available=0`, patients-per-site `not_available=0`, site-count `not_available=0`.
 - Audit modality/non-vaccine coverage: enrollment modality-refined 2,542 and non-vaccine Infections fallback 140; patients-per-site modality-refined 2,421 and non-vaccine Infections fallback 163; site-count modality-refined 0 and non-vaccine Infections fallback 0.
@@ -1318,10 +1148,7 @@ Validation commands:
 ```bash
 python scripts/build_operational_benchmarks.py
 python scripts/check_operational_benchmarks.py
-python scripts/audit_operational_benchmarks.py
-python scripts/check_enrollment_benchmarks.py
-python scripts/check_site_benchmarks.py
-python -m py_compile scripts/build_operational_benchmarks.py scripts/check_operational_benchmarks.py scripts/audit_operational_benchmarks.py src/operational_benchmarks.py frontend/views/edit_trial.py
+python -m py_compile scripts/build_operational_benchmarks.py scripts/check_operational_benchmarks.py src/operational_benchmarks.py frontend/views/edit_trial.py
 git diff --check
 ```
 
@@ -1523,10 +1350,10 @@ S1B completed and authorized S2 because it confirmed:
 
 S2 QA completed with GO before S3 by verifying:
 
-- `frontend/data/site_benchmarks_v1.csv` exists, is non-empty, and has the required schema.
-- `frontend/data/site_benchmarks_v1_report.json` exists and matches the artifact/report summary values.
-- `scripts/check_site_benchmarks.py` passes.
-- `src/site_benchmarks.py` returns schema-safe missing-artifact metadata and deterministic lookup behavior.
+- The historical site-only artifact existed, was non-empty, and had the required schema.
+- The historical site-only report matched the artifact/report summary values.
+- The historical site-only checker passed.
+- The historical site-only runtime returned schema-safe missing-artifact metadata and deterministic lookup behavior.
 - Boundary classification at P25/P75/P90 matches the S2 check script.
 - Before S3, `planned_sites` remained inactive, with no UI, API, model, SHAP, calibration, taxonomy, audit/demo parity, or prediction-payload changes.
 
@@ -1776,187 +1603,11 @@ patients_per_site_n / patients_per_site_p25 / patients_per_site_p50 / patients_p
 The runtime must keep metric-specific counts and confidence flags. It must not collapse them into one shared `benchmark_n`.
 Same-level modality rows are available only for enrollment and patients-per-site refinement. Raw site-count evidence remains clinical-only.
 
-Historical Phase 1 enrollment-only artifact path:
+Historical standalone enrollment-only and site-only benchmark artifacts have been removed. Current benchmark documentation and examples should use only the combined operational benchmark artifact and runtime:
 
 ```text
-frontend/data/enrollment_benchmarks_v1.csv
-```
-
-Historical Phase 1 enrollment-only report path:
-
-```text
-frontend/data/enrollment_benchmarks_v1_report.json
-```
-
-This location was selected because `frontend/data/` is already copied into the app image and already holds compact app-loaded artifacts such as `search_registry.csv` and `gbd_l3_indication_lookup.csv`.
-
-The artifact should contain one row per benchmark cohort and fallback level.
-
-Recommended artifact fields:
-
-- `benchmark_version`
-- `source_data_version`
-- `benchmark_key`
-- `phase`
-- `indication_or_therapeutic_area`
-- `rare_disease_flag`
-- `benchmark_level_used`
-- `benchmark_n`
-- `benchmark_p25`
-- `benchmark_p50`
-- `benchmark_p75`
-- `benchmark_p90`
-- `low_confidence_flag`
-- `created_at`
-- `outlier_policy`
-- `calibration_notes`, optional
-
-Phase 1 artifact schema:
-
-```text
-benchmark_version
-source_data_version
-benchmark_key
-phase
-indication_or_therapeutic_area
-gbd_cause_id_3_ml
-therapeutic_area
-rare_disease_flag
-benchmark_level_used
-benchmark_n
-benchmark_p25
-benchmark_p50
-benchmark_p75
-benchmark_p90
-low_confidence_flag
-created_at
-outlier_policy
-calibration_notes
-```
-
-At runtime, the app uses the current prediction snapshot to look up the relevant combined operational benchmark row, apply deterministic fallback logic if needed, classify the current operational assumptions, and store the resulting metadata in the simulation snapshot.
-
-Runtime should require only:
-
-- The current trial prediction snapshot.
-- The compact combined operational benchmark artifact.
-- Deterministic fallback logic.
-
-Runtime should not require:
-
-- The full raw historical trial database.
-- Notebook-only calibration data.
-- Model retraining.
-- Recomputing all benchmark percentiles from scratch.
-
-This keeps the production app lighter, faster, more auditable, and less dependent on raw historical data.
-
-Historical site-count artifact paths:
-
-```text
-frontend/data/site_benchmarks_v1.csv
-frontend/data/site_benchmarks_v1_report.json
-```
-
-Historical site-count runtime utility:
-
-```text
-src/site_benchmarks.py
-```
-
-Main functions:
-
-```text
-load_site_benchmarks(...)
-lookup_site_benchmark(...)
-classify_site_count(...)
-planned_sites_metadata(...)
-```
-
-These older enrollment-only and site-only artifacts/utilities remain useful QA references. The active Simulation Mode runtime now uses the combined operational artifact and utility.
-
-Enrollment and site-count runtime fallback behavior:
-
-```text
-1. Try phase + indication + rare disease.
-2. If missing or too sparse (metric n < 20), try phase + therapeutic area + rare disease.
-3. If missing or too sparse, try phase + therapeutic area.
-4. If missing or too sparse, try phase only.
-5. If a matched row has at least one relevant operational metric with n >= 50, keep that row even when another metric is near-threshold low confidence.
-6. Mark metric confidence separately.
-7. Return not_available if the artifact is missing/corrupt, phase cannot be matched, the operational value is invalid/missing, or percentile values are incomplete.
-```
-
-## Completed Planned Enrollment Implementation Path
-
-This section is historical and describes the completed Planned Enrollment implementation path. It is not the next action. S1B, S2, and S3 for `planned_sites` are now complete under `Next Operational Assumptions - Sites And Duration Planning`.
-
-Focused v1 path and current status:
-
-1. Audit enrollment fields and enrollment_type values in `data/data_clinpred.csv`. Completed in notebook and report.
-2. Create enrollment source flags:
-   - `is_completed_actual_enrollment_target`.
-   - `is_estimated_planned_enrollment`.
-   - `is_ongoing_actual_enrollment_lower_bound`.
-3. Run the Enrollment Benchmark Calibration Gate:
-   - evaluate candidate fields,
-   - check coverage and sample size,
-   - test percentile and label stability proxies,
-   - confirm that the default hierarchy is acceptable,
-   - decide which fields remain support/conflict signals.
-4. Precompute and save a compact enrollment benchmark artifact:
-   - one row per benchmark cohort and fallback level,
-   - P25/P50/P75/P90,
-   - cohort size,
-   - benchmark level,
-   - confidence flag,
-   - benchmark version and source data version.
-5. Build a runtime benchmark lookup function using the approved v1 hierarchy and compact artifact. Implemented in `src/enrollment_benchmarks.py`.
-6. Calculate or retrieve P25/P50/P75/P90 for the selected current snapshot. Implemented through the compact artifact lookup path.
-7. Classify the current assumption as `below_benchmark`, `typical`, `ambitious`, `above_benchmark_high`, or `not_available`. Implemented.
-8. Add the Simulation Mode Planned Enrollment UI field and session-state assumption handling. Implemented in Phase 2A / 2B.
-9. Store benchmark metadata in prediction snapshots and operational-only updates through `operational_assumptions.planned_enrollment`. Implemented in Phase 2A / 2B.
-10. Keep `support_level = "not_evaluated"` and support/conflict lists empty until a later phase. Still deferred.
-11. Keep XGBoost, SHAP, therapeutic-area calibration, audit mode, and parity behavior unchanged. Preserved.
-
-The completed v1 foundation does not require model training. It uses deterministic cohort percentiles.
-
-Deferred after completed Planned Enrollment foundation:
-
-- Support/conflict signal generation from structured Trial Features.
-- Narrative / Coherence layer calls.
-
-## Notebook Plan And Current Workbook
-
-The central notebook is:
-
-```text
-notebooks/estimation.ipynb
-```
-
-The previous broad missing-operational-value notebook was archived to:
-
-```text
-notebooks/archive/estimation_legacy_before_enrollment_benchmark.ipynb
-```
-
-The current notebook proves and documents the enrollment benchmark contract before UI or API integration. It is an analytical workbook, not the source of truth for writing the production-facing artifact. The source-of-truth artifact build command is:
-
-```bash
-python scripts/build_enrollment_benchmarks.py
-```
-
-That rebuilds:
-
-```text
-frontend/data/enrollment_benchmarks_v1.csv
-frontend/data/enrollment_benchmarks_v1_report.json
-```
-
-Then validate with:
-
-```bash
-python scripts/check_enrollment_benchmarks.py
+frontend/data/operational_benchmarks_v1.csv
+src/operational_benchmarks.py
 ```
 
 Recommended v1 notebook / implementation blocks:
@@ -2007,8 +1658,8 @@ These checks are used to make the benchmark stable and auditable, not to turn v1
 
 Phase 1 QA checks already completed:
 
-- Artifact regenerated successfully at `frontend/data/enrollment_benchmarks_v1.csv`.
-- Report regenerated successfully at `frontend/data/enrollment_benchmarks_v1_report.json`.
+- Historical enrollment-only artifact regenerated successfully before later consolidation and deletion.
+- Historical enrollment-only report regenerated successfully before later consolidation and deletion.
 - Artifact schema matches the implementation and this document.
 - Artifact row count is 876.
 - Duplicate benchmark keys: 0.

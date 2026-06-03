@@ -1,15 +1,15 @@
 {
-  "artifact_rows": 4056,
+  "artifact_rows": 4006,
   "benchmark_rows_by_level": {
-    "phase_indication_rare": 660,
-    "phase_indication_rare_modality": 1958,
+    "phase_indication_rare": 656,
+    "phase_indication_rare_modality": 1948,
     "phase_indication_rare_non_vaccine_infections": 81,
     "phase_only": 4,
-    "phase_ta": 76,
-    "phase_ta_modality": 453,
+    "phase_ta": 72,
+    "phase_ta_modality": 440,
     "phase_ta_non_vaccine_infections": 4,
-    "phase_ta_rare": 138,
-    "phase_ta_rare_modality": 674,
+    "phase_ta_rare": 133,
+    "phase_ta_rare_modality": 660,
     "phase_ta_rare_non_vaccine_infections": 8
   },
   "calibration_notes": "Deterministic combined operational benchmark for planned enrollment, site-count proxy, and enrollment-coherent patients-per-site defaults; same-level therapeutic modality refinement is used for enrollment and patients-per-site only; no operational ML model.",
@@ -21,9 +21,9 @@
       "low_confidence_matches": 0,
       "match_counts": {
         "phase_indication_rare": 23299,
-        "phase_only": 1136,
-        "phase_ta": 2270,
-        "phase_ta_rare": 7361
+        "phase_only": 1193,
+        "phase_ta": 2269,
+        "phase_ta_rare": 7305
       },
       "not_available": 0
     },
@@ -31,9 +31,9 @@
       "low_confidence_matches": 0,
       "match_counts": {
         "phase_indication_rare": 23299,
-        "phase_only": 1136,
-        "phase_ta": 2270,
-        "phase_ta_rare": 7361
+        "phase_only": 1193,
+        "phase_ta": 2269,
+        "phase_ta_rare": 7305
       },
       "not_available": 0
     },
@@ -41,19 +41,19 @@
       "low_confidence_matches": 0,
       "match_counts": {
         "phase_indication_rare": 23439,
-        "phase_only": 1136,
-        "phase_ta": 2231,
-        "phase_ta_rare": 7260
+        "phase_only": 1193,
+        "phase_ta": 2230,
+        "phase_ta_rare": 7204
       },
       "not_available": 0
     }
   },
-  "created_at": "2026-06-02T20:32:59+00:00",
+  "created_at": "2026-06-03T10:08:47+00:00",
   "duplicate_benchmark_keys": 0,
   "low_confidence_rows_by_metric": {
-    "enrollment": 3578,
-    "patients_per_site": 3568,
-    "site_count": 667
+    "enrollment": 3530,
+    "patients_per_site": 3520,
+    "site_count": 656
   },
   "minimum_confident_cohort_threshold": 50,
   "outlier_policy": "positive completed ACTUAL enrollment, positive completed registry-derived facility-count proxy, and completed ACTUAL enrollment per positive facility-count proxy; percentiles used without winsorization",

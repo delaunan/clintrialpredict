@@ -14,6 +14,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DATA_CLINPRED_PATH = PROJECT_ROOT / "data" / "data_clinpred.csv"
 OUTPUT_PATH = PROJECT_ROOT / "frontend" / "data" / "operational_benchmarks_v1.csv"
 REPORT_PATH = PROJECT_ROOT / "frontend" / "data" / "operational_benchmarks_v1_report.json"
+EXCEL_PATH = PROJECT_ROOT / "frontend" / "data" / "operational_benchmarks_v1.xlsx"
 
 BENCHMARK_VERSION = "operational_benchmarks_v1"
 OUTLIER_POLICY = (
@@ -27,6 +28,9 @@ CALIBRATION_NOTES = (
 )
 
 MIN_N_DEFAULT = 50
+
+INVALID_THERAPEUTIC_AREAS = {"", "OTHER", "OTHER/UNCLASSIFIED", "UNKNOWN", "UNCLASSIFIED"}
+INVALID_MODALITIES = {"", "UNKNOWN", "UNCLASSIFIED"}
 
 REQUIRED_COLUMNS = [
     "nct_id",
@@ -125,6 +129,28 @@ def _as_int(value: object, default: int = 0) -> int:
     if pd.isna(numeric):
         return default
     return int(numeric)
+
+
+def _is_valid_indication(value: object) -> bool:
+    return _as_int(value) > 0
+
+
+def _is_valid_ta(value: object) -> bool:
+    return _clean_text(value) not in INVALID_THERAPEUTIC_AREAS
+
+
+def _is_valid_modality(value: object) -> bool:
+    return _clean_text(value) not in INVALID_MODALITIES
+
+
+def _is_valid_level_key(level_name: str, key_data: dict[str, object]) -> bool:
+    if "phase_indication_rare" in level_name and not _is_valid_indication(key_data.get("gbd_cause_id_3_ml")):
+        return False
+    if "phase_ta" in level_name and not _is_valid_ta(key_data.get("therapeutic_area")):
+        return False
+    if level_name.endswith("_modality") and not _is_valid_modality(key_data.get("therapeutic_modality")):
+        return False
+    return True
 
 
 def _available_usecols(path: Path, requested_columns: list[str]) -> list[str]:
@@ -249,6 +275,8 @@ def _summaries_by_level(
             if not isinstance(keys, tuple):
                 keys = (keys,)
             key_data = dict(zip(level["group_cols"], keys, strict=True))
+            if not _is_valid_level_key(level["name"], key_data):
+                continue
             base = {
                 "benchmark_level_used": level["name"],
                 "phase": key_data.get("phase", "UNKNOWN"),
@@ -461,10 +489,25 @@ def build_report(
     }
 
 
-def write_outputs(artifact: pd.DataFrame, report: dict[str, object], output_path: Path, report_path: Path) -> None:
+def write_outputs(
+    artifact: pd.DataFrame,
+    report: dict[str, object],
+    output_path: Path,
+    report_path: Path,
+    excel_path: Path,
+) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     artifact.to_csv(output_path, index=False)
     report_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    with pd.ExcelWriter(excel_path, engine="openpyxl") as writer:
+        artifact.to_excel(writer, sheet_name="operational_benchmarks", index=False)
+        worksheet = writer.book["operational_benchmarks"]
+        worksheet.freeze_panes = "A2"
+        worksheet.auto_filter.ref = worksheet.dimensions
+        for column_cells in worksheet.columns:
+            header = str(column_cells[0].value or "")
+            width = min(max(len(header) + 2, 12), 42)
+            worksheet.column_dimensions[column_cells[0].column_letter].width = width
 
 
 def main() -> None:
@@ -472,6 +515,7 @@ def main() -> None:
     parser.add_argument("--input", type=Path, default=DATA_CLINPRED_PATH)
     parser.add_argument("--output", type=Path, default=OUTPUT_PATH)
     parser.add_argument("--report", type=Path, default=REPORT_PATH)
+    parser.add_argument("--excel", type=Path, default=EXCEL_PATH)
     parser.add_argument("--min-n", type=int, default=MIN_N_DEFAULT)
     args = parser.parse_args()
 
@@ -480,7 +524,7 @@ def main() -> None:
     source_version = _source_data_version(args.input)
     artifact = build_benchmarks(df, min_n=args.min_n, created_at=created_at, source_data_version=source_version)
     report = build_report(df, artifact, min_n=args.min_n, created_at=created_at, source_data_version=source_version)
-    write_outputs(artifact, report, args.output, args.report)
+    write_outputs(artifact, report, args.output, args.report, args.excel)
 
     print(f"Loaded {report['source_records_loaded']} records")
     print(f"Completed ACTUAL enrollment targets: {report['completed_actual_enrollment_targets']}")
@@ -488,6 +532,7 @@ def main() -> None:
     print(f"Completed patients-per-site targets: {report['completed_patients_per_site_targets']}")
     print(f"Wrote operational benchmark artifact: {args.output} ({len(artifact)} rows)")
     print(f"Wrote operational benchmark report: {args.report}")
+    print(f"Wrote operational benchmark Excel export: {args.excel}")
     print("Benchmark rows by level:")
     for level, count in report["benchmark_rows_by_level"].items():
         print(f"  {level}: {count}")

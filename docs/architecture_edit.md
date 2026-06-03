@@ -17,6 +17,9 @@ Current state to carry forward:
 - Sparse, unseen, or cross-TA indications remain selectable without user-facing model-support warnings.
 - Execution Framework has one-way alignment: changing Benchmark Comparator to `Placebo Control` sets Placebo Control to `Yes`; changing Benchmark Comparator to `No Control Group or Not Specified` sets Placebo Control to `No`. This triggers only from Benchmark Comparator changes, and the user can manually override Placebo Control afterward.
 - Simulation scoring still uses the existing model, SHAP contribution path, and TA calibration logic. No model artifacts were changed.
+- Simulation Mode has two active operational assumptions, Planned Enrollment and Planned Site Count. They are benchmarked through the single combined artifact `frontend/data/operational_benchmarks_v1.csv` and runtime utility `src/operational_benchmarks.py`.
+- Operational assumptions stay outside `/predict`, XGBoost, SHAP, Completion Score, TA calibration, taxonomy artifacts, and prediction payloads. Operational-only edits refresh snapshot metadata without calling `/predict`.
+- Benchmark maintenance is consolidated to one builder and one checker: `python scripts/build_operational_benchmarks.py` and `python scripts/check_operational_benchmarks.py`.
 
 Verification still needed:
 
@@ -37,6 +40,8 @@ The current edit-mode implementation phase is complete. The next session should 
 
 ### Operational Assumptions Update - 2026-06-01
 
+Historical note: this section records the first operational-assumption implementation. It is superseded by the 2026-06-03 section below for current active assumptions.
+
 Simulation Mode now includes the first Operational Assumption foundation:
 
 - Planned Enrollment appears as a compact Simulation Mode-only mini-card separate from model-facing Trial Features.
@@ -44,11 +49,66 @@ Simulation Mode now includes the first Operational Assumption foundation:
 - Changing Planned Enrollment marks Simulation Mode pending, turns `Predict Trial Completion` blue, shows the gauge-side `Click Predict to update` prompt, and displays the previous enrollment value.
 - Clicking `Predict Trial Completion` for an operational-only change refreshes the latest snapshot metadata through `simulation_operational_update`, does not call `/predict`, and does not change Completion Score, impact bar, treemap, SHAP impacts, or pillar impacts.
 - Snapshots and simulation history now include `operational_assumptions`.
-- `planned_enrollment` is the only active operational assumption. `planned_sites`, `planned_countries`, and `planned_duration_months` are reserved inactive keys only.
+- At this stage, `planned_enrollment` was the only active operational assumption. `planned_sites`, `planned_countries`, and `planned_duration_months` were reserved inactive keys only.
 - The Enrollment Assumption card shows benchmark position, reference cohort, and source metadata such as `planned value`, `final observed enrollment`, `benchmark default`, or `user scenario`.
 - The generic operational-assumption pending/update path is intended to support future validated fields, but sites, countries, and duration are not implemented yet.
 
 This update did not modify `frontend/views/trial_audit.py`, `api/main.py`, model artifacts, SHAP artifacts, taxonomy artifacts, benchmark artifacts, notebooks, or deployment files.
+
+### Operational Assumptions Update - 2026-06-03
+
+Simulation Mode now uses a single operational benchmark system for Planned Enrollment and Planned Site Count:
+
+- Active operational assumptions are `planned_enrollment` and `planned_sites`.
+- `planned_countries` and `planned_duration_months` remain future-reserved/inactive.
+- Active runtime artifact: `frontend/data/operational_benchmarks_v1.csv`.
+- Active runtime utility: `src/operational_benchmarks.py`.
+- Active maintenance commands:
+  - `python scripts/build_operational_benchmarks.py`
+  - `python scripts/check_operational_benchmarks.py`
+- Historical enrollment-only and site-only benchmark builders, checkers, runtime utilities, artifacts, reports, and notebooks were removed.
+- The builder writes the CSV runtime artifact, JSON build report, and Excel inspection export.
+- The checker covers schema, fallback behavior, modality/non-vaccine rules, registry-wide coverage, defaulting safety, and model-boundary safeguards.
+
+Operational benchmark rules:
+
+- Enrollment percentiles use completed trials with positive `ACTUAL` enrollment.
+- Site-count percentiles use completed trials with positive `number_of_facilities`.
+- Patients-per-site percentiles use completed trials with positive `ACTUAL` enrollment and positive `number_of_facilities`, using `enrollment / number_of_facilities`.
+- `number_of_facilities` is treated as a registry-derived facility-count proxy, not true planned sites or true activated sites.
+- Runtime lookup uses the clinical hierarchy `phase_indication_rare -> phase_ta_rare -> phase_ta -> phase_only`.
+- Invalid indication id `0` disables indication-level lookup only.
+- Invalid/unclassified TA disables TA-level lookup only; a valid indication can still be used.
+- Unknown/unclassified modality does not create or select modality-refinement rows.
+- Same-level modality refinement applies only to enrollment and patients-per-site, requires `n >= 50`, and never applies to raw site count.
+- For Infections trials with modality not equal to `VACCINE`, non-vaccine Infections fallback can apply to enrollment and patients-per-site when same-level modality refinement is unavailable and `n >= 50`.
+- Vaccine Infections trials can use vaccine refinement when supported and never use non-vaccine fallback.
+- Clinical fallback rows with `30 <= n < 50` are usable but low confidence; `n < 30` falls back when possible.
+
+Operational defaulting rules:
+
+- Planned Enrollment uses a positive planned/estimated value when available.
+- Completed trials without planned/estimated enrollment may use final observed enrollment.
+- Non-completed trials without planned/estimated enrollment use `max(observed_lower_bound, enrollment_p50)` when available.
+- Completed trials with positive `number_of_facilities` initialize Planned Sites from completed registry facility-count proxy.
+- Non-completed trials treat positive `number_of_facilities` as current registry facility-count proxy lower-bound/context.
+- Non-completed Planned Sites default to `max(current_registry_facility_count_proxy, planned_enrollment / patients_per_site_p50)` when patients-per-site P50 is available.
+- Pure site-count P50 is fallback/reference only when the enrollment-coherent patients-per-site candidate cannot be calculated.
+- User edits are scenario assumptions and update operational metadata without changing the XGBoost Completion Score unless model-facing Trial Features also change.
+
+Validation completed for this operational benchmark consolidation:
+
+- `python scripts/build_operational_benchmarks.py`
+- `python scripts/check_operational_benchmarks.py`
+- `python -m py_compile scripts/build_operational_benchmarks.py scripts/check_operational_benchmarks.py src/operational_benchmarks.py frontend/views/edit_trial.py`
+- `PYENV_VERSION=ClinTrialPredict python -m jupyter nbconvert --to notebook --execute notebooks/estimation.ipynb --output estimation_executed.ipynb --output-dir /tmp --ExecutePreprocessor.timeout=300`
+- Streamlit `APP_VARIANT=edit_trial` health check returned `200 ok` on a temporary local server.
+
+Remaining verification before deployment readiness:
+
+- Manual browser smoke test in Simulation Mode for Planned Enrollment and Planned Sites cards.
+- Confirm vaccine and non-vaccine Infections examples display expected benchmark metadata.
+- Confirm operational-only Planned Enrollment/Planned Sites edits do not call `/predict` and do not change Completion Score/charts.
 
 Implemented since the 2026-05-30 status:
 

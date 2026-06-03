@@ -32,9 +32,12 @@ NON_VACCINE_INFECTIONS_LEVELS = {
 MODALITY_REFINED_METRICS = {"enrollment", "patients_per_site"}
 
 METRIC_PREFIXES = ("enrollment", "site_count", "patients_per_site")
-MIN_USABLE_METRIC_N = 20
+MIN_USABLE_METRIC_N = 30
 MIN_MODALITY_REFINEMENT_N = 50
 MIN_NON_VACCINE_INFECTIONS_N = 50
+
+INVALID_THERAPEUTIC_AREAS = {"", "OTHER", "OTHER/UNCLASSIFIED", "UNKNOWN", "UNCLASSIFIED"}
+INVALID_MODALITIES = {"", "UNKNOWN", "UNCLASSIFIED"}
 
 REQUIRED_ARTIFACT_COLUMNS = {
     "benchmark_version",
@@ -100,6 +103,21 @@ def _clean_modality(value: Any) -> str | None:
         return None
     text = str(value).strip()
     return text.upper() if text else None
+
+
+def _is_valid_indication(value: Any) -> bool:
+    indication = _clean_int(value)
+    return indication is not None and indication > 0
+
+
+def _is_valid_ta(value: Any) -> bool:
+    therapeutic_area = _clean_ta(value)
+    return therapeutic_area is not None and therapeutic_area not in INVALID_THERAPEUTIC_AREAS
+
+
+def _is_valid_modality(value: Any) -> bool:
+    modality = _clean_modality(value)
+    return modality is not None and modality not in INVALID_MODALITIES
 
 
 def _clean_int(value: Any) -> int | None:
@@ -177,11 +195,11 @@ def _candidate_keys(snapshot: dict[str, Any]) -> list[tuple[str, dict[str, Any]]
         return []
 
     candidates: list[tuple[str, dict[str, Any]]] = []
-    if indication is not None and rare is not None:
+    if _is_valid_indication(indication) and rare is not None:
         candidates.append(("phase_indication_rare", {"phase": phase, "gbd_cause_id_3_ml": indication, "rare_disease_flag": rare}))
-    if therapeutic_area and rare is not None:
+    if _is_valid_ta(therapeutic_area) and rare is not None:
         candidates.append(("phase_ta_rare", {"phase": phase, "therapeutic_area": therapeutic_area, "rare_disease_flag": rare}))
-    if therapeutic_area:
+    if _is_valid_ta(therapeutic_area):
         candidates.append(("phase_ta", {"phase": phase, "therapeutic_area": therapeutic_area}))
     candidates.append(("phase_only", {"phase": phase}))
     return candidates
@@ -209,7 +227,7 @@ def _same_level_modality_refinement(
     base_level = str(base_row.get("benchmark_level_used") or "")
     refined_level = MODALITY_REFINEMENT_LEVELS.get(base_level)
     modality = _snapshot_modality(snapshot)
-    if not refined_level or not modality:
+    if not refined_level or not _is_valid_modality(modality):
         return base_row
 
     mask = benchmarks["benchmark_level_used"].eq(refined_level)
