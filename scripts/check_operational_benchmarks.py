@@ -601,6 +601,14 @@ def main() -> None:
         "Duration metadata should include primary completion context",
     )
     _assert(
+        duration_metadata["planned_duration_months"]["primary_completion_source"] == "estimated_primary_completion",
+        "Trusted active ESTIMATED primary completion should remain direct in duration metadata",
+    )
+    _assert(
+        duration_metadata["planned_duration_months"]["planned_primary_completion_months"] == 24.0,
+        "Trusted active ESTIMATED primary completion value should not be replaced by same-cohort benchmark P50",
+    )
+    _assert(
         duration_metadata["planned_duration_months"]["benchmark_n"] >= 50,
         "Duration metadata should use a full-duration cohort with n >= 50",
     )

@@ -531,9 +531,9 @@ This is conceptual JSON for planning only, not an implementation contract yet:
       "benchmark_p50": 30.0,
       "benchmark_p75": 55.0,
       "benchmark_p90": 80.0,
-      "duration_status": "below_benchmark | typical | ambitious | above_benchmark_high | not_available",
+      "duration_status": "shorter_than_benchmark | typical | long | very_long | not_available",
       "planned_primary_completion_months": 18.0,
-      "primary_completion_source": "same_cohort_benchmark | not_available",
+      "primary_completion_source": "actual_primary_completion | estimated_primary_completion | completed_actual_primary_completion | completed_missing_primary_date_type_duration | same_cohort_benchmark | not_available",
       "primary_completion_n": 120,
       "interpretation_hint": "Duration is an operational scenario assumption and does not enter the XGBoost Completion Score."
     }

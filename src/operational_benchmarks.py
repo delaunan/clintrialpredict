@@ -629,32 +629,6 @@ def planned_primary_completion_default_from_operational_benchmark(
     active_non_stopped = bool(status and not completed and not stopped)
     warnings: list[str] = []
 
-    if benchmark_row is not None:
-        if benchmark_p50 is None:
-            return {
-                "value": None,
-                "source": "not_available",
-                "trusted_direct_value": False,
-                "benchmark_primary_completion_p50": None,
-                "actual_primary_completion_lower_bound": None,
-                "estimated_primary_completion_candidate": None,
-                "endpoint_duration_months_context": endpoint_duration,
-                "benchmark_row": row,
-                "warnings": warnings,
-            }
-        return {
-            "value": round(float(benchmark_p50), 2),
-            "source": "same_cohort_benchmark",
-            "primary_completion_default_basis": "same_duration_cohort_benchmark",
-            "trusted_direct_value": False,
-            "benchmark_primary_completion_p50": benchmark_p50,
-            "actual_primary_completion_lower_bound": None,
-            "estimated_primary_completion_candidate": None,
-            "endpoint_duration_months_context": endpoint_duration,
-            "benchmark_row": row,
-            "warnings": warnings,
-        }
-
     if primary_duration is not None:
         if active_non_stopped and date_type == "ACTUAL":
             source = "actual_primary_completion"
@@ -681,6 +655,32 @@ def planned_primary_completion_default_from_operational_benchmark(
                 "benchmark_row": row,
                 "warnings": warnings,
             }
+
+    if benchmark_row is not None:
+        if benchmark_p50 is None:
+            return {
+                "value": None,
+                "source": "not_available",
+                "trusted_direct_value": False,
+                "benchmark_primary_completion_p50": None,
+                "actual_primary_completion_lower_bound": None,
+                "estimated_primary_completion_candidate": None,
+                "endpoint_duration_months_context": endpoint_duration,
+                "benchmark_row": row,
+                "warnings": warnings,
+            }
+        return {
+            "value": round(float(benchmark_p50), 2),
+            "source": "same_cohort_benchmark",
+            "primary_completion_default_basis": "same_duration_cohort_benchmark",
+            "trusted_direct_value": False,
+            "benchmark_primary_completion_p50": benchmark_p50,
+            "actual_primary_completion_lower_bound": None,
+            "estimated_primary_completion_candidate": None,
+            "endpoint_duration_months_context": endpoint_duration,
+            "benchmark_row": row,
+            "warnings": warnings,
+        }
 
     lower_bound = None
     estimated_candidate = None

@@ -17,7 +17,7 @@ Current state to carry forward:
 - Sparse, unseen, or cross-TA indications remain selectable without user-facing model-support warnings.
 - Execution Framework has one-way alignment: changing Benchmark Comparator to `Placebo Control` sets Placebo Control to `Yes`; changing Benchmark Comparator to `No Control Group or Not Specified` sets Placebo Control to `No`. This triggers only from Benchmark Comparator changes, and the user can manually override Placebo Control afterward.
 - Simulation scoring still uses the existing model, SHAP contribution path, and TA calibration logic. No model artifacts were changed.
-- Simulation Mode has two active operational assumptions, Planned Enrollment and Planned Site Count. They are benchmarked through the single combined artifact `frontend/data/operational_benchmarks_v1.csv` and runtime utility `src/operational_benchmarks.py`.
+- Simulation Mode has three active operational assumptions: Planned Enrollment, Planned Site Count, and Duration. They are benchmarked through the single combined artifact `frontend/data/operational_benchmarks_v1.csv` and runtime utility `src/operational_benchmarks.py`.
 - Operational assumptions stay outside `/predict`, XGBoost, SHAP, Completion Score, TA calibration, taxonomy artifacts, and prediction payloads. Operational-only edits refresh snapshot metadata without calling `/predict`.
 - Benchmark maintenance is consolidated to one builder and one checker: `python scripts/build_operational_benchmarks.py` and `python scripts/check_operational_benchmarks.py`.
 - Operational assumption labels stay visually light: direct AACT-backed values have no suffix, system-filled defaults show `(est.)`, and participant edits remove the suffix while the snapshot metadata still records `source = user_scenario`.
@@ -58,10 +58,10 @@ This update did not modify `frontend/views/trial_audit.py`, `api/main.py`, model
 
 ### Operational Assumptions Update - 2026-06-03
 
-Simulation Mode now uses a single operational benchmark system for Planned Enrollment and Planned Site Count:
+Simulation Mode now uses a single operational benchmark system for Planned Enrollment, Planned Site Count, and Duration:
 
-- Active operational assumptions are `planned_enrollment` and `planned_sites`.
-- `planned_countries` and `planned_duration_months` remain future-reserved/inactive.
+- Active operational assumptions are `planned_enrollment`, `planned_sites`, and `planned_duration_months`.
+- `planned_countries` remains future-reserved/inactive.
 - Active runtime artifact: `frontend/data/operational_benchmarks_v1.csv`.
 - Active runtime utility: `src/operational_benchmarks.py`.
 - Active maintenance commands:
@@ -76,6 +76,8 @@ Operational benchmark rules:
 - Enrollment percentiles use completed trials with positive `ACTUAL` enrollment.
 - Site-count percentiles use completed trials with positive `number_of_facilities`.
 - Patients-per-site percentiles use completed trials with positive `ACTUAL` enrollment and positive `number_of_facilities`, using `enrollment / number_of_facilities`.
+- Total-duration percentiles use completed trials with `completion_date_type = ACTUAL` and positive `completion_duration_months`.
+- Primary-readout percentiles use completed trials with `primary_completion_date_type = ACTUAL` and positive `primary_completion_duration_months`.
 - `number_of_facilities` is treated as a registry-derived facility-count proxy, not true planned sites or true activated sites.
 - Runtime lookup uses the clinical hierarchy `phase_indication_rare -> phase_ta_rare -> phase_ta -> phase_only`.
 - Invalid indication id `0` disables indication-level lookup only.
@@ -95,6 +97,8 @@ Operational defaulting rules:
 - Non-completed trials treat positive `number_of_facilities` as current registry facility-count proxy lower-bound/context.
 - Non-completed Planned Sites default to `max(current_registry_facility_count_proxy, planned_enrollment / patients_per_site_p50)` when patients-per-site P50 is available.
 - Pure site-count P50 is fallback/reference only when the enrollment-coherent patients-per-site candidate cannot be calculated.
+- Planned Duration uses trusted direct date-derived total duration when available. Active/non-stopped `ESTIMATED` completion dates and completed `ACTUAL` completion dates open without `(est.)`; stopped/interrupted dates are floor/context only.
+- The Duration Assumption card preserves trusted direct primary readout timing when available, including active/non-stopped `ESTIMATED` primary-completion dates. Same-cohort primary-readout benchmark appears only when trusted direct readout timing is unavailable and the selected duration cohort has `primary_completion_months_n >= 50`.
 - User edits are scenario assumptions and update operational metadata without changing the XGBoost Completion Score unless model-facing Trial Features also change.
 - UI source convention: no suffix means the opening value comes directly from a usable AACT-backed field; `(est.)` means the opening value was system-filled because the operational field was not directly available. Once the participant edits a value, the suffix is removed, but metadata still stores `user_scenario` for LLM/coherence use.
 
@@ -108,36 +112,29 @@ Validation completed for this operational benchmark consolidation:
 
 Remaining verification before deployment readiness:
 
-- Manual browser smoke test in Simulation Mode for Planned Enrollment and Planned Sites cards.
+- Continue manual browser smoke tests in Simulation Mode for Planned Enrollment, Planned Sites, and Duration cards as new representative trials are identified.
 - Confirm vaccine and non-vaccine Infections examples display expected benchmark metadata.
-- Confirm operational-only Planned Enrollment/Planned Sites edits do not call `/predict` and do not change Completion Score/charts.
+- Confirm operational-only Planned Enrollment/Planned Sites/Duration edits do not call `/predict` and do not change Completion Score/charts.
 
-### Planned Duration UI Activation - Next Session Handoff
+### Planned Duration UI Activation - Implemented 2026-06-03
 
-The non-UI duration benchmark/runtime/checker foundation is implemented. The next UI step is to activate `planned_duration_months` in Simulation Mode using the same operational-assumption behavior already implemented for Planned Enrollment and Planned Site Count.
+`planned_duration_months` is now active in Simulation Mode using the same operational-assumption behavior as Planned Enrollment and Planned Site Count.
 
-Scope for `frontend/views/edit_trial.py`:
+Implemented scope in `frontend/views/edit_trial.py`:
 
-- Add `planned_duration_months` to active operational assumptions and remove it from future-reserved assumptions.
-- Import `planned_duration_default_from_operational_benchmark` and `planned_duration_months_metadata` from `src/operational_benchmarks.py`.
-- Add state/source/baseline/widget helpers that mirror the current Planned Enrollment and Planned Sites helpers.
-- Render a numeric input for `Duration (months)` or `Planned Duration (months)`.
-- Use the established lightweight label convention:
+- `planned_duration_months` is an active operational assumption and is removed from future-reserved assumptions.
+- The UI imports and uses `planned_duration_default_from_operational_benchmark` and `planned_duration_months_metadata` from `src/operational_benchmarks.py`.
+- State/source/baseline/widget helpers mirror Planned Enrollment and Planned Sites.
+- The numeric input label is `Duration (months)`.
+- The established lightweight label convention is preserved:
   - no suffix for opening values that come directly from usable AACT-backed duration data,
   - `(est.)` for system-filled benchmark/default duration values,
   - no visible suffix after participant edit, while metadata stores `source = user_scenario`.
-- Changing duration must mark the operational assumption container blue, show `:blue[(previous: X)]`, and turn `Predict Trial Completion` blue.
-- If only duration/enrollment/sites changed, clicking `Predict Trial Completion` must refresh operational metadata via `simulation_operational_update` and must not call `/predict`.
-- If duration changes together with model-facing Trial Features, `/predict` is called only because model-facing fields changed; duration must not be included in the prediction payload.
-- Add duration metadata to baseline snapshots, successful simulation prediction snapshots, operational-only update snapshots, and simulation history.
-- Add a Duration Assumption card matching the current Enrollment/Sites card style:
-  - current duration in months,
-  - benchmark label and percentiles,
-  - reference cohort and support `n`,
-  - primary readout timing as non-editable context when available,
-  - no extra source line for direct AACT-backed values or user scenarios,
-  - a source/context line only for system-estimated defaults,
-  - clear copy that duration does not enter the XGBoost Completion Score.
+- Changing duration marks the operational assumption container blue, shows `:blue[(previous: X)]`, and turns `Predict Trial Completion` blue.
+- If only duration/enrollment/sites changed, clicking `Predict Trial Completion` refreshes operational metadata via `simulation_operational_update` and does not call `/predict`.
+- If duration changes together with model-facing Trial Features, `/predict` is called only because model-facing fields changed; duration is not included in the prediction payload.
+- Duration metadata is attached to baseline snapshots, successful simulation prediction snapshots, operational-only update snapshots, and simulation history.
+- The Duration Assumption card shows current duration, benchmark position, reference cohort, percentiles, primary readout context, endpoint-duration context, relevant floors/default basis, and clear copy that duration does not enter the XGBoost Completion Score.
 
 Source semantics for UI/LLM:
 
@@ -153,17 +150,17 @@ Duration benchmark contract to preserve:
 
 - Full completion duration is the controlling metric for the editable value.
 - Runtime selects the first/best duration cohort with `duration_months_n >= 50`.
-- Primary-completion timing is same-cohort context only and is available only when that same selected row has `primary_completion_months_n >= 50`.
+- Primary-completion timing preserves trusted direct date-derived values first. Same-cohort primary-readout benchmark is fallback/context only and requires `primary_completion_months_n >= 50` on the same selected duration row.
 - Duration uses endpoint-duration-bin plus clinical fallback, then clinical-only fallback.
 - Duration does not use modality refinement or non-vaccine Infections fallback.
 - Duration remains outside `/predict`, XGBoost, SHAP, Completion Score, impact bar, treemap, TA calibration, model artifacts, taxonomy artifacts, and API contracts.
 
-Required verification for the duration UI step:
+Verification completed for the duration UI step:
 
 - `python -m py_compile frontend/views/edit_trial.py src/operational_benchmarks.py`
 - `python scripts/check_operational_benchmarks.py`
 - Static scan proving `planned_duration_months` is not in `SIMULATION_FEATURE_IDS` and is not in prediction payload construction.
-- Browser smoke test:
+- Browser smoke tests:
   - direct AACT-backed duration opens without `(est.)`,
   - benchmark/default duration opens with `(est.)`,
   - editing duration removes `(est.)`, shows previous value, turns the card/button blue, and stores `user_scenario`,

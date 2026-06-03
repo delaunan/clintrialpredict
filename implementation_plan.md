@@ -4,7 +4,7 @@
 
 Implementation document for the current `estimation` branch duration increment.
 
-D0-D3 are implemented for the non-UI duration foundation: artifact builder, runtime utility, checker, and notebook checks. Simulation Mode UI activation remains pending and should be handled separately.
+D0-D4 are implemented for the duration foundation: artifact builder, runtime utility, checker, notebook checks, and Simulation Mode UI activation.
 
 ## Current Baseline
 
@@ -12,7 +12,7 @@ The active operational benchmark layer supports:
 
 - `planned_enrollment`
 - `planned_sites`
-- non-UI `planned_duration_months` runtime/checker/notebook support
+- active `planned_duration_months` runtime/checker/notebook/UI support
 - deterministic benchmark metadata
 - pending operational-assumption updates
 - snapshot-bound metadata
@@ -89,7 +89,7 @@ Add a third benchmarked operational-assumption foundation:
 planned_duration_months
 ```
 
-This estimates and benchmarks total operational trial duration in months. It is ready for later Simulation Mode UI wiring, but the UI is not activated in this step.
+This estimates and benchmarks total operational trial duration in months. It is active in Simulation Mode as the `Duration (months)` operational assumption.
 
 It must remain separate from:
 
@@ -196,8 +196,9 @@ Primary completion fallback / floor rule:
 
 ```text
 planned_primary_completion_months =
-same selected full-duration cohort primary_completion_months_p50
-if primary_completion_months_n >= 50
+trusted date-derived primary completion timing
+else same selected full-duration cohort primary_completion_months_p50
+     if primary_completion_months_n >= 50
 else not_available
 ```
 
@@ -207,14 +208,15 @@ Total duration source priority:
 
 1. Select the best full-duration benchmark cohort first, using `duration_months_n >= 50`.
 2. Read `duration_months_p50` from that selected row for the editable duration benchmark/default.
-3. Read `primary_completion_months_p50` from the same selected row only when `primary_completion_months_n >= 50`; otherwise mark primary-completion context as unavailable.
-4. Derive `raw_total_duration_months` from `start_date -> completion_date` when valid.
-5. If the trial is completed and `completion_date_type = ACTUAL`, use `raw_total_duration_months` directly as `final_observed_total_duration`.
-6. If the trial is completed, `completion_date_type` is missing, and `raw_total_duration_months` is valid, use `raw_total_duration_months` directly for the individual trial default with warning metadata. Do not include this row in the completed benchmark distribution.
-7. If the trial is active/non-stopped and `completion_date_type = ACTUAL`, use `raw_total_duration_months`, but mark a lower-confidence source such as `actual_completion_noncompleted_status_lag`.
-8. If the trial is active/non-stopped and `completion_date_type = ESTIMATED`, use `raw_total_duration_months` directly as `estimated_planned_total_duration`.
-9. Otherwise, use completed-trial total-duration benchmark P50 as the candidate and apply stopped/interrupted total-duration floors.
-10. If the participant edits the value, source becomes `user_scenario`.
+3. Preserve trusted direct primary-completion timing for active/non-stopped `ACTUAL` or `ESTIMATED` primary-completion dates and completed `ACTUAL` primary-completion dates.
+4. If trusted direct primary-completion timing is unavailable, read `primary_completion_months_p50` from the same selected row only when `primary_completion_months_n >= 50`; otherwise mark primary-completion context as unavailable.
+5. Derive `raw_total_duration_months` from `start_date -> completion_date` when valid.
+6. If the trial is completed and `completion_date_type = ACTUAL`, use `raw_total_duration_months` directly as `final_observed_total_duration`.
+7. If the trial is completed, `completion_date_type` is missing, and `raw_total_duration_months` is valid, use `raw_total_duration_months` directly for the individual trial default with warning metadata. Do not include this row in the completed benchmark distribution.
+8. If the trial is active/non-stopped and `completion_date_type = ACTUAL`, use `raw_total_duration_months`, but mark a lower-confidence source such as `actual_completion_noncompleted_status_lag`.
+9. If the trial is active/non-stopped and `completion_date_type = ESTIMATED`, use `raw_total_duration_months` directly as `estimated_planned_total_duration`.
+10. Otherwise, use completed-trial total-duration benchmark P50 as the candidate and apply stopped/interrupted total-duration floors.
+11. If the participant edits the value, source becomes `user_scenario`.
 
 Important non-completed-trial rule:
 
@@ -397,9 +399,9 @@ above_benchmark_high
 not_available
 ```
 
-## Pending D4 UI Behavior
+## D4 UI Behavior
 
-D4 should make Simulation Mode show three operational assumptions:
+D4 makes Simulation Mode show three operational assumptions:
 
 - Planned Enrollment
 - Planned Sites
@@ -497,7 +499,7 @@ Work:
 - confirm model-boundary checks still prove duration does not enter XGBoost
 - add notebook cells for duration artifact checks, source-priority examples, metadata shape, and single-checker execution
 
-### Phase D4: Simulation Mode UI - pending
+### Phase D4: Simulation Mode UI - complete
 
 Files:
 
@@ -517,7 +519,7 @@ Work:
   - `get_current_planned_duration_source(...)`
   - `_sync_planned_duration_widget(...)`
   - `get_previous_planned_duration_assumption(...)`
-- Add a numeric input labeled `Planned Duration (months)` or `Duration (months)`.
+- Add a numeric input labeled `Duration (months)`.
 - Apply the same lightweight source-label convention:
   - no suffix when the opening value comes from usable AACT-backed duration data,
   - `(est.)` when the opening value is system-filled from benchmark/default logic,
@@ -534,18 +536,18 @@ Work:
   - benchmark position,
   - reference cohort and `n`,
   - P25/P50/P75/P90,
-  - primary readout timing context from the same selected full-duration cohort when available,
+  - trusted direct primary readout timing when available, otherwise same-cohort primary readout benchmark when available,
   - source/context line only when the opening value is system-estimated,
   - explicit copy that it does not enter the XGBoost Completion Score.
 - Preserve the strict duration benchmark rule already implemented in runtime:
   - editable duration cohort requires `duration_months_n >= 50`,
-  - primary-completion context comes from the same selected full-duration row only if `primary_completion_months_n >= 50`,
+  - primary-completion context preserves trusted direct date-derived values first; same-cohort benchmark context requires `primary_completion_months_n >= 50`,
   - duration does not use modality refinement or non-vaccine Infections fallback.
 - Add duration stale-state tracking for `phase_ml`, `gbd_cause_id_3_ml`, `therapeutic_area_ml`, `is_rare_disease_ml`, and `primary_duration_months_ml`; do not include therapeutic modality for duration stale-state in v1.
 - Extend reset/off-on behavior so duration widget/source/baseline keys are cleared and recreated exactly like enrollment/sites.
 - Extend static checks to prove `planned_duration_months` is not in `SIMULATION_FEATURE_IDS`, is not in prediction payloads, and is not sent to `/predict`.
 
-### Phase D5: Documentation - pending for UI activation
+### Phase D5: Documentation - complete for UI activation
 
 Files:
 
@@ -554,10 +556,10 @@ Files:
 - `docs/architecture_narratives.md`
 - `implementation_plan.md`
 
-Work after D4 is implemented:
+Work completed after D4 implementation:
 
 - Mark `planned_duration_months` as active in Simulation Mode alongside Planned Enrollment and Planned Sites.
-- Record the final UI label chosen for the input, currently `Duration (months)` or `Planned Duration (months)`, with `(est.)` only for system-filled opening values.
+- Record the final UI label chosen for the input, `Duration (months)`, with `(est.)` only for system-filled opening values.
 - Confirm the source convention remains consistent:
   - no suffix for direct AACT-backed opening values,
   - `(est.)` for benchmark/default opening values,
