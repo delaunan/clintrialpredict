@@ -17,6 +17,17 @@ LEVEL_ORDER = [
     "phase_only",
 ]
 
+DURATION_LEVEL_ORDER = [
+    "phase_indication_rare_endpoint_bin",
+    "phase_ta_rare_endpoint_bin",
+    "phase_ta_endpoint_bin",
+    "phase_endpoint_bin",
+    "phase_indication_rare",
+    "phase_ta_rare",
+    "phase_ta",
+    "phase_only",
+]
+
 MODALITY_REFINEMENT_LEVELS = {
     "phase_indication_rare": "phase_indication_rare_modality",
     "phase_ta_rare": "phase_ta_rare_modality",
@@ -30,14 +41,17 @@ NON_VACCINE_INFECTIONS_LEVELS = {
 }
 
 MODALITY_REFINED_METRICS = {"enrollment", "patients_per_site"}
+DURATION_METRICS = {"primary_completion_months", "duration_months"}
 
-METRIC_PREFIXES = ("enrollment", "site_count", "patients_per_site")
+METRIC_PREFIXES = ("enrollment", "site_count", "patients_per_site", "primary_completion_months", "duration_months")
 MIN_USABLE_METRIC_N = 30
+MIN_DURATION_METRIC_N = 50
 MIN_MODALITY_REFINEMENT_N = 50
 MIN_NON_VACCINE_INFECTIONS_N = 50
 
 INVALID_THERAPEUTIC_AREAS = {"", "OTHER", "OTHER/UNCLASSIFIED", "UNKNOWN", "UNCLASSIFIED"}
 INVALID_MODALITIES = {"", "UNKNOWN", "UNCLASSIFIED"}
+STOPPED_OR_INTERRUPTED_STATUSES = {"TERMINATED", "WITHDRAWN", "SUSPENDED"}
 
 REQUIRED_ARTIFACT_COLUMNS = {
     "benchmark_version",
@@ -48,6 +62,7 @@ REQUIRED_ARTIFACT_COLUMNS = {
     "therapeutic_area",
     "rare_disease_flag",
     "therapeutic_modality",
+    "endpoint_duration_bin",
     "benchmark_level_used",
     "created_at",
     "outlier_policy",
@@ -103,6 +118,28 @@ def _clean_modality(value: Any) -> str | None:
         return None
     text = str(value).strip()
     return text.upper() if text else None
+
+
+def endpoint_duration_bin(value: Any) -> str | None:
+    numeric = pd.to_numeric(value, errors="coerce")
+    if pd.isna(numeric) or float(numeric) <= 0:
+        return None
+    months = float(numeric)
+    if months <= 3:
+        return "<=3"
+    if months <= 6:
+        return "3-6"
+    if months <= 12:
+        return "6-12"
+    if months <= 18:
+        return "12-18"
+    if months <= 24:
+        return "18-24"
+    if months <= 36:
+        return "24-36"
+    if months <= 60:
+        return "36-60"
+    return ">60"
 
 
 def _is_valid_indication(value: Any) -> bool:
@@ -172,6 +209,7 @@ def load_operational_benchmarks(path: str | Path = DEFAULT_ARTIFACT_PATH) -> pd.
     artifact["phase"] = artifact["phase"].map(_clean_phase)
     artifact["therapeutic_area"] = artifact["therapeutic_area"].map(_clean_ta)
     artifact["therapeutic_modality"] = artifact["therapeutic_modality"].map(_clean_modality)
+    artifact["endpoint_duration_bin"] = artifact["endpoint_duration_bin"].map(lambda value: None if _is_missing(value) else str(value).strip())
     artifact["gbd_cause_id_3_ml"] = pd.to_numeric(artifact["gbd_cause_id_3_ml"], errors="coerce")
     artifact["rare_disease_flag"] = pd.to_numeric(artifact["rare_disease_flag"], errors="coerce")
     for prefix in METRIC_PREFIXES:
@@ -183,7 +221,7 @@ def load_operational_benchmarks(path: str | Path = DEFAULT_ARTIFACT_PATH) -> pd.
     return artifact
 
 
-def _candidate_keys(snapshot: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
+def _candidate_keys(snapshot: dict[str, Any], *, include_duration_bin: bool = False) -> list[tuple[str, dict[str, Any]]]:
     phase = _clean_phase(_first_present(snapshot.get("phase"), snapshot.get("phase_ui"), snapshot.get("phase_ml")))
     indication = _clean_int(snapshot.get("gbd_cause_id_3_ml"))
     therapeutic_area = _clean_ta(
@@ -195,6 +233,40 @@ def _candidate_keys(snapshot: dict[str, Any]) -> list[tuple[str, dict[str, Any]]
         return []
 
     candidates: list[tuple[str, dict[str, Any]]] = []
+    duration_bin = endpoint_duration_bin(snapshot.get("primary_duration_months_ml"))
+    if include_duration_bin and duration_bin:
+        if _is_valid_indication(indication) and rare is not None:
+            candidates.append(
+                (
+                    "phase_indication_rare_endpoint_bin",
+                    {
+                        "phase": phase,
+                        "gbd_cause_id_3_ml": indication,
+                        "rare_disease_flag": rare,
+                        "endpoint_duration_bin": duration_bin,
+                    },
+                )
+            )
+        if _is_valid_ta(therapeutic_area) and rare is not None:
+            candidates.append(
+                (
+                    "phase_ta_rare_endpoint_bin",
+                    {
+                        "phase": phase,
+                        "therapeutic_area": therapeutic_area,
+                        "rare_disease_flag": rare,
+                        "endpoint_duration_bin": duration_bin,
+                    },
+                )
+            )
+        if _is_valid_ta(therapeutic_area):
+            candidates.append(
+                (
+                    "phase_ta_endpoint_bin",
+                    {"phase": phase, "therapeutic_area": therapeutic_area, "endpoint_duration_bin": duration_bin},
+                )
+            )
+        candidates.append(("phase_endpoint_bin", {"phase": phase, "endpoint_duration_bin": duration_bin}))
     if _is_valid_indication(indication) and rare is not None:
         candidates.append(("phase_indication_rare", {"phase": phase, "gbd_cause_id_3_ml": indication, "rare_disease_flag": rare}))
     if _is_valid_ta(therapeutic_area) and rare is not None:
@@ -330,7 +402,8 @@ def lookup_operational_benchmark(
         if prefix not in METRIC_PREFIXES:
             raise ValueError(f"Unknown cohort metric prefix: {prefix}")
 
-    for level, values in _candidate_keys(snapshot):
+    include_duration_bin = metric_prefix in DURATION_METRICS
+    for level, values in _candidate_keys(snapshot, include_duration_bin=include_duration_bin):
         mask = benchmarks["benchmark_level_used"].eq(level)
         for column, expected in values.items():
             if column in {"gbd_cause_id_3_ml", "rare_disease_flag"}:
@@ -369,6 +442,8 @@ def lookup_operational_benchmark(
             benchmarks,
             artifact_path=artifact_path,
             metric_prefix=metric_prefix,
+            cohort_metric_prefixes=cohort_metric_prefixes,
+            min_metric_n=min_metric_n,
             require_confident=False,
         )
     return None
@@ -502,12 +577,295 @@ def planned_enrollment_default_from_operational_benchmark(
     }
 
 
+def _status_text(snapshot: dict[str, Any], explicit_status: Any = None) -> str:
+    return str(_first_present(explicit_status, snapshot.get("overall_status")) or "").strip().upper()
+
+
+def _date_type_text(value: Any) -> str:
+    return str(value or "").strip().upper()
+
+
+def _duration_context(snapshot: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "primary_completion_duration_months_context": _positive_float(
+            snapshot.get("primary_completion_duration_months")
+        ),
+        "total_duration_months_observed": _positive_float(snapshot.get("completion_duration_months")),
+        "endpoint_duration_months_context": _positive_float(snapshot.get("primary_duration_months_ml")),
+        "primary_completion_date_type": _date_type_text(snapshot.get("primary_completion_date_type")),
+        "completion_date_type": _date_type_text(snapshot.get("completion_date_type")),
+    }
+
+
+def planned_primary_completion_default_from_operational_benchmark(
+    snapshot: dict[str, Any],
+    *,
+    overall_status: Any = None,
+    artifact: pd.DataFrame | None = None,
+    artifact_path: str | Path = DEFAULT_ARTIFACT_PATH,
+    benchmark_row: pd.Series | dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    benchmarks = load_operational_benchmarks(artifact_path) if artifact is None else artifact
+    row = pd.Series(benchmark_row) if benchmark_row is not None else None
+    if row is None:
+        row = lookup_operational_benchmark(
+            snapshot,
+            benchmarks,
+            metric_prefix="primary_completion_months",
+            min_metric_n=MIN_DURATION_METRIC_N,
+            cohort_metric_prefixes=("primary_completion_months",),
+        )
+    primary_n = _metric_n(row, "primary_completion_months") if row is not None else None
+    benchmark_p50 = None
+    if row is not None and primary_n is not None and primary_n >= MIN_DURATION_METRIC_N:
+        benchmark_p50 = _positive_float(row.get("primary_completion_months_p50"))
+    context = _duration_context(snapshot)
+    primary_duration = context["primary_completion_duration_months_context"]
+    endpoint_duration = context["endpoint_duration_months_context"]
+    date_type = context["primary_completion_date_type"]
+    status = _status_text(snapshot, overall_status)
+    completed = status == "COMPLETED"
+    stopped = status in STOPPED_OR_INTERRUPTED_STATUSES
+    active_non_stopped = bool(status and not completed and not stopped)
+    warnings: list[str] = []
+
+    if benchmark_row is not None:
+        if benchmark_p50 is None:
+            return {
+                "value": None,
+                "source": "not_available",
+                "trusted_direct_value": False,
+                "benchmark_primary_completion_p50": None,
+                "actual_primary_completion_lower_bound": None,
+                "estimated_primary_completion_candidate": None,
+                "endpoint_duration_months_context": endpoint_duration,
+                "benchmark_row": row,
+                "warnings": warnings,
+            }
+        return {
+            "value": round(float(benchmark_p50), 2),
+            "source": "same_cohort_benchmark",
+            "primary_completion_default_basis": "same_duration_cohort_benchmark",
+            "trusted_direct_value": False,
+            "benchmark_primary_completion_p50": benchmark_p50,
+            "actual_primary_completion_lower_bound": None,
+            "estimated_primary_completion_candidate": None,
+            "endpoint_duration_months_context": endpoint_duration,
+            "benchmark_row": row,
+            "warnings": warnings,
+        }
+
+    if primary_duration is not None:
+        if active_non_stopped and date_type == "ACTUAL":
+            source = "actual_primary_completion"
+        elif active_non_stopped and date_type == "ESTIMATED":
+            source = "estimated_primary_completion"
+        elif completed and date_type == "ACTUAL":
+            source = "completed_actual_primary_completion"
+        elif completed and not date_type:
+            source = "completed_missing_primary_date_type_duration"
+            warnings.append("missing_primary_completion_date_type")
+        else:
+            source = ""
+        if source:
+            if endpoint_duration is not None and primary_duration < endpoint_duration:
+                warnings.append("primary_completion_shorter_than_primary_duration_ml")
+            return {
+                "value": round(float(primary_duration), 2),
+                "source": source,
+                "trusted_direct_value": True,
+                "benchmark_primary_completion_p50": benchmark_p50,
+                "actual_primary_completion_lower_bound": None,
+                "estimated_primary_completion_candidate": primary_duration if source == "estimated_primary_completion" else None,
+                "endpoint_duration_months_context": endpoint_duration,
+                "benchmark_row": row,
+                "warnings": warnings,
+            }
+
+    lower_bound = None
+    estimated_candidate = None
+    if stopped and primary_duration is not None:
+        if date_type == "ESTIMATED":
+            estimated_candidate = primary_duration
+        else:
+            lower_bound = primary_duration
+
+    candidates = [
+        ("benchmark_default", benchmark_p50),
+        ("endpoint_duration_floor", endpoint_duration),
+        ("actual_primary_completion_lower_bound", lower_bound),
+        ("estimated_primary_completion_floor", estimated_candidate),
+    ]
+    available = [(basis, value) for basis, value in candidates if value is not None and value > 0]
+    if not available:
+        return {
+            "value": None,
+            "source": "not_available",
+            "trusted_direct_value": False,
+            "benchmark_primary_completion_p50": benchmark_p50,
+            "actual_primary_completion_lower_bound": lower_bound,
+            "estimated_primary_completion_candidate": estimated_candidate,
+            "endpoint_duration_months_context": endpoint_duration,
+            "benchmark_row": row,
+            "warnings": warnings,
+        }
+
+    selected_basis, selected_value = max(available, key=lambda item: item[1])
+    return {
+        "value": round(float(selected_value), 2),
+        "source": "benchmark_default_with_floors",
+        "primary_completion_default_basis": selected_basis,
+        "trusted_direct_value": False,
+        "benchmark_primary_completion_p50": benchmark_p50,
+        "actual_primary_completion_lower_bound": lower_bound,
+        "estimated_primary_completion_candidate": estimated_candidate,
+        "endpoint_duration_months_context": endpoint_duration,
+        "benchmark_row": row,
+        "warnings": warnings,
+    }
+
+
+def planned_duration_default_from_operational_benchmark(
+    snapshot: dict[str, Any],
+    *,
+    overall_status: Any = None,
+    artifact: pd.DataFrame | None = None,
+    artifact_path: str | Path = DEFAULT_ARTIFACT_PATH,
+) -> dict[str, Any]:
+    benchmarks = load_operational_benchmarks(artifact_path) if artifact is None else artifact
+    row = lookup_operational_benchmark(
+        snapshot,
+        benchmarks,
+        metric_prefix="duration_months",
+        min_metric_n=MIN_DURATION_METRIC_N,
+        cohort_metric_prefixes=("duration_months",),
+    )
+    benchmark_p50 = _positive_float(row.get("duration_months_p50")) if row is not None else None
+    context = _duration_context(snapshot)
+    total_duration = context["total_duration_months_observed"]
+    endpoint_duration = context["endpoint_duration_months_context"]
+    date_type = context["completion_date_type"]
+    status = _status_text(snapshot, overall_status)
+    completed = status == "COMPLETED"
+    stopped = status in STOPPED_OR_INTERRUPTED_STATUSES
+    active_non_stopped = bool(status and not completed and not stopped)
+    primary_default = planned_primary_completion_default_from_operational_benchmark(
+        snapshot,
+        overall_status=status,
+        artifact=benchmarks,
+        benchmark_row=row,
+    )
+    planned_primary = _positive_float(primary_default.get("value"))
+    trusted_primary = bool(primary_default.get("trusted_direct_value"))
+    warnings = list(primary_default.get("warnings") or [])
+
+    if total_duration is not None:
+        if completed and date_type == "ACTUAL":
+            source = "final_observed_total_duration"
+        elif completed and not date_type:
+            source = "completed_missing_completion_date_type_duration"
+            warnings.append("missing_completion_date_type")
+        elif active_non_stopped and date_type == "ACTUAL":
+            source = "actual_completion_noncompleted_status_lag"
+            warnings.append("actual_completion_date_on_non_completed_status")
+        elif active_non_stopped and date_type == "ESTIMATED":
+            source = "estimated_planned_total_duration"
+        else:
+            source = ""
+        if source:
+            if planned_primary is not None and total_duration < planned_primary:
+                warnings.append("total_duration_shorter_than_primary_completion")
+            return {
+                "value": round(float(total_duration), 2),
+                "source": source,
+                "trusted_direct_value": True,
+                "planned_primary_completion_months": planned_primary,
+                "primary_completion_source": primary_default.get("source"),
+                "benchmark_total_duration_p50": benchmark_p50,
+                "actual_total_duration_lower_bound": None,
+                "actual_primary_completion_lower_bound": primary_default.get("actual_primary_completion_lower_bound"),
+                "estimated_total_duration_candidate": total_duration if source == "estimated_planned_total_duration" else None,
+                "estimated_primary_completion_candidate": primary_default.get("estimated_primary_completion_candidate"),
+                "endpoint_duration_months_context": endpoint_duration,
+                "benchmark_primary_completion_p50": primary_default.get("benchmark_primary_completion_p50"),
+                "benchmark_row": row,
+                "primary_benchmark_row": primary_default.get("benchmark_row"),
+                "warnings": warnings,
+            }
+
+    lower_bound = None
+    estimated_candidate = None
+    if stopped and total_duration is not None:
+        if date_type == "ESTIMATED":
+            estimated_candidate = total_duration
+        else:
+            lower_bound = total_duration
+
+    candidates = [
+        ("benchmark_default", benchmark_p50),
+        ("actual_total_completion_lower_bound", lower_bound),
+        ("estimated_total_completion_floor", estimated_candidate),
+    ]
+    if planned_primary is not None and primary_default.get("source") != "not_available":
+        candidates.append(("planned_primary_completion_months_same_cohort", planned_primary))
+    available = [(basis, value) for basis, value in candidates if value is not None and value > 0]
+    if not available:
+        return {
+            "value": None,
+            "source": "not_available",
+            "trusted_direct_value": False,
+            "planned_primary_completion_months": planned_primary,
+            "primary_completion_source": primary_default.get("source"),
+            "benchmark_total_duration_p50": benchmark_p50,
+            "actual_total_duration_lower_bound": lower_bound,
+            "actual_primary_completion_lower_bound": primary_default.get("actual_primary_completion_lower_bound"),
+            "estimated_total_duration_candidate": estimated_candidate,
+            "estimated_primary_completion_candidate": primary_default.get("estimated_primary_completion_candidate"),
+            "endpoint_duration_months_context": endpoint_duration,
+            "benchmark_primary_completion_p50": primary_default.get("benchmark_primary_completion_p50"),
+            "benchmark_row": row,
+            "primary_benchmark_row": primary_default.get("benchmark_row"),
+            "warnings": warnings,
+        }
+
+    selected_basis, selected_value = max(available, key=lambda item: item[1])
+    return {
+        "value": round(float(selected_value), 2),
+        "source": "benchmark_default_with_floors",
+        "duration_default_basis": selected_basis,
+        "trusted_direct_value": False,
+        "planned_primary_completion_months": planned_primary,
+        "primary_completion_source": primary_default.get("source"),
+        "benchmark_total_duration_p50": benchmark_p50,
+        "actual_total_duration_lower_bound": lower_bound,
+        "actual_primary_completion_lower_bound": primary_default.get("actual_primary_completion_lower_bound"),
+        "estimated_total_duration_candidate": estimated_candidate,
+        "estimated_primary_completion_candidate": primary_default.get("estimated_primary_completion_candidate"),
+        "endpoint_duration_months_context": endpoint_duration,
+        "benchmark_primary_completion_p50": primary_default.get("benchmark_primary_completion_p50"),
+        "benchmark_row": row,
+        "primary_benchmark_row": primary_default.get("benchmark_row"),
+        "warnings": warnings,
+    }
+
+
 def classify_enrollment(planned_enrollment: Any, benchmark_row: pd.Series | dict[str, Any]) -> str:
     return _classify_against_percentiles(planned_enrollment, benchmark_row, "enrollment")
 
 
 def classify_site_count(planned_sites: Any, benchmark_row: pd.Series | dict[str, Any]) -> str:
     return _classify_against_percentiles(planned_sites, benchmark_row, "site_count")
+
+
+def classify_duration_months(planned_duration_months: Any, benchmark_row: pd.Series | dict[str, Any]) -> str:
+    return _classify_against_percentiles(planned_duration_months, benchmark_row, "duration_months")
+
+
+def classify_primary_completion_months(
+    planned_primary_completion_months: Any,
+    benchmark_row: pd.Series | dict[str, Any],
+) -> str:
+    return _classify_against_percentiles(planned_primary_completion_months, benchmark_row, "primary_completion_months")
 
 
 def _classify_against_percentiles(value: Any, benchmark_row: pd.Series | dict[str, Any], prefix: str) -> str:
@@ -605,6 +963,46 @@ def _empty_site_metadata(
             "is_benchmark_stale": bool(is_benchmark_stale),
             "low_confidence_flag": True,
             "interpretation_hint": hint or "Site-count benchmark is not available for this snapshot.",
+        }
+    }
+
+
+def _empty_duration_metadata(
+    value: Any = None,
+    source: str = "not_available",
+    hint: str | None = None,
+    is_benchmark_stale: bool = False,
+) -> dict[str, Any]:
+    return {
+        "planned_duration_months": {
+            "value": value,
+            "source": source,
+            "duration_definition": "start_date_to_completion_date_months",
+            "benchmark_level_used": "not_available",
+            "benchmark_n": None,
+            "benchmark_p25": None,
+            "benchmark_p50": None,
+            "benchmark_p75": None,
+            "benchmark_p90": None,
+            "duration_status": "not_available",
+            "support_level": "not_evaluated",
+            "supporting_signals": [],
+            "conflicting_signals": [],
+            "benchmark_snapshot_id": None,
+            "is_benchmark_stale": bool(is_benchmark_stale),
+            "low_confidence_flag": True,
+            "planned_primary_completion_months": None,
+            "primary_completion_source": "not_available",
+            "primary_completion_duration_months_context": None,
+            "endpoint_duration_months_context": None,
+            "actual_total_duration_lower_bound": None,
+            "actual_primary_completion_lower_bound": None,
+            "estimated_total_duration_candidate": None,
+            "estimated_primary_completion_candidate": None,
+            "benchmark_total_duration_p50": None,
+            "benchmark_primary_completion_p50": None,
+            "warnings": [],
+            "interpretation_hint": hint or "Duration benchmark is not available for this snapshot.",
         }
     }
 
@@ -737,6 +1135,99 @@ def planned_sites_metadata(
             "patients_per_site_p50": default_context.get("patients_per_site_p50"),
             "enrollment_coherent_site_candidate": default_context.get("enrollment_coherent_site_candidate"),
             "operational_benchmark_snapshot_id": default_context.get("operational_benchmark_snapshot_id"),
+            "interpretation_hint": hint_map[status],
+        }
+    }
+
+
+def planned_duration_months_metadata(
+    snapshot: dict[str, Any],
+    planned_duration_months: Any = None,
+    *,
+    artifact: pd.DataFrame | None = None,
+    artifact_path: str | Path = DEFAULT_ARTIFACT_PATH,
+    source: str | None = None,
+    is_benchmark_stale: bool = False,
+    overall_status: Any = None,
+) -> dict[str, Any]:
+    benchmarks = load_operational_benchmarks(artifact_path) if artifact is None else artifact
+    default_context = planned_duration_default_from_operational_benchmark(
+        snapshot,
+        overall_status=overall_status,
+        artifact=benchmarks,
+    )
+    numeric_value = _positive_float(planned_duration_months)
+    if numeric_value is None:
+        numeric_value = _positive_float(default_context.get("value"))
+    if numeric_value is None:
+        return _empty_duration_metadata(
+            planned_duration_months,
+            default_context.get("source", "not_available"),
+            "Planned duration is missing or invalid.",
+            is_benchmark_stale,
+        )
+
+    row = default_context.get("benchmark_row")
+    if row is None:
+        return _empty_duration_metadata(float(numeric_value), default_context.get("source", "not_available"), is_benchmark_stale=is_benchmark_stale)
+
+    status = classify_duration_months(float(numeric_value), row)
+    if status == "not_available":
+        return _empty_duration_metadata(
+            float(numeric_value),
+            default_context.get("source", "not_available"),
+            "Benchmark percentiles are incomplete for this snapshot.",
+            is_benchmark_stale,
+        )
+
+    primary_row = default_context.get("primary_benchmark_row")
+    hint_map = {
+        "below_benchmark": "Duration is below the usual historical total-duration benchmark for the matched cohort.",
+        "typical": "Duration is within the usual historical total-duration benchmark range for the matched cohort.",
+        "ambitious": "Duration is above the usual range but not beyond the high historical benchmark.",
+        "above_benchmark_high": "Duration is above the high historical total-duration benchmark for the matched cohort.",
+    }
+    return {
+        "planned_duration_months": {
+            "value": float(numeric_value),
+            "source": source or default_context.get("source", "not_available"),
+            "duration_definition": "start_date_to_completion_date_months",
+            "benchmark_level_used": row.get("benchmark_level_used"),
+            "benchmark_n": _metric_n(row, "duration_months"),
+            "benchmark_p25": _metric_value(row, "duration_months_p25"),
+            "benchmark_p50": _metric_value(row, "duration_months_p50"),
+            "benchmark_p75": _metric_value(row, "duration_months_p75"),
+            "benchmark_p90": _metric_value(row, "duration_months_p90"),
+            "duration_status": status,
+            "support_level": "not_evaluated",
+            "supporting_signals": [],
+            "conflicting_signals": [],
+            "benchmark_snapshot_id": _benchmark_snapshot_id(row),
+            "is_benchmark_stale": bool(is_benchmark_stale),
+            "low_confidence_flag": bool(row.get("duration_months_low_confidence_flag", True)),
+            "planned_primary_completion_months": default_context.get("planned_primary_completion_months"),
+            "primary_completion_source": default_context.get("primary_completion_source"),
+            "primary_completion_benchmark_level_used": (
+                primary_row.get("benchmark_level_used") if primary_row is not None else None
+            ),
+            "primary_completion_n": _metric_n(primary_row, "primary_completion_months") if primary_row is not None else None,
+            "primary_completion_low_confidence_flag": (
+                bool(primary_row.get("primary_completion_months_low_confidence_flag", True))
+                if primary_row is not None
+                else None
+            ),
+            "primary_completion_duration_months_context": _duration_context(snapshot)[
+                "primary_completion_duration_months_context"
+            ],
+            "endpoint_duration_months_context": default_context.get("endpoint_duration_months_context"),
+            "actual_total_duration_lower_bound": default_context.get("actual_total_duration_lower_bound"),
+            "actual_primary_completion_lower_bound": default_context.get("actual_primary_completion_lower_bound"),
+            "estimated_total_duration_candidate": default_context.get("estimated_total_duration_candidate"),
+            "estimated_primary_completion_candidate": default_context.get("estimated_primary_completion_candidate"),
+            "benchmark_total_duration_p50": default_context.get("benchmark_total_duration_p50"),
+            "benchmark_primary_completion_p50": default_context.get("benchmark_primary_completion_p50"),
+            "duration_default_basis": default_context.get("duration_default_basis"),
+            "warnings": default_context.get("warnings") or [],
             "interpretation_hint": hint_map[status],
         }
     }

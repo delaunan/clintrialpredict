@@ -2,16 +2,17 @@
 
 ## Status
 
-Planning document for the next `estimation` branch increment.
+Implementation document for the current `estimation` branch duration increment.
 
-No runtime duration implementation is approved yet. This plan should be reviewed and approved before editing benchmark builders, runtime utilities, or the Simulation Mode UI.
+D0-D3 are implemented for the non-UI duration foundation: artifact builder, runtime utility, checker, and notebook checks. Simulation Mode UI activation remains pending and should be handled separately.
 
 ## Current Baseline
 
-The active operational benchmark layer already supports:
+The active operational benchmark layer supports:
 
 - `planned_enrollment`
 - `planned_sites`
+- non-UI `planned_duration_months` runtime/checker/notebook support
 - deterministic benchmark metadata
 - pending operational-assumption updates
 - snapshot-bound metadata
@@ -30,6 +31,19 @@ Result:
 - benchmark checks passed before rebuild
 - benchmark builder regenerated `frontend/data/operational_benchmarks_v1.csv`, `frontend/data/operational_benchmarks_v1_report.json`, and `frontend/data/operational_benchmarks_v1.xlsx`
 - benchmark checks passed after rebuild
+
+Current artifact summary:
+
+- Source records loaded: 34,066.
+- Completed ACTUAL enrollment targets: 20,526.
+- Completed positive site-count proxy targets: 19,880.
+- Completed patients-per-site targets: 19,689.
+- Completed ACTUAL primary-completion timing targets: 20,681.
+- Completed ACTUAL total-duration targets: 20,476.
+- Artifact rows: 7,406.
+- Duplicate benchmark keys: 0.
+- Source data version: `41bcafd6226cd999`.
+- Strict runtime duration scan over `frontend/data/search_registry.csv`: 0 `not_available`, 285 unique selected duration cohorts, selected `duration_months_n` minimum 50, median 129, mean about 210.
 
 ## Current Timeline Data Foundation
 
@@ -69,13 +83,13 @@ completion_duration_months: 33,672
 
 ## Goal
 
-Add a third active operational assumption:
+Add a third benchmarked operational-assumption foundation:
 
 ```text
 planned_duration_months
 ```
 
-This should estimate and benchmark total operational trial duration in months for Simulation Mode.
+This estimates and benchmarks total operational trial duration in months. It is ready for later Simulation Mode UI wiring, but the UI is not activated in this step.
 
 It must remain separate from:
 
@@ -93,13 +107,17 @@ Recommended v1 target:
 planned_duration_months = total operational trial duration from start_date to completion_date
 ```
 
-Use `primary_completion_date` to derive `planned_primary_completion_months` as readout-timing context and as a consistency floor for active/planned trials. It is not the same target as total study duration because it measures the primary endpoint milestone rather than full operational completion.
+Use `primary_completion_date` to derive `planned_primary_completion_months` as readout-timing context. It is not the same target as total study duration because it measures the primary endpoint milestone rather than full operational completion. The editable duration cohort is selected by full completion duration support, not by primary-completion support.
 
 Source columns available in `data/data_clinpred.csv`:
 
 - `start_date`
 - `completion_date`
+- `completion_date_type`
+- `completion_duration_months`
 - `primary_completion_date`
+- `primary_completion_date_type`
+- `primary_completion_duration_months`
 - `primary_duration_months`
 - `primary_duration_months_ml`
 - `is_duration_unknown`
@@ -112,10 +130,8 @@ In scope:
 - derive historical total-duration targets from completed trials with valid `start_date` and `completion_date`
 - add duration percentiles to the compact operational benchmark artifact
 - add runtime lookup, defaulting, classification, and metadata for `planned_duration_months`
-- add a Simulation Mode numeric input and assumption card
-- preserve the existing operational-assumption pending/update pattern
 - update checker coverage and schema checks
-- update `docs/architecture_estimation.md` with the final accepted duration contract after implementation
+- update `notebooks/estimation.ipynb` with duration checks
 
 Out of scope:
 
@@ -123,6 +139,8 @@ Out of scope:
 - score adjustment from duration
 - SHAP or pillar attribution for duration
 - API contract changes
+- Simulation Mode numeric input or assumption card
+- operational-assumption pending/update UI behavior
 - LLM narrative generation
 - Coherence Score implementation
 - country, cost, market, spend, or development-commitment estimation
@@ -172,33 +190,31 @@ Primary completion source priority:
 4. If the trial is active/non-stopped and `primary_completion_date_type = ESTIMATED`, use `raw_primary_completion_months` directly as `estimated_primary_completion`.
 5. If the trial is completed and `primary_completion_date_type = ACTUAL`, use `raw_primary_completion_months` directly as completed actual readout context.
 6. If the trial is completed, `primary_completion_date_type` is missing, and `raw_primary_completion_months` is valid, use `raw_primary_completion_months` directly for the individual trial default with warning metadata. Do not include this row in the completed benchmark distribution.
-7. Otherwise, use completed-trial primary-readout benchmark P50 as the candidate and apply fallback floors.
+7. Otherwise, use completed-trial primary-readout benchmark P50 from the selected context when available and apply fallback floors only in fallback/untrusted cases.
 
 Primary completion fallback / floor rule:
 
 ```text
 planned_primary_completion_months =
-max(
-  benchmark_primary_completion_p50,
-  endpoint_duration_months_if_available,
-  actual_primary_completion_duration_if_stopped_interrupted_and_available,
-  estimated_primary_completion_duration_if_stopped_interrupted_and_available,
-  missing_type_primary_completion_duration_if_stopped_interrupted_and_available
-)
+same selected full-duration cohort primary_completion_months_p50
+if primary_completion_months_n >= 50
+else not_available
 ```
 
-Do not force `endpoint_duration_months` / `primary_duration_months_ml` as a floor when a trusted active/non-stopped or completed `ACTUAL`, `ESTIMATED`, or completed missing-type primary completion date is available. If a trusted date-derived primary completion duration is shorter than `primary_duration_months_ml`, preserve the trusted date-derived value and add a warning flag such as `primary_completion_shorter_than_primary_duration_ml`.
+Primary-completion timing is context for the duration card, not a separate editable input and not an independent cohort selector. The runtime should not choose a different, stronger primary-completion cohort if the selected full-duration cohort has weak primary-completion support.
 
 Total duration source priority:
 
-1. Calculate `planned_primary_completion_months` first.
-2. Derive `raw_total_duration_months` from `start_date -> completion_date` when valid.
-3. If the trial is completed and `completion_date_type = ACTUAL`, use `raw_total_duration_months` directly as `final_observed_total_duration`.
-4. If the trial is completed, `completion_date_type` is missing, and `raw_total_duration_months` is valid, use `raw_total_duration_months` directly for the individual trial default with warning metadata. Do not include this row in the completed benchmark distribution.
-5. If the trial is active/non-stopped and `completion_date_type = ACTUAL`, use `raw_total_duration_months`, but mark a lower-confidence source such as `actual_completion_noncompleted_status_lag`.
-6. If the trial is active/non-stopped and `completion_date_type = ESTIMATED`, use `raw_total_duration_months` directly as `estimated_planned_total_duration`.
-7. Otherwise, use completed-trial total-duration benchmark P50 as the candidate and apply fallback floors.
-8. If the participant edits the value, source becomes `user_scenario`.
+1. Select the best full-duration benchmark cohort first, using `duration_months_n >= 50`.
+2. Read `duration_months_p50` from that selected row for the editable duration benchmark/default.
+3. Read `primary_completion_months_p50` from the same selected row only when `primary_completion_months_n >= 50`; otherwise mark primary-completion context as unavailable.
+4. Derive `raw_total_duration_months` from `start_date -> completion_date` when valid.
+5. If the trial is completed and `completion_date_type = ACTUAL`, use `raw_total_duration_months` directly as `final_observed_total_duration`.
+6. If the trial is completed, `completion_date_type` is missing, and `raw_total_duration_months` is valid, use `raw_total_duration_months` directly for the individual trial default with warning metadata. Do not include this row in the completed benchmark distribution.
+7. If the trial is active/non-stopped and `completion_date_type = ACTUAL`, use `raw_total_duration_months`, but mark a lower-confidence source such as `actual_completion_noncompleted_status_lag`.
+8. If the trial is active/non-stopped and `completion_date_type = ESTIMATED`, use `raw_total_duration_months` directly as `estimated_planned_total_duration`.
+9. Otherwise, use completed-trial total-duration benchmark P50 as the candidate and apply stopped/interrupted total-duration floors.
+10. If the participant edits the value, source becomes `user_scenario`.
 
 Important non-completed-trial rule:
 
@@ -214,24 +230,23 @@ Total duration fallback / floor rule:
 planned_duration_months =
 max(
   benchmark_total_duration_p50,
-  planned_primary_completion_months,
+  planned_primary_completion_months_same_cohort if available,
   actual_total_completion_duration_if_stopped_interrupted_and_available,
   estimated_total_completion_duration_if_stopped_interrupted_and_available,
-  missing_type_total_completion_duration_if_stopped_interrupted_and_available,
-  endpoint_duration_months_if_no_trusted_primary_completion_exists
+  missing_type_total_completion_duration_if_stopped_interrupted_and_available
 )
 ```
 
-Direct trusted total-duration candidates should still be checked for logical consistency. If a trusted active/non-stopped or completed total duration is shorter than `planned_primary_completion_months`, preserve the direct value only with an explicit warning flag, or route it through a documented QA/error-handling path before implementation. Do not silently hide this inconsistency.
+Primary-completion context should not make a sparse full-duration cohort acceptable. It also should not independently pull the editable duration value to a different cohort. In fallback/untrusted cases, primary-completion context may be used only as a same-cohort floor candidate so the total-duration default is not shorter than the readout timing context.
 
 If no usable date-derived value exists and no benchmark exists either:
 
 ```text
-planned_primary_completion_months = endpoint_duration_months if available else not_available
-planned_duration_months = endpoint_duration_months if available else not_available
+planned_primary_completion_months = not_available
+planned_duration_months = not_available
 ```
 
-and mark benchmark confidence as low or not available.
+and mark benchmark confidence as not available. `primary_duration_months_ml` remains endpoint context and should not become the editable total-duration default by itself.
 
 Detailed status/date-type handling:
 
@@ -289,7 +304,7 @@ Level 8: same phase only
 >60 months
 ```
 
-Use a cohort only when `n >= 50`. If a cohort is too sparse, fall back to the next broader level.
+Use a cohort for editable duration only when `duration_months_n >= 50`. If a cohort is too sparse for full completion duration, fall back to the next broader level. Primary-completion context is read from the same selected full-duration row only when `primary_completion_months_n >= 50`.
 
 Placeholder cohort values must not become specific benchmark identities:
 
@@ -322,7 +337,7 @@ Also derive and store readout timing context:
 operational_assumptions.planned_primary_completion_months
 ```
 
-`planned_primary_completion_months` may be metadata/context in v1 rather than a separate editable input.
+`planned_primary_completion_months` is metadata/context in v1, not a separate editable input.
 
 Recommended fields:
 
@@ -382,9 +397,9 @@ above_benchmark_high
 not_available
 ```
 
-## UI Behavior
+## Pending D4 UI Behavior
 
-Simulation Mode should show three operational assumptions:
+D4 should make Simulation Mode show three operational assumptions:
 
 - Planned Enrollment
 - Planned Sites
@@ -400,6 +415,8 @@ Simulation Mode should show three operational assumptions:
 - clear text that it does not enter the XGBoost Completion Score
 - readout timing can be shown as context, for example `Primary readout timing`, without making it a separate editable field in v1
 - if an actual non-completed stop date exists, show it as lower-bound/early-stop context, not as the planned duration source
+- opening labels should use no suffix for direct AACT-backed values and `(est.)` for system-filled benchmark/default values
+- after participant edit, remove the visible suffix while storing `source = user_scenario` in metadata
 
 ## Stale-State Rule
 
@@ -432,7 +449,7 @@ For v1, duration benchmark stale-state should track the fields that define the a
 - Validate that non-completed actual completion dates are treated as lower bounds / early-stop context only.
 - Validate that `endpoint_duration_months = primary_duration_months_ml` acts as a fallback/floor only when trusted direct primary-completion dates are unavailable or untrusted.
 
-### Phase D1: Artifact Builder
+### Phase D1: Artifact Builder - complete
 
 Files:
 
@@ -447,7 +464,7 @@ Work:
 - add duration report counts and coverage
 - keep artifact compact and deterministic
 
-### Phase D2: Runtime Utility
+### Phase D2: Runtime Utility - complete
 
 Files:
 
@@ -465,11 +482,12 @@ Work:
 - enforce fallback/default consistency without silently overwriting trusted direct date-derived values
 - keep behavior outside model-facing prediction code
 
-### Phase D3: Checker
+### Phase D3: Checker and Notebook - complete
 
 Files:
 
 - `scripts/check_operational_benchmarks.py`
+- `notebooks/estimation.ipynb`
 
 Work:
 
@@ -477,8 +495,9 @@ Work:
 - add lookup coverage checks
 - add defaulting safety checks
 - confirm model-boundary checks still prove duration does not enter XGBoost
+- add notebook cells for duration artifact checks, source-priority examples, metadata shape, and single-checker execution
 
-### Phase D4: Simulation Mode UI
+### Phase D4: Simulation Mode UI - pending
 
 Files:
 
@@ -486,24 +505,67 @@ Files:
 
 Work:
 
-- activate `planned_duration_months`
-- add state/source/baseline/widget helpers
-- add numeric input
-- include metadata in snapshots
-- add assumption card
-- include pending operational update behavior
+- Activate `planned_duration_months` as the third active operational assumption, alongside `planned_enrollment` and `planned_sites`.
+- Add `planned_duration_months` to `ACTIVE_OPERATIONAL_ASSUMPTION_KEYS` and remove it from the future-reserved tuple.
+- Import and use `planned_duration_default_from_operational_benchmark(...)` and `planned_duration_months_metadata(...)` from `src/operational_benchmarks.py`.
+- Add state/source/baseline/widget helpers mirroring the exact pattern used by Planned Enrollment and Planned Sites:
+  - `get_planned_duration_state_key(...)`
+  - `get_planned_duration_source_state_key(...)`
+  - `get_planned_duration_baseline_state_key(...)`
+  - `ensure_planned_duration_state(...)`
+  - `get_current_planned_duration_assumption(...)`
+  - `get_current_planned_duration_source(...)`
+  - `_sync_planned_duration_widget(...)`
+  - `get_previous_planned_duration_assumption(...)`
+- Add a numeric input labeled `Planned Duration (months)` or `Duration (months)`.
+- Apply the same lightweight source-label convention:
+  - no suffix when the opening value comes from usable AACT-backed duration data,
+  - `(est.)` when the opening value is system-filled from benchmark/default logic,
+  - remove the suffix after participant edit while storing `source = user_scenario`.
+- Keep the same pending behavior:
+  - a modified duration value turns the operational assumption container blue,
+  - the label shows `:blue[(previous: X)]`,
+  - `Predict Trial Completion` turns blue,
+  - operational-only duration changes create/update a snapshot via `simulation_operational_update`,
+  - operational-only duration changes do not call `/predict` and do not change Completion Score, SHAP, impact bar, treemap, TA calibration, model artifacts, taxonomy artifacts, or API payloads.
+- Include `planned_duration_months_metadata(...)` output in `operational_assumptions.planned_duration_months` for baseline snapshots, simulation prediction snapshots, operational-only update snapshots, and simulation history.
+- Add a Duration Assumption card matching the Enrollment/Sites card pattern:
+  - current value in months,
+  - benchmark position,
+  - reference cohort and `n`,
+  - P25/P50/P75/P90,
+  - primary readout timing context from the same selected full-duration cohort when available,
+  - source/context line only when the opening value is system-estimated,
+  - explicit copy that it does not enter the XGBoost Completion Score.
+- Preserve the strict duration benchmark rule already implemented in runtime:
+  - editable duration cohort requires `duration_months_n >= 50`,
+  - primary-completion context comes from the same selected full-duration row only if `primary_completion_months_n >= 50`,
+  - duration does not use modality refinement or non-vaccine Infections fallback.
+- Add duration stale-state tracking for `phase_ml`, `gbd_cause_id_3_ml`, `therapeutic_area_ml`, `is_rare_disease_ml`, and `primary_duration_months_ml`; do not include therapeutic modality for duration stale-state in v1.
+- Extend reset/off-on behavior so duration widget/source/baseline keys are cleared and recreated exactly like enrollment/sites.
+- Extend static checks to prove `planned_duration_months` is not in `SIMULATION_FEATURE_IDS`, is not in prediction payloads, and is not sent to `/predict`.
 
-### Phase D5: Documentation
+### Phase D5: Documentation - pending for UI activation
 
 Files:
 
 - `docs/architecture_estimation.md`
+- `docs/architecture_edit.md`
+- `docs/architecture_narratives.md`
+- `implementation_plan.md`
 
-Work:
+Work after D4 is implemented:
 
-- promote accepted duration target definition
-- document source rules, metadata, stale-state behavior, and exclusions
-- update active scope from enrollment/sites to enrollment/sites/duration
+- Mark `planned_duration_months` as active in Simulation Mode alongside Planned Enrollment and Planned Sites.
+- Record the final UI label chosen for the input, currently `Duration (months)` or `Planned Duration (months)`, with `(est.)` only for system-filled opening values.
+- Confirm the source convention remains consistent:
+  - no suffix for direct AACT-backed opening values,
+  - `(est.)` for benchmark/default opening values,
+  - no suffix after user edits, with metadata storing `source = user_scenario`.
+- Document that the Duration Assumption card follows the Enrollment/Sites card behavior: blue pending state, previous value marker, blue Predict button, operational-only snapshot update, and no `/predict` call unless model-facing Trial Features also changed.
+- Document that duration remains outside XGBoost, SHAP, Completion Score, impact bar, treemap, TA calibration, model artifacts, taxonomy artifacts, and API prediction payloads.
+- Update the narrative architecture so the future LLM receives `operational_assumptions.planned_duration_months` metadata and treats direct AACT values, benchmark assumptions, and user scenarios according to source metadata rather than visible UI suffixes.
+- Add the verification results from D4: py_compile, operational checker, static boundary scans, and browser smoke test scenarios.
 
 ## Verification
 
@@ -529,9 +591,9 @@ Expected parity rule:
 100% Perfect Parity before deployment.
 ```
 
-## Approval Checkpoint
+## D4 Approval Checkpoint
 
-Before implementation, confirm:
+Before UI activation, preserve these already-approved rules:
 
 1. `planned_duration_months` means planned total operational trial duration from `start_date` to `completion_date`.
 2. `planned_primary_completion_months` is derived as readout-timing context and consistency support, not a separate editable v1 input.

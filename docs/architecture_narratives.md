@@ -139,6 +139,16 @@ Benchmark: ambitious versus similar trials
 Support: partly supported by the current design choices
 ```
 
+The same pattern should apply to active operational assumptions as they are implemented. Planned Enrollment and Planned Sites are active now. Planned Duration can be added after its Simulation Mode UI step, using the same visual and metadata behavior.
+
+For opening UI labels, use the same compact source convention across operational fields:
+
+- Direct AACT-backed opening values have no suffix.
+- System-filled benchmark/default values show `(est.)`.
+- Participant edits remove the suffix, while metadata still stores `source = user_scenario`.
+
+For duration specifically, direct AACT-backed values include usable completed actual total duration and usable active/non-stopped estimated total duration. Stopped/interrupted dates are lower-bound or floor context, not trusted planned-duration targets by themselves. If benchmark/default logic supplies the editable opening value, the UI label should show `(est.)`.
+
 The main participant UI should not overexpose benchmark percentiles unless needed. The benchmark can be shown lightly as `below benchmark`, `typical`, `ambitious`, or `above benchmark high`. Detailed benchmark statistics can be reserved for development or facilitator view.
 
 The narrative must use conditional and analytical language:
@@ -488,7 +498,7 @@ This is conceptual JSON for planning only, not an implementation contract yet:
   "operational_assumptions": {
     "planned_enrollment": {
       "value": 600,
-      "source": "planned_value | final_observed_value | model_default | user_scenario",
+      "source": "planned_value | final_observed_value | observed_lower_bound | model_default | user_scenario",
       "benchmark_level_used": "phase_indication_rare | phase_ta_rare | phase_ta | phase_only",
       "benchmark_n": 123,
       "benchmark_p25": 120,
@@ -500,6 +510,32 @@ This is conceptual JSON for planning only, not an implementation contract yet:
       "supporting_signals": [],
       "conflicting_signals": [],
       "interpretation_hint": "Enrollment is above the usual benchmark and is only partly supported by the current design choices."
+    },
+    "planned_sites": {
+      "value": 30,
+      "source": "completed_registry_facility_count | current_registry_facility_count_proxy | benchmark_default | enrollment_coherent_benchmark_default | user_scenario",
+      "benchmark_level_used": "phase_ta_rare | phase_ta | phase_only",
+      "benchmark_n": 123,
+      "site_count_p50": 20,
+      "patients_per_site_p50": 8.5,
+      "site_count_status": "below_benchmark | typical | ambitious | above_benchmark_high | not_available",
+      "interpretation_hint": "Site count is an operational scenario assumption and does not enter the XGBoost Completion Score."
+    },
+    "planned_duration_months": {
+      "value": 42.0,
+      "source": "final_observed_total_duration | estimated_planned_total_duration | actual_completion_noncompleted_status_lag | benchmark_default_with_floors | user_scenario",
+      "duration_definition": "start_date_to_completion_date_months",
+      "benchmark_level_used": "phase_ta_rare_endpoint_bin",
+      "benchmark_n": 159,
+      "benchmark_p25": 15.0,
+      "benchmark_p50": 30.0,
+      "benchmark_p75": 55.0,
+      "benchmark_p90": 80.0,
+      "duration_status": "below_benchmark | typical | ambitious | above_benchmark_high | not_available",
+      "planned_primary_completion_months": 18.0,
+      "primary_completion_source": "same_cohort_benchmark | not_available",
+      "primary_completion_n": 120,
+      "interpretation_hint": "Duration is an operational scenario assumption and does not enter the XGBoost Completion Score."
     }
   },
   "model_interpretation": {
@@ -524,7 +560,9 @@ This is conceptual JSON for planning only, not an implementation contract yet:
 }
 ```
 
-Operational-assumption values are assembled after the latest prediction snapshot. If the user changes therapeutic area, indication, modality, patient profile, phase, or other relevant fields, the enrollment benchmark becomes stale until the next `Predict Trial Completion` action.
+Operational-assumption values are assembled after the latest prediction snapshot. If the user changes fields that define an operational benchmark cohort, the affected benchmark becomes stale until the next `Predict Trial Completion` action. Enrollment and sites may react to therapeutic area, indication, phase, rare-disease status, and modality where the implemented benchmark contract uses them. Duration should react only to its approved v1 cohort fields: phase, indication, therapeutic area, rare-disease status, and primary endpoint duration bin. Duration must not use therapeutic modality for stale-state unless a later duration benchmark explicitly adds modality.
+
+The LLM should use operational source metadata, not the compact UI label, to distinguish direct AACT-backed values, system-filled benchmark defaults, and participant scenarios. Direct AACT-backed values are source facts for the selected trial. System-filled values are benchmark assumptions. `user_scenario` values are participant scenario choices even when the visible label has no suffix.
 
 Structured dropdown fields are the primary source of truth. Short text fields are secondary and should be used for coherence checking, contradiction detection, and narrative context rather than as the main source of scoring.
 

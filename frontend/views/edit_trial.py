@@ -4999,6 +4999,29 @@ def get_current_planned_sites_source(row):
     return st.session_state.get(get_planned_sites_source_state_key(nct_id), "registry_facility_count_proxy")
 
 
+def is_system_estimated_operational_assumption(assumption_key, source):
+    source = str(source or "").strip()
+    if source == "user_scenario":
+        return False
+    if assumption_key == "planned_enrollment":
+        return source in {"model_default"}
+    if assumption_key == "planned_sites":
+        return source != "completed_registry_facility_count"
+    if assumption_key == "planned_duration_months":
+        return source in {
+            "benchmark_default_with_floors",
+            "benchmark_imputed_default",
+            "benchmark_imputed_default_with_observed_lower_bound",
+        }
+    return False
+
+
+def operational_assumption_input_label(label, assumption_key, source):
+    if is_system_estimated_operational_assumption(assumption_key, source):
+        return f"{label} (est.)"
+    return label
+
+
 def get_current_operational_assumption_value(row, assumption_key):
     if assumption_key == "planned_enrollment":
         return get_current_planned_enrollment_assumption(row)
@@ -6998,7 +7021,11 @@ def render_planned_enrollment_input(row):
 
     enrollment_pending = has_pending_enrollment_assumption(row)
     previous_enrollment = get_previous_planned_enrollment_assumption(row)
-    enrollment_label = "Planned Enrollment"
+    enrollment_label = operational_assumption_input_label(
+        "Planned Enrollment",
+        "planned_enrollment",
+        get_current_planned_enrollment_source(row),
+    )
     if enrollment_pending and previous_enrollment is not None:
         enrollment_label = f"Planned Enrollment :blue[(previous: {previous_enrollment:,})]"
 
@@ -7043,7 +7070,11 @@ def render_planned_sites_input(row):
 
     site_pending = has_pending_site_assumption(row)
     previous_sites = get_previous_planned_sites_assumption(row)
-    site_label = "Planned Sites"
+    site_label = operational_assumption_input_label(
+        "Planned Sites",
+        "planned_sites",
+        get_current_planned_sites_source(row),
+    )
     if site_pending and previous_sites is not None:
         site_label = f"Planned Sites :blue[(previous: {previous_sites:,})]"
 
@@ -7129,6 +7160,15 @@ def _site_source_label(source):
     return labels.get(str(source or "").strip(), "not available")
 
 
+def _operational_estimated_source_line(assumption_key, source):
+    if not is_system_estimated_operational_assumption(assumption_key, source):
+        return ""
+    label = "estimated default"
+    if assumption_key == "planned_sites" and str(source or "").strip() == "current_registry_facility_count_proxy":
+        label = "estimated from current registry facility count"
+    return f"<div class='enrollment-assumption-line'><strong>Source:</strong> {html.escape(label)}</div>"
+
+
 def _benchmark_number_text(value):
     try:
         numeric = pd.to_numeric(value, errors="coerce")
@@ -7154,7 +7194,7 @@ def render_enrollment_assumption_card(row):
     stale = is_enrollment_benchmark_stale(row) or bool(metadata.get("is_benchmark_stale"))
     enrollment_pending = has_pending_enrollment_assumption(row)
     source = get_current_planned_enrollment_source(row) if enrollment_pending else metadata.get("source")
-    source_line = f"<div class='enrollment-assumption-line'><strong>Source:</strong> {html.escape(_enrollment_source_label(source))}</div>"
+    source_line = _operational_estimated_source_line("planned_enrollment", source)
 
     if stale:
         body_lines = [
@@ -7235,7 +7275,7 @@ def render_site_assumption_card(row):
     stale = is_enrollment_benchmark_stale(row) or bool(metadata.get("is_benchmark_stale"))
     site_pending = has_pending_site_assumption(row)
     source = get_current_planned_sites_source(row) if site_pending else metadata.get("source")
-    source_line = f"<div class='enrollment-assumption-line'><strong>Source:</strong> {html.escape(_site_source_label(source))}</div>"
+    source_line = _operational_estimated_source_line("planned_sites", source)
 
     if stale:
         body_lines = [

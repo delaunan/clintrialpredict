@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import tempfile
 from pathlib import Path
 
@@ -8,12 +9,17 @@ import pandas as pd
 from src.operational_benchmarks import (
     DEFAULT_ARTIFACT_PATH,
     REQUIRED_ARTIFACT_COLUMNS,
+    classify_duration_months,
     classify_enrollment,
+    classify_primary_completion_months,
     classify_site_count,
     load_operational_benchmarks,
     lookup_operational_benchmark,
+    planned_duration_default_from_operational_benchmark,
+    planned_duration_months_metadata,
     planned_enrollment_metadata,
     planned_enrollment_default_from_operational_benchmark,
+    planned_primary_completion_default_from_operational_benchmark,
     planned_sites_metadata,
     planned_sites_default_from_operational_benchmark,
 )
@@ -21,6 +27,7 @@ from src.operational_benchmarks import (
 
 SEARCH_REGISTRY_PATH = Path("frontend/data/search_registry.csv")
 EDIT_TRIAL_PATH = Path("frontend/views/edit_trial.py")
+REPORT_PATH = Path("frontend/data/operational_benchmarks_v1_report.json")
 
 
 def _assert(condition: bool, message: str) -> None:
@@ -44,33 +51,27 @@ def _snapshot_from_registry_row(row: pd.Series) -> dict:
     return snapshot
 
 
-def _assert_registry_coverage(registry: pd.DataFrame, artifact: pd.DataFrame) -> None:
-    for metric in ("enrollment", "site_count", "patients_per_site"):
-        missing = 0
-        low_support = 0
-        modality_refined = 0
-        non_vaccine = 0
-        for _, row in registry.iterrows():
-            lookup = lookup_operational_benchmark(_snapshot_from_registry_row(row), artifact, metric_prefix=metric)
-            if lookup is None:
-                missing += 1
-                continue
-            metric_n = pd.to_numeric(lookup.get(f"{metric}_n"), errors="coerce")
-            if pd.isna(metric_n) or int(metric_n) < 30:
-                low_support += 1
-            level = str(lookup.get("benchmark_level_used") or "")
-            if level.endswith("_modality"):
-                modality_refined += 1
-            if level.endswith("_non_vaccine_infections"):
-                non_vaccine += 1
+def _assert_registry_coverage_report(artifact: pd.DataFrame) -> None:
+    _assert(REPORT_PATH.exists(), f"Missing benchmark report: {REPORT_PATH}")
+    report = json.loads(REPORT_PATH.read_text(encoding="utf-8"))
+    coverage = report.get("coverage_qa", {})
+    for metric in ("enrollment", "site_count", "patients_per_site", "primary_completion_months", "duration_months"):
+        metric_coverage = coverage.get(metric, {})
+        _assert(
+            metric_coverage.get("not_available") == 0,
+            f"{metric} report coverage has {metric_coverage.get('not_available')} rows without a benchmark",
+        )
+        _assert(
+            metric_coverage.get("low_confidence_matches") == 0,
+            f"{metric} report coverage has {metric_coverage.get('low_confidence_matches')} low-confidence matches",
+        )
 
-        _assert(missing == 0, f"{metric} lookup has {missing} registry rows without a benchmark")
-        _assert(low_support == 0, f"{metric} lookup has {low_support} registry rows below n=30")
-        if metric == "site_count":
-            _assert(modality_refined == 0, "Site-count lookup should not use modality-refined rows")
-            _assert(non_vaccine == 0, "Site-count lookup should not use non-vaccine Infections fallback rows")
-        else:
-            _assert(modality_refined > 0, f"{metric} lookup should have modality-refined rows")
+    for metric in ("primary_completion_months", "duration_months"):
+        metric_rows = artifact[pd.to_numeric(artifact[f"{metric}_n"], errors="coerce").fillna(0).gt(0)]
+        _assert(
+            metric_rows["benchmark_level_used"].str.contains("endpoint_bin", regex=False).any(),
+            f"{metric} artifact should include endpoint-duration-bin benchmark rows",
+        )
 
 
 def _assert_site_defaulting(registry: pd.DataFrame, artifact: pd.DataFrame) -> None:
@@ -111,7 +112,7 @@ def _assert_model_boundary() -> None:
         feature_block = text[start:end]
     except ValueError:
         feature_block = ""
-    for field in ("planned_sites", "planned_enrollment", "number_of_facilities"):
+    for field in ("planned_sites", "planned_enrollment", "planned_duration_months", "number_of_facilities"):
         _assert(field not in feature_block, f"{field} should not be model-facing in SIMULATION_FEATURE_IDS")
 
 
@@ -148,8 +149,24 @@ def main() -> None:
         artifact.loc[artifact["benchmark_level_used"].str.endswith("_modality"), "site_count_n"].fillna(0).eq(0).all(),
         "Raw site-count benchmarks should not use modality refinement rows",
     )
+    _assert(
+        artifact.loc[artifact["benchmark_level_used"].str.endswith("_modality"), "duration_months_n"].fillna(0).eq(0).all(),
+        "Duration benchmarks should not use modality refinement rows",
+    )
+    _assert(
+        artifact.loc[artifact["benchmark_level_used"].str.endswith("_non_vaccine_infections"), "duration_months_n"]
+        .fillna(0)
+        .eq(0)
+        .all(),
+        "Duration benchmarks should not use non-vaccine Infections fallback rows",
+    )
+    duration_bin_levels = artifact["benchmark_level_used"].str.contains("endpoint_bin", regex=False)
+    _assert(
+        artifact.loc[duration_bin_levels, "endpoint_duration_bin"].fillna("").astype(str).str.len().gt(0).all(),
+        "Endpoint-bin duration rows should include endpoint_duration_bin",
+    )
 
-    for prefix in ("enrollment", "site_count", "patients_per_site"):
+    for prefix in ("enrollment", "site_count", "patients_per_site", "primary_completion_months", "duration_months"):
         for suffix in ("n", "p25", "p50", "p75", "p90"):
             column = f"{prefix}_{suffix}"
             _assert(column in artifact.columns, f"Missing column: {column}")
@@ -222,6 +239,12 @@ def main() -> None:
         modality_site["benchmark_level_used"] == "phase_ta_rare",
         "Raw site-count lookup should remain on the clinical cohort, not modality refinement",
     )
+    modality_duration = lookup_operational_benchmark(modality_snapshot, artifact, metric_prefix="duration_months")
+    _assert(modality_duration is not None, "Duration lookup failed for vaccine snapshot")
+    _assert(
+        not str(modality_duration["benchmark_level_used"]).endswith("_modality"),
+        "Duration lookup should not use modality refinement",
+    )
 
     registry = pd.read_csv("frontend/data/search_registry.csv", low_memory=False)
     non_vaccine_infections_trial = registry[registry["nct_id"].eq("NCT04938830")].iloc[0].to_dict()
@@ -264,6 +287,95 @@ def main() -> None:
     _assert(
         non_vaccine_site is not None and not str(non_vaccine_site["benchmark_level_used"]).endswith("_non_vaccine_infections"),
         "Raw site-count should not use non-vaccine Infections fallback",
+    )
+    non_vaccine_duration = lookup_operational_benchmark(
+        non_vaccine_infections_trial,
+        artifact,
+        metric_prefix="duration_months",
+    )
+    _assert(
+        non_vaccine_duration is not None
+        and not str(non_vaccine_duration["benchmark_level_used"]).endswith("_non_vaccine_infections"),
+        "Duration should not use non-vaccine Infections fallback",
+    )
+
+    duration_row = artifact[
+        artifact["benchmark_level_used"].str.contains("endpoint_bin", regex=False)
+        & artifact["duration_months_low_confidence_flag"].eq(False)
+        & artifact["duration_months_n"].gt(0)
+    ].iloc[0]
+    endpoint_bin_midpoints = {
+        "<=3": 3,
+        "3-6": 4.5,
+        "6-12": 9,
+        "12-18": 15,
+        "18-24": 21,
+        "24-36": 30,
+        "36-60": 48,
+        ">60": 72,
+    }
+    duration_snapshot = {
+        "phase": duration_row["phase"],
+        "gbd_cause_id_3_ml": int(duration_row["gbd_cause_id_3_ml"]) if pd.notna(duration_row["gbd_cause_id_3_ml"]) else None,
+        "therapeutic_area": duration_row.get("therapeutic_area"),
+        "is_rare_disease_ml": int(duration_row["rare_disease_flag"]) if pd.notna(duration_row["rare_disease_flag"]) else None,
+        "primary_duration_months_ml": endpoint_bin_midpoints[str(duration_row["endpoint_duration_bin"])],
+    }
+    duration_lookup = lookup_operational_benchmark(duration_snapshot, artifact, metric_prefix="duration_months")
+    _assert(duration_lookup is not None, "Endpoint-bin duration lookup failed")
+    _assert(
+        "endpoint_bin" in str(duration_lookup["benchmark_level_used"]),
+        "Duration lookup should prefer endpoint-bin cohorts when available",
+    )
+    _assert(
+        int(duration_lookup["duration_months_n"]) >= 50,
+        "Duration lookup should require duration_months_n >= 50",
+    )
+
+    synthetic_specific = artifact.iloc[0].copy()
+    synthetic_specific["benchmark_key"] = (
+        "phase_indication_rare_endpoint_bin|phase=PHASE3|indication=123456|rare=0|endpoint_bin=6-12"
+    )
+    synthetic_specific["benchmark_level_used"] = "phase_indication_rare_endpoint_bin"
+    synthetic_specific["phase"] = "PHASE3"
+    synthetic_specific["gbd_cause_id_3_ml"] = 123456
+    synthetic_specific["therapeutic_area"] = ""
+    synthetic_specific["rare_disease_flag"] = 0
+    synthetic_specific["endpoint_duration_bin"] = "6-12"
+    synthetic_specific["duration_months_n"] = 49
+    synthetic_specific["duration_months_p50"] = 1
+    synthetic_specific["duration_months_low_confidence_flag"] = True
+
+    synthetic_broad = artifact.iloc[0].copy()
+    synthetic_broad["benchmark_key"] = "phase_endpoint_bin|phase=PHASE3|endpoint_bin=6-12"
+    synthetic_broad["benchmark_level_used"] = "phase_endpoint_bin"
+    synthetic_broad["phase"] = "PHASE3"
+    synthetic_broad["gbd_cause_id_3_ml"] = ""
+    synthetic_broad["therapeutic_area"] = ""
+    synthetic_broad["rare_disease_flag"] = ""
+    synthetic_broad["endpoint_duration_bin"] = "6-12"
+    synthetic_broad["duration_months_n"] = 50
+    synthetic_broad["duration_months_p50"] = 99
+    synthetic_broad["duration_months_low_confidence_flag"] = False
+
+    synthetic_artifact = pd.DataFrame([synthetic_specific, synthetic_broad], columns=artifact.columns)
+    strict_duration_lookup = lookup_operational_benchmark(
+        {
+            "phase": "PHASE3",
+            "gbd_cause_id_3_ml": 123456,
+            "is_rare_disease_ml": 0,
+            "primary_duration_months_ml": 9,
+        },
+        synthetic_artifact,
+        metric_prefix="duration_months",
+        min_metric_n=50,
+        cohort_metric_prefixes=("duration_months",),
+    )
+    _assert(
+        strict_duration_lookup is not None
+        and strict_duration_lookup["benchmark_level_used"] == "phase_endpoint_bin"
+        and int(strict_duration_lookup["duration_months_n"]) == 50,
+        "Duration lookup should skip n=49 granular rows and use the first n>=50 fallback",
     )
 
     fallback_row = artifact[
@@ -361,6 +473,17 @@ def main() -> None:
     _assert(classify_enrollment(75, enrollment_boundary) == "typical", "Enrollment P75 inclusive boundary failed")
     _assert(classify_enrollment(90, enrollment_boundary) == "ambitious", "Enrollment P90 inclusive boundary failed")
     _assert(classify_site_count(91, site_boundary) == "above_benchmark_high", "Site-count P90 upper boundary failed")
+    duration_boundary = pd.Series({"duration_months_p25": 25, "duration_months_p75": 75, "duration_months_p90": 90})
+    primary_boundary = pd.Series(
+        {
+            "primary_completion_months_p25": 25,
+            "primary_completion_months_p75": 75,
+            "primary_completion_months_p90": 90,
+        }
+    )
+    _assert(classify_duration_months(24, duration_boundary) == "below_benchmark", "Duration P25 lower boundary failed")
+    _assert(classify_duration_months(75, duration_boundary) == "typical", "Duration P75 inclusive boundary failed")
+    _assert(classify_primary_completion_months(91, primary_boundary) == "above_benchmark_high", "Primary completion P90 upper boundary failed")
 
     enrollment_metadata = planned_enrollment_metadata(strict_snapshot, strict_row["enrollment_p50"], artifact=artifact)
     _assert("planned_enrollment" in enrollment_metadata, "Unified metadata should return planned_enrollment")
@@ -384,7 +507,113 @@ def main() -> None:
         "Site metadata should include patients-per-site context",
     )
 
-    _assert_registry_coverage(registry, artifact)
+    completed_duration_default = planned_duration_default_from_operational_benchmark(
+        {
+            **strict_snapshot,
+            "completion_duration_months": 37,
+            "completion_date_type": "ACTUAL",
+            "primary_completion_duration_months": 20,
+            "primary_completion_date_type": "ACTUAL",
+            "primary_duration_months_ml": 18,
+            "overall_status": "COMPLETED",
+        },
+        artifact=artifact,
+    )
+    _assert(
+        completed_duration_default["source"] == "final_observed_total_duration",
+        "Completed ACTUAL completion duration should be direct final observed duration",
+    )
+    _assert(completed_duration_default["value"] == 37, "Completed ACTUAL total duration was not preserved")
+
+    active_estimated_duration_default = planned_duration_default_from_operational_benchmark(
+        {
+            **strict_snapshot,
+            "completion_duration_months": 42,
+            "completion_date_type": "ESTIMATED",
+            "primary_completion_duration_months": 24,
+            "primary_completion_date_type": "ESTIMATED",
+            "primary_duration_months_ml": 30,
+            "overall_status": "RECRUITING",
+        },
+        artifact=artifact,
+    )
+    _assert(
+        active_estimated_duration_default["source"] == "estimated_planned_total_duration",
+        "Active ESTIMATED completion duration should be direct planned total duration",
+    )
+
+    stopped_duration_default = planned_duration_default_from_operational_benchmark(
+        {
+            **strict_snapshot,
+            "completion_duration_months": 50,
+            "completion_date_type": "ACTUAL",
+            "primary_completion_duration_months": 20,
+            "primary_completion_date_type": "ACTUAL",
+            "primary_duration_months_ml": 18,
+            "overall_status": "TERMINATED",
+        },
+        artifact=artifact,
+    )
+    _assert(
+        stopped_duration_default["source"] == "benchmark_default_with_floors",
+        "Stopped ACTUAL completion duration should be a lower-bound floor, not a direct source",
+    )
+    _assert(stopped_duration_default["value"] >= 50, "Stopped duration lower-bound floor was not respected")
+
+    primary_default = planned_primary_completion_default_from_operational_benchmark(
+        {
+            **strict_snapshot,
+            "primary_completion_duration_months": 10,
+            "primary_completion_date_type": "ESTIMATED",
+            "primary_duration_months_ml": 18,
+            "overall_status": "RECRUITING",
+        },
+        artifact=artifact,
+    )
+    _assert(
+        primary_default["source"] == "estimated_primary_completion",
+        "Trusted active ESTIMATED primary completion duration should be direct",
+    )
+    _assert(
+        "primary_completion_shorter_than_primary_duration_ml" in primary_default["warnings"],
+        "Shorter trusted primary completion should carry warning metadata",
+    )
+
+    duration_metadata = planned_duration_months_metadata(
+        {
+            **strict_snapshot,
+            "completion_duration_months": 42,
+            "completion_date_type": "ESTIMATED",
+            "primary_completion_duration_months": 24,
+            "primary_completion_date_type": "ESTIMATED",
+            "primary_duration_months_ml": 30,
+            "overall_status": "RECRUITING",
+        },
+        artifact=artifact,
+    )
+    _assert("planned_duration_months" in duration_metadata, "Unified metadata should return planned_duration_months")
+    _assert(
+        duration_metadata["planned_duration_months"]["support_level"] == "not_evaluated",
+        "Duration support level changed",
+    )
+    _assert(
+        "planned_primary_completion_months" in duration_metadata["planned_duration_months"],
+        "Duration metadata should include primary completion context",
+    )
+    _assert(
+        duration_metadata["planned_duration_months"]["benchmark_n"] >= 50,
+        "Duration metadata should use a full-duration cohort with n >= 50",
+    )
+    primary_n = duration_metadata["planned_duration_months"]["primary_completion_n"]
+    if primary_n is not None:
+        _assert(primary_n >= 50, "Primary-completion context should require same-cohort n >= 50")
+        _assert(
+            duration_metadata["planned_duration_months"]["primary_completion_benchmark_level_used"]
+            == duration_metadata["planned_duration_months"]["benchmark_level_used"],
+            "Primary-completion context should come from the selected full-duration cohort",
+        )
+
+    _assert_registry_coverage_report(artifact)
     _assert_site_defaulting(registry, artifact)
     _assert_model_boundary()
 
