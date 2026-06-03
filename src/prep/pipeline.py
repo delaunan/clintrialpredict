@@ -966,8 +966,20 @@ PIPELINE_REGISTRY = {
         "completion_date": {
             "ui": {"label": "Completion Date", "pillar": "Metadata", "subgroup": "Timeline", "priority": 171}
         },
+        "completion_date_type": {
+            "ui": {"label": "Completion Date Type", "pillar": "Metadata", "subgroup": "Timeline", "priority": 171.1}
+        },
+        "completion_duration_months": {
+            "ui": {"label": "Completion Duration Months", "pillar": "Metadata", "subgroup": "Timeline", "priority": 171.2}
+        },
         "primary_completion_date": {
             "ui": {"label": "Primary Completion Date", "pillar": "Metadata", "subgroup": "Timeline", "priority": 172}
+        },
+        "primary_completion_date_type": {
+            "ui": {"label": "Primary Completion Date Type", "pillar": "Metadata", "subgroup": "Timeline", "priority": 172.1}
+        },
+        "primary_completion_duration_months": {
+            "ui": {"label": "Primary Completion Duration Months", "pillar": "Metadata", "subgroup": "Timeline", "priority": 172.2}
         },
         "start_year": {
             "ui": {"label": "Start Year", "pillar": "Metadata", "subgroup": "Timeline", "priority": 173}
