@@ -233,6 +233,9 @@ class ClinicalTrialLoader:
         for col in registry_numeric_cols + ui_numeric_cols:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce')
+
+        if 'primary_duration_months_ml' in df.columns:
+            df['primary_duration_months_ml'] = df['primary_duration_months_ml'].round(1)
         
         return df
 

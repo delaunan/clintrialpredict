@@ -13,6 +13,8 @@ Current active UI operational-assumption scope = planned enrollment + planned si
 Countries, cost, market potential, downstream commitment, and full operational-scale estimation are postponed.
 ```
 
+Current estimation v1 status: complete for the deterministic operational-assumption layer. The active layer includes benchmark artifacts/runtime/checker/notebook coverage for Planned Enrollment, Planned Site Count, and Planned Duration, plus Simulation Mode UI integration for all three. Future narrative, Coherence Score, country, cost, market, and downstream commitment work remains intentionally out of scope.
+
 This document should be read alongside [docs/architecture_narratives.md](/home/delaunan/code/delaunan/clintrialpredict/docs/architecture_narratives.md), which defines how the benchmark is interpreted through the serious-game narrative layer.
 
 ## Active V1 Implementation Scope
@@ -24,7 +26,8 @@ The active implementation scope is narrow by design:
 - Planned Duration benchmark/runtime/checker/UI support, active in Simulation Mode as `Duration (months)`.
 - Deterministic benchmark metadata.
 - Compact production artifact runtime.
-- No XGBoost changes.
+- No XGBoost changes from operational assumptions.
+- Existing model-facing maximum primary endpoint duration, `primary_duration_months_ml`, is rounded to one decimal before model training/scoring inputs are built.
 - No SHAP changes.
 - No therapeutic-area calibration changes.
 - No audit/demo parity changes.
@@ -34,7 +37,7 @@ The active implementation scope is narrow by design:
 
 The broader architecture may reserve names for future operational assumptions, but active Simulation Mode implementation is limited to planned enrollment, planned site count, and planned total duration. Reserved future keys must not imply active country, cost, market, spend, or development-commitment estimates.
 
-## Current Implementation Status - 2026-06-03
+## Current Implementation Status - 2026-06-04
 
 The active estimation layer is the combined deterministic operational benchmark. Historical enrollment-only and site-only benchmark scripts, runtime utilities, artifacts, and reports have been removed to keep one source of truth.
 
@@ -47,6 +50,8 @@ Active files:
 - `frontend/data/operational_benchmarks_v1_report.json`: active build report.
 - `frontend/data/operational_benchmarks_v1.xlsx`: analyst inspection export only; the app does not read it.
 - `notebooks/estimation.ipynb`: current explanatory notebook aligned to the combined operational artifact.
+- `notebooks/validation_clinpred.ipynb`: validation notebook aligned to the one-decimal `primary_duration_months_ml` training/scoring rule.
+- `notebooks/production_01.ipynb`: production notebook aligned to the one-decimal `primary_duration_months_ml` rule and ending with an exported-registry parity trigger.
 
 Reproducibility workflow:
 
@@ -56,6 +61,19 @@ python scripts/check_operational_benchmarks.py
 ```
 
 The production runtime uses only `frontend/data/operational_benchmarks_v1.csv` through `src/operational_benchmarks.py`. It must not load `data/data_clinpred.csv`.
+
+Model-facing endpoint-duration precision rule:
+
+- `primary_duration_months_ml` is rounded to one decimal in `src/prep/data_loader_clinpred.py` when `data_clinpred.csv` is rebuilt.
+- `primary_duration_months_ml` is also rounded to one decimal in `src/prep/pipeline.py` inside the `num_duration` preprocessing pipeline before imputation/scaling.
+- The rounding transformer is applied only to `NUM_DURATION_COL = ['primary_duration_months_ml']`.
+- This rule is separate from operational `planned_duration_months`; it does not make operational duration part of XGBoost.
+
+Production QA trigger:
+
+- `notebooks/production_01.ipynb` now ends with a final exported-registry parity check.
+- The check runs the `audit_parity.py` logic against `frontend/data/search_registry.csv` and renders a Markdown PASS/FAIL explanation.
+- The check verifies that `Clinical_Score == 50.0 + sum(the four pillar impacts)` for every exported frontend registry row.
 
 ## Phase 2A / 2B Implementation Status - 2026-06-01, Updated 2026-06-03
 
@@ -145,7 +163,7 @@ Each enrollment-related value should be classified before use.
 
 | Field class | Meaning | Example | V1 use |
 | ----------- | ------- | ------- | ------ |
-| Design-stage / planned value | Known or intended near trial design time. | Estimated enrollment from the record. | Initial `planned_enrollment_assumption` when available. |
+| Design-stage / planned value | Known or intended near trial design time. | Estimated enrollment from the record. | Initial `operational_assumptions.planned_enrollment` value when available. |
 | Final observed value | Known only after trial completion. | Completed-trial actual enrollment. | Historical benchmark data or completed-trial display context. |
 | Observed-to-date lower bound | Current partial operational value, not necessarily final. | Ongoing or terminated actual enrollment from current extract. | Lower-bound candidate when no planned/estimated value exists; not final truth. |
 | Model default | Synthetic benchmark-derived default. | P50 or other selected cohort default when no planned value exists. | Neutral starting assumption. |
@@ -156,15 +174,17 @@ Rule: every stored enrollment benchmark output must preserve source, cohort, per
 
 ## V1 MVP Definition
 
-The v1 estimation MVP is not a full missing-operational-value workbench. It is an enrollment-benchmark layer for serious-game simulation. It provides a neutral, auditable benchmark against which a user's planned enrollment assumption can be assessed.
+The v1 estimation MVP is not a full missing-operational-value workbench. It is a deterministic operational-assumption benchmark layer for serious-game simulation. It provides neutral, auditable benchmarks against which a user's planned enrollment, planned site count, and planned duration assumptions can be assessed.
 
 Active v1 scope includes:
 
-- `planned_enrollment_assumption`.
-- Enrollment source priority.
+- `operational_assumptions.planned_enrollment`.
+- `operational_assumptions.planned_sites`.
+- `operational_assumptions.planned_duration_months`.
+- Source-priority metadata.
 - Deterministic benchmark hierarchy.
 - P25/P50/P75/P90 benchmark percentiles.
-- `enrollment_status` classification.
+- Benchmark status classification.
 - `support_level = "not_evaluated"` until a later implementation phase.
 - Empty support/conflict signal lists until a later implementation phase.
 - Benchmark stale-state logic.
@@ -195,7 +215,7 @@ Explicitly excluded from active v1:
 Use this source priority:
 
 ```text
-1. If planned/estimated enrollment is available, use it as the initial `planned_enrollment_assumption`.
+1. If planned/estimated enrollment is available, use it as the initial `operational_assumptions.planned_enrollment` value.
 2. If the trial is completed and actual enrollment represents final observed value, it can be used as final observed context.
 3. If no usable planned value exists and the trial is not completed, treat actual/current enrollment as `observed_lower_bound` when available.
 4. If no usable planned value exists, look up benchmark P50 as `model_default`.
@@ -586,7 +606,7 @@ Current Planned Enrollment runtime returns `support_level = "not_evaluated"` and
 
 ## Revised Operational Assumptions Roadmap
 
-The estimation architecture evolves in staged, decision-gated increments. Planned Enrollment is active. S1B, S2, and S3 for `planned_sites` are complete, and `planned_sites` is active in Simulation Mode only. D0-D4 for `planned_duration_months` are complete, and Duration is active in Simulation Mode as an operational assumption. `planned_countries` remains excluded.
+The estimation architecture evolved in staged, decision-gated increments. Planned Enrollment is active. S1B, S2, and S3 for `planned_sites` are complete, and `planned_sites` is active in Simulation Mode only. D0-D6 for `planned_duration_months` and endpoint-duration precision finalization are complete, and Duration is active in Simulation Mode as an operational assumption. `planned_countries` remains excluded.
 
 Current roadmap:
 
@@ -625,7 +645,7 @@ Current roadmap:
    - Use pure site-count P50 only as a fallback when the enrollment-coherent patients-per-site candidate is unavailable.
    - Keep the revision outside XGBoost, SHAP, `/predict`, prediction payloads, calibration, audit parity, model artifacts, taxonomy artifacts, LLM narratives, Coherence Score, and Adjusted Trial Value Score.
 
-8. Next: Browser smoke testing and deployment readiness review for Planned Site Count.
+8. Completed: Browser smoke testing and deployment readiness review for active operational assumptions.
    - Confirm the operational-assumption card shows the revised lower-bound context and enrollment-coherent candidate.
    - Confirm planned-sites operational-only updates still do not call `/predict`.
 
@@ -650,19 +670,25 @@ Current roadmap:
    - Duration remains outside XGBoost, SHAP, Completion Score, impact bar, treemap, TA calibration, model artifacts, taxonomy artifacts, and prediction payloads.
    - Trusted direct primary readout timing is preserved before same-cohort primary-readout benchmark fallback.
 
-13. Future after stable deterministic payloads: narrative payload builder, LLM narrative, then Coherence Score.
+13. Completed: D6 model-facing endpoint-duration precision and production QA trigger.
+   - `primary_duration_months_ml` is rounded to one decimal in data generation and in the model preprocessing duration pipe.
+   - The rounding applies only to the existing model-facing maximum primary endpoint duration feature, not to operational `planned_duration_months`.
+   - Validation and production notebooks were copied with this rule to all local branch levels.
+   - The production notebook ends with an exported-registry parity trigger using `audit_parity.py` logic.
+
+14. Future after stable deterministic payloads: narrative payload builder, LLM narrative, then Coherence Score.
    - Narrative and scoring work must consume deterministic payloads.
    - LLM text must not invent operational ranges or create hidden score changes.
    - Coherence Score must remain separate from the existing XGBoost Completion Score.
    - `planned_countries` remains excluded.
 
-Next required step: continue manual QA/deployment readiness review for active Planned Enrollment, Planned Sites, and Duration operational assumptions.
+No remaining required estimation-v1 implementation step is open. Remaining items are future product/architecture work: narrative payload builder, LLM narrative, Coherence Score, Adjusted Trial Value Score, `planned_countries`, cost, market potential, and downstream commitment logic.
 
-The detailed source contracts, methodology, metadata shapes, staged roadmap, and decision gates for S1B/S2/S3/D0/D1/D2/D3/D4 are defined in `Next Operational Assumptions - Sites And Duration Planning`.
+The detailed source contracts, methodology, metadata shapes, staged roadmap, and decision gates for S1B/S2/S3/D0/D1/D2/D3/D4/D6 are defined in `Next Operational Assumptions - Sites And Duration Planning`.
 
 ## Next Operational Assumptions - Sites And Duration Planning
 
-This section is the source-of-truth plan for operational-assumption families after active Planned Enrollment. S1B `planned_sites` audit, S2 `planned_sites` artifact/runtime utility, and S3 `planned_sites` Simulation Mode integration are complete. D0-D4 `planned_duration_months` benchmark/runtime/checker/UI activation is complete. `planned_countries` remains excluded.
+This section is the source-of-truth plan for operational-assumption families after active Planned Enrollment. S1B `planned_sites` audit, S2 `planned_sites` artifact/runtime utility, and S3 `planned_sites` Simulation Mode integration are complete. D0-D6 `planned_duration_months` benchmark/runtime/checker/UI activation and endpoint-duration precision finalization are complete. `planned_countries` remains excluded.
 
 ### Current Boundary
 
@@ -964,7 +990,7 @@ Combined artifact summary:
 Single-artifact runtime rule:
 
 - `frontend/views/edit_trial.py` imports benchmark metadata and defaulting from `src/operational_benchmarks.py`.
-- Planned Enrollment and Planned Site Count both use `frontend/data/operational_benchmarks_v1.csv`; Planned Duration runtime helpers use the same artifact but are not yet wired into the UI.
+- Planned Enrollment, Planned Site Count, and Planned Duration all use `frontend/data/operational_benchmarks_v1.csv`; Planned Duration is wired into Simulation Mode as `Duration (months)`.
 - The runtime keeps metric-specific evidence fields: `enrollment_n`, `site_count_n`, `patients_per_site_n`, `duration_months_n`, and `primary_completion_months_n`.
 - The runtime keeps metric-specific confidence flags.
 - If a matched cohort has at least one relevant operational metric with `n >= 50`, the app keeps that specific cohort row and does not jump to a broader fallback only because another metric is near-threshold.
@@ -1088,11 +1114,11 @@ Implementation boundaries:
 - Do not load `data/data_clinpred.csv` at production runtime to compute patients-per-site.
 - Patients-per-site distributions are precomputed into the compact combined operational benchmark artifact.
 - Keep `planned_sites` outside XGBoost, `/predict`, SHAP, pillar impacts, impact bar, treemap, Completion Score, therapeutic-area calibration, audit mode, model artifacts, taxonomy artifacts, API contracts, and prediction payloads.
-- Historically keep `planned_duration_months` UI inactive until D4. This is superseded by D4 implementation.
+- Historically keep `planned_duration_months` UI inactive until D4. This is superseded by the completed D4 implementation.
 - Keep `planned_countries` excluded.
 - Do not implement LLM narratives, Coherence Score, or Adjusted Trial Value Score as part of this revision.
 
-Next required step: browser-smoke-test the revised planned-sites initialization and card metadata before deployment readiness review.
+Status: this revision has been superseded by the completed active operational-assumption layer for Planned Enrollment, Planned Site Count, and Planned Duration. Browser/deployment readiness checks for the active deterministic layer were completed during the D4-D6 finalization work.
 
 ### Current Operational Benchmark Handoff
 
@@ -1115,8 +1141,8 @@ Current benchmark sources:
 
 Current operational benchmark rules:
 
-- Planned Enrollment and Planned Site Count are active in Simulation Mode only.
-- Planned Enrollment and Planned Site Count both use the combined operational artifact through `src/operational_benchmarks.py`.
+- Planned Enrollment, Planned Site Count, and Planned Duration are active in Simulation Mode only.
+- Planned Enrollment, Planned Site Count, and Planned Duration use the combined operational artifact through `src/operational_benchmarks.py`.
 - Planned Enrollment defaulting uses a positive planned/estimated value when present.
 - Non-completed trials without a planned/estimated enrollment use `max(observed_lower_bound, enrollment_p50)`.
 - Completed trials with positive `number_of_facilities` use completed registry facility-count proxy for Planned Sites.
@@ -1124,9 +1150,10 @@ Current operational benchmark rules:
 - Non-completed Planned Sites default to `max(current_registry_facility_count_proxy, planned_enrollment / patients_per_site_p50)` when patients-per-site P50 is available.
 - Pure site-count P50 is only a fallback when the enrollment-coherent patients-per-site candidate is unavailable.
 - Raw site-count percentiles remain clinical-only. They do not use modality refinement or non-vaccine Infections fallback.
-- Planned Duration benchmark/runtime support is implemented but not yet active in Simulation Mode.
+- Planned Duration benchmark/runtime/checker/UI support is active in Simulation Mode as `Duration (months)`.
 - Editable Planned Duration uses one cohort selected by full completion duration with `duration_months_n >= 50`.
 - Primary-completion timing is same-row readout context only: use `primary_completion_months_p50` from the selected full-duration row when `primary_completion_months_n >= 50`; otherwise mark it unavailable.
+- `primary_duration_months_ml` is rounded to one decimal before model training/scoring; this model-facing endpoint-duration precision rule is separate from operational `planned_duration_months`.
 
 Current cohort and refinement rules:
 
@@ -1169,10 +1196,11 @@ python -m py_compile scripts/build_operational_benchmarks.py scripts/check_opera
 git diff --check
 ```
 
-Manual/browser validation still needed before deployment readiness:
+Manual/browser validation completed during D4-D6 finalization:
 
 - Open Simulation Mode in the edit-trial app.
 - Confirm Enrollment and Site Count cards render.
+- Confirm Duration card renders and follows the same operational-only update pattern.
 - Confirm vaccine examples such as `NCT05035212` still use modality-refined enrollment and patients-per-site.
 - Confirm non-vaccine Infections examples such as `NCT04938830` use non-vaccine Infections fallback for enrollment and patients-per-site but not for raw site-count.
 - Confirm operational-only changes still do not call `/predict`.
@@ -1458,7 +1486,7 @@ benchmark_low_confidence
 Recommended order:
 
 ```text
-S1B completed -> S2 implemented -> S2 QA checkpoint GO -> S3 implemented -> post-S3 planned_sites defaulting revision implemented -> D0 -> D1 -> D2 -> D3 -> D4
+S1B completed -> S2 implemented -> S2 QA checkpoint GO -> S3 implemented -> post-S3 planned_sites defaulting revision implemented -> D0 -> D1 -> D2 -> D3 -> D4 -> D5 -> D6
 ```
 
 Site-count stages:
@@ -1476,8 +1504,10 @@ Duration stages:
 - D2: duration runtime utility - complete.
 - D3: duration checker and notebook coverage - complete.
 - D4: `planned_duration_months` Simulation Mode integration - complete.
+- D5: documentation alignment for UI activation - complete.
+- D6: one-decimal `primary_duration_months_ml` model-facing precision and production parity trigger - complete.
 
-Each stage was implemented separately. Completing S1B authorized only S2 after a separate prompt. S2 QA authorized S3 through a separate prompt, and S3 is now implemented. The post-S3 planned-sites defaulting revision is implemented. The duration artifact/runtime/checker/notebook foundation and D4 UI activation are implemented.
+Each stage was implemented separately. Completing S1B authorized only S2 after a separate prompt. S2 QA authorized S3 through a separate prompt, and S3 is now implemented. The post-S3 planned-sites defaulting revision is implemented. The duration artifact/runtime/checker/notebook foundation, D4 UI activation, D5 documentation alignment, and D6 endpoint-duration precision finalization are implemented.
 
 ### Decision Gates
 
@@ -1776,7 +1806,7 @@ Before S3 was explicitly authorized:
 - Do not implement Adjusted Trial Value Score.
 - Do not deploy based only on documentation.
 
-S2 QA returned GO and S3 was separately authorized. These historical non-goals were superseded only for narrow `planned_sites` Simulation Mode activation. They remain active boundaries for all other excluded capabilities.
+S2 QA returned GO and S3 was separately authorized. These historical non-goals were later superseded for the narrow `planned_sites` Simulation Mode activation and then for separately authorized D4 `planned_duration_months` activation. They remain active boundaries for excluded capabilities such as `planned_countries`, countries, cost, market potential, LLM narratives, Coherence Score, Adjusted Trial Value Score, model retraining, SHAP changes, therapeutic-area calibration changes, audit/demo parity changes, API contract changes, and deployment behavior.
 
 ## Historical Explicit Non-Goals After S3 And Before Duration UI Activation
 
@@ -1863,7 +1893,7 @@ Recommended v1 notebook / implementation blocks:
 <REF:VALIDATION> Check sample sizes, sparse groups, outliers, and label stability.
 ```
 
-`notebooks/estimation.ipynb` is now the consolidated explanatory notebook for the combined operational benchmark. It covers Planned Enrollment, Planned Site Count, patients-per-site defaulting support, and the non-UI Planned Duration foundation. Notebook blocks focused on countries, cost, calendar spend, future market commitment, and portfolio views are not part of v1 and belong to later roadmap work.
+`notebooks/estimation.ipynb` is now the consolidated explanatory notebook for the combined operational benchmark. It covers Planned Enrollment, Planned Site Count, patients-per-site defaulting support, and active Planned Duration benchmark/runtime/checker/UI support. Notebook blocks focused on countries, cost, calendar spend, future market commitment, and portfolio views are not part of v1 and belong to later roadmap work.
 
 The notebook intentionally does not automatically overwrite the artifact when run end-to-end. It reproduces the calculations in memory and validates the already-built artifact. This prevents accidental production-facing artifact churn during analytical review.
 
@@ -1928,7 +1958,6 @@ The previous broader estimation architecture remains useful as later roadmap thi
 
 Current future estimation roadmap topics:
 
-- Browser smoke testing and deployment readiness review for the implemented Planned Site Count Simulation Mode layer.
 - Reconciliation of enrollment/sites/duration narrative/coherence behavior, now that duration UI activation exists.
 
 Cost translation, calendar spend, future development commitment, market potential, and full operational-scale estimation remain out of scope. They should not be added to the current operational assumptions container.
@@ -1948,12 +1977,13 @@ Future versions may also explore model-based enrollment calibration, including f
 - Treat the benchmark artifact as versioned, auditable input to the narrative layer.
 - Do not train a model for v1 unless explicitly requested later.
 - Do not add active country, cost, or market logic to v1. Duration is already active in Simulation Mode after D4 and must remain outside the completion model path.
-- For the next operational-assumption work, use `Next Operational Assumptions - Sites And Duration Planning` as the source of truth.
+- For future operational-assumption work, use `Next Operational Assumptions - Sites And Duration Planning` as the source of truth.
 - Treat S1B `planned_sites` audit as complete.
 - Treat S2 `planned_sites` compact benchmark artifact/runtime utility as implemented.
 - Treat S3 `planned_sites` Simulation Mode integration as implemented.
 - Treat the post-S3 planned-sites defaulting revision as implemented.
 - Treat the `planned_duration_months` artifact/runtime/checker/UI foundation as implemented.
+- Treat the one-decimal `primary_duration_months_ml` model-facing precision rule as implemented in data generation and preprocessing.
 - For non-completed trials, do not initialize the editable `planned_sites` assumption directly from `number_of_facilities`.
 - Treat non-completed `number_of_facilities` as `current_registry_facility_count_proxy` context and a lower-bound candidate.
 - Add deterministic patients-per-site benchmark support from completed trials with positive enrollment and positive registry facility-count proxy values.
@@ -1974,7 +2004,7 @@ Future versions may also explore model-based enrollment calibration, including f
 
 ## Historical Phase 2 Entry Point
 
-This Phase 2 entry point is historical. It describes the already implemented Planned Enrollment foundation and is not the next implementation instruction. The next operational-assumption work must follow `Next Operational Assumptions - Sites And Duration Planning`: S1B is complete, S2 is implemented, S2 QA returned GO, S3 Simulation Mode integration is implemented, the post-S3 planned-sites defaulting revision is implemented, and D0-D4 duration benchmark/runtime/checker/UI activation is implemented.
+This Phase 2 entry point is historical. It describes the already implemented Planned Enrollment foundation and is not the next implementation instruction. Future operational-assumption work must follow `Next Operational Assumptions - Sites And Duration Planning`: S1B is complete, S2 is implemented, S2 QA returned GO, S3 Simulation Mode integration is implemented, the post-S3 planned-sites defaulting revision is implemented, and D0-D6 duration benchmark/runtime/checker/UI activation plus endpoint-duration precision finalization is implemented.
 
 Historical Planned Enrollment implementation sequence:
 

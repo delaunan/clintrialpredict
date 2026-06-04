@@ -4988,7 +4988,7 @@ def get_initial_planned_duration_assumption(row):
         )
         default_value = _positive_number(default.get("value"))
         if default_value is not None:
-            return round(float(default_value), 2), str(default.get("source") or "benchmark_default_with_floors")
+            return round(float(default_value), 1), str(default.get("source") or "benchmark_default_with_floors")
     except Exception:
         logger.exception("Initial planned duration operational benchmark lookup failed")
 
@@ -5117,7 +5117,7 @@ def _operational_assumption_values_equal(current, previous, assumption_key=None)
     if pd.isna(current_num) or pd.isna(previous_num):
         return False
     if assumption_key == "planned_duration_months":
-        return round(float(current_num), 2) == round(float(previous_num), 2)
+        return round(float(current_num), 1) == round(float(previous_num), 1)
     return int(round(float(current_num))) == int(round(float(previous_num)))
 
 
@@ -5274,7 +5274,7 @@ def _format_operational_assumption_display_value(assumption_key, value):
     if pd.isna(numeric):
         return None
     if assumption_key == "planned_duration_months":
-        return f"{float(numeric):,.2f}"
+        return f"{float(numeric):,.1f}"
     return f"{int(round(float(numeric))):,}"
 
 
@@ -5451,7 +5451,7 @@ def _option_key_for_ui_value(field_id, value):
         numeric = pd.to_numeric(value, errors="coerce")
         if pd.isna(numeric):
             return None
-        return round(float(numeric), 2) if field_id == "primary_duration_months_ml" else int(round(float(numeric)))
+        return round(float(numeric), 1) if field_id == "primary_duration_months_ml" else int(round(float(numeric)))
 
     if isinstance(value, bool):
         return "1" if value else "0"
@@ -5488,7 +5488,7 @@ def _canonical_feature_value(field_id, value):
         numeric = pd.to_numeric(value, errors="coerce")
         if pd.isna(numeric):
             return None
-        return round(float(numeric), 2) if field_id == "primary_duration_months_ml" else int(round(float(numeric)))
+        return round(float(numeric), 1) if field_id == "primary_duration_months_ml" else int(round(float(numeric)))
 
     meta = TAXONOMY.get(field_id, {})
     options = meta.get("ui", {}).get("options") or []
@@ -5531,7 +5531,7 @@ def get_display_value_for_field(field_id, value):
 
     if field_id == "primary_duration_months_ml":
         numeric = pd.to_numeric(value, errors="coerce")
-        return "N/A" if pd.isna(numeric) else f"{float(numeric):.2f}"
+        return "N/A" if pd.isna(numeric) else f"{float(numeric):.1f}"
 
     if field_id == "number_of_arms_ml":
         numeric = pd.to_numeric(value, errors="coerce")
@@ -5618,7 +5618,7 @@ def _values_equal_for_snapshot(current, reference, field_id=None):
             return True
         if pd.isna(current_num) or pd.isna(reference_num):
             return False
-        return round(float(current_num), 2) == round(float(reference_num), 2)
+        return round(float(current_num), 1) == round(float(reference_num), 1)
 
     return _json_safe(current) == _json_safe(reference)
 
@@ -5723,7 +5723,7 @@ def get_previous_operational_assumption_value(row, assumption_key):
     if pd.isna(previous) or float(previous) <= 0:
         return None
     if assumption_key == "planned_duration_months":
-        return round(float(previous), 2)
+        return round(float(previous), 1)
     return int(round(float(previous)))
 
 
@@ -7141,7 +7141,7 @@ def _sync_planned_duration_widget(row):
     value_key = get_planned_duration_state_key(nct_id)
     source_key = get_planned_duration_source_state_key(nct_id)
     value = pd.to_numeric(st.session_state.get(widget_key, 0.0), errors="coerce")
-    st.session_state[value_key] = 0.0 if pd.isna(value) else round(float(value), 2)
+    st.session_state[value_key] = 0.0 if pd.isna(value) else round(float(value), 1)
     st.session_state[source_key] = "user_scenario"
     st.session_state.simulation_has_edits = True
 
@@ -7256,7 +7256,7 @@ def _render_trial_feature_control(field_id, row):
         if pd.isna(current_value_raw):
             current_value = 0.0 if allows_decimal else 0
         elif allows_decimal:
-            current_value = round(float(current_value_raw), 2)
+            current_value = round(float(current_value_raw), 1)
         else:
             current_value = int(round(float(current_value_raw)))
 
@@ -7274,7 +7274,7 @@ def _render_trial_feature_control(field_id, row):
                     current_value
                     if pd.isna(repaired)
                     else (
-                        round(float(repaired), 2)
+                        round(float(repaired), 1)
                         if allows_decimal
                         else int(round(float(repaired)))
                     )
@@ -7284,8 +7284,8 @@ def _render_trial_feature_control(field_id, row):
             label,
             current_value,
             min_value=0.0 if allows_decimal else 0,
-            step=0.01 if allows_decimal else 1,
-            format="%.2f" if allows_decimal else "%d",
+            step=0.1 if allows_decimal else 1,
+            format="%.1f" if allows_decimal else "%d",
             key=widget_key,
             on_change=_sync_feature_widget_to_shared_state,
             args=(field_id,)
@@ -7454,7 +7454,7 @@ def render_planned_duration_input(row):
     nct_id = str(row.get(ID_COL, st.session_state.get("selected_nct_id", "")))
     widget_key = get_operational_assumption_widget_key(nct_id, "planned_duration_months")
     current_value = pd.to_numeric(get_current_planned_duration_assumption(row), errors="coerce")
-    current_value = 0.0 if pd.isna(current_value) or float(current_value) < 0 else round(float(current_value), 2)
+    current_value = 0.0 if pd.isna(current_value) or float(current_value) < 0 else round(float(current_value), 1)
 
     if widget_key in st.session_state:
         stored = pd.to_numeric(st.session_state.get(widget_key), errors="coerce")
@@ -7489,7 +7489,7 @@ def render_planned_duration_input(row):
             "label": duration_label,
             "min_value": 0.0,
             "step": 0.10,
-            "format": "%.2f",
+            "format": "%.1f",
             "key": widget_key,
             "on_change": _sync_planned_duration_widget,
             "args": (row,),
@@ -7805,7 +7805,7 @@ def render_duration_assumption_card(row):
     metadata = assumptions.get("planned_duration_months") or {}
 
     current_value = pd.to_numeric(get_current_planned_duration_assumption(row), errors="coerce")
-    current_text = "not set" if pd.isna(current_value) or float(current_value) <= 0 else f"{float(current_value):,.2f} months"
+    current_text = "not set" if pd.isna(current_value) or float(current_value) <= 0 else f"{float(current_value):,.1f} months"
 
     stale = is_duration_benchmark_stale(row) or bool(metadata.get("is_benchmark_stale"))
     duration_pending = has_pending_duration_assumption(row)

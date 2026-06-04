@@ -118,7 +118,7 @@ After each prediction, the participant view should display:
 - `Adjusted Trial Value Score`, shown in the main gauge.
 - `Completion Score` as a component score.
 - `Coherence Score` as a component score.
-- A short `Enrollment Assumption` note.
+- A short `Operational Assumptions` note.
 - Concise `Design Coherence Review`.
 
 Participant narrative sections:
@@ -127,19 +127,19 @@ Participant narrative sections:
 - `Why the completion score may have moved`
 - `What the design may have gained`
 - `What the design may have sacrificed`
-- `Enrollment coherence note`
+- `Operational coherence note`
 - `One question for the team to debate`
 
 Suggested participant UI wording:
 
 ```text
-Enrollment assumption:
-Current: 600 patients
-Benchmark: ambitious versus similar trials
-Support: partly supported by the current design choices
+Operational assumptions:
+Enrollment: 600 patients, ambitious versus similar trials
+Sites: 30 sites, typical versus similar trials
+Duration: 42.0 months, long versus similar trials
 ```
 
-The same pattern should apply to active operational assumptions as they are implemented. Planned Enrollment and Planned Sites are active now. Planned Duration can be added after its Simulation Mode UI step, using the same visual and metadata behavior.
+Planned Enrollment, Planned Sites, and Planned Duration are active now. They use the same operational-assumption visual pattern and metadata behavior.
 
 For opening UI labels, use the same compact source convention across operational fields:
 
@@ -253,24 +253,26 @@ Examples:
 
 The LLM should use changed fields, SHAP/feature deltas, pillar deltas, and previous narrative memory to detect potential shortcut patterns. The output should frame shortcut concerns as hypotheses for discussion, not definitive findings.
 
-## 10. Enrollment Assumption MVP
+## 10. Operational Assumptions MVP
 
-For v1, only `Planned Enrollment` is added as an operational assumption. Sites, countries, total duration, cost, and market layers are postponed.
+For estimation v1, `Planned Enrollment`, `Planned Sites`, and `Planned Duration` are active operational assumptions. Countries, cost, market, and downstream commitment layers remain postponed.
 
 Purpose:
 
 ```text
-The enrollment assumption is the first operational stress test.
-It helps the narrative judge whether the selected patient number is coherent with the trial profile.
-It does not enter the XGBoost model.
-It does not directly change the Completion Score.
-It feeds the Coherence Score only.
+Operational assumptions are deterministic scenario stress tests.
+They help the narrative judge whether selected enrollment, site count, and total duration assumptions are coherent with the trial profile.
+They do not enter the XGBoost model.
+They do not directly change the Completion Score.
+They feed the future Coherence Score only.
 ```
 
-Field:
+Active fields:
 
 ```text
-planned_enrollment_assumption
+operational_assumptions.planned_enrollment
+operational_assumptions.planned_sites
+operational_assumptions.planned_duration_months
 ```
 
 Source priority:
@@ -363,7 +365,7 @@ Suggested investigation logic:
 
 This can ground the enrollment coherence layer in observed historical patterns, avoid arbitrary LLM reasoning, keep the system deterministic and auditable, and help define bounded enrollment effects inside the Coherence Score.
 
-V1 should work with a simple benchmark first. Optional calibration analysis can improve the benchmark later, but should not block the first serious-game narrative implementation.
+V1 now works with deterministic benchmark metadata for enrollment, sites, and duration. Optional calibration analysis can improve future coherence interpretation, but should not block the first serious-game narrative implementation.
 
 ### Enrollment Support Signals
 
@@ -560,7 +562,9 @@ This is conceptual JSON for planning only, not an implementation contract yet:
 }
 ```
 
-Operational-assumption values are assembled after the latest prediction snapshot. If the user changes fields that define an operational benchmark cohort, the affected benchmark becomes stale until the next `Predict Trial Completion` action. Enrollment and sites may react to therapeutic area, indication, phase, rare-disease status, and modality where the implemented benchmark contract uses them. Duration should react only to its approved v1 cohort fields: phase, indication, therapeutic area, rare-disease status, and primary endpoint duration bin. Duration must not use therapeutic modality for stale-state unless a later duration benchmark explicitly adds modality.
+The payload should include all active operational assumptions: `planned_enrollment`, `planned_sites`, and `planned_duration_months`. These assumptions remain outside XGBoost and Completion Score; they feed narrative / Coherence only.
+
+Operational-assumption values are assembled after the latest prediction snapshot. If the user changes fields that define an operational benchmark cohort, the affected benchmark becomes stale until the next `Predict Trial Completion` action. Enrollment and sites react to the implemented benchmark cohort fields. Duration reacts only to phase, indication, therapeutic area, rare-disease status, and primary endpoint duration bin. Duration does not use therapeutic modality in v1.
 
 The LLM should use operational source metadata, not the compact UI label, to distinguish direct AACT-backed values, system-filled benchmark defaults, and participant scenarios. Direct AACT-backed values are source facts for the selected trial. System-filled values are benchmark assumptions. `user_scenario` values are participant scenario choices even when the visible label has no suffix.
 
@@ -937,8 +941,9 @@ Always send:
 - `title`
 - `summary_ui`
 - All 31 structured Trial Features
-- `planned_enrollment_assumption`
 - `operational_assumptions.planned_enrollment` benchmark and support metadata
+- `operational_assumptions.planned_sites` benchmark and source metadata
+- `operational_assumptions.planned_duration_months` benchmark and source metadata
 - `completion_score`
 - `previous_completion_score`
 - `score_delta`
@@ -996,14 +1001,15 @@ This document does not prescribe a database implementation. The implementation c
 
 The stored serious-game snapshot should include:
 
-- Planned enrollment assumption.
-- Enrollment source.
+- Operational assumptions snapshot.
+- Planned enrollment metadata.
+- Planned sites metadata.
+- Planned duration metadata.
+- Source labels.
 - Benchmark level used.
 - Benchmark percentiles.
-- Enrollment status.
-- Support level.
-- Supporting signals.
-- Conflicting signals.
+- Benchmark status labels.
+- Support/conflict signals, when implemented.
 - Coherence Score.
 - Coherence Adjustment.
 - Adjusted Trial Value Score.
@@ -1024,9 +1030,9 @@ Storage should keep `Coherence Score`, `Coherence Adjustment`, and `Adjusted Tri
 - No change to taxonomy unless later required.
 - No change to audit/demo parity behavior.
 - No portfolio mode yet.
-- No site-count model in v1.
+- No model-based site-count estimator in v1 beyond the implemented deterministic benchmark metadata.
 - No country-count model in v1.
-- No total-duration estimator in v1.
+- No model-based total-duration estimator in v1 beyond the implemented deterministic benchmark metadata.
 - No cost layer in v1.
 - No market layer in v1.
 - No full operational scale engine in v1.
@@ -1039,9 +1045,9 @@ Storage should keep `Coherence Score`, `Coherence Adjustment`, and `Adjusted Tri
 V1 serious-game narrative layer:
 
 - Keep XGBoost unchanged.
-- Add planned enrollment as the first operational assumption.
-- Classify enrollment against similar-trial benchmarks.
-- Use enrollment as one bounded input into Coherence Score.
+- Use Planned Enrollment, Planned Sites, and Planned Duration as deterministic operational assumptions.
+- Classify operational assumptions against similar-trial benchmarks.
+- Use operational assumptions as bounded inputs into the future Coherence Score.
 - Make Coherence Score bidirectional.
 - Calculate a bounded Coherence Adjustment.
 - Calculate Adjusted Trial Value Score additively.

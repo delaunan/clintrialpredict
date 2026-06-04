@@ -1108,6 +1108,9 @@ class RegistryImputer(BaseEstimator, TransformerMixin):
 def identity_transform(x):
     return x
 
+def round_one_decimal(x):
+    return np.round(x, 1)
+
 # ==============================================================================
 # 4. PIPELINE BUILDER
 # ==============================================================================
@@ -1151,6 +1154,7 @@ def preprocessor():
     ])
 
     pipe_duration = Pipeline([
+        ('round_one_decimal', FunctionTransformer(round_one_decimal, feature_names_out="one-to-one")),
         ('imputer', SimpleImputer(strategy='median')),
         ('scaler', StandardScaler())
     ])

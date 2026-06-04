@@ -41,7 +41,7 @@ The current edit-mode implementation phase is complete. The next session should 
 
 ### Operational Assumptions Update - 2026-06-01
 
-Historical note: this section records the first operational-assumption implementation. It is superseded by the 2026-06-03 section below for current active assumptions.
+Historical note: this section records the first operational-assumption implementation. It is superseded by the 2026-06-03 and duration activation sections below for current active assumptions.
 
 Simulation Mode now includes the first Operational Assumption foundation:
 
@@ -50,9 +50,9 @@ Simulation Mode now includes the first Operational Assumption foundation:
 - Changing Planned Enrollment marks Simulation Mode pending, turns `Predict Trial Completion` blue, shows the gauge-side `Click Predict to update` prompt, and displays the previous enrollment value.
 - Clicking `Predict Trial Completion` for an operational-only change refreshes the latest snapshot metadata through `simulation_operational_update`, does not call `/predict`, and does not change Completion Score, impact bar, treemap, SHAP impacts, or pillar impacts.
 - Snapshots and simulation history now include `operational_assumptions`.
-- At this stage, `planned_enrollment` was the only active operational assumption. `planned_sites`, `planned_countries`, and `planned_duration_months` were reserved inactive keys only.
+- At that historical stage, activation was limited to `planned_enrollment`. This was superseded when `planned_sites` and `planned_duration_months` were activated; only `planned_countries` remains reserved/inactive.
 - The Enrollment Assumption card shows benchmark position, reference cohort, and source metadata such as `planned value`, `final observed enrollment`, `benchmark default`, or `user scenario`.
-- The generic operational-assumption pending/update path is intended to support future validated fields, but sites, countries, and duration are not implemented yet.
+- The generic operational-assumption pending/update path later supported Planned Sites and Duration. Countries remain excluded.
 
 This update did not modify `frontend/views/trial_audit.py`, `api/main.py`, model artifacts, SHAP artifacts, taxonomy artifacts, benchmark artifacts, notebooks, or deployment files.
 
@@ -175,9 +175,9 @@ Implemented since the 2026-05-30 status:
 - Field edits no longer queue or run automatic prediction. Gauge, impact bar, and treemap stay tied to the latest successful snapshot until `Predict Trial Completion` is clicked.
 - Pending-change comparison now uses user-visible UI option identity (`compare_values`) instead of only ML-facing encoded values. This means changes such as `Not Specified` -> `Novel Target (No Prior Approvals)` are marked pending even when both options map to the same encoded model value.
 - Snapshots and session-state history now store both `submitted_values` for scoring/API submission and `compare_values` for UI pending-change comparison, plus display labels, score, previous score, point/percent delta, impacts, and changed fields.
-- Previous-value markers render inline after the field label, in blue, and disappear after successful prediction or full revert.
+- Previous-value markers render inline after the field label. They are blue while a new prediction is pending, then remain visible in light grey after prediction so the user can see the value needed to revert.
 - Long previous indication labels are truncated inline for layout stability.
-- `primary_duration_months_ml` uses two-decimal display and `0.01` steps while preserving numeric comparison.
+- `primary_duration_months_ml` uses one-decimal display and `0.1` steps, matching the one-decimal model-facing endpoint-duration rule.
 - Trial Features widget keys are deleted during reset so Simulation Mode off/on starts from original selected-trial values and does not reuse stale previous-session dropdown state.
 - Simulation tab order is now `Trial Information`, `Population Details`, `Completion Score`, `Trial Features`; when Simulation Mode is toggled on, `Trial Features` opens by default.
 - Simulation-only gauge comparison now shows compact previous-score and variance text (`Prev: SCORE pts` plus up/down/flat indicator and percent/flat marker).
@@ -240,7 +240,7 @@ Current Trial Features layout:
 - Bottom left: `Scientific Challenge`
 - Bottom right: `Execution Framework`
 - The layout is visually finalized as of this session: four white rounded pillar cards, two fields per row by default, single-field rows left-aligned at half-card width, equal top-row card heights, equal bottom-row card heights, compact row-to-row spacing, and enlarged pillar icon/title headers with extra separation before the first field row.
-- `number_of_arms_ml` remains an integer input. `primary_duration_months_ml` preserves numeric precision for scoring and uses two-decimal display with `0.01` increments.
+- `number_of_arms_ml` remains an integer input. `primary_duration_months_ml` uses one-decimal display/comparison with `0.1` increments, matching the model-facing preprocessing rule.
 
 Current Trial Features row structure:
 
@@ -807,14 +807,14 @@ A field has pending changes when its current effective UI value differs from the
 - Do not mix UI labels and ML values in the same comparison field. Keep `submitted_values` for scoring/API submission, `compare_values` for pending-change comparison, and display values for user-facing labels.
 - For taxonomy fields, map labels to stable option keys for comparison so UI-visible changes are marked pending even if the encoded ML value is unchanged.
 - For numeric fields, compare numeric values rather than formatted strings.
-- Decimal fields such as `primary_duration_months_ml` must preserve scoring precision and use two-decimal UI control precision. Formatting alone must not create pending changes.
+- Decimal fields such as `primary_duration_months_ml` must use the same normalized precision for display, pending-change comparison, and model-facing preprocessing. Formatting alone must not create pending changes.
 - Keep the existing soft-blue field highlight.
-- Show the previous value from the latest prediction snapshot near the field label while pending changes exist.
+- Show the previous value from the latest prediction snapshot near the field label while pending or incorporated change history exists.
 - The previous value text should be light blue while that field has pending changes.
-- After successful prediction, incorporated previous-value markers may either turn grey if this is simple and stable, or disappear if that is significantly simpler.
+- After successful prediction, incorporated previous-value markers remain visible in light grey until the field is changed again.
 - On the next edit cycle, the previous value shown must come from the most recent prediction snapshot.
 
-Current visual implementation appends `(previous: VALUE)` inline after the field label and truncates long indication previous values.
+Current visual implementation appends `(previous: VALUE)` inline after the field label, uses blue for pending changes, uses light grey after prediction, and truncates long indication previous values.
 
 ## Stale Score Notice
 
