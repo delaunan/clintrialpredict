@@ -4146,6 +4146,16 @@ def inject_custom_styles():
                             var(--ui-control-shadow) !important;
             }}
 
+            /* Previously predicted change - keep it visible, but quieter than
+               the blue pending-change state. */
+            html body [class*="st-key-simfield_prev_"] div[data-baseweb="select"] > div,
+            html body [class*="st-key-simfield_prev_"] div[data-baseweb="input"] > div {{
+                background-color: #f1f5f9 !important;
+                border-color: #cbd5e1 !important;
+                box-shadow: inset 0 0 0 1px rgba(100,116,139,0.08),
+                            var(--ui-control-shadow) !important;
+            }}
+
             html body [class*="st-key-simfield_attn_"] div[data-baseweb="select"] > div,
             html body [class*="st-key-simfield_attn_"] div[data-baseweb="input"] > div {{
                 background-color: #fff1f2 !important;
@@ -4189,6 +4199,13 @@ def inject_custom_styles():
                 background-color: #e8f0fb !important;
                 border-color: #9bbbe2 !important;
                 box-shadow: inset 0 0 0 1px rgba(47,98,166,0.10),
+                            var(--ui-control-shadow) !important;
+            }}
+
+            html body [class*="st-key-operational_assumption_prev_"] div[data-baseweb="input"] > div {{
+                background-color: #f1f5f9 !important;
+                border-color: #cbd5e1 !important;
+                box-shadow: inset 0 0 0 1px rgba(100,116,139,0.08),
                             var(--ui-control-shadow) !important;
             }}
 
@@ -5236,6 +5253,64 @@ def _changed_fields_between(previous_snapshot, compare_values):
     return changed
 
 
+def _previous_display_values_for_changed_fields(previous_snapshot, changed_fields):
+    previous_snapshot = previous_snapshot or {}
+    committed_previous_values = dict(previous_snapshot.get("previous_display_values") or {})
+    previous_display_values = previous_snapshot.get("display_values") or {}
+    previous_values = previous_snapshot.get("compare_values") or previous_snapshot.get("submitted_values") or {}
+
+    for field_id in changed_fields:
+        committed_previous_values[field_id] = (
+            previous_display_values.get(field_id)
+            if previous_display_values.get(field_id) not in (None, "")
+            else get_display_value_for_field(field_id, previous_values.get(field_id))
+        )
+
+    return committed_previous_values
+
+
+def _format_operational_assumption_display_value(assumption_key, value):
+    numeric = pd.to_numeric(value, errors="coerce")
+    if pd.isna(numeric):
+        return None
+    if assumption_key == "planned_duration_months":
+        return f"{float(numeric):,.2f}"
+    return f"{int(round(float(numeric))):,}"
+
+
+def _changed_operational_assumptions_between(previous_snapshot, operational_assumptions):
+    if not previous_snapshot:
+        return []
+
+    previous_assumptions = (previous_snapshot or {}).get("operational_assumptions") or {}
+    operational_assumptions = operational_assumptions or {}
+    changed = []
+
+    for assumption_key in ACTIVE_OPERATIONAL_ASSUMPTION_KEYS:
+        current = (operational_assumptions.get(assumption_key) or {}).get("value")
+        previous = (previous_assumptions.get(assumption_key) or {}).get("value")
+        if _operational_assumption_values_equal(current, previous, assumption_key=assumption_key):
+            continue
+        changed.append(assumption_key)
+
+    return changed
+
+
+def _previous_display_values_for_changed_operational_assumptions(previous_snapshot, changed_assumptions):
+    previous_snapshot = previous_snapshot or {}
+    committed_previous_values = dict(previous_snapshot.get("previous_operational_display_values") or {})
+    previous_assumptions = previous_snapshot.get("operational_assumptions") or {}
+
+    for assumption_key in changed_assumptions:
+        previous_value = (previous_assumptions.get(assumption_key) or {}).get("value")
+        committed_previous_values[assumption_key] = _format_operational_assumption_display_value(
+            assumption_key,
+            previous_value,
+        )
+
+    return committed_previous_values
+
+
 def set_latest_prediction_snapshot(
     nct_id,
     result,
@@ -5260,6 +5335,21 @@ def set_latest_prediction_snapshot(
         field_id: get_display_value_for_field(field_id, compare_values.get(field_id))
         for field_id in SIMULATION_FEATURE_IDS
     }
+    changed_fields = _changed_fields_between(previous_snapshot, compare_values)
+    committed_changed_fields = sorted(
+        set((previous_snapshot or {}).get("committed_changed_fields") or [])
+        | set((previous_snapshot or {}).get("changed_fields") or [])
+        | set(changed_fields)
+    )
+    changed_operational_assumptions = _changed_operational_assumptions_between(
+        previous_snapshot,
+        operational_assumptions,
+    )
+    committed_changed_operational_assumptions = sorted(
+        set((previous_snapshot or {}).get("committed_changed_operational_assumptions") or [])
+        | set((previous_snapshot or {}).get("changed_operational_assumptions") or [])
+        | set(changed_operational_assumptions)
+    )
 
     snapshot = {
         "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -5277,7 +5367,19 @@ def set_latest_prediction_snapshot(
         "feature_impacts": _json_safe(result.get("feature_impacts") or result.get("subcat_impacts") or []),
         "subcat_impacts": _json_safe(result.get("subcat_impacts") or []),
         "result": _json_safe(result),
-        "changed_fields": _changed_fields_between(previous_snapshot, compare_values),
+        "changed_fields": changed_fields,
+        "committed_changed_fields": committed_changed_fields,
+        "previous_display_values": _json_safe(
+            _previous_display_values_for_changed_fields(previous_snapshot, changed_fields)
+        ),
+        "changed_operational_assumptions": changed_operational_assumptions,
+        "committed_changed_operational_assumptions": committed_changed_operational_assumptions,
+        "previous_operational_display_values": _json_safe(
+            _previous_display_values_for_changed_operational_assumptions(
+                previous_snapshot,
+                changed_operational_assumptions,
+            )
+        ),
         "operational_assumptions": _json_safe(operational_assumptions or {}),
     }
 
@@ -5316,6 +5418,11 @@ def append_simulation_prediction_history(snapshot):
         "pillar_impacts": snapshot.get("pillar_impacts"),
         "feature_impacts": snapshot.get("feature_impacts"),
         "changed_fields": snapshot.get("changed_fields"),
+        "committed_changed_fields": snapshot.get("committed_changed_fields"),
+        "previous_display_values": snapshot.get("previous_display_values"),
+        "changed_operational_assumptions": snapshot.get("changed_operational_assumptions"),
+        "committed_changed_operational_assumptions": snapshot.get("committed_changed_operational_assumptions"),
+        "previous_operational_display_values": snapshot.get("previous_operational_display_values"),
         "operational_assumptions": snapshot.get("operational_assumptions"),
     })
 
@@ -5446,11 +5553,12 @@ def sync_rendered_simulation_widgets_to_shared_state(row):
 
     for field_id in SIMULATION_FEATURE_IDS:
         widget_key = f"feature_{trial_key}_{field_id}"
-        if widget_key not in st.session_state:
+        widget_override = _peek_feature_widget_override(field_id)
+        if widget_key not in st.session_state and widget_override is None:
             continue
 
         state_key = f"input_{trial_key}_{field_id}"
-        widget_value = st.session_state.get(widget_key)
+        widget_value = widget_override if widget_override is not None else st.session_state.get(widget_key)
 
         if field_id == "gbd_cause_id_3_ml":
             selected_id = 0
@@ -5619,16 +5727,92 @@ def get_previous_operational_assumption_value(row, assumption_key):
     return int(round(float(previous)))
 
 
-def get_previous_planned_enrollment_assumption(row):
-    return get_previous_operational_assumption_value(row, "planned_enrollment")
+def change_state_token(pending=False, committed=False, attention=False):
+    if attention:
+        return "attn"
+    if pending:
+        return "chg"
+    if committed:
+        return "prev"
+    return "base"
 
 
-def get_previous_planned_sites_assumption(row):
-    return get_previous_operational_assumption_value(row, "planned_sites")
+def label_with_previous_value(label, previous_value, state_token, formatter=None):
+    if state_token == "chg":
+        color_token = "blue"
+    elif state_token == "prev":
+        color_token = "gray"
+    else:
+        return label
+
+    if previous_value in (None, ""):
+        return label
+
+    if formatter:
+        previous_value = formatter(previous_value)
+
+    return f"{label} :{color_token}[(previous: {previous_value})]"
 
 
-def get_previous_planned_duration_assumption(row):
-    return get_previous_operational_assumption_value(row, "planned_duration_months")
+def get_committed_feature_ids(row):
+    nct_id = str(row.get(ID_COL, st.session_state.get("selected_nct_id", "")))
+    snapshot = get_latest_prediction_snapshot(nct_id) or {}
+    return (
+        snapshot.get("committed_changed_fields")
+        or snapshot.get("changed_fields")
+        or []
+    )
+
+
+def feature_history_state_token(field_id, row):
+    return change_state_token(
+        pending=field_id in get_pending_feature_ids(row),
+        committed=field_id in get_committed_feature_ids(row),
+    )
+
+
+def get_committed_operational_assumption_keys(row):
+    nct_id = str(row.get(ID_COL, st.session_state.get("selected_nct_id", "")))
+    snapshot = get_latest_prediction_snapshot(nct_id) or {}
+    return (
+        snapshot.get("committed_changed_operational_assumptions")
+        or snapshot.get("changed_operational_assumptions")
+        or []
+    )
+
+
+def has_committed_operational_assumption(row, assumption_key):
+    return assumption_key in get_committed_operational_assumption_keys(row)
+
+
+def operational_assumption_history_state_token(row, assumption_key):
+    return change_state_token(
+        pending=assumption_key in get_pending_operational_assumption_keys(row),
+        committed=has_committed_operational_assumption(row, assumption_key),
+    )
+
+
+def operational_assumption_label_with_previous(label, row, assumption_key):
+    state_token = operational_assumption_history_state_token(row, assumption_key)
+    if state_token == "chg":
+        previous_value = get_previous_operational_assumption_value(row, assumption_key)
+    elif state_token == "prev":
+        nct_id = str(row.get(ID_COL, st.session_state.get("selected_nct_id", "")))
+        snapshot = get_latest_prediction_snapshot(nct_id) or {}
+        previous_value = (snapshot.get("previous_operational_display_values") or {}).get(assumption_key)
+    else:
+        return label
+
+    return label_with_previous_value(
+        label,
+        previous_value,
+        state_token,
+        formatter=lambda value: (
+            value
+            if isinstance(value, str)
+            else _format_operational_assumption_display_value(assumption_key, value)
+        ),
+    )
 
 
 def has_pending_simulation_changes(row):
@@ -6756,6 +6940,21 @@ def _indication_attention_key():
     return f"indication_requires_choice_{trial_key}"
 
 
+def _current_option_key_from_state(field_id, row):
+    trial_key = st.session_state.get("selected_nct_id", "no_trial")
+    state_key = f"input_{trial_key}_{field_id}"
+    return _option_key_for_ui_value(
+        field_id,
+        st.session_state.get(state_key, _get_initial_field_value(field_id, row))
+    )
+
+
+def _has_placebo_comparator_conflict(row):
+    comparator_key = _current_option_key_from_state("comparator_benchmark_ml", row)
+    placebo_key = _current_option_key_from_state("has_placebo_ml", row)
+    return comparator_key == "PLACEBO" and placebo_key == "0"
+
+
 def _feature_widget_override_key(field_id):
     trial_key = st.session_state.get("selected_nct_id", "no_trial")
     return f"feature_widget_override_{trial_key}_{field_id}"
@@ -6770,6 +6969,10 @@ def _consume_feature_widget_override(field_id):
     if key not in st.session_state:
         return None
     return st.session_state.pop(key)
+
+
+def _peek_feature_widget_override(field_id):
+    return st.session_state.get(_feature_widget_override_key(field_id))
 
 
 def _observed_rows_for_ta(item, ta_code):
@@ -6943,28 +7146,31 @@ def _sync_planned_duration_widget(row):
     st.session_state.simulation_has_edits = True
 
 
-def _feature_value_is_modified(field_id, row, state_key, initial_val, options):
-    """True when current input differs from the latest prediction snapshot."""
-    return field_id in get_pending_feature_ids(row)
-
-
 def _label_with_previous_value(label, field_id, row):
     nct_id = str(row.get(ID_COL, st.session_state.get("selected_nct_id", "")))
     snapshot = get_latest_prediction_snapshot(nct_id) or {}
     reference_values = snapshot.get("compare_values") or snapshot.get("submitted_values") or {}
+    state_token = feature_history_state_token(field_id, row)
 
-    if field_id not in get_pending_feature_ids(row):
+    if state_token == "base":
         return label
 
-    previous_value = snapshot.get("display_values", {}).get(field_id)
+    if state_token == "chg":
+        previous_value = snapshot.get("display_values", {}).get(field_id)
+    else:
+        previous_value = snapshot.get("previous_display_values", {}).get(field_id)
+
     if previous_value in (None, ""):
-        previous_value = get_display_value_for_field(field_id, reference_values.get(field_id))
+        fallback_values = reference_values
+        if state_token != "chg":
+            fallback_values = snapshot.get("submitted_values") or reference_values
+        previous_value = get_display_value_for_field(field_id, fallback_values.get(field_id))
 
     previous_value = str(previous_value or "N/A")
     if field_id == "gbd_cause_id_3_ml" and len(previous_value) > 34:
         previous_value = f"{previous_value[:31].rstrip()}..."
 
-    return f"{label} :blue[(previous: {previous_value})]"
+    return label_with_previous_value(label, previous_value, state_token)
 
 
 def _render_trial_feature_control(field_id, row):
@@ -6976,17 +7182,23 @@ def _render_trial_feature_control(field_id, row):
     label = SIMULATION_FEATURE_LABEL_OVERRIDES.get(field_id, ui.get("label", field_id))
     label = _label_with_previous_value(label, field_id, row)
 
-    # Flag the wrapper when the value has been edited away from the original,
-    # so the control box can render in a soft blue (see .st-key-simfield_chg_).
-    # Keep the field type in the wrapper class for targeted visual tuning.
-    changed = _feature_value_is_modified(field_id, row, state_key, initial_val, options)
     needs_attention = (
-        field_id == "gbd_cause_id_3_ml"
-        and bool(st.session_state.get(_indication_attention_key(), False))
+        (
+            field_id == "gbd_cause_id_3_ml"
+            and bool(st.session_state.get(_indication_attention_key(), False))
+        )
+        or (
+            field_id == "comparator_benchmark_ml"
+            and _has_placebo_comparator_conflict(row)
+        )
     )
     is_number_field = field_id != "gbd_cause_id_3_ml" and not options
     kind = "num" if is_number_field else "sel"
-    state_token = "attn" if needs_attention else ("chg" if changed else "base")
+    state_token = change_state_token(
+        pending=field_id in get_pending_feature_ids(row),
+        committed=field_id in get_committed_feature_ids(row),
+        attention=needs_attention,
+    )
     container_key = (
         f"simfield_{state_token}_{kind}_{_field_token(field_id)}"
     )
@@ -7149,17 +7361,18 @@ def render_planned_enrollment_input(row):
         if pd.isna(stored) or float(stored) < 0:
             st.session_state[widget_key] = current_value
 
-    enrollment_pending = has_pending_enrollment_assumption(row)
-    previous_enrollment = get_previous_planned_enrollment_assumption(row)
     enrollment_label = operational_assumption_input_label(
         "Planned Enrollment",
         "planned_enrollment",
         get_current_planned_enrollment_source(row),
     )
-    if enrollment_pending and previous_enrollment is not None:
-        enrollment_label = f"Planned Enrollment :blue[(previous: {previous_enrollment:,})]"
+    enrollment_label = operational_assumption_label_with_previous(
+        enrollment_label,
+        row,
+        "planned_enrollment",
+    )
 
-    state_token = "chg" if enrollment_pending else "base"
+    state_token = operational_assumption_history_state_token(row, "planned_enrollment")
     with st.container(key=f"operational_assumption_{state_token}_{_field_token('planned_enrollment')}"):
         st.markdown(
             """
@@ -7198,17 +7411,18 @@ def render_planned_sites_input(row):
         if pd.isna(stored) or float(stored) < 0:
             st.session_state[widget_key] = current_value
 
-    site_pending = has_pending_site_assumption(row)
-    previous_sites = get_previous_planned_sites_assumption(row)
     site_label = operational_assumption_input_label(
         "Planned Sites",
         "planned_sites",
         get_current_planned_sites_source(row),
     )
-    if site_pending and previous_sites is not None:
-        site_label = f"Planned Sites :blue[(previous: {previous_sites:,})]"
+    site_label = operational_assumption_label_with_previous(
+        site_label,
+        row,
+        "planned_sites",
+    )
 
-    state_token = "chg" if site_pending else "base"
+    state_token = operational_assumption_history_state_token(row, "planned_sites")
     with st.container(key=f"operational_assumption_{state_token}_{_field_token('planned_sites')}"):
         st.markdown(
             """
@@ -7247,17 +7461,18 @@ def render_planned_duration_input(row):
         if pd.isna(stored) or float(stored) < 0:
             st.session_state[widget_key] = current_value
 
-    duration_pending = has_pending_duration_assumption(row)
-    previous_duration = get_previous_planned_duration_assumption(row)
     duration_label = operational_assumption_input_label(
         "Duration (months)",
         "planned_duration_months",
         get_current_planned_duration_source(row),
     )
-    if duration_pending and previous_duration is not None:
-        duration_label = f"Duration (months) :blue[(previous: {previous_duration:,.2f})]"
+    duration_label = operational_assumption_label_with_previous(
+        duration_label,
+        row,
+        "planned_duration_months",
+    )
 
-    state_token = "chg" if duration_pending else "base"
+    state_token = operational_assumption_history_state_token(row, "planned_duration_months")
     with st.container(key=f"operational_assumption_{state_token}_{_field_token('planned_duration_months')}"):
         st.markdown(
             """
