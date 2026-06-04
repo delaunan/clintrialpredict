@@ -4126,6 +4126,16 @@ def inject_custom_styles():
                             var(--ui-control-shadow) !important;
             }}
 
+            /* Previously predicted change - keep it visible, but quieter than
+               the blue pending-change state. */
+            html body [class*="st-key-simfield_prev_"] div[data-baseweb="select"] > div,
+            html body [class*="st-key-simfield_prev_"] div[data-baseweb="input"] > div {{
+                background-color: #f1f5f9 !important;
+                border-color: #cbd5e1 !important;
+                box-shadow: inset 0 0 0 1px rgba(100,116,139,0.08),
+                            var(--ui-control-shadow) !important;
+            }}
+
             html body [class*="st-key-simfield_attn_"] div[data-baseweb="select"] > div,
             html body [class*="st-key-simfield_attn_"] div[data-baseweb="input"] > div {{
                 background-color: #fff1f2 !important;
@@ -4723,6 +4733,22 @@ def _changed_fields_between(previous_snapshot, compare_values):
     return changed
 
 
+def _previous_display_values_for_changed_fields(previous_snapshot, changed_fields):
+    previous_snapshot = previous_snapshot or {}
+    committed_previous_values = dict(previous_snapshot.get("previous_display_values") or {})
+    previous_display_values = previous_snapshot.get("display_values") or {}
+    previous_values = previous_snapshot.get("compare_values") or previous_snapshot.get("submitted_values") or {}
+
+    for field_id in changed_fields:
+        committed_previous_values[field_id] = (
+            previous_display_values.get(field_id)
+            if previous_display_values.get(field_id) not in (None, "")
+            else get_display_value_for_field(field_id, previous_values.get(field_id))
+        )
+
+    return committed_previous_values
+
+
 def set_latest_prediction_snapshot(
     nct_id,
     result,
@@ -4746,6 +4772,12 @@ def set_latest_prediction_snapshot(
         field_id: get_display_value_for_field(field_id, compare_values.get(field_id))
         for field_id in SIMULATION_FEATURE_IDS
     }
+    changed_fields = _changed_fields_between(previous_snapshot, compare_values)
+    committed_changed_fields = sorted(
+        set((previous_snapshot or {}).get("committed_changed_fields") or [])
+        | set((previous_snapshot or {}).get("changed_fields") or [])
+        | set(changed_fields)
+    )
 
     snapshot = {
         "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -4763,7 +4795,11 @@ def set_latest_prediction_snapshot(
         "feature_impacts": _json_safe(result.get("feature_impacts") or result.get("subcat_impacts") or []),
         "subcat_impacts": _json_safe(result.get("subcat_impacts") or []),
         "result": _json_safe(result),
-        "changed_fields": _changed_fields_between(previous_snapshot, compare_values),
+        "changed_fields": changed_fields,
+        "committed_changed_fields": committed_changed_fields,
+        "previous_display_values": _json_safe(
+            _previous_display_values_for_changed_fields(previous_snapshot, changed_fields)
+        ),
     }
 
     st.session_state[get_simulation_snapshot_key(nct_id)] = snapshot
@@ -4801,6 +4837,8 @@ def append_simulation_prediction_history(snapshot):
         "pillar_impacts": snapshot.get("pillar_impacts"),
         "feature_impacts": snapshot.get("feature_impacts"),
         "changed_fields": snapshot.get("changed_fields"),
+        "committed_changed_fields": snapshot.get("committed_changed_fields"),
+        "previous_display_values": snapshot.get("previous_display_values"),
     })
 
 
@@ -4828,7 +4866,7 @@ def _option_key_for_ui_value(field_id, value):
         numeric = pd.to_numeric(value, errors="coerce")
         if pd.isna(numeric):
             return None
-        return round(float(numeric), 2) if field_id == "primary_duration_months_ml" else int(round(float(numeric)))
+        return round(float(numeric), 1) if field_id == "primary_duration_months_ml" else int(round(float(numeric)))
 
     if isinstance(value, bool):
         return "1" if value else "0"
@@ -4865,7 +4903,7 @@ def _canonical_feature_value(field_id, value):
         numeric = pd.to_numeric(value, errors="coerce")
         if pd.isna(numeric):
             return None
-        return round(float(numeric), 2) if field_id == "primary_duration_months_ml" else int(round(float(numeric)))
+        return round(float(numeric), 1) if field_id == "primary_duration_months_ml" else int(round(float(numeric)))
 
     meta = TAXONOMY.get(field_id, {})
     options = meta.get("ui", {}).get("options") or []
@@ -4908,7 +4946,7 @@ def get_display_value_for_field(field_id, value):
 
     if field_id == "primary_duration_months_ml":
         numeric = pd.to_numeric(value, errors="coerce")
-        return "N/A" if pd.isna(numeric) else f"{float(numeric):.2f}"
+        return "N/A" if pd.isna(numeric) else f"{float(numeric):.1f}"
 
     if field_id == "number_of_arms_ml":
         numeric = pd.to_numeric(value, errors="coerce")
@@ -4966,7 +5004,7 @@ def _values_equal_for_snapshot(current, reference, field_id=None):
             return True
         if pd.isna(current_num) or pd.isna(reference_num):
             return False
-        return round(float(current_num), 2) == round(float(reference_num), 2)
+        return round(float(current_num), 1) == round(float(reference_num), 1)
 
     return _json_safe(current) == _json_safe(reference)
 
@@ -4993,6 +5031,50 @@ def get_pending_feature_ids(row):
 
 def has_pending_changes(row):
     return bool(get_pending_feature_ids(row))
+
+
+def change_state_token(pending=False, committed=False, attention=False):
+    if attention:
+        return "attn"
+    if pending:
+        return "chg"
+    if committed:
+        return "prev"
+    return "base"
+
+
+def label_with_previous_value(label, previous_value, state_token, formatter=None):
+    if state_token == "chg":
+        color_token = "blue"
+    elif state_token == "prev":
+        color_token = "gray"
+    else:
+        return label
+
+    if previous_value in (None, ""):
+        return label
+
+    if formatter:
+        previous_value = formatter(previous_value)
+
+    return f"{label} :{color_token}[(previous: {previous_value})]"
+
+
+def get_committed_feature_ids(row):
+    nct_id = str(row.get(ID_COL, st.session_state.get("selected_nct_id", "")))
+    snapshot = get_latest_prediction_snapshot(nct_id) or {}
+    return (
+        snapshot.get("committed_changed_fields")
+        or snapshot.get("changed_fields")
+        or []
+    )
+
+
+def feature_history_state_token(field_id, row):
+    return change_state_token(
+        pending=field_id in get_pending_feature_ids(row),
+        committed=field_id in get_committed_feature_ids(row),
+    )
 
 
 def ensure_simulation_baseline_snapshot(row):
@@ -6095,6 +6177,21 @@ def _indication_attention_key():
     return f"indication_requires_choice_{trial_key}"
 
 
+def _current_option_key_from_state(field_id, row):
+    trial_key = st.session_state.get("selected_nct_id", "no_trial")
+    state_key = f"input_{trial_key}_{field_id}"
+    return _option_key_for_ui_value(
+        field_id,
+        st.session_state.get(state_key, _get_initial_field_value(field_id, row))
+    )
+
+
+def _has_placebo_comparator_conflict(row):
+    comparator_key = _current_option_key_from_state("comparator_benchmark_ml", row)
+    placebo_key = _current_option_key_from_state("has_placebo_ml", row)
+    return comparator_key == "PLACEBO" and placebo_key == "0"
+
+
 def _feature_widget_override_key(field_id):
     trial_key = st.session_state.get("selected_nct_id", "no_trial")
     return f"feature_widget_override_{trial_key}_{field_id}"
@@ -6251,28 +6348,31 @@ def _sync_indication_widget_to_shared_state(row):
     queue_simulation_reprediction_if_score_visible()
 
 
-def _feature_value_is_modified(field_id, row, state_key, initial_val, options):
-    """True when current input differs from the latest prediction snapshot."""
-    return field_id in get_pending_feature_ids(row)
-
-
 def _label_with_previous_value(label, field_id, row):
     nct_id = str(row.get(ID_COL, st.session_state.get("selected_nct_id", "")))
     snapshot = get_latest_prediction_snapshot(nct_id) or {}
     reference_values = snapshot.get("compare_values") or snapshot.get("submitted_values") or {}
+    state_token = feature_history_state_token(field_id, row)
 
-    if field_id not in get_pending_feature_ids(row):
+    if state_token == "base":
         return label
 
-    previous_value = snapshot.get("display_values", {}).get(field_id)
+    if state_token == "chg":
+        previous_value = snapshot.get("display_values", {}).get(field_id)
+    else:
+        previous_value = snapshot.get("previous_display_values", {}).get(field_id)
+
     if previous_value in (None, ""):
-        previous_value = get_display_value_for_field(field_id, reference_values.get(field_id))
+        fallback_values = reference_values
+        if state_token != "chg":
+            fallback_values = snapshot.get("submitted_values") or reference_values
+        previous_value = get_display_value_for_field(field_id, fallback_values.get(field_id))
 
     previous_value = str(previous_value or "N/A")
     if field_id == "gbd_cause_id_3_ml" and len(previous_value) > 34:
         previous_value = f"{previous_value[:31].rstrip()}..."
 
-    return f"{label} :blue[(previous: {previous_value})]"
+    return label_with_previous_value(label, previous_value, state_token)
 
 
 def _render_trial_feature_control(field_id, row):
@@ -6284,17 +6384,23 @@ def _render_trial_feature_control(field_id, row):
     label = SIMULATION_FEATURE_LABEL_OVERRIDES.get(field_id, ui.get("label", field_id))
     label = _label_with_previous_value(label, field_id, row)
 
-    # Flag the wrapper when the value has been edited away from the original,
-    # so the control box can render in a soft blue (see .st-key-simfield_chg_).
-    # Keep the field type in the wrapper class for targeted visual tuning.
-    changed = _feature_value_is_modified(field_id, row, state_key, initial_val, options)
     needs_attention = (
-        field_id == "gbd_cause_id_3_ml"
-        and bool(st.session_state.get(_indication_attention_key(), False))
+        (
+            field_id == "gbd_cause_id_3_ml"
+            and bool(st.session_state.get(_indication_attention_key(), False))
+        )
+        or (
+            field_id == "comparator_benchmark_ml"
+            and _has_placebo_comparator_conflict(row)
+        )
     )
     is_number_field = field_id != "gbd_cause_id_3_ml" and not options
     kind = "num" if is_number_field else "sel"
-    state_token = "attn" if needs_attention else ("chg" if changed else "base")
+    state_token = change_state_token(
+        pending=field_id in get_pending_feature_ids(row),
+        committed=field_id in get_committed_feature_ids(row),
+        attention=needs_attention,
+    )
     container_key = (
         f"simfield_{state_token}_{kind}_{_field_token(field_id)}"
     )
@@ -6352,7 +6458,7 @@ def _render_trial_feature_control(field_id, row):
         if pd.isna(current_value_raw):
             current_value = 0.0 if allows_decimal else 0
         elif allows_decimal:
-            current_value = round(float(current_value_raw), 2)
+            current_value = round(float(current_value_raw), 1)
         else:
             current_value = int(round(float(current_value_raw)))
 
@@ -6370,7 +6476,7 @@ def _render_trial_feature_control(field_id, row):
                     current_value
                     if pd.isna(repaired)
                     else (
-                        round(float(repaired), 2)
+                        round(float(repaired), 1)
                         if allows_decimal
                         else int(round(float(repaired)))
                     )
@@ -6380,8 +6486,8 @@ def _render_trial_feature_control(field_id, row):
             label,
             current_value,
             min_value=0.0 if allows_decimal else 0,
-            step=0.01 if allows_decimal else 1,
-            format="%.2f" if allows_decimal else "%d",
+            step=0.1 if allows_decimal else 1,
+            format="%.1f" if allows_decimal else "%d",
             key=widget_key,
             on_change=_sync_feature_widget_to_shared_state,
             args=(field_id,)
