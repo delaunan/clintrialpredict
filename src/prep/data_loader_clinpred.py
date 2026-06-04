@@ -88,7 +88,8 @@ class ClinicalTrialLoader:
 
         cols_studies = ['nct_id', 'overall_status', 'study_type', 'phase', 'start_date', 'number_of_arms',
                         'official_title', 'brief_title', 'why_stopped', 'has_dmc', 'is_fda_regulated_drug',
-                        'enrollment', 'enrollment_type', 'primary_completion_date', 'completion_date', 'has_expanded_access', 'acronym']
+                        'enrollment', 'enrollment_type', 'primary_completion_date', 'primary_completion_date_type',
+                        'completion_date', 'completion_date_type', 'has_expanded_access', 'acronym']
 
         df = self._safe_load('studies.txt', cols=cols_studies)
         if df.empty: raise ValueError("'studies.txt' failed to load.")
@@ -126,6 +127,7 @@ class ClinicalTrialLoader:
         df['start_year'] = df['start_date'].dt.year
         df = df[df['start_year'].between(start_year, end_year)]
         print(f"    [Filter] Kept {len(df)} trials within dynamic range {start_year}-{end_year}.")
+        df = self._engineer_timeline_durations(df)
 
         # 7. Modality Filter (Drug/Biologic/Genetic)
         df_int = self._safe_load('interventions.txt', cols=['nct_id', 'intervention_type'])
@@ -222,7 +224,8 @@ class ClinicalTrialLoader:
         ui_numeric_cols = [
             'enrollment', 'number_of_facilities', 'min_p_value', 'scientific_success',
             'target', 'gbd_cause_id', 'gbd_hierarchy_level',
-            'primary_duration_months', 'is_rare_disease',
+            'primary_duration_months', 'primary_completion_duration_months',
+            'completion_duration_months', 'is_rare_disease',
             'daly_global', 'yld_global', 'yll_global', 'chronic_ratio_global',
             'daly_high_income', 'yld_high_income', 'yll_high_income', 'market_skew_index'
         ]
@@ -230,7 +233,35 @@ class ClinicalTrialLoader:
         for col in registry_numeric_cols + ui_numeric_cols:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce')
+
+        if 'primary_duration_months_ml' in df.columns:
+            df['primary_duration_months_ml'] = df['primary_duration_months_ml'].round(1)
         
+        return df
+
+    def _engineer_timeline_durations(self, df):
+        """Adds registry milestone durations without changing model-facing duration features."""
+        df = df.copy()
+        month_days = 365.25 / 12
+
+        start = pd.to_datetime(df.get('start_date'), errors='coerce')
+        timeline_pairs = {
+            'primary_completion_duration_months': 'primary_completion_date',
+            'completion_duration_months': 'completion_date',
+        }
+
+        for output_col, date_col in timeline_pairs.items():
+            if date_col not in df.columns:
+                df[output_col] = np.nan
+                continue
+            milestone = pd.to_datetime(df[date_col], errors='coerce')
+            months = (milestone - start).dt.days / month_days
+            df[output_col] = months.where(months > 0).round(2)
+
+        for type_col in ['primary_completion_date_type', 'completion_date_type']:
+            if type_col in df.columns:
+                df[type_col] = df[type_col].fillna('').astype(str).str.strip().str.upper()
+
         return df
 
     def _engineer_geography(self, df):
