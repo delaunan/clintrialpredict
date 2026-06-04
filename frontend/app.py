@@ -37,29 +37,21 @@ if variant == "trial_audit":
     audit.render_transition_overlay_hook()
     audit.route_app()
 
-elif variant == "edit_trial":
-    import frontend.views.edit_trial as edit_trial
-    edit_trial.init_session_state()
-    edit_trial.keep_filter_state_alive()
-    edit_trial.inject_custom_styles()
-    edit_trial.render_transition_overlay_hook()
-    edit_trial.route_app()
+elif variant == "trial_edit":
+    import frontend.views.trial_edit as trial_edit
+    trial_edit.init_session_state()
+    trial_edit.keep_filter_state_alive()
+    trial_edit.inject_custom_styles()
+    trial_edit.render_transition_overlay_hook()
+    trial_edit.route_app()
 
-elif variant == "simulator":
-    # Placeholder for Simulator variant
-    st.title("Simulator Mode")
-    st.info("Simulation variant is currently under development.")
-    if st.button("Back to Audit"):
-        st.session_state["variant_override"] = "trial_audit"
-        st.rerun()
-
-elif variant == "serious_game":
-    # Placeholder for Serious Game variant
-    st.title("Serious Game Mode")
-    st.info("Serious Game variant (Portfolio, Costs, Market) is currently under development.")
-    if st.button("Back to Audit"):
-        st.session_state["variant_override"] = "trial_audit"
-        st.rerun()
+elif variant == "trial_simulator":
+    import frontend.views.trial_simulator as trial_simulator
+    trial_simulator.init_session_state()
+    trial_simulator.keep_filter_state_alive()
+    trial_simulator.inject_custom_styles()
+    trial_simulator.render_transition_overlay_hook()
+    trial_simulator.route_app()
 
 else:
     st.error(f"Unknown APP_VARIANT: {variant}")

@@ -968,7 +968,7 @@ Implemented files and artifacts:
 - Runtime utility: `src/operational_benchmarks.py`.
 - Compact artifact: `frontend/data/operational_benchmarks_v1.csv`.
 - Report: `frontend/data/operational_benchmarks_v1_report.json`.
-- Simulation Mode integration: `frontend/views/edit_trial.py`.
+- Simulation Mode integration: `frontend/views/trial_simulator.py`.
 - Active UI/runtime source: the single combined operational artifact. The older enrollment-only and site-only artifacts were removed after consolidation.
 
 Combined artifact summary:
@@ -989,7 +989,7 @@ Combined artifact summary:
 
 Single-artifact runtime rule:
 
-- `frontend/views/edit_trial.py` imports benchmark metadata and defaulting from `src/operational_benchmarks.py`.
+- `frontend/views/trial_simulator.py` imports benchmark metadata and defaulting from `src/operational_benchmarks.py`.
 - Planned Enrollment, Planned Site Count, and Planned Duration all use `frontend/data/operational_benchmarks_v1.csv`; Planned Duration is wired into Simulation Mode as `Duration (months)`.
 - The runtime keeps metric-specific evidence fields: `enrollment_n`, `site_count_n`, `patients_per_site_n`, `duration_months_n`, and `primary_completion_months_n`.
 - The runtime keeps metric-specific confidence flags.
@@ -1131,7 +1131,7 @@ Active files:
 - Runtime utility: `src/operational_benchmarks.py`.
 - Active artifact: `frontend/data/operational_benchmarks_v1.csv`.
 - Active report: `frontend/data/operational_benchmarks_v1_report.json`.
-- Simulation Mode integration: `frontend/views/edit_trial.py`.
+- Simulation Mode integration: `frontend/views/trial_simulator.py`.
 
 Current benchmark sources:
 
@@ -1192,7 +1192,7 @@ Validation commands:
 ```bash
 python scripts/build_operational_benchmarks.py
 python scripts/check_operational_benchmarks.py
-python -m py_compile scripts/build_operational_benchmarks.py scripts/check_operational_benchmarks.py src/operational_benchmarks.py frontend/views/edit_trial.py
+python -m py_compile scripts/build_operational_benchmarks.py scripts/check_operational_benchmarks.py src/operational_benchmarks.py frontend/views/trial_simulator.py
 git diff --check
 ```
 
@@ -1790,7 +1790,7 @@ Before S3 was explicitly authorized:
 - Do not activate `planned_sites`.
 - Do not add `planned_sites` UI.
 - Do not add `planned_sites` to `ACTIVE_OPERATIONAL_ASSUMPTION_KEYS`.
-- Do not import or activate `src/site_benchmarks.py` from `frontend/views/edit_trial.py`.
+- Do not import or activate `src/site_benchmarks.py` from `frontend/views/trial_simulator.py`.
 - Do not change `/predict`.
 - Do not change XGBoost.
 - Do not change SHAP.

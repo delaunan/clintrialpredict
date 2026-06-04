@@ -26,7 +26,7 @@ from src.operational_benchmarks import (
 
 
 SEARCH_REGISTRY_PATH = Path("frontend/data/search_registry.csv")
-EDIT_TRIAL_PATH = Path("frontend/views/edit_trial.py")
+TRIAL_SIMULATOR_PATH = Path("frontend/views/trial_simulator.py")
 REPORT_PATH = Path("frontend/data/operational_benchmarks_v1_report.json")
 
 
@@ -105,7 +105,7 @@ def _assert_site_defaulting(registry: pd.DataFrame, artifact: pd.DataFrame) -> N
 
 
 def _assert_model_boundary() -> None:
-    text = EDIT_TRIAL_PATH.read_text(encoding="utf-8")
+    text = TRIAL_SIMULATOR_PATH.read_text(encoding="utf-8")
     try:
         start = text.index("SIMULATION_FEATURE_IDS")
         end = text.index("]", start)

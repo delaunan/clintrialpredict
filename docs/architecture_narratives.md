@@ -69,8 +69,8 @@ Core boundary:
 
 The current architecture provides the data needed for a later narrative layer:
 
-- `frontend/app.py` routes `APP_VARIANT=edit_trial` into the isolated simulation view.
-- `frontend/views/edit_trial.py` owns the Simulation Mode UI, structured Trial Features, pending-change tracking, latest prediction snapshots, prediction history, and score/charts rendering.
+- `frontend/app.py` routes `APP_VARIANT=trial_simulator` into the isolated simulation view.
+- `frontend/views/trial_simulator.py` owns the Simulation Mode UI, structured Trial Features, pending-change tracking, latest prediction snapshots, prediction history, and score/charts rendering.
 - `api/main.py` keeps `/predict` backward compatible for audit mode and adds `simulation_mode: true` live scoring through the production pipeline.
 - `api/main.py` returns `score`, `pillar_impacts`, `subcat_impacts`, `mode`, and live probability for simulation calls.
 - `models/taxonomy_01.json` defines the structured feature labels, options, mappings, pillars, subgroups, and encodings used by the UI and API.
