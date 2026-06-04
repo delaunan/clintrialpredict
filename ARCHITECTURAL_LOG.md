@@ -95,8 +95,8 @@ All variants share the same **Scoring Engine**, **Parity Logic**, and **Data Reg
 | Variant (`APP_VARIANT`) | Primary Focus | UI Components |
 | :--- | :--- | :--- |
 | **`trial_audit` (Default)** | Standard Discovery | Landing Search + Static Forensic View. |
-| **`simulator`** | Interactive Forecasting | Adds "Simulation Mode" (Live FastAPI /predict calls). |
-| **`serious_game`** | Strategic Management | Adds Portfolio View, Cost Estimation, and Market Potential layers. |
+| **`trial_edit`** | Trial Editing | Stable edit-mode workflow maintained separately from the simulator branch. |
+| **`trial_simulator`** | Interactive Forecasting | Simulation/game workflow with live FastAPI `/predict` calls and operational assumptions. |
 
 ### **D. Frontend Structure (Modular)**
 - `frontend/app.py`: Lightweight router/entry point.
