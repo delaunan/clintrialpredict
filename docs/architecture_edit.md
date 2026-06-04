@@ -17,6 +17,10 @@ Current state to carry forward:
 - Sparse, unseen, or cross-TA indications remain selectable without user-facing model-support warnings.
 - Execution Framework has one-way alignment: changing Benchmark Comparator to `Placebo Control` sets Placebo Control to `Yes`; changing Benchmark Comparator to `No Control Group or Not Specified` sets Placebo Control to `No`. This triggers only from Benchmark Comparator changes, and the user can manually override Placebo Control afterward.
 - Simulation scoring still uses the existing model, SHAP contribution path, and TA calibration logic. No model artifacts were changed.
+- Simulation Mode has three active operational assumptions: Planned Enrollment, Planned Site Count, and Duration. They are benchmarked through the single combined artifact `frontend/data/operational_benchmarks_v1.csv` and runtime utility `src/operational_benchmarks.py`.
+- Operational assumptions stay outside `/predict`, XGBoost, SHAP, Completion Score, TA calibration, taxonomy artifacts, and prediction payloads. Operational-only edits refresh snapshot metadata without calling `/predict`.
+- Benchmark maintenance is consolidated to one builder and one checker: `python scripts/build_operational_benchmarks.py` and `python scripts/check_operational_benchmarks.py`.
+- Operational assumption labels stay visually light: direct AACT-backed values have no suffix, system-filled defaults show `(est.)`, and participant edits remove the suffix while the snapshot metadata still records `source = user_scenario`.
 
 Verification still needed:
 
@@ -35,6 +39,134 @@ Next product area:
 
 The current edit-mode implementation phase is complete. The next session should be refinement-only unless a new defect is found.
 
+### Operational Assumptions Update - 2026-06-01
+
+Historical note: this section records the first operational-assumption implementation. It is superseded by the 2026-06-03 and duration activation sections below for current active assumptions.
+
+Simulation Mode now includes the first Operational Assumption foundation:
+
+- Planned Enrollment appears as a compact Simulation Mode-only mini-card separate from model-facing Trial Features.
+- Planned Enrollment is stored in session state with operational-assumption keys, not the model-facing `input_{nct_id}_{field_id}` feature pattern.
+- Changing Planned Enrollment marks Simulation Mode pending, turns `Predict Trial Completion` blue, shows the gauge-side `Click Predict to update` prompt, and displays the previous enrollment value.
+- Clicking `Predict Trial Completion` for an operational-only change refreshes the latest snapshot metadata through `simulation_operational_update`, does not call `/predict`, and does not change Completion Score, impact bar, treemap, SHAP impacts, or pillar impacts.
+- Snapshots and simulation history now include `operational_assumptions`.
+- At that historical stage, activation was limited to `planned_enrollment`. This was superseded when `planned_sites` and `planned_duration_months` were activated; only `planned_countries` remains reserved/inactive.
+- The Enrollment Assumption card shows benchmark position, reference cohort, and source metadata such as `planned value`, `final observed enrollment`, `benchmark default`, or `user scenario`.
+- The generic operational-assumption pending/update path later supported Planned Sites and Duration. Countries remain excluded.
+
+This update did not modify `frontend/views/trial_audit.py`, `api/main.py`, model artifacts, SHAP artifacts, taxonomy artifacts, benchmark artifacts, notebooks, or deployment files.
+
+### Operational Assumptions Update - 2026-06-03
+
+Simulation Mode now uses a single operational benchmark system for Planned Enrollment, Planned Site Count, and Duration:
+
+- Active operational assumptions are `planned_enrollment`, `planned_sites`, and `planned_duration_months`.
+- `planned_countries` remains future-reserved/inactive.
+- Active runtime artifact: `frontend/data/operational_benchmarks_v1.csv`.
+- Active runtime utility: `src/operational_benchmarks.py`.
+- Active maintenance commands:
+  - `python scripts/build_operational_benchmarks.py`
+  - `python scripts/check_operational_benchmarks.py`
+- Historical enrollment-only and site-only benchmark builders, checkers, runtime utilities, artifacts, reports, and notebooks were removed.
+- The builder writes the CSV runtime artifact, JSON build report, and Excel inspection export.
+- The checker covers schema, fallback behavior, modality/non-vaccine rules, registry-wide coverage, defaulting safety, and model-boundary safeguards.
+
+Operational benchmark rules:
+
+- Enrollment percentiles use completed trials with positive `ACTUAL` enrollment.
+- Site-count percentiles use completed trials with positive `number_of_facilities`.
+- Patients-per-site percentiles use completed trials with positive `ACTUAL` enrollment and positive `number_of_facilities`, using `enrollment / number_of_facilities`.
+- Total-duration percentiles use completed trials with `completion_date_type = ACTUAL` and positive `completion_duration_months`.
+- Primary-readout percentiles use completed trials with `primary_completion_date_type = ACTUAL` and positive `primary_completion_duration_months`.
+- `number_of_facilities` is treated as a registry-derived facility-count proxy, not true planned sites or true activated sites.
+- Runtime lookup uses the clinical hierarchy `phase_indication_rare -> phase_ta_rare -> phase_ta -> phase_only`.
+- Invalid indication id `0` disables indication-level lookup only.
+- Invalid/unclassified TA disables TA-level lookup only; a valid indication can still be used.
+- Unknown/unclassified modality does not create or select modality-refinement rows.
+- Same-level modality refinement applies only to enrollment and patients-per-site, requires `n >= 50`, and never applies to raw site count.
+- For Infections trials with modality not equal to `VACCINE`, non-vaccine Infections fallback can apply to enrollment and patients-per-site when same-level modality refinement is unavailable and `n >= 50`.
+- Vaccine Infections trials can use vaccine refinement when supported and never use non-vaccine fallback.
+- Clinical fallback rows with `30 <= n < 50` are usable but low confidence; `n < 30` falls back when possible.
+
+Operational defaulting rules:
+
+- Planned Enrollment uses a positive planned/estimated value when available.
+- Completed trials without planned/estimated enrollment may use final observed enrollment.
+- Non-completed trials without planned/estimated enrollment use `max(observed_lower_bound, enrollment_p50)` when available.
+- Completed trials with positive `number_of_facilities` initialize Planned Sites from completed registry facility-count proxy.
+- Non-completed trials treat positive `number_of_facilities` as current registry facility-count proxy lower-bound/context.
+- Non-completed Planned Sites default to `max(current_registry_facility_count_proxy, planned_enrollment / patients_per_site_p50)` when patients-per-site P50 is available.
+- Pure site-count P50 is fallback/reference only when the enrollment-coherent patients-per-site candidate cannot be calculated.
+- Planned Duration uses trusted direct date-derived total duration when available. Active/non-stopped `ESTIMATED` completion dates and completed `ACTUAL` completion dates open without `(est.)`; stopped/interrupted dates are floor/context only.
+- The Duration Assumption card preserves trusted direct primary readout timing when available, including active/non-stopped `ESTIMATED` primary-completion dates. Same-cohort primary-readout benchmark appears only when trusted direct readout timing is unavailable and the selected duration cohort has `primary_completion_months_n >= 50`.
+- User edits are scenario assumptions and update operational metadata without changing the XGBoost Completion Score unless model-facing Trial Features also change.
+- UI source convention: no suffix means the opening value comes directly from a usable AACT-backed field; `(est.)` means the opening value was system-filled because the operational field was not directly available. Once the participant edits a value, the suffix is removed, but metadata still stores `user_scenario` for LLM/coherence use.
+
+Validation completed for this operational benchmark consolidation:
+
+- `python scripts/build_operational_benchmarks.py`
+- `python scripts/check_operational_benchmarks.py`
+- `python -m py_compile scripts/build_operational_benchmarks.py scripts/check_operational_benchmarks.py src/operational_benchmarks.py frontend/views/edit_trial.py`
+- `PYENV_VERSION=ClinTrialPredict python -m jupyter nbconvert --to notebook --execute notebooks/estimation.ipynb --output estimation_executed.ipynb --output-dir /tmp --ExecutePreprocessor.timeout=300`
+- Streamlit `APP_VARIANT=edit_trial` health check returned `200 ok` on a temporary local server.
+
+Remaining verification before deployment readiness:
+
+- Continue manual browser smoke tests in Simulation Mode for Planned Enrollment, Planned Sites, and Duration cards as new representative trials are identified.
+- Confirm vaccine and non-vaccine Infections examples display expected benchmark metadata.
+- Confirm operational-only Planned Enrollment/Planned Sites/Duration edits do not call `/predict` and do not change Completion Score/charts.
+
+### Planned Duration UI Activation - Implemented 2026-06-03
+
+`planned_duration_months` is now active in Simulation Mode using the same operational-assumption behavior as Planned Enrollment and Planned Site Count.
+
+Implemented scope in `frontend/views/edit_trial.py`:
+
+- `planned_duration_months` is an active operational assumption and is removed from future-reserved assumptions.
+- The UI imports and uses `planned_duration_default_from_operational_benchmark` and `planned_duration_months_metadata` from `src/operational_benchmarks.py`.
+- State/source/baseline/widget helpers mirror Planned Enrollment and Planned Sites.
+- The numeric input label is `Duration (months)`.
+- The established lightweight label convention is preserved:
+  - no suffix for opening values that come directly from usable AACT-backed duration data,
+  - `(est.)` for system-filled benchmark/default duration values,
+  - no visible suffix after participant edit, while metadata stores `source = user_scenario`.
+- Changing duration marks the operational assumption container blue, shows `:blue[(previous: X)]`, and turns `Predict Trial Completion` blue.
+- If only duration/enrollment/sites changed, clicking `Predict Trial Completion` refreshes operational metadata via `simulation_operational_update` and does not call `/predict`.
+- If duration changes together with model-facing Trial Features, `/predict` is called only because model-facing fields changed; duration is not included in the prediction payload.
+- Duration metadata is attached to baseline snapshots, successful simulation prediction snapshots, operational-only update snapshots, and simulation history.
+- The Duration Assumption card shows current duration, benchmark position, reference cohort, percentiles, primary readout context, endpoint-duration context, relevant floors/default basis, and clear copy that duration does not enter the XGBoost Completion Score.
+
+Source semantics for UI/LLM:
+
+- Direct AACT-backed values are not visibly suffixed but should retain exact metadata source:
+  - completed `ACTUAL` completion duration,
+  - ongoing active/non-stopped `ESTIMATED` completion duration,
+  - active/non-stopped `ACTUAL` completion date status-lag cases if present.
+- System-filled values use `(est.)` in the initial label and should carry benchmark/default source metadata.
+- Terminated/withdrawn/suspended actual or estimated completion dates are lower-bound/floor context, not trusted planned duration. If benchmark/default logic supplies the editable opening value, show `(est.)`.
+- Participant edits remove the visible suffix but must store `source = user_scenario`.
+
+Duration benchmark contract to preserve:
+
+- Full completion duration is the controlling metric for the editable value.
+- Runtime selects the first/best duration cohort with `duration_months_n >= 50`.
+- Primary-completion timing preserves trusted direct date-derived values first. Same-cohort primary-readout benchmark is fallback/context only and requires `primary_completion_months_n >= 50` on the same selected duration row.
+- Duration uses endpoint-duration-bin plus clinical fallback, then clinical-only fallback.
+- Duration does not use modality refinement or non-vaccine Infections fallback.
+- Duration remains outside `/predict`, XGBoost, SHAP, Completion Score, impact bar, treemap, TA calibration, model artifacts, taxonomy artifacts, and API contracts.
+
+Verification completed for the duration UI step:
+
+- `python -m py_compile frontend/views/edit_trial.py src/operational_benchmarks.py`
+- `python scripts/check_operational_benchmarks.py`
+- Static scan proving `planned_duration_months` is not in `SIMULATION_FEATURE_IDS` and is not in prediction payload construction.
+- Browser smoke tests:
+  - direct AACT-backed duration opens without `(est.)`,
+  - benchmark/default duration opens with `(est.)`,
+  - editing duration removes `(est.)`, shows previous value, turns the card/button blue, and stores `user_scenario`,
+  - operational-only duration update does not call `/predict` and leaves Completion Score/charts unchanged,
+  - mixed duration + model-facing edits call `/predict` only for model-facing fields.
+
 Implemented since the 2026-05-30 status:
 
 - `frontend/views/edit_trial.py` now uses a latest-prediction snapshot workflow for simulation mode.
@@ -43,9 +175,9 @@ Implemented since the 2026-05-30 status:
 - Field edits no longer queue or run automatic prediction. Gauge, impact bar, and treemap stay tied to the latest successful snapshot until `Predict Trial Completion` is clicked.
 - Pending-change comparison now uses user-visible UI option identity (`compare_values`) instead of only ML-facing encoded values. This means changes such as `Not Specified` -> `Novel Target (No Prior Approvals)` are marked pending even when both options map to the same encoded model value.
 - Snapshots and session-state history now store both `submitted_values` for scoring/API submission and `compare_values` for UI pending-change comparison, plus display labels, score, previous score, point/percent delta, impacts, and changed fields.
-- Previous-value markers render inline after the field label, in blue, and disappear after successful prediction or full revert.
+- Previous-value markers render inline after the field label. They are blue while a new prediction is pending, then remain visible in light grey after prediction so the user can see the value needed to revert.
 - Long previous indication labels are truncated inline for layout stability.
-- `primary_duration_months_ml` uses two-decimal display and `0.01` steps while preserving numeric comparison.
+- `primary_duration_months_ml` uses one-decimal display and `0.1` steps, matching the one-decimal model-facing endpoint-duration rule.
 - Trial Features widget keys are deleted during reset so Simulation Mode off/on starts from original selected-trial values and does not reuse stale previous-session dropdown state.
 - Simulation tab order is now `Trial Information`, `Population Details`, `Completion Score`, `Trial Features`; when Simulation Mode is toggled on, `Trial Features` opens by default.
 - Simulation-only gauge comparison now shows compact previous-score and variance text (`Prev: SCORE pts` plus up/down/flat indicator and percent/flat marker).
@@ -108,7 +240,7 @@ Current Trial Features layout:
 - Bottom left: `Scientific Challenge`
 - Bottom right: `Execution Framework`
 - The layout is visually finalized as of this session: four white rounded pillar cards, two fields per row by default, single-field rows left-aligned at half-card width, equal top-row card heights, equal bottom-row card heights, compact row-to-row spacing, and enlarged pillar icon/title headers with extra separation before the first field row.
-- `number_of_arms_ml` remains an integer input. `primary_duration_months_ml` preserves numeric precision for scoring and uses two-decimal display with `0.01` increments.
+- `number_of_arms_ml` remains an integer input. `primary_duration_months_ml` uses one-decimal display/comparison with `0.1` increments, matching the model-facing preprocessing rule.
 
 Current Trial Features row structure:
 
@@ -675,14 +807,14 @@ A field has pending changes when its current effective UI value differs from the
 - Do not mix UI labels and ML values in the same comparison field. Keep `submitted_values` for scoring/API submission, `compare_values` for pending-change comparison, and display values for user-facing labels.
 - For taxonomy fields, map labels to stable option keys for comparison so UI-visible changes are marked pending even if the encoded ML value is unchanged.
 - For numeric fields, compare numeric values rather than formatted strings.
-- Decimal fields such as `primary_duration_months_ml` must preserve scoring precision and use two-decimal UI control precision. Formatting alone must not create pending changes.
+- Decimal fields such as `primary_duration_months_ml` must use the same normalized precision for display, pending-change comparison, and model-facing preprocessing. Formatting alone must not create pending changes.
 - Keep the existing soft-blue field highlight.
-- Show the previous value from the latest prediction snapshot near the field label while pending changes exist.
+- Show the previous value from the latest prediction snapshot near the field label while pending or incorporated change history exists.
 - The previous value text should be light blue while that field has pending changes.
-- After successful prediction, incorporated previous-value markers may either turn grey if this is simple and stable, or disappear if that is significantly simpler.
+- After successful prediction, incorporated previous-value markers remain visible in light grey until the field is changed again.
 - On the next edit cycle, the previous value shown must come from the most recent prediction snapshot.
 
-Current visual implementation appends `(previous: VALUE)` inline after the field label and truncates long indication previous values.
+Current visual implementation appends `(previous: VALUE)` inline after the field label, uses blue for pending changes, uses light grey after prediction, and truncates long indication previous values.
 
 ## Stale Score Notice
 

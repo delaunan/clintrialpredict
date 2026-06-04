@@ -1,0 +1,617 @@
+{
+  "audit": "site_count_s1b",
+  "source_field": "number_of_facilities",
+  "source_contract_confirmed": true,
+  "interpretation": "registry-derived aggregate facility-count proxy; not true planned/actual/estimated site count",
+  "min_n_threshold": 50,
+  "overall_quality": {
+    "total_rows": 34066,
+    "present": 34066,
+    "missing": 0,
+    "zero": 2242,
+    "negative": 0,
+    "positive": 31824,
+    "min": 0.0,
+    "p25": 1.0,
+    "median": 12.0,
+    "p75": 40.0,
+    "p90": 93.0,
+    "p95": 149.0,
+    "p99": 302.34999999999854,
+    "max": 1745.0
+  },
+  "breakdowns": {
+    "overall_status": [
+      {
+        "group": "COMPLETED",
+        "rows": 20719,
+        "present": 20719,
+        "zero": 839,
+        "positive": 19880,
+        "median": 13.0,
+        "p75": 40.0,
+        "p90": 90.0,
+        "max": 1611
+      },
+      {
+        "group": "TERMINATED",
+        "rows": 4195,
+        "present": 4195,
+        "zero": 116,
+        "positive": 4079,
+        "median": 14.0,
+        "p75": 41.0,
+        "p90": 92.0,
+        "max": 1745
+      },
+      {
+        "group": "RECRUITING",
+        "rows": 4134,
+        "present": 4134,
+        "zero": 0,
+        "positive": 4134,
+        "median": 10.0,
+        "p75": 39.0,
+        "p90": 104.0,
+        "max": 1264
+      },
+      {
+        "group": "ACTIVE_NOT_RECRUITING",
+        "rows": 2487,
+        "present": 2487,
+        "zero": 2,
+        "positive": 2485,
+        "median": 28.0,
+        "p75": 79.0,
+        "p90": 175.0,
+        "max": 1065
+      },
+      {
+        "group": "WITHDRAWN",
+        "rows": 1245,
+        "present": 1245,
+        "zero": 685,
+        "positive": 560,
+        "median": 0.0,
+        "p75": 1.0,
+        "p90": 9.600000000000136,
+        "max": 311
+      },
+      {
+        "group": "NOT_YET_RECRUITING",
+        "rows": 1139,
+        "present": 1139,
+        "zero": 600,
+        "positive": 539,
+        "median": 0.0,
+        "p75": 1.0,
+        "p90": 5.2000000000000455,
+        "max": 226
+      },
+      {
+        "group": "ENROLLING_BY_INVITATION",
+        "rows": 147,
+        "present": 147,
+        "zero": 0,
+        "positive": 147,
+        "median": 10.0,
+        "p75": 30.5,
+        "p90": 92.80000000000001,
+        "max": 371
+      }
+    ],
+    "phase": [
+      {
+        "group": "PHASE2",
+        "rows": 14387,
+        "present": 14387,
+        "zero": 881,
+        "positive": 13506,
+        "median": 9.0,
+        "p75": 28.0,
+        "p90": 56.0,
+        "max": 456
+      },
+      {
+        "group": "PHASE3",
+        "rows": 13884,
+        "present": 13884,
+        "zero": 1046,
+        "positive": 12838,
+        "median": 25.0,
+        "p75": 74.0,
+        "p90": 157.0,
+        "max": 1745
+      },
+      {
+        "group": "PHASE1/PHASE2",
+        "rows": 4739,
+        "present": 4739,
+        "zero": 240,
+        "positive": 4499,
+        "median": 5.0,
+        "p75": 14.0,
+        "p90": 28.0,
+        "max": 166
+      },
+      {
+        "group": "PHASE2/PHASE3",
+        "rows": 1056,
+        "present": 1056,
+        "zero": 75,
+        "positive": 981,
+        "median": 13.0,
+        "p75": 43.25,
+        "p90": 91.0,
+        "max": 577
+      }
+    ],
+    "therapeutic_area": [
+      {
+        "group": "ONCOLOGY",
+        "rows": 8396,
+        "present": 8396,
+        "zero": 505,
+        "positive": 7891,
+        "median": 13.0,
+        "p75": 42.0,
+        "p90": 117.0,
+        "max": 794
+      },
+      {
+        "group": "INFECTIONS",
+        "rows": 3158,
+        "present": 3158,
+        "zero": 231,
+        "positive": 2927,
+        "median": 6.0,
+        "p75": 24.0,
+        "p90": 58.0,
+        "max": 464
+      },
+      {
+        "group": "NEUROLOGY",
+        "rows": 2599,
+        "present": 2599,
+        "zero": 155,
+        "positive": 2444,
+        "median": 16.0,
+        "p75": 48.0,
+        "p90": 94.0,
+        "max": 495
+      },
+      {
+        "group": "DERMATOLOGY",
+        "rows": 2414,
+        "present": 2414,
+        "zero": 139,
+        "positive": 2275,
+        "median": 10.0,
+        "p75": 34.0,
+        "p90": 72.0,
+        "max": 547
+      },
+      {
+        "group": "GASTROINTESTINAL",
+        "rows": 2290,
+        "present": 2290,
+        "zero": 221,
+        "positive": 2069,
+        "median": 15.0,
+        "p75": 50.0,
+        "p90": 115.0,
+        "max": 766
+      },
+      {
+        "group": "METABOLIC",
+        "rows": 2110,
+        "present": 2110,
+        "zero": 149,
+        "positive": 1961,
+        "median": 15.0,
+        "p75": 50.75,
+        "p90": 108.10000000000014,
+        "max": 888
+      },
+      {
+        "group": "RESPIRATORY",
+        "rows": 2001,
+        "present": 2001,
+        "zero": 149,
+        "positive": 1852,
+        "median": 12.0,
+        "p75": 53.0,
+        "p90": 123.0,
+        "max": 1611
+      },
+      {
+        "group": "MUSCULOSKELETAL",
+        "rows": 1972,
+        "present": 1972,
+        "zero": 129,
+        "positive": 1843,
+        "median": 13.0,
+        "p75": 42.25,
+        "p90": 93.0,
+        "max": 507
+      },
+      {
+        "group": "CARDIOVASCULAR",
+        "rows": 1670,
+        "present": 1670,
+        "zero": 116,
+        "positive": 1554,
+        "median": 13.0,
+        "p75": 50.75,
+        "p90": 138.10000000000014,
+        "max": 1745
+      },
+      {
+        "group": "OPHTHALMOLOGY",
+        "rows": 1574,
+        "present": 1574,
+        "zero": 121,
+        "positive": 1453,
+        "median": 5.0,
+        "p75": 23.0,
+        "p90": 57.0,
+        "max": 320
+      },
+      {
+        "group": "RENAL/UROLOGY",
+        "rows": 1255,
+        "present": 1255,
+        "zero": 76,
+        "positive": 1179,
+        "median": 15.0,
+        "p75": 43.0,
+        "p90": 92.60000000000014,
+        "max": 978
+      },
+      {
+        "group": "PSYCHIATRY",
+        "rows": 1250,
+        "present": 1250,
+        "zero": 66,
+        "positive": 1184,
+        "median": 20.0,
+        "p75": 47.0,
+        "p90": 81.0,
+        "max": 303
+      },
+      {
+        "group": "HEMATOLOGY",
+        "rows": 1094,
+        "present": 1094,
+        "zero": 45,
+        "positive": 1049,
+        "median": 13.0,
+        "p75": 32.0,
+        "p90": 68.70000000000005,
+        "max": 309
+      },
+      {
+        "group": "GENETIC",
+        "rows": 674,
+        "present": 674,
+        "zero": 34,
+        "positive": 640,
+        "median": 8.0,
+        "p75": 20.0,
+        "p90": 34.0,
+        "max": 170
+      },
+      {
+        "group": "IMMUNOLOGY",
+        "rows": 604,
+        "present": 604,
+        "zero": 34,
+        "positive": 570,
+        "median": 18.0,
+        "p75": 56.0,
+        "p90": 121.70000000000005,
+        "max": 369
+      },
+      {
+        "group": "REPRODUCTIVE",
+        "rows": 510,
+        "present": 510,
+        "zero": 47,
+        "positive": 463,
+        "median": 10.0,
+        "p75": 36.75,
+        "p90": 75.30000000000007,
+        "max": 224
+      },
+      {
+        "group": "DENTAL",
+        "rows": 223,
+        "present": 223,
+        "zero": 10,
+        "positive": 213,
+        "median": 1.0,
+        "p75": 1.0,
+        "p90": 3.8000000000000114,
+        "max": 50
+      },
+      {
+        "group": "EAR/NOSE/THROAT",
+        "rows": 142,
+        "present": 142,
+        "zero": 8,
+        "positive": 134,
+        "median": 2.0,
+        "p75": 10.0,
+        "p90": 24.900000000000006,
+        "max": 135
+      },
+      {
+        "group": "UNCLASSIFIED",
+        "rows": 130,
+        "present": 130,
+        "zero": 7,
+        "positive": 123,
+        "median": 4.0,
+        "p75": 14.0,
+        "p90": 29.0,
+        "max": 113
+      }
+    ],
+    "is_rare_disease_ml": [
+      {
+        "group": 0,
+        "rows": 28649,
+        "present": 28649,
+        "zero": 1890,
+        "positive": 26759,
+        "median": 12.0,
+        "p75": 41.0,
+        "p90": 97.0,
+        "max": 1745
+      },
+      {
+        "group": 1,
+        "rows": 5417,
+        "present": 5417,
+        "zero": 352,
+        "positive": 5065,
+        "median": 12.0,
+        "p75": 33.0,
+        "p90": 70.0,
+        "max": 459
+      }
+    ]
+  },
+  "top20_outliers": [
+    {
+      "nct_id": "NCT01975376",
+      "number_of_facilities": 1745,
+      "phase": "PHASE3",
+      "therapeutic_area": "CARDIOVASCULAR",
+      "overall_status": "TERMINATED",
+      "enrollment": 16784.0
+    },
+    {
+      "nct_id": "NCT01313676",
+      "number_of_facilities": 1611,
+      "phase": "PHASE3",
+      "therapeutic_area": "RESPIRATORY",
+      "overall_status": "COMPLETED",
+      "enrollment": 16568.0
+    },
+    {
+      "nct_id": "NCT01975389",
+      "number_of_facilities": 1595,
+      "phase": "PHASE3",
+      "therapeutic_area": "CARDIOVASCULAR",
+      "overall_status": "TERMINATED",
+      "enrollment": 10564.0
+    },
+    {
+      "nct_id": "NCT01663402",
+      "number_of_facilities": 1388,
+      "phase": "PHASE3",
+      "therapeutic_area": "CARDIOVASCULAR",
+      "overall_status": "COMPLETED",
+      "enrollment": 18924.0
+    },
+    {
+      "nct_id": "NCT02993406",
+      "number_of_facilities": 1319,
+      "phase": "PHASE3",
+      "therapeutic_area": "CARDIOVASCULAR",
+      "overall_status": "COMPLETED",
+      "enrollment": 13970.0
+    },
+    {
+      "nct_id": "NCT01764633",
+      "number_of_facilities": 1284,
+      "phase": "PHASE3",
+      "therapeutic_area": "CARDIOVASCULAR",
+      "overall_status": "COMPLETED",
+      "enrollment": 27564.0
+    },
+    {
+      "nct_id": "NCT07000357",
+      "number_of_facilities": 1264,
+      "phase": "PHASE3",
+      "therapeutic_area": "CARDIOVASCULAR",
+      "overall_status": "RECRUITING",
+      "enrollment": 15100.0
+    },
+    {
+      "nct_id": "NCT01991795",
+      "number_of_facilities": 1237,
+      "phase": "PHASE3",
+      "therapeutic_area": "CARDIOVASCULAR",
+      "overall_status": "COMPLETED",
+      "enrollment": 19271.0
+    },
+    {
+      "nct_id": "NCT01126437",
+      "number_of_facilities": 1191,
+      "phase": "PHASE3",
+      "therapeutic_area": "RESPIRATORY",
+      "overall_status": "COMPLETED",
+      "enrollment": 17183.0
+    },
+    {
+      "nct_id": "NCT07064473",
+      "number_of_facilities": 1150,
+      "phase": "PHASE3",
+      "therapeutic_area": "CARDIOVASCULAR",
+      "overall_status": "RECRUITING",
+      "enrollment": 11800.0
+    },
+    {
+      "nct_id": "NCT01327846",
+      "number_of_facilities": 1131,
+      "phase": "PHASE3",
+      "therapeutic_area": "CARDIOVASCULAR",
+      "overall_status": "COMPLETED",
+      "enrollment": 10066.0
+    },
+    {
+      "nct_id": "NCT05636176",
+      "number_of_facilities": 1117,
+      "phase": "PHASE3",
+      "therapeutic_area": "CARDIOVASCULAR",
+      "overall_status": "RECRUITING",
+      "enrollment": 5600.0
+    },
+    {
+      "nct_id": "NCT05643573",
+      "number_of_facilities": 1069,
+      "phase": "PHASE3",
+      "therapeutic_area": "CARDIOVASCULAR",
+      "overall_status": "TERMINATED",
+      "enrollment": 14830.0
+    },
+    {
+      "nct_id": "NCT05021835",
+      "number_of_facilities": 1065,
+      "phase": "PHASE3",
+      "therapeutic_area": "CARDIOVASCULAR",
+      "overall_status": "ACTIVE_NOT_RECRUITING",
+      "enrollment": 6200.0
+    },
+    {
+      "nct_id": "NCT05757869",
+      "number_of_facilities": 1052,
+      "phase": "PHASE3",
+      "therapeutic_area": "CARDIOVASCULAR",
+      "overall_status": "ACTIVE_NOT_RECRUITING",
+      "enrollment": 20284.0
+    },
+    {
+      "nct_id": "NCT02929329",
+      "number_of_facilities": 1033,
+      "phase": "PHASE3",
+      "therapeutic_area": "CARDIOVASCULAR",
+      "overall_status": "COMPLETED",
+      "enrollment": 8256.0
+    },
+    {
+      "nct_id": "NCT01035255",
+      "number_of_facilities": 1031,
+      "phase": "PHASE3",
+      "therapeutic_area": "CARDIOVASCULAR",
+      "overall_status": "TERMINATED",
+      "enrollment": 8442.0
+    },
+    {
+      "nct_id": "NCT00831441",
+      "number_of_facilities": 1012,
+      "phase": "PHASE3",
+      "therapeutic_area": "CARDIOVASCULAR",
+      "overall_status": "TERMINATED",
+      "enrollment": 7484.0
+    },
+    {
+      "nct_id": "NCT05754957",
+      "number_of_facilities": 1003,
+      "phase": "PHASE3",
+      "therapeutic_area": "CARDIOVASCULAR",
+      "overall_status": "COMPLETED",
+      "enrollment": 14194.0
+    },
+    {
+      "nct_id": "NCT02164513",
+      "number_of_facilities": 998,
+      "phase": "PHASE3",
+      "therapeutic_area": "RESPIRATORY",
+      "overall_status": "COMPLETED",
+      "enrollment": 10355.0
+    }
+  ],
+  "benchmark_target": {
+    "definition": "overall_status == COMPLETED and number_of_facilities > 0",
+    "rows": 19880
+  },
+  "hierarchy_summary": [
+    {
+      "level": "phase_indication_rare",
+      "rows": 659,
+      "confident_rows": 105,
+      "low_confidence_rows": 554,
+      "duplicate_keys": 0,
+      "min_p50": 1.0,
+      "max_p50": 277.0
+    },
+    {
+      "level": "phase_ta_rare",
+      "rows": 138,
+      "confident_rows": 53,
+      "low_confidence_rows": 85,
+      "duplicate_keys": 0,
+      "min_p50": 1.0,
+      "max_p50": 78.0
+    },
+    {
+      "level": "phase_ta",
+      "rows": 76,
+      "confident_rows": 48,
+      "low_confidence_rows": 28,
+      "duplicate_keys": 0,
+      "min_p50": 1.0,
+      "max_p50": 75.0
+    },
+    {
+      "level": "phase_only",
+      "rows": 4,
+      "confident_rows": 4,
+      "low_confidence_rows": 0,
+      "duplicate_keys": 0,
+      "min_p50": 5.0,
+      "max_p50": 28.0
+    }
+  ],
+  "fallback_summary": {
+    "matched_level_counts": {
+      "phase_ta_rare": 7260,
+      "phase_indication_rare": 23439,
+      "phase_ta": 2231,
+      "phase_only": 1136
+    },
+    "not_available_count": 0,
+    "low_confidence_match_count": 0
+  },
+  "patients_per_site_optional": {
+    "rows": 31258,
+    "p25": 3.5,
+    "median": 7.428571428571429,
+    "p75": 26.725,
+    "p90": 129.0,
+    "max": 90116.0
+  },
+  "decision_gate": {
+    "number_of_facilities_available_numeric": true,
+    "completed_positive_population_sufficient": true,
+    "phase_only_fallback_robust": true,
+    "duplicate_benchmark_keys_zero": true,
+    "low_confidence_behavior_flaggable": true,
+    "outliers_documented": true,
+    "wording_avoids_overclaiming": true,
+    "s2_recommended": true
+  }
+}

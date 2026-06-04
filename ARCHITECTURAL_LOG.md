@@ -96,7 +96,7 @@ All variants share the same **Scoring Engine**, **Parity Logic**, and **Data Reg
 | :--- | :--- | :--- |
 | **`trial_audit` (Default)** | Standard Discovery | Landing Search + Static Forensic View. |
 | **`simulator`** | Interactive Forecasting | Adds "Simulation Mode" (Live FastAPI /predict calls). |
-| **`serious_game`** | Strategic Management | Adds Portfolio View, Cost Estimation, and Market Potential layers. |
+| **`estimation`** | Missing Value Estimation | Adds operational value estimation for duration, enrollment, sites, and countries. |
 
 ### **D. Frontend Structure (Modular)**
 - `frontend/app.py`: Lightweight router/entry point.
