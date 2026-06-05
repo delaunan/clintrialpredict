@@ -33,6 +33,7 @@ def _check_packet(fixture: dict, errors: list[str]) -> None:
         "trial_identity",
         "text_context",
         "structured_features",
+        "structured_feature_display_values",
         "operational_assumptions",
         "model_interpretation",
         "review_context",
@@ -91,7 +92,8 @@ def _check_review_continuity_context(errors: list[str]) -> None:
         if item["fixture_id"] == "model_facing_endpoint_shortcut_v1"
     )
     baseline_trace = {
-        "trace_id": "baseline-trace",
+        "input_hash": "baseline-input-hash",
+        "iteration_id": 0,
         "status": "reviewed",
         "validation_status": "valid",
         "quality_adjustment": 0,
@@ -114,7 +116,8 @@ def _check_review_continuity_context(errors: list[str]) -> None:
     }
     previous_trace = {
         **baseline_trace,
-        "trace_id": "previous-trace",
+        "input_hash": "previous-input-hash",
+        "iteration_id": 1,
         "quality_adjustment": -2,
         "final_candidate_score": 66,
         "changed_fields": ["operational_assumptions.planned_enrollment"],
@@ -139,9 +142,9 @@ def _check_review_continuity_context(errors: list[str]) -> None:
     )
 
     context = continuity_packet.get("review_context") or {}
-    if context.get("baseline_review", {}).get("trace_id") != "baseline-trace":
+    if context.get("baseline_review", {}).get("input_hash") != "baseline-input-hash":
         errors.append("continuity packet missing baseline review context")
-    if context.get("previous_review", {}).get("trace_id") != "previous-trace":
+    if context.get("previous_review", {}).get("input_hash") != "previous-input-hash":
         errors.append("continuity packet missing previous review context")
     if (
         continuity_packet.get("iteration_context", {}).get("compact_storyline_memory")

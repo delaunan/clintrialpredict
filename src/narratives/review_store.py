@@ -6,7 +6,7 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from typing import Any, MutableMapping
 
-from src.narratives.provider import PROVIDER_MOCK, review_packet_with_provider
+from src.narratives.provider import MOCK_MODEL_NAME, PROVIDER_MOCK, review_packet_with_provider
 
 NARRATIVE_REVIEW_STATE_KEY = "narrative_review_store_v1"
 
@@ -57,6 +57,14 @@ def latest_trace_for_session(state: MutableMapping[str, Any], session_id: str) -
 
 def _trace_id(session_id: str, input_hash: str, iteration_id: Any) -> str:
     return f"{session_id}:{iteration_id}:{input_hash}"
+
+
+def _cache_key(input_hash: str | None, provider: str | None, model_name: str | None) -> str | None:
+    if not input_hash:
+        return None
+    provider_key = str(provider or PROVIDER_MOCK).strip().lower()
+    model_key = str(model_name or (MOCK_MODEL_NAME if provider_key == PROVIDER_MOCK else "")).strip()
+    return f"{provider_key}:{model_key}:{input_hash}"
 
 
 def _build_trace(
@@ -125,17 +133,26 @@ def store_review_trace(
     input_hash = trace["input_hash"]
 
     if input_hash and review_result.get("status") in {"reviewed", "reused_previous_review"}:
-        store["reviews_by_hash"][input_hash] = deepcopy(trace)
+        cache_key = _cache_key(input_hash, trace.get("provider"), trace.get("model_name"))
+        if cache_key:
+            store["reviews_by_hash"][cache_key] = deepcopy(trace)
 
     store["trace_history"].append(deepcopy(trace))
     store["latest_trace_by_session"][str(session_id)] = trace["trace_id"]
     return deepcopy(trace)
 
 
-def cached_review_trace(state: MutableMapping[str, Any], input_hash: str | None) -> dict[str, Any] | None:
-    if not input_hash:
+def cached_review_trace(
+    state: MutableMapping[str, Any],
+    input_hash: str | None,
+    *,
+    provider: str = PROVIDER_MOCK,
+    model_name: str | None = None,
+) -> dict[str, Any] | None:
+    cache_key = _cache_key(input_hash, provider, model_name)
+    if not cache_key:
         return None
-    trace = get_review_store(state)["reviews_by_hash"].get(str(input_hash))
+    trace = get_review_store(state)["reviews_by_hash"].get(cache_key)
     return deepcopy(trace) if trace else None
 
 
@@ -152,7 +169,12 @@ def replay_or_review_with_provider(
     """Reuse cached review traces for identical inputs, otherwise call provider."""
     input_hash = packet.get("input_hash")
     if failure_mode is None:
-        cached = cached_review_trace(state, str(input_hash) if input_hash else None)
+        cached = cached_review_trace(
+            state,
+            str(input_hash) if input_hash else None,
+            provider=provider,
+            model_name=model_name,
+        )
         if cached is not None:
             iteration_id = (packet.get("iteration_context") or {}).get("iteration_number")
             cached["cached"] = True
@@ -166,12 +188,31 @@ def replay_or_review_with_provider(
             store["latest_trace_by_session"][str(session_id)] = cached["trace_id"]
             return cached
 
+    previous_session_trace = latest_trace_for_session(state, session_id)
     review_result = review_packet_with_provider(
         packet,
         provider=provider,
         model_name=model_name,
         failure_mode=failure_mode,
     )
+    if (
+        review_result.get("status") == "reused_previous_review"
+        and previous_session_trace
+        and previous_session_trace.get("status") in {"reviewed", "reused_previous_review"}
+    ):
+        review_result = {
+            **review_result,
+            "review": deepcopy(previous_session_trace.get("output_json")),
+            "validated_review": deepcopy(previous_session_trace.get("validated_review")),
+            "scoring": {
+                "validation_status": previous_session_trace.get("validation_status"),
+                "validation_errors": deepcopy(previous_session_trace.get("validation_errors") or []),
+                "quality_adjustment": previous_session_trace.get("quality_adjustment"),
+                "final_candidate_score": previous_session_trace.get("final_candidate_score"),
+                "quality_assessment": deepcopy(previous_session_trace.get("quality_assessment") or {}),
+                "input_hash": packet.get("input_hash"),
+            },
+        }
     return store_review_trace(
         state,
         packet=packet,

@@ -67,9 +67,11 @@ FUTURE_RESERVED_OPERATIONAL_ASSUMPTION_KEYS = (
     "planned_countries",
 )
 OPERATIONAL_ASSUMPTION_UPDATE_SOURCE = "simulation_operational_update"
+TEXT_CONTEXT_UPDATE_SOURCE = "simulation_text_update"
 SIMULATION_SNAPSHOT_SCORE_DELTA_SOURCES = {
     "simulation_ptc",
     OPERATIONAL_ASSUMPTION_UPDATE_SOURCE,
+    TEXT_CONTEXT_UPDATE_SOURCE,
     "simulation_enrollment_update",
 }
 
@@ -5385,6 +5387,37 @@ def _changed_operational_assumptions_between(previous_snapshot, operational_assu
     return changed
 
 
+def normalize_text_for_materiality(value):
+    return re.sub(r"\W+", "", str(value or "").strip().lower())
+
+
+def _changed_text_context_fields_between(previous_snapshot, text_context):
+    if not previous_snapshot:
+        return []
+
+    previous_text = (previous_snapshot or {}).get("text_context") or {}
+    text_context = text_context or {}
+    changed = []
+
+    for key in sorted(set(previous_text) | set(text_context)):
+        if normalize_text_for_materiality(text_context.get(key)) == normalize_text_for_materiality(previous_text.get(key)):
+            continue
+        changed.append(key)
+
+    return changed
+
+
+def _next_iteration_context(previous_snapshot, source):
+    previous_iteration = ((previous_snapshot or {}).get("iteration_context") or {}).get("iteration_number")
+    if isinstance(previous_iteration, int):
+        iteration_number = previous_iteration + 1
+    else:
+        iteration_number = 0 if source == "prerecorded_baseline" else 1
+    return {
+        "iteration_number": iteration_number,
+    }
+
+
 def _previous_display_values_for_changed_operational_assumptions(previous_snapshot, changed_assumptions):
     previous_snapshot = previous_snapshot or {}
     committed_previous_values = dict(previous_snapshot.get("previous_operational_display_values") or {})
@@ -5408,6 +5441,7 @@ def set_latest_prediction_snapshot(
     source="simulation_ptc",
     compare_values=None,
     operational_assumptions=None,
+    text_context=None,
 ):
     score = _score_from_result(result)
     previous_score = _score_from_result((previous_snapshot or {}).get("result"))
@@ -5438,6 +5472,13 @@ def set_latest_prediction_snapshot(
         set((previous_snapshot or {}).get("committed_changed_operational_assumptions") or [])
         | set((previous_snapshot or {}).get("changed_operational_assumptions") or [])
         | set(changed_operational_assumptions)
+    )
+    text_context = text_context or {}
+    changed_text_context_fields = _changed_text_context_fields_between(previous_snapshot, text_context)
+    committed_changed_text_context_fields = sorted(
+        set((previous_snapshot or {}).get("committed_changed_text_context_fields") or [])
+        | set((previous_snapshot or {}).get("changed_text_context_fields") or [])
+        | set(changed_text_context_fields)
     )
 
     snapshot = {
@@ -5470,6 +5511,10 @@ def set_latest_prediction_snapshot(
             )
         ),
         "operational_assumptions": _json_safe(operational_assumptions or {}),
+        "text_context": _json_safe(text_context),
+        "changed_text_context_fields": changed_text_context_fields,
+        "committed_changed_text_context_fields": committed_changed_text_context_fields,
+        "iteration_context": _next_iteration_context(previous_snapshot, source),
     }
 
     st.session_state[get_simulation_snapshot_key(nct_id)] = snapshot
@@ -5513,6 +5558,10 @@ def append_simulation_prediction_history(snapshot):
         "committed_changed_operational_assumptions": snapshot.get("committed_changed_operational_assumptions"),
         "previous_operational_display_values": snapshot.get("previous_operational_display_values"),
         "operational_assumptions": snapshot.get("operational_assumptions"),
+        "text_context": snapshot.get("text_context"),
+        "changed_text_context_fields": snapshot.get("changed_text_context_fields"),
+        "committed_changed_text_context_fields": snapshot.get("committed_changed_text_context_fields"),
+        "iteration_context": snapshot.get("iteration_context"),
     })
 
 
@@ -5944,6 +5993,18 @@ def has_pending_operational_assumptions(row):
     return bool(get_pending_operational_assumption_keys(row))
 
 
+def get_pending_text_context_fields(row):
+    nct_id = str(row.get(ID_COL, st.session_state.get("selected_nct_id", "")))
+    snapshot = get_latest_prediction_snapshot(nct_id)
+    if not snapshot:
+        return []
+    return _changed_text_context_fields_between(snapshot, build_text_context_for_narrative(row))
+
+
+def has_pending_text_context_changes(row):
+    return bool(get_pending_text_context_fields(row))
+
+
 def has_pending_enrollment_assumption(row):
     return "planned_enrollment" in get_pending_operational_assumption_keys(row)
 
@@ -6056,7 +6117,11 @@ def operational_assumption_label_with_previous(label, row, assumption_key):
 
 
 def has_pending_simulation_changes(row):
-    return has_pending_changes(row) or has_pending_operational_assumptions(row)
+    return (
+        has_pending_changes(row)
+        or has_pending_operational_assumptions(row)
+        or has_pending_text_context_changes(row)
+    )
 
 
 def ensure_simulation_baseline_snapshot(row):
@@ -6114,6 +6179,7 @@ def ensure_simulation_baseline_snapshot(row):
         source="prerecorded_baseline",
         compare_values=compare_values,
         operational_assumptions=operational_assumptions,
+        text_context=build_text_context_for_narrative(row),
     )
     st.session_state.analysis_result = result
     st.session_state.analysis_nct_id = nct_id
@@ -8509,24 +8575,37 @@ def get_analysis_result_for_selected_trial(row):
             st.session_state.trigger_prediction = False
             return (snapshot or {}).get("result")
 
-        if has_pending_operational_assumptions(row) and not has_pending_changes(row):
+        if (
+            (has_pending_operational_assumptions(row) or has_pending_text_context_changes(row))
+            and not has_pending_changes(row)
+        ):
             previous_snapshot = snapshot or {}
             if previous_snapshot.get("result"):
                 compare_values = previous_snapshot.get("compare_values") or get_current_compare_values(row)
                 submitted_values = previous_snapshot.get("submitted_values") or get_current_feature_values(row)
-                operational_assumptions = build_operational_assumptions(
-                    row,
-                    snapshot_values=compare_values,
-                    is_benchmark_stale=False,
+                operational_assumptions = (
+                    build_operational_assumptions(
+                        row,
+                        snapshot_values=compare_values,
+                        is_benchmark_stale=False,
+                    )
+                    if has_pending_operational_assumptions(row)
+                    else previous_snapshot.get("operational_assumptions")
+                )
+                source = (
+                    OPERATIONAL_ASSUMPTION_UPDATE_SOURCE
+                    if has_pending_operational_assumptions(row)
+                    else TEXT_CONTEXT_UPDATE_SOURCE
                 )
                 updated_snapshot = set_latest_prediction_snapshot(
                     st.session_state.selected_nct_id,
                     previous_snapshot["result"],
                     submitted_values,
                     previous_snapshot=previous_snapshot,
-                    source=OPERATIONAL_ASSUMPTION_UPDATE_SOURCE,
+                    source=source,
                     compare_values=compare_values,
                     operational_assumptions=operational_assumptions,
+                    text_context=build_text_context_for_narrative(row),
                 )
                 st.session_state.analysis_result = updated_snapshot["result"]
                 st.session_state.analysis_nct_id = st.session_state.selected_nct_id
@@ -8591,6 +8670,7 @@ def get_analysis_result_for_selected_trial(row):
                             source="simulation_ptc",
                             compare_values=compare_values,
                             operational_assumptions=operational_assumptions,
+                            text_context=build_text_context_for_narrative(row),
                         )
                         st.session_state.analysis_result = snapshot["result"]
 

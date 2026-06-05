@@ -66,6 +66,8 @@ def main() -> int:
         errors.append("no-op fixture should store reused_previous_review status")
     if noop_trace.get("review_needed") is not False:
         errors.append("no-op fixture should not require a fresh review")
+    if not noop_trace.get("validated_review"):
+        errors.append("no-op fixture should carry forward the previous validated review")
 
     failure_trace = replay_or_review_with_mock(
         state,

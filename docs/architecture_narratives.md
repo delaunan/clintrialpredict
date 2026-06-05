@@ -500,6 +500,10 @@ This is conceptual JSON for planning only, not an implementation contract yet:
     "sponsor_tier_ml": "...",
     "primary_duration_months_ml": "..."
   },
+  "structured_feature_display_values": {
+    "phase_ml": "Phase 3",
+    "endpoint_rigor_ml": "Clinical outcome"
+  },
   "operational_assumptions": {
     "planned_enrollment": {
       "value": 600,
@@ -556,14 +560,16 @@ This is conceptual JSON for planning only, not an implementation contract yet:
   },
   "review_context": {
     "baseline_review": {
-      "trace_id": "...",
+      "input_hash": "...",
+      "iteration_id": 0,
       "status": "reviewed",
       "quality_adjustment": 0,
       "final_candidate_score": 68,
       "compact_storyline_memory": "..."
     },
     "previous_review": {
-      "trace_id": "...",
+      "input_hash": "...",
+      "iteration_id": 1,
       "status": "reviewed",
       "quality_adjustment": -2,
       "final_candidate_score": 70,
@@ -587,7 +593,7 @@ Operational-assumption values are assembled after the latest prediction snapshot
 
 The LLM should use operational source metadata, not the compact UI label, to distinguish direct AACT-backed values, system-filled benchmark defaults, and participant scenarios. Direct AACT-backed values are source facts for the selected trial. System-filled values are benchmark assumptions. `user_scenario` values are participant scenario choices even when the visible label has no suffix.
 
-Structured dropdown fields are the primary source of truth. Short text fields are secondary and should be used for coherence checking, contradiction detection, and narrative context rather than as the main source of scoring.
+Structured dropdown fields are the primary source of truth. Short text fields are secondary and should be used for coherence checking, contradiction detection, and narrative context rather than as the main source of scoring. Narrative packets should send canonical submitted structured values first and display labels separately, so future providers can reason from readable labels without losing model-facing value provenance.
 
 Missing or brief free-text fields should not be heavily penalized unless they directly contradict structured trial features or make an otherwise important design claim impossible to interpret.
 
@@ -884,7 +890,7 @@ Do not call the LLM and do not create a new storyline step when:
 
 For no-op predictions, reuse the latest validated review and leave Quality Adjustment, Final Candidate Score, and storyline memory unchanged.
 
-For minor text-only edits, use a materiality gate before triggering a full review:
+For minor text-only edits, use a materiality gate before triggering a full review. The first implemented gate normalizes case, whitespace, and punctuation before comparing text snapshots; richer semantic materiality can be added later:
 
 ```text
 Normalize text -> compare to previous text -> classify as no-op, minor wording, or material meaning change.
@@ -923,7 +929,7 @@ The goal is to make repeated runs as consistent as possible while acknowledging 
 
 Provider abstraction should be thin. The application should own payload construction, validation, Quality Adjustment calculation, persistence, cache lookup, and UI rendering. Provider-specific code should own only model invocation and response normalization. The V1 provider boundary starts with a deterministic mock provider and an explicit unsupported-provider failure path; real OpenAI/Gemini invocation can be added behind the same boundary later.
 
-Use a deterministic input hash based on prompt version, rubric version, baseline snapshot, current snapshot, storyline memory, and text context. If the same input hash is reviewed again, reuse the stored validated review instead of calling the provider again. Generate the baseline review once per selected study and store it for the session.
+Use a deterministic input hash based on prompt version, rubric version, baseline snapshot, current snapshot, storyline memory, and text context. If the same input hash is reviewed again with the same provider/model cache namespace, reuse the stored validated review instead of calling the provider again. Generate the baseline review once per selected study and store it for the session. Hashable review context should avoid session-specific trace IDs; use stable input hashes and iteration IDs instead.
 
 Validation and failure behavior:
 

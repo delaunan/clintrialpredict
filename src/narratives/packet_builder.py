@@ -126,10 +126,15 @@ def _snapshot_values(snapshot: dict[str, Any] | None) -> dict[str, Any]:
     snapshot = snapshot or {}
     return (
         snapshot.get("structured_features")
-        or snapshot.get("compare_values")
         or snapshot.get("submitted_values")
+        or snapshot.get("compare_values")
         or {}
     )
+
+
+def _snapshot_display_values(snapshot: dict[str, Any] | None) -> dict[str, Any]:
+    snapshot = snapshot or {}
+    return snapshot.get("display_values") or {}
 
 
 def _snapshot_text_context(snapshot: dict[str, Any] | None) -> dict[str, Any]:
@@ -226,6 +231,10 @@ def _changed_fields(current_snapshot: dict[str, Any]) -> list[str]:
         f"operational_assumptions.{key}"
         for key in current_snapshot.get("changed_operational_assumptions") or []
     )
+    changed.extend(
+        f"text_context.{key}"
+        for key in current_snapshot.get("changed_text_context_fields") or []
+    )
     seen: set[str] = set()
     ordered: list[str] = []
     for field in changed:
@@ -264,7 +273,8 @@ def _compact_review_context(trace: dict[str, Any] | None) -> dict[str, Any] | No
     continuity = validated.get("continuity") or {}
     participant = validated.get("participant_review") or {}
     return json_safe({
-        "trace_id": trace.get("trace_id"),
+        "input_hash": trace.get("input_hash"),
+        "iteration_id": trace.get("iteration_id"),
         "status": trace.get("status"),
         "validation_status": trace.get("validation_status"),
         "quality_adjustment": trace.get("quality_adjustment"),
@@ -322,6 +332,10 @@ def build_review_packet(
         "trial_identity": _select_keys(current_identity, TRIAL_IDENTITY_KEYS),
         "text_context": _select_keys(current_text, TEXT_CONTEXT_KEYS),
         "structured_features": _select_keys(current_values, STRUCTURED_FEATURE_KEYS),
+        "structured_feature_display_values": _select_keys(
+            _snapshot_display_values(current_snapshot),
+            STRUCTURED_FEATURE_KEYS,
+        ),
         "operational_assumptions": _select_keys(
             current_snapshot.get("operational_assumptions") or {},
             ACTIVE_OPERATIONAL_ASSUMPTION_KEYS,
