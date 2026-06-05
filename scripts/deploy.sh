@@ -225,6 +225,22 @@ case $COMMAND in
         push_image
         deploy_ui "$UI_SERVICE" "trial_audit"
         ;;
+    trial-audit)
+        print_header
+        require_ready
+        build_image
+        push_image
+        deploy_ui "$UI_SERVICE" "trial_audit"
+        ;;
+    uis)
+        print_header
+        require_ready
+        build_image
+        push_image
+        deploy_ui "$UI_SERVICE" "trial_audit"
+        deploy_ui "clintrial-edit" "trial_edit"
+        deploy_ui "clintrial-simulator" "trial_simulator"
+        ;;
     trial-simulator)
         print_header
         require_ready
@@ -250,7 +266,7 @@ case $COMMAND in
         deploy_ui "clintrial-simulator" "trial_simulator"
         ;;
     *)
-        echo "Usage: $0 {check|auth|build|push|api|ui|trial-edit|trial-simulator|all}"
+        echo "Usage: $0 {check|auth|build|push|api|ui|trial-audit|trial-edit|trial-simulator|uis|all}"
         exit 1
         ;;
 esac

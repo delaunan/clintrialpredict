@@ -1,5 +1,13 @@
 # Edit Mode Live Prediction Architecture
 
+## Document Role
+
+This file owns the live trial UI and prediction workflow contract for `trial_edit` and `trial_simulator`. It covers Streamlit view behavior, editable Trial Features state, `/predict` simulation calls, SHAP/impact chart update rules, and parity boundaries.
+
+It should not own operational benchmark methodology; use `docs/architecture_estimation.md` for that. It should not own future LLM narrative or Coherence Score rules; use `docs/architecture_narratives.md` for that.
+
+Efficient update rule: change this file only when the UI workflow, model-facing simulation payload, live prediction path, or score/chart contract changes. For operational card text, update this file only for display behavior; put benchmark math in `docs/architecture_estimation.md`.
+
 This document started as the planning reference for turning the current read-only/audit demo into a simple, robust live simulation workflow. It now also records the implementation state of the isolated edit-trial variant so future sessions can resume without rediscovering the same decisions.
 
 ## Handoff Summary - Next Session

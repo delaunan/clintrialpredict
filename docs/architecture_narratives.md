@@ -1,5 +1,13 @@
 # Serious-Game Narrative Architecture
 
+## Document Role
+
+This file owns the future serious-game narrative layer: LLM commentary, Coherence Score, Coherence Adjustment, Adjusted Trial Value Score, facilitator/participant outputs, and narrative payload contracts.
+
+It should not own the existing XGBoost Completion Score, SHAP impact mechanics, or simulation UI state; use `docs/architecture_edit.md` for those. It should consume operational benchmark metadata from `docs/architecture_estimation.md` rather than redefining benchmark construction.
+
+Efficient update rule: change this file when narrative inputs/outputs, LLM contracts, Coherence scoring, or participant/facilitator interpretation rules change. Do not implement or imply changes to XGBoost, SHAP, calibration, or operational benchmark construction here.
+
 ## 1. Purpose Of The Narrative Architecture
 
 This document defines the future design for adding a serious-game narrative layer around single-trial simulation in ClinTrialPredict. It is planning-only: no code, API, UI, model, taxonomy, or parity behavior is changed by this document.

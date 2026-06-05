@@ -1,5 +1,26 @@
 # **Clinical Trial Prediction: Project Status & Architecture (v56.0)**
 
+## **0. Documentation Map**
+Use this file as the project architecture hub. It should stay concise and point to the domain-specific architecture files rather than absorbing every implementation detail.
+
+| File | Role | Update When |
+| :--- | :--- | :--- |
+| `GEMINI.md` | Shared agent operating rules and safety gates. | Agent workflow, parity rules, or memory policy changes. |
+| `AGENTS.md` | Codex-specific startup and workflow wrapper around `GEMINI.md`. | Codex-only workflow instructions change. |
+| `ARCHITECTURAL_LOG.md` | Current high-level system map: production architecture, shared core, variants, artifacts, and documentation index. | Product topology, core architecture, artifact inventory, or variant list changes. |
+| `docs/architecture_edit.md` | Live trial-edit/trial-simulator UI and `/predict` simulation contract. | UI behavior, prediction workflow, editable feature state, or simulation scoring contract changes. |
+| `docs/architecture_estimation.md` | Operational-assumption benchmark architecture. | Planned enrollment, planned sites, duration benchmarks, operational artifacts, or defaulting logic changes. |
+| `docs/architecture_narratives.md` | Future serious-game narrative, Coherence Score, and LLM commentary plan. | Narrative payloads, LLM outputs, Coherence scoring, or adjusted trial value design changes. |
+| `docs/estimation_v1_completion.md` | Short completion snapshot for estimation v1. | Only when closing/superseding an estimation milestone. |
+| `.gemini/tmp/clintrialpredict/memory/MEMORY.md` | Short private handoff notes, not an architecture source of truth. | End of meaningful work; prefix by architecture scope and branch. |
+
+Update rules:
+
+- Prefer updating one domain file per decision. Cross-link instead of duplicating the same contract in multiple docs.
+- Keep this hub current but short: variants, shared core, artifact inventory, and document routing only.
+- Move long implementation history into the relevant `docs/architecture_*.md` file or a milestone note.
+- Memory entries should cite the architecture scope first and branch provenance second, for example `[architecture_edit][trial-edit]`. They should not preserve obsolete instructions as active guidance.
+
 ## **1. Production Deployment (v1.0 - "Steel Shield")**
 - **Production URL**: [https://clintrial-ui-835962039082.europe-west1.run.app/](https://clintrial-ui-835962039082.europe-west1.run.app/)
 - **Infrastructure**: Google Cloud Run (Serverless).
@@ -81,7 +102,12 @@ To ensure the UI and API match the Notebook precisely, the system implements **R
 ## **6. Reference & Audit Tools**
 - **Database Refresh**: `python refresh_registry.py` (Re-calculates `search_registry.csv`).
 - **Parity Audit**: `python audit_parity.py` (Checks for mathematical drift).
-- **Deployment**: `scripts/deploy.sh` (Standard Cloud Run push).
+- **Deployment**: `scripts/deploy.sh` (Cloud Run build/push/deploy helper).
+  - `./scripts/deploy.sh trial-audit`: deploys `clintrial-ui` with `APP_VARIANT=trial_audit`.
+  - `./scripts/deploy.sh trial-edit`: deploys `clintrial-edit` with `APP_VARIANT=trial_edit`.
+  - `./scripts/deploy.sh trial-simulator`: deploys `clintrial-simulator` with `APP_VARIANT=trial_simulator`.
+  - `./scripts/deploy.sh uis`: deploys all three UI services from the same image.
+  - `./scripts/deploy.sh all`: deploys API plus all three UI services.
 
 ---
 

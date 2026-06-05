@@ -5,12 +5,14 @@ Use `GEMINI.md` as the shared project source of truth. Keep this file short beca
 ## Startup Context
 - At the start of a new task, read `GEMINI.md` before acting.
 - Check the current Git branch with `git branch --show-current`.
-- If `.gemini/tmp/clintrialpredict/memory/MEMORY.md` exists, read only entries matching the current branch prefix.
-- If branch memory is long, summarize the latest relevant goal, decisions, files, blockers, and next step before continuing.
-- Do not read unrelated branch memory unless the user explicitly asks.
+- If `.gemini/tmp/clintrialpredict/memory/MEMORY.md` exists, read entries for the relevant architecture scope first, then entries for the current branch. Scope matters more than branch.
+- If memory is long, summarize the latest relevant goal, decisions, files, blockers, and next step before continuing.
+- Do not read unrelated architecture-scope memory unless the user explicitly asks.
 - Treat memory as guidance, not truth. Current user instructions, current code, and test results override older memory entries.
 
 ## Efficient, Surgical Workflow
+- Classify the task before acting: `core_scoring`, `trial_audit`, `trial_edit`, `trial_simulator`, `operational_estimation`, `narratives_llm`, `deployment`, or `docs_memory`.
+- Use the classification to choose the smallest source of truth: `ARCHITECTURAL_LOG.md` for system topology/shared core, `docs/architecture_edit.md` for UI and live prediction workflow, `docs/architecture_estimation.md` for operational benchmarks, `docs/architecture_narratives.md` for LLM/Coherence planning, and `GEMINI.md`/`AGENTS.md` for agent behavior.
 - Start by identifying the smallest relevant file set. Read those files first, then expand when correctness requires imports, call sites, configs, tests, runtime paths, or shared helpers.
 - Prefer `rg`, targeted file reads, and exact symbols over broad scans.
 - Do not paste or restate large file contents in responses; summarize findings and cite paths.
@@ -36,7 +38,13 @@ Use `GEMINI.md` as the shared project source of truth. Keep this file short beca
 - Use `/status` to monitor context and rate-limit pressure during long sessions.
 
 ## Memory Updates
-- When finishing meaningful work, offer or add a concise branch-prefixed summary to `.gemini/tmp/clintrialpredict/memory/MEMORY.md`.
+- When finishing meaningful work, offer or add a concise architecture-scope-and-branch summary to `.gemini/tmp/clintrialpredict/memory/MEMORY.md`, using `[scope][branch-name]`.
 - Include only: goal, decisions, files changed or inspected, tests/commands run, blockers, and next step.
 - Keep memory entries short; never paste full code, large diffs, or long logs.
 - When updating memory, correct or supersede stale entries rather than preserving misleading history as active context.
+
+## Response Shape
+- For completed work, answer with scope, changed files, verification, remaining risk, and next action.
+- For investigations, lead with the finding, then evidence, then options.
+- For reviews, lead with risks and file references.
+- Do not repeat long architecture history when a file reference or one-sentence summary is enough.

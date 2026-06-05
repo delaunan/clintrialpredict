@@ -1,5 +1,13 @@
 # ClinTrialPredict Operational Assumption Estimation Architecture
 
+## Document Role
+
+This file owns the deterministic operational-assumption benchmark layer: planned enrollment, planned site count, planned duration, benchmark artifacts, runtime defaulting, checks, and notebook validation.
+
+It should not own Streamlit interaction details except where needed to define the operational-assumption contract; use `docs/architecture_edit.md` for UI workflow behavior. It should not define LLM narrative or Coherence scoring behavior; use `docs/architecture_narratives.md` for that.
+
+Efficient update rule: change this file when cohort rules, source priorities, artifact columns, defaulting logic, validation thresholds, or benchmark status changes. Do not duplicate UI layout notes here unless they affect benchmark semantics.
+
 ## Purpose
 
 This document defines the v1 operational-assumption estimation / benchmarking architecture for ClinTrialPredict serious-game mode. It started as the planned-enrollment architecture and now records the implemented combined benchmark foundation for planned enrollment, planned site count, and planned duration.
