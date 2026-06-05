@@ -259,6 +259,13 @@ def _quality_contributions(validated_domains: dict[str, dict[str, Any]]) -> dict
     }
 
 
+def _has_complete_scoring_domains(validated_review: dict[str, Any]) -> bool:
+    domains = validated_review.get("quality_review_domains") or {}
+    if set(domains) != REQUIRED_REVIEW_DOMAINS:
+        return False
+    return all(domain.get("valid") is True for domain in domains.values())
+
+
 def validate_review_json(review: dict[str, Any]) -> dict[str, Any]:
     """Validate provider/mock review JSON and return normalized review fields."""
     errors: list[str] = []
@@ -317,6 +324,16 @@ def score_validated_review(packet: dict[str, Any], validated_review: dict[str, A
             "quality_adjustment": None,
             "final_candidate_score": None,
             "quality_assessment": {},
+        }
+
+    if not _has_complete_scoring_domains(validated_review):
+        return {
+            "validation_status": validated_review.get("validation_status", "partial"),
+            "validation_errors": list(validated_review.get("validation_errors") or []),
+            "quality_adjustment": None,
+            "final_candidate_score": None,
+            "quality_assessment": {},
+            "input_hash": packet.get("input_hash") or stable_packet_hash(packet),
         }
 
     contributions = _quality_contributions(validated_review.get("quality_review_domains") or {})

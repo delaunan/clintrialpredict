@@ -67,6 +67,10 @@ def _check_failure_paths(errors: list[str]) -> None:
         errors.append("malformed failure mode did not return malformed_response status")
     if malformed.get("scoring", {}).get("validation_status") == "valid":
         errors.append("malformed failure mode should not validate as valid")
+    if malformed.get("scoring", {}).get("quality_adjustment") is not None:
+        errors.append("malformed failure mode should not return a Quality Adjustment")
+    if malformed.get("scoring", {}).get("final_candidate_score") is not None:
+        errors.append("malformed failure mode should not return a Final Candidate Score")
 
     unmatched_packet = dict(packet)
     unmatched_packet["input_hash"] = "unmatched"
