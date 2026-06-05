@@ -921,7 +921,7 @@ Recommended trace fields to store for each narrative pass:
 
 The goal is to make repeated runs as consistent as possible while acknowledging that exact determinism is not guaranteed for LLM outputs.
 
-Provider abstraction should be thin. The application should own payload construction, validation, Quality Adjustment calculation, persistence, cache lookup, and UI rendering. Provider-specific code should own only model invocation and response normalization.
+Provider abstraction should be thin. The application should own payload construction, validation, Quality Adjustment calculation, persistence, cache lookup, and UI rendering. Provider-specific code should own only model invocation and response normalization. The V1 provider boundary starts with a deterministic mock provider and an explicit unsupported-provider failure path; real OpenAI/Gemini invocation can be added behind the same boundary later.
 
 Use a deterministic input hash based on prompt version, rubric version, baseline snapshot, current snapshot, storyline memory, and text context. If the same input hash is reviewed again, reuse the stored validated review instead of calling the provider again. Generate the baseline review once per selected study and store it for the session.
 
@@ -1327,7 +1327,7 @@ Implementation staging:
 5. Storage and replay: persist validated review traces in session state first, including input hash, validation status, Quality Adjustment, Final Candidate Score, and compact storyline memory. Reuse cached reviews for identical input hashes. Current implementation artifact: `src/narratives/review_store.py`, validated by `scripts/check_narrative_review_store.py`.
 6. Minimal UI panel: render Completion Score, Quality Adjustment, Final Candidate Score, Quality Review, and compact Quality Assessment rows. Do not build adjusted treemap yet. Current implementation artifact: `frontend/views/trial_simulator.py`, using the provider-free packet builder, mock reviewer, and session-state review store.
 7. Hidden baseline continuity: generate/store the hidden baseline review and verify that later iteration reviews use baseline review, previous review, and compact storyline memory consistently. Current implementation artifacts: `src/narratives/packet_builder.py`, `frontend/views/trial_simulator.py`, and `scripts/check_narrative_packet_builder.py`.
-8. Thin LLM provider wrapper: add the provider abstraction only after packet building, validation, scoring, caching, replay, and mock UI work. Provider code invokes the model and normalizes JSON only. The application owns scoring.
+8. Thin LLM provider wrapper: add the provider abstraction only after packet building, validation, scoring, caching, replay, and mock UI work. Provider code invokes the model and normalizes JSON only. The application owns scoring. Current implementation artifact: `src/narratives/provider.py`, validated by `scripts/check_narrative_provider.py`; the simulator still uses the deterministic mock provider.
 9. First adjusted-score visual: add Final Candidate Score View with component cards and the seven-bar grouped chart.
 10. Two-branch adjusted treemap: add only after the simpler adjusted view is stable and understandable; defer to V1.1 if it slows the first implementation.
 11. Calibration/playtesting: review examples and tune rating-to-point mapping within the `-10` to `+10` total Quality Adjustment range.

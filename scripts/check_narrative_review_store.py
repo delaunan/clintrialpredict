@@ -38,6 +38,10 @@ def main() -> int:
         errors.append("stored trace did not preserve Quality Adjustment")
     if first.get("final_candidate_score") != review_fixture["expected_behavior"]["expected_final_candidate_score"]:
         errors.append("stored trace did not preserve Final Candidate Score")
+    if first.get("model_name") != "fixture_hash_mock_v1":
+        errors.append("stored trace did not preserve provider model name")
+    if first.get("provider_metadata", {}).get("deterministic") is not True:
+        errors.append("stored trace did not preserve provider metadata")
     if not compact_storyline_from_trace(first):
         errors.append("stored trace should expose compact storyline memory")
 

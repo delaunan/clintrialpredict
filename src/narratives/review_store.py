@@ -6,7 +6,7 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from typing import Any, MutableMapping
 
-from src.narratives.mock_reviewer import review_packet_with_mock
+from src.narratives.provider import PROVIDER_MOCK, review_packet_with_provider
 
 NARRATIVE_REVIEW_STATE_KEY = "narrative_review_store_v1"
 
@@ -79,6 +79,8 @@ def _build_trace(
         "iteration_id": iteration_id,
         "timestamp": _utc_now(),
         "provider": review_result.get("provider"),
+        "model_name": review_result.get("model_name"),
+        "provider_metadata": deepcopy(review_result.get("provider_metadata") or {}),
         "status": review_result.get("status"),
         "cached": cached,
         "review_needed": review_result.get("review_needed"),
@@ -137,15 +139,17 @@ def cached_review_trace(state: MutableMapping[str, Any], input_hash: str | None)
     return deepcopy(trace) if trace else None
 
 
-def replay_or_review_with_mock(
+def replay_or_review_with_provider(
     state: MutableMapping[str, Any],
     *,
     packet: dict[str, Any],
     session_id: str,
     baseline_id: str | None = None,
+    provider: str = PROVIDER_MOCK,
+    model_name: str | None = None,
     failure_mode: str | None = None,
 ) -> dict[str, Any]:
-    """Reuse cached review traces for identical inputs, otherwise call mock reviewer."""
+    """Reuse cached review traces for identical inputs, otherwise call provider."""
     input_hash = packet.get("input_hash")
     if failure_mode is None:
         cached = cached_review_trace(state, str(input_hash) if input_hash else None)
@@ -162,7 +166,12 @@ def replay_or_review_with_mock(
             store["latest_trace_by_session"][str(session_id)] = cached["trace_id"]
             return cached
 
-    review_result = review_packet_with_mock(packet, failure_mode=failure_mode)
+    review_result = review_packet_with_provider(
+        packet,
+        provider=provider,
+        model_name=model_name,
+        failure_mode=failure_mode,
+    )
     return store_review_trace(
         state,
         packet=packet,
@@ -170,4 +179,23 @@ def replay_or_review_with_mock(
         session_id=session_id,
         baseline_id=baseline_id,
         cached=False,
+    )
+
+
+def replay_or_review_with_mock(
+    state: MutableMapping[str, Any],
+    *,
+    packet: dict[str, Any],
+    session_id: str,
+    baseline_id: str | None = None,
+    failure_mode: str | None = None,
+) -> dict[str, Any]:
+    """Backward-compatible mock-provider replay helper."""
+    return replay_or_review_with_provider(
+        state,
+        packet=packet,
+        session_id=session_id,
+        baseline_id=baseline_id,
+        provider=PROVIDER_MOCK,
+        failure_mode=failure_mode,
     )

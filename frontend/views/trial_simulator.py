@@ -31,7 +31,7 @@ from src.operational_benchmarks import (
 from src.narratives.packet_builder import build_review_packet
 from src.narratives.review_store import (
     compact_storyline_from_trace,
-    replay_or_review_with_mock,
+    replay_or_review_with_provider,
 )
 
 # Load environment variables
@@ -5609,11 +5609,12 @@ def get_hidden_baseline_review_trace(row, baseline_snapshot):
     if cached_trace and cached_trace.get("input_hash") == packet.get("input_hash"):
         return cached_trace
 
-    trace = replay_or_review_with_mock(
+    trace = replay_or_review_with_provider(
         st.session_state,
         packet=packet,
         session_id=session_id,
         baseline_id=(packet.get("iteration_context") or {}).get("baseline_snapshot_id"),
+        provider="mock",
     )
     st.session_state[state_key] = trace
     return trace
@@ -5655,11 +5656,12 @@ def get_quality_review_trace_for_snapshot(row, snapshot):
     if cached_trace and cached_trace.get("input_hash") == packet.get("input_hash"):
         return cached_trace
 
-    trace = replay_or_review_with_mock(
+    trace = replay_or_review_with_provider(
         st.session_state,
         packet=packet,
         session_id=session_id,
         baseline_id=(packet.get("iteration_context") or {}).get("baseline_snapshot_id"),
+        provider="mock",
     )
     st.session_state[state_key] = trace
     return trace
