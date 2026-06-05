@@ -25,6 +25,7 @@ TRIAL_IDENTITY_KEYS = (
 TEXT_CONTEXT_KEYS = (
     "title",
     "summary_ui",
+    "conditions_ui",
     "primary_outcomes_ui",
     "primary_endpoint_description",
     "interventions_ui",
@@ -263,7 +264,11 @@ def _iteration_number(current_snapshot: dict[str, Any], previous_snapshot: dict[
     return 0 if source == "prerecorded_baseline" else 1
 
 
-def _compact_review_context(trace: dict[str, Any] | None) -> dict[str, Any] | None:
+def _compact_review_context(
+    trace: dict[str, Any] | None,
+    *,
+    include_quality_scores: bool = True,
+) -> dict[str, Any] | None:
     if not trace:
         return None
     if trace.get("status") not in {"reviewed", "reused_previous_review"}:
@@ -277,8 +282,9 @@ def _compact_review_context(trace: dict[str, Any] | None) -> dict[str, Any] | No
         "iteration_id": trace.get("iteration_id"),
         "status": trace.get("status"),
         "validation_status": trace.get("validation_status"),
-        "quality_adjustment": trace.get("quality_adjustment"),
-        "final_candidate_score": trace.get("final_candidate_score"),
+        "quality_adjustment": trace.get("quality_adjustment") if include_quality_scores else None,
+        "final_candidate_score": trace.get("final_candidate_score") if include_quality_scores else None,
+        "quality_numeric_context": "visible_review" if include_quality_scores else "hidden_baseline_qualitative_only",
         "changed_fields": trace.get("changed_fields") or [],
         "score_movement": trace.get("score_movement"),
         "participant_review": {
@@ -352,7 +358,10 @@ def build_review_packet(
             "top_feature_impact_changes": _feature_driver_values(current_snapshot, "top_feature_impact_changes"),
         },
         "review_context": {
-            "baseline_review": _compact_review_context(baseline_review_trace),
+            "baseline_review": _compact_review_context(
+                baseline_review_trace,
+                include_quality_scores=False,
+            ),
             "previous_review": _compact_review_context(previous_review_trace),
         },
         "iteration_context": {

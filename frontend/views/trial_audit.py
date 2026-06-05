@@ -12,11 +12,11 @@ from dotenv import load_dotenv
 import numpy as np
 import pandas as pd
 import streamlit as st
-import requests
 
 
 # IMPORT PLOTTING UTILS
 from frontend.utils.plot import plot_success_gauge, plot_impact_bar, plot_treemap
+from frontend.utils.audit_decomposition import build_prerecorded_audit_decomposition_result
 
 # Load environment variables
 load_dotenv()
@@ -44,11 +44,6 @@ DATA_PATH = FRONTEND_DIR / "data" / "search_registry.csv"
 TAXONOMY_PATH = PROJECT_ROOT / "models" / "taxonomy_01.json"
 IS_CLOUD_RUN = bool(os.getenv("K_SERVICE"))
 
-API_URL = os.getenv("API_URL", "").strip()
-if not API_URL and not IS_CLOUD_RUN:
-    API_URL = "http://localhost:8000/predict"
-
-API_TIMEOUT_SECONDS = 60
 logger = logging.getLogger(__name__)
 ID_COL = "nct_id"
 
@@ -5181,69 +5176,24 @@ def get_analysis_result_for_selected_trial(row):
     ):
         with st.spinner("Analyzing signals..."):
             try:
-                if not API_URL:
-                    st.error("Prediction service is not configured.")
-                    return None
-
-                row_to_predict: pd.Series = get_edited_row(row)
-                prediction_payload = row_to_predict.replace({np.nan: None}).to_dict()
-
-                res = requests.post(
-                    API_URL,
-                    json=prediction_payload,
-                    timeout=API_TIMEOUT_SECONDS
-                )
-
-                if res.status_code == 200:
-                    result = res.json()
-
-                    st.session_state.analysis_result = result
-                    st.session_state.analysis_nct_id = st.session_state.selected_nct_id
-                    st.session_state.trigger_prediction = False
-
+                result = build_prerecorded_audit_decomposition_result(row, TAXONOMY)
+                if not result:
                     audit_log(
-                        "prediction_success",
-                        score=result.get("score"),
+                        "prediction_prerecorded_unavailable",
                         **get_selected_trial_audit_fields(),
                     )
-                else:
-                    audit_log(
-                        "prediction_api_error",
-                        status_code=res.status_code,
-                        **get_selected_trial_audit_fields(),
-                    )
-
-                    st.error(f"API Error: {res.status_code}")
+                    st.error("Prerecorded score decomposition is unavailable for this trial.")
                     return None
 
-            except requests.exceptions.Timeout:
+                st.session_state.analysis_result = result
+                st.session_state.analysis_nct_id = st.session_state.selected_nct_id
+                st.session_state.trigger_prediction = False
+
                 audit_log(
-                    "prediction_timeout",
+                    "prediction_success",
+                    score=result.get("score"),
                     **get_selected_trial_audit_fields(),
                 )
-
-                st.error("API Error: request timed out.")
-                return None
-
-            except requests.exceptions.RequestException:
-                audit_log(
-                    "prediction_request_exception",
-                    **get_selected_trial_audit_fields(),
-                )
-
-                logger.exception("Prediction API request failed")
-                st.error("Prediction service is temporarily unavailable. Please try again later.")
-                return None
-
-            except ValueError:
-                audit_log(
-                    "prediction_invalid_response",
-                    **get_selected_trial_audit_fields(),
-                )
-
-                logger.exception("Prediction API returned an invalid response")
-                st.error("Prediction service returned an invalid response. Please try again later.")
-                return None
 
             except Exception:
                 audit_log(

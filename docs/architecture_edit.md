@@ -178,7 +178,7 @@ Verification completed for the duration UI step:
 Implemented since the 2026-05-30 status:
 
 - `frontend/views/trial_simulator.py` now uses a latest-prediction snapshot workflow for simulation mode.
-- Simulation Mode creates a prerecorded baseline snapshot from original selected-trial values and audit prediction data, then shows `Trial Features` with `Completion Score` available.
+- Simulation Mode creates a local comparison baseline snapshot from original selected-trial values and precomputed audit decomposition artifacts, then shows `Trial Features`.
 - `Predict Trial Completion` is visually blue only when pending UI changes exist and grey/visually inactive when current values match the latest prediction snapshot; clicking it with no pending changes is a no-op.
 - Field edits no longer queue or run automatic prediction. Gauge, impact bar, and treemap stay tied to the latest successful snapshot until `Predict Trial Completion` is clicked.
 - Pending-change comparison now uses user-visible UI option identity (`compare_values`) instead of only ML-facing encoded values. This means changes such as `Not Specified` -> `Novel Target (No Prior Approvals)` are marked pending even when both options map to the same encoded model value.
@@ -244,12 +244,16 @@ Important fixes already made:
 
 Current Trial Features layout:
 
+- Top text-context card area:
+  - Left narrow column: editable `Conditions`, extended to align with the bottom of the `Interventions` card.
+  - Right wide area: editable `Study Summary` on top, then editable `Interventions` and `Primary Outcomes` side by side.
 - Top left: `Therapeutic Context`
 - Top right: `Patient Profile`
 - Bottom left: `Scientific Challenge`
 - Bottom right: `Execution Framework`
 - The layout is visually finalized as of this session: four white rounded pillar cards, two fields per row by default, single-field rows left-aligned at half-card width, equal top-row card heights, equal bottom-row card heights, compact row-to-row spacing, and enlarged pillar icon/title headers with extra separation before the first field row.
 - `number_of_arms_ml` remains an integer input. `primary_duration_months_ml` uses one-decimal display/comparison with `0.1` increments, matching the model-facing preprocessing rule.
+- The text-context cards share the existing Trial Information text state and feed narrative `text_context`; they do not enter XGBoost Completion Score.
 
 Current Trial Features row structure:
 
@@ -325,10 +329,12 @@ These rules are the current edit-trial behavior contract. Future refinements sho
 - A feature must have one effective edited value per selected trial, stored through the existing `input_{nct_id}_{field_id}` session-state convention.
 - Any tab that displays an editable model feature must read from the same state-aware value helpers used by Trial Features.
 - Simulation mode must be driven by one latest prediction snapshot per selected trial/session.
-- A snapshot is created or replaced only after a successful prediction result or after loading the prerecorded baseline snapshot when simulation mode first turns on for an existing selected trial.
+- A snapshot is created or replaced only after a successful prediction result or after seeding the local registry-value comparison baseline when simulation mode first turns on for an existing selected trial.
 - Pending changes are computed by comparing current visible UI option identity against the latest prediction snapshot, not against the original registry row after a newer prediction has run.
 - Snapshots store model-facing `submitted_values` for scoring and UI-facing `compare_values` for pending-change comparison.
-- Turning simulation mode on must show Trial Features and create a baseline snapshot from original selected-trial values and prerecorded audit prediction data if no current simulation snapshot exists for that selected trial.
+- Turning simulation mode on must show Trial Features and create a local baseline snapshot from original selected-trial values if no current simulation snapshot exists for that selected trial. For existing audit trials, this baseline should use the pre-saved audit SHAP/decomposition artifacts (`models/shap_values_01.joblib` plus taxonomy/model feature names) to populate the baseline gauge, impact bar, and treemap without running XGBoost prediction or encoding.
+- Turning simulation mode on should also initialize the hidden baseline Quality Review context for the narrative layer. This is hidden from participants and must not expose Quality Adjustment, Final Candidate Score, or baseline narrative comments.
+- Dropdown changes rerun Streamlit but must not call `/predict`; only `Predict Trial Completion` may run a user-requested simulation prediction.
 - Turning simulation mode off must reset visible Trial Features values to the original selected-trial values, clear simulation-only state, clear Trial Features widget keys, restore the normal audit tab layout, and prevent edited values from leaking into the audit gauge, treemap, or impact bar.
 - Changing selected trial must clear simulation prediction state and initialize editor values from the newly selected row.
 
@@ -337,7 +343,9 @@ These rules are the current edit-trial behavior contract. Future refinements sho
 - Simulation prediction must submit the edited row with `simulation_mode: true`.
 - Audit prediction must use the original selected row and the existing precomputed/audit path.
 - No user action except `Predict Trial Completion` may run a new simulation prediction.
-- For existing selected trials, baseline snapshot creation when simulation mode turns on must use prerecorded audit prediction data, not a live simulation API call.
+- For existing selected trials, baseline snapshot creation when simulation mode turns on is local and must not call `/predict`. It may load precomputed audit SHAP/decomposition artifacts, but it must not run the live XGBoost prediction pipeline. This baseline is not a user-run simulation prediction and does not replace explicit `Predict Trial Completion` behavior.
+- Audit decomposition assembly is shared through `src/scoring/decomposition.py`. The API uses it after audit SHAP lookup or live TreeSHAP generation; the frontend uses `frontend/utils/audit_decomposition.py` to call the same assembly locally for no-edit prerecorded audit results.
+- Across `trial_audit.py`, `trial_edit.py`, and `trial_simulator.py`, no-edit Completion Score actions should use local prerecorded SHAP decomposition rather than `/predict`. This includes normal/audit Predict clicks and existing-trial Simulation Mode baseline snapshots. `/predict` is reserved for edited model-facing simulation scenarios that require live XGBoost/TreeSHAP.
 - Gauge, impact bar, and treemap always reflect the latest successful prediction snapshot. They must not visually change merely because the user edits a field.
 - Live scoring must normalize UI labels, taxonomy option keys, already encoded values, numeric strings, and boolean-like raw values before calling the model pipeline.
 - Live scoring must compute the TA calibration offset from the edited therapeutic area, not from the original row when the user has changed it.
@@ -361,7 +369,8 @@ Clinical_Score = clip(round(50 + sum(rounded pillar impacts), 1), 1, 99)
 ### UI Behavior
 
 - Trial Features must remain visible throughout simulation mode, including after a successful prediction.
-- When simulation mode turns on, Completion Score must be visible immediately after baseline snapshot creation, including gauge, impact bar, treemap, pillar impacts, and feature impacts.
+- When simulation mode turns on, Trial Features must be visible immediately. For an existing selected trial, the app creates a local prerecorded baseline snapshot from registry values and precomputed audit SHAP/decomposition artifacts, then may show the baseline Completion Score, impact bar, and treemap from that snapshot without calling `/predict`.
+- If precomputed decomposition is unavailable for a specific trial, the app may fall back to a score-only registry baseline; chart-rich outputs then require a successful explicit prediction response.
 - In simulation mode with score visible, tab order is `Trial Information`, `Population Details`, `Completion Score`, `Trial Features`; when Simulation Mode is toggled on, `Trial Features` opens by default.
 - `Predict Trial Completion` is grey/visually inactive when current visible Trial Features values match the latest prediction snapshot. It may remain enabled for implementation simplicity, but clicking it in this state must not run prediction.
 - `Predict Trial Completion` is blue/active when at least one visible Trial Features value has pending changes.
@@ -432,8 +441,8 @@ The intended user flow is:
 1. Open a trial.
 2. Toggle `Simulation Mode` on.
 3. A new `Trial Features` tab appears.
-4. If no current simulation snapshot exists for the selected trial, the app creates a baseline snapshot from original selected-trial values and prerecorded audit prediction data.
-5. `Completion Score` appears immediately from that baseline snapshot and remains available before `Trial Features` in the tab order.
+4. If no current simulation snapshot exists for the selected trial, the app creates a local comparison baseline snapshot from original selected-trial values and precomputed audit SHAP/decomposition artifacts.
+5. For existing selected trials, `Completion Score` can appear immediately from the local prerecorded baseline and remains available before `Trial Features` in the tab order. Gauge, impact bar, and treemap can be populated from precomputed audit decomposition without calling `/predict`.
 6. `Trial Features` contains four white rounded boxes, one per pillar:
    - Therapeutic Context
    - Patient Profile
@@ -461,18 +470,18 @@ Protect the deployed demo by implementing simulation as a separate app variant, 
 
 This gives the demo a clean safety boundary. Bugs in the simulation view should not affect the published audit demo.
 
-Inside the simulation view, use one shared edited-row state and one live API path.
+Inside the simulation view, use one shared edited-row state and one live API path only when model-facing features were edited.
 
 The frontend should not maintain separate values for the same feature in multiple tabs. Every editable widget should write to the existing `input_{nct_id}_{field_id}` convention, and every display panel should read through the same state-aware helpers. This keeps synchronization simple: when `phase_ml` changes in `Trial Features`, the phase field in `Trial Information` reads the same session-state value on rerun.
 
-The backend should not depend on precomputed SHAP values when any feature can be changed. The `/predict` endpoint should support two modes:
+The backend should not depend on precomputed SHAP values when model-facing features can be changed. The `/predict` endpoint supports two modes:
 
 - `audit`: existing behavior for unchanged known trials, using precomputed SHAP values if desired.
 - `simulation`: live behavior for edited rows, using the model pipeline to recompute score and model contributions from the submitted feature values.
 
-The simplest robust version is to always use the live path when the frontend sends `simulation_mode: true`.
+The frontend no longer needs to call `/predict` for unchanged known trials because it can build the same prerecorded audit result locally through `frontend/utils/audit_decomposition.py` and `src/scoring/decomposition.py`.
 
-Implementation decision: keep the existing precomputed/audit path in normal mode and use live scoring only for simulation mode. After unchanged-row live scores match `Clinical_Score` and latency is acceptable, the project can reconsider whether to unify all prediction requests behind the live path.
+Implementation decision: use local prerecorded audit decomposition for no-edit actions in all trial views, and reserve `/predict` live scoring for edited model-facing simulation scenarios. Operational-only and text-only scenario updates refresh metadata/review context without changing the XGBoost Completion Score.
 
 ## Production Scoring Source
 
@@ -737,8 +746,8 @@ A latest prediction snapshot is the last set of values and outputs that were act
 Snapshot rules:
 
 - One latest prediction snapshot is active per selected trial/session.
-- A snapshot is created or replaced only after a successful prediction result or after loading the prerecorded baseline snapshot for an existing selected trial.
-- When simulation mode turns on and no current simulation snapshot exists for the selected trial, create a baseline snapshot from original selected-trial values and prerecorded audit prediction data.
+- A snapshot is created or replaced only after a successful prediction result or after seeding the registry-value comparison baseline when simulation mode turns on.
+- When simulation mode turns on and no current simulation snapshot exists for the selected trial, create a baseline snapshot from original selected-trial values. This baseline preserves pending-change and previous-value behavior; explicit prediction still requires the `/predict` service.
 - In simulation mode, "initial value" means the value stored in the latest prediction snapshot, not necessarily the original registry value.
 - After each successful `Predict Trial Completion` click, the submitted canonical values and live prediction result become the new reference snapshot.
 - Pending-change comparison must use UI comparison values from the latest snapshot. This is intentional because a user-visible option change should look pending even when two UI options share the same encoded model value.
@@ -772,6 +781,7 @@ Recommended reset behavior:
 
 - On selected trial change: clear the active simulation snapshot and pending-change state for the active UI context, then reinitialize editor values from the newly selected row. Session-level history records may remain in memory because each record includes its own `nct_id`.
 - On simulation mode on: show `Trial Features`, initialize editor values from original selected-trial values, create a prerecorded baseline snapshot if none exists, and show `Completion Score` from that snapshot.
+- On simulation mode on after baseline snapshot creation: initialize the hidden baseline Quality Review context for later narrative continuity. Failure to initialize this hidden context must not block the user from starting Simulation Mode.
 - On simulation mode off: reset visible Trial Features values back to the original selected-trial values, clear simulation-only prediction state, clear pending-change markers, hide `Trial Features`, hide simulation-only deltas and stale notices, restore normal audit-mode behavior, and make `Predict Trial Completion` blue again for the normal prediction flow.
 - On simulation mode on again after being off: start fresh from original selected-trial values, create a fresh baseline snapshot, and do not restore previous edits in this implementation pass.
 - On field edit: keep `Trial Features` visible, recompute pending-change state from the latest snapshot, and do not run prediction.
@@ -792,7 +802,7 @@ Simulation mode after baseline snapshot creation:
 - `Completion Score`
 - `Trial Features`
 
-When Simulation Mode is toggled on, `Trial Features` opens by default even though `Completion Score` is already available from the baseline snapshot.
+When Simulation Mode is toggled on, `Trial Features` opens by default. For existing selected trials, `Completion Score` can be available immediately from the local prerecorded baseline snapshot. Baseline gauge, impact bar, and treemap should use precomputed audit decomposition when available.
 
 The `Predict Trial Completion` button should no longer be blocked by simulation mode. In simulation mode, it should submit the current edited row only when pending changes exist. Changing tabs, opening Population Details, or interacting anywhere except `Predict Trial Completion` must not run a new prediction.
 
@@ -865,10 +875,10 @@ Edge case:
 
 - Gauge, impact bar, and treemap always reflect the latest successful prediction snapshot.
 - They must not visually change merely because the user changed a field.
-- They update only after successful `Predict Trial Completion`, except for the initial baseline snapshot when simulation mode is turned on.
+- They update only after successful `Predict Trial Completion`; editable-field changes alone never update charts.
 - After successful `Predict Trial Completion`, chart values and point variations must reflect the latest API response.
 - Impact-bar variation labels render without parentheses and show `-` when variation is effectively zero.
-- For existing selected trials, the initial baseline chart values come from prerecorded audit prediction data. If expected prerecorded data is missing, use the existing audit error behavior and do not add new fallback scoring logic in this pass.
+- The local comparison baseline does not require live `/predict`. Baseline chart-rich score outputs should use precomputed audit decomposition when available; edited model-facing scenarios still require a successful explicit prediction response.
 
 ## Prediction History Preparation
 
@@ -910,7 +920,7 @@ A later blank-trial mode may start from no prerecorded audit baseline. In that m
 
 ## Acceptance Criteria
 
-- Simulation mode on shows Trial Features and baseline Completion Score.
+- Simulation mode on shows Trial Features and initializes the local comparison baseline.
 - `Predict Trial Completion` is grey/inactive when current values match the latest snapshot.
 - Clicking grey/inactive `Predict Trial Completion` does not call the API.
 - `Predict Trial Completion` is blue/active when at least one field has pending changes.
@@ -965,7 +975,7 @@ A later blank-trial mode may start from no prerecorded audit baseline. In that m
 ### Phase 4 - Prediction workflow - Implemented
 
 - Let `Predict Trial Completion` work while simulation mode is on.
-- When simulation mode turns on, create a baseline snapshot from original selected-trial values and prerecorded audit prediction data.
+- When simulation mode turns on, create a local comparison baseline snapshot from original selected-trial values and precomputed audit decomposition.
 - Keep gauge, impact bar, and treemap tied to the latest successful prediction snapshot.
 - Do not run prediction from tab changes or field edits.
 - Use pending-change comparison against the latest snapshot to control field markers, stale-score notice, and `Predict Trial Completion` button color/state.

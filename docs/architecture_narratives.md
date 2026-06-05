@@ -98,7 +98,7 @@ Intended flow:
 
 1. Facilitator selects an existing trial.
 2. User opens Simulation Mode.
-3. The system creates a hidden baseline review object from the original selected-trial state and the baseline prediction snapshot.
+3. The system loads or creates a hidden baseline review object from the original selected-trial state and available baseline context during Simulation Mode initialization.
 4. Participants do not immediately see a detailed LLM narrative. Showing rich interpretation before the exercise could reveal too much guidance.
 5. Participants change structured dropdown fields and, later, optional short text fields.
 6. Participants click `Predict Trial Completion`.
@@ -112,18 +112,25 @@ The visible narrative should usually compare the current prediction against the 
 
 ### Baseline Review Object
 
-For existing-study mode, generate a baseline review once per selected study and store it for the session. The baseline review is normally hidden from participants at the start of the exercise, but it should be passed into later review calls so the LLM can evaluate how the design path evolved from the original trial.
+For existing-study mode, generate a baseline review once per selected study/version and store it durably, keyed by stable trial identity plus baseline input hash, prompt version, rubric version, and provider/model namespace. The first team opening Simulation Mode for a trial may create this baseline if it does not exist. Later teams opening the same trial should load the same baseline review and compact memory, so all teams start from a consistent original-trial interpretation.
+
+The baseline review is initialized when Simulation Mode opens, not delayed until the first participant prediction. It remains hidden from participants at the start of the exercise, but it should be passed into later review calls so the LLM can evaluate how the design path evolved from the original trial.
+
+The baseline review context passed to later LLM calls is qualitative-only. It may include baseline strengths, concerns, consistency flags, participant-review text, continuity fields, and compact memory. It must not expose hidden baseline `Quality Adjustment`, `Final Candidate Score`, or a hidden numeric quality score to later prompt logic as a prior visible score.
 
 The stored baseline review should include:
 
-- Baseline prediction snapshot.
+- Baseline score/model snapshot when available. For existing audit trials, this should include precomputed Completion Score decomposition from saved SHAP artifacts, not a live XGBoost prediction rerun.
 - Baseline structured Trial Features.
 - Baseline operational assumptions and source metadata.
 - Baseline study summary and endpoint text, when available.
+- Baseline conditions, interventions, and primary outcomes text, when available.
 - Baseline strengths.
 - Baseline concerns.
 - Baseline text/structured consistency flags.
 - Baseline compact memory summary.
+
+Participant-facing rule: do not show the baseline Quality Review, Quality Adjustment, Final Candidate Score, or baseline narrative comments by default. Participants may see the original XGBoost Completion Score and model drivers if that is part of the trial-opening experience. The hidden baseline review exists to enrich the first and later visible reviews, not to expose a quality score before teams make their first scenario choice. If hidden baseline review initialization fails, Simulation Mode should still open; later visible Quality Review calls can proceed without baseline review context or retry when a durable provider/store exists.
 
 Later prediction reviews should receive:
 
@@ -132,6 +139,8 @@ Later prediction reviews should receive:
 - Compact storyline memory.
 - Current delta packet.
 - Current snapshot.
+
+For the first visible review after a team edit, the narrative may compare qualitatively against the original trial baseline, but it must not refer to hidden baseline quality numbers as if participants had already seen them. For example, it may say that the model Completion Score decreased while the current design appears less penalized on coherence than the original baseline context. It should not say that the team "improved the score" when the visible Completion Score or visible Final Candidate Score declined.
 
 ## 5. Scratch Mode User Experience, Future Version
 
@@ -464,7 +473,9 @@ This is conceptual JSON for planning only, not an implementation contract yet:
   "text_context": {
     "title": "...",
     "summary_ui": "...",
+    "conditions_ui": "...",
     "primary_outcomes_ui": "...",
+    "interventions_ui": "...",
     "criteria_ui": "..."
   },
   "structured_features": {
@@ -563,8 +574,9 @@ This is conceptual JSON for planning only, not an implementation contract yet:
       "input_hash": "...",
       "iteration_id": 0,
       "status": "reviewed",
-      "quality_adjustment": 0,
-      "final_candidate_score": 68,
+      "quality_adjustment": null,
+      "final_candidate_score": null,
+      "quality_numeric_context": "hidden_baseline_qualitative_only",
       "compact_storyline_memory": "..."
     },
     "previous_review": {
@@ -1247,14 +1259,16 @@ Examples:
 
 Each narrative pass and its context should be saved so future LLM calls can continue the story and so facilitators can review the decision path.
 
-Implementation options to decide later:
+Implementation layers:
 
 - Streamlit session state for the initial prototype.
 - Local JSON/session file for development.
-- Future durable storage for serious-game sessions.
+- Durable storage for shared trial-level baseline reviews and serious-game sessions.
 - Future export for facilitator debrief.
 
-This document does not prescribe a database implementation. The implementation choice should be made later based on deployment environment, facilitator workflow, session privacy requirements, and export needs.
+The durable baseline-review requirement is trial-level: if two teams choose the same trial/version, they should load the same hidden baseline review unless the baseline input hash, prompt version, rubric version, or provider/model namespace changes. Team/session-specific iteration traces remain separate from that shared baseline.
+
+This document does not prescribe the concrete database engine yet. The implementation choice should be made based on deployment environment, facilitator workflow, session privacy requirements, and export needs.
 
 The stored serious-game snapshot should include:
 
@@ -1330,13 +1344,14 @@ Implementation staging:
 2. Deterministic review packet builder: assemble baseline/current/previous snapshots, changed fields, operational metadata, score deltas, text context, and compact storyline memory without calling an LLM. Current implementation artifact: `src/narratives/packet_builder.py`, validated by `scripts/check_narrative_packet_builder.py`.
 3. Validation and scoring engine: validate review JSON, enforce `evidence_fields`, derive Quality Assessment pillars/subcategories, apply pillar/subcategory caps, apply zero/positive-adjustment guardrails, clamp Quality Adjustment, and calculate Final Candidate Score. Current implementation artifact: `src/narratives/scoring.py`, validated by `scripts/check_narrative_scoring.py`.
 4. Mock reviewer: use deterministic fake JSON responses based on the fixtures to test validation, scoring math, no-op behavior, text-materiality behavior, and failure handling. Current implementation artifact: `src/narratives/mock_reviewer.py`, validated by `scripts/check_narrative_mock_reviewer.py`.
-5. Storage and replay: persist validated review traces in session state first, including input hash, validation status, Quality Adjustment, Final Candidate Score, and compact storyline memory. Reuse cached reviews for identical input hashes. Current implementation artifact: `src/narratives/review_store.py`, validated by `scripts/check_narrative_review_store.py`.
+5. Storage and replay: persist validated review traces in session state first, including input hash, validation status, Quality Adjustment, Final Candidate Score, and compact storyline memory. Reuse cached reviews for identical input hashes. Current implementation artifact: `src/narratives/review_store.py`, validated by `scripts/check_narrative_review_store.py`. This is prototype storage only and does not yet satisfy the durable cross-team baseline requirement.
 6. Minimal UI panel: render Completion Score, Quality Adjustment, Final Candidate Score, Quality Review, and compact Quality Assessment rows. Do not build adjusted treemap yet. Current implementation artifact: `frontend/views/trial_simulator.py`, using the provider-free packet builder, mock reviewer, and session-state review store.
 7. Hidden baseline continuity: generate/store the hidden baseline review and verify that later iteration reviews use baseline review, previous review, and compact storyline memory consistently. Current implementation artifacts: `src/narratives/packet_builder.py`, `frontend/views/trial_simulator.py`, and `scripts/check_narrative_packet_builder.py`.
 8. Thin LLM provider wrapper: add the provider abstraction only after packet building, validation, scoring, caching, replay, and mock UI work. Provider code invokes the model and normalizes JSON only. The application owns scoring. Current implementation artifact: `src/narratives/provider.py`, validated by `scripts/check_narrative_provider.py`; the simulator still uses the deterministic mock provider.
 9. First adjusted-score visual: add Final Candidate Score View with component cards and the seven-bar grouped chart.
-10. Two-branch adjusted treemap: add only after the simpler adjusted view is stable and understandable; defer to V1.1 if it slows the first implementation.
-11. Calibration/playtesting: review examples and tune rating-to-point mapping within the `-10` to `+10` total Quality Adjustment range.
+10. Durable baseline store: add a database-backed baseline review repository keyed by trial/version and input hash. It should use create-if-missing semantics so the first team creates the hidden baseline and later teams reuse it.
+11. Two-branch adjusted treemap: add only after the simpler adjusted view is stable and understandable; defer to V1.1 if it slows the first implementation.
+12. Calibration/playtesting: review examples and tune rating-to-point mapping within the `-10` to `+10` total Quality Adjustment range.
 
 ## 21. Open Questions
 

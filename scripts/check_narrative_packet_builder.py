@@ -146,6 +146,16 @@ def _check_review_continuity_context(errors: list[str]) -> None:
         errors.append("continuity packet missing baseline review context")
     if context.get("previous_review", {}).get("input_hash") != "previous-input-hash":
         errors.append("continuity packet missing previous review context")
+    if context.get("baseline_review", {}).get("quality_adjustment") is not None:
+        errors.append("hidden baseline review context should not expose quality_adjustment")
+    if context.get("baseline_review", {}).get("final_candidate_score") is not None:
+        errors.append("hidden baseline review context should not expose final_candidate_score")
+    if context.get("baseline_review", {}).get("quality_numeric_context") != "hidden_baseline_qualitative_only":
+        errors.append("hidden baseline review context should be marked qualitative-only")
+    if context.get("previous_review", {}).get("quality_adjustment") != -2:
+        errors.append("previous visible review context should preserve quality_adjustment")
+    if context.get("previous_review", {}).get("final_candidate_score") != 66:
+        errors.append("previous visible review context should preserve final_candidate_score")
     if (
         continuity_packet.get("iteration_context", {}).get("compact_storyline_memory")
         != "Previous iteration memory"

@@ -19,6 +19,7 @@ import requests
 
 # IMPORT PLOTTING UTILS
 from frontend.utils.plot import plot_success_gauge, plot_impact_bar, plot_treemap
+from frontend.utils.audit_decomposition import build_prerecorded_audit_decomposition_result
 from src.operational_benchmarks import (
     load_operational_benchmarks,
     planned_enrollment_default_from_operational_benchmark,
@@ -328,6 +329,8 @@ TEXTAREA_HEIGHTS = {
     "completion_prediction_left": 265,
     "completion_prediction_right": 560,
 }
+
+SIMULATION_CONDITIONS_TEXTAREA_HEIGHT = 325
 
 
 
@@ -4136,6 +4139,12 @@ def inject_custom_styles():
                 margin-top: -10px !important;
             }}
 
+            html body [data-testid="stHorizontalBlock"]:has(.st-key-summary_side_shell_simulation_conditions_block) > [data-testid="stColumn"],
+            html body [data-testid="stHorizontalBlock"]:has(.st-key-summary_side_shell_simulation_interventions_block) > [data-testid="stColumn"] {{
+                width: auto !important;
+                min-width: 0 !important;
+            }}
+
             /* Per-field wrapper that carries the changed-value flag. */
             html body [class*="st-key-simfield_"] {{
                 margin: 0 !important;
@@ -4694,6 +4703,7 @@ def init_session_state():
 
         "detail_completion_tab_visible": False,
         "detail_prediction_notice": False,
+        "prediction_error_notice": None,
         "completion_score_tab_jump_nonce": 0,
         "simulation_open_features_tab": False,
         "simulation_prediction_result": None,
@@ -4833,6 +4843,7 @@ def reset_detail_prediction_state():
     st.session_state.analysis_nct_id = None
     st.session_state.detail_completion_tab_visible = False
     st.session_state.detail_prediction_notice = False
+    st.session_state.prediction_error_notice = None
     reset_simulation_prediction_state()
 
 
@@ -5608,6 +5619,7 @@ def build_text_context_for_narrative(row):
     output_keys = {
         "top_title": "title",
         "study_summary": "summary_ui",
+        "conditions": "conditions_ui",
         "primary_outcomes": "primary_outcomes_ui",
         "interventions": "interventions_ui",
         "eligibility_criteria": "criteria_ui",
@@ -5637,6 +5649,18 @@ def get_hidden_baseline_review_trace_state_key(nct_id):
     return f"narrative_hidden_baseline_review_trace_{str(nct_id or '').strip()}"
 
 
+def normalize_hidden_baseline_review_trace(trace):
+    if not trace:
+        return trace
+    normalized = dict(trace)
+    normalized["hidden_baseline"] = True
+    normalized["participant_visible"] = False
+    normalized["quality_adjustment"] = None
+    normalized["final_candidate_score"] = None
+    normalized["baseline_quality_numeric_policy"] = "qualitative_context_only"
+    return normalized
+
+
 def get_hidden_baseline_review_trace(row, baseline_snapshot):
     if not baseline_snapshot:
         return None
@@ -5656,7 +5680,7 @@ def get_hidden_baseline_review_trace(row, baseline_snapshot):
     )
 
     if cached_trace and cached_trace.get("input_hash") == packet.get("input_hash"):
-        return cached_trace
+        return normalize_hidden_baseline_review_trace(cached_trace)
 
     trace = replay_or_review_with_provider(
         st.session_state,
@@ -5665,8 +5689,25 @@ def get_hidden_baseline_review_trace(row, baseline_snapshot):
         baseline_id=(packet.get("iteration_context") or {}).get("baseline_snapshot_id"),
         provider="mock",
     )
+    trace = normalize_hidden_baseline_review_trace(trace)
     st.session_state[state_key] = trace
     return trace
+
+
+def ensure_hidden_baseline_review_initialized(row):
+    nct_id = str(row.get(ID_COL, st.session_state.get("selected_nct_id", "")))
+    if not nct_id:
+        return None
+
+    baseline_snapshot = get_baseline_prediction_snapshot(nct_id) or get_latest_prediction_snapshot(nct_id)
+    if not baseline_snapshot:
+        return None
+
+    try:
+        return get_hidden_baseline_review_trace(row, baseline_snapshot)
+    except Exception:
+        logger.exception("Hidden baseline Quality Review initialization failed")
+        return None
 
 
 def get_trace_current_snapshot_id(trace):
@@ -6124,56 +6165,37 @@ def has_pending_simulation_changes(row):
     )
 
 
-def ensure_simulation_baseline_snapshot(row):
+def seed_simulation_baseline_snapshot_from_registry(row, reason):
     nct_id = str(row.get(ID_COL, st.session_state.get("selected_nct_id", "")))
     if not nct_id or get_latest_prediction_snapshot(nct_id):
         return
-    ensure_planned_enrollment_state(row)
-    ensure_planned_sites_state(row)
-    ensure_planned_duration_state(row)
 
-    if not API_URL:
-        st.error("Prediction service is not configured.")
-        return
-
-    with st.spinner("Loading baseline completion score..."):
-        payload = row.replace({np.nan: None}).to_dict()
-        payload["simulation_mode"] = False
-        try:
-            res = requests.post(API_URL, json=payload, timeout=API_TIMEOUT_SECONDS)
-        except requests.exceptions.Timeout:
-            st.error("API Error: request timed out.")
-            return
-        except requests.exceptions.RequestException:
-            logger.exception("Baseline prediction API request failed")
-            st.error("Prediction service is temporarily unavailable. Please try again later.")
-            return
-
-    if res.status_code != 200:
-        st.error(f"API Error: {res.status_code}")
-        return
-
-    try:
-        result = res.json()
-    except ValueError:
-        logger.exception("Baseline prediction API returned an invalid response")
-        st.error("Prediction service returned an invalid response. Please try again later.")
-        return
-
-    if result.get("error"):
-        st.error(result.get("error"))
-        return
-
-    submitted_values = get_current_feature_values(row)
+    score = pd.to_numeric(row.get("Clinical_Score"), errors="coerce")
+    baseline_result = build_prerecorded_audit_decomposition_result(
+        row,
+        TAXONOMY,
+        mode="audit_prerecorded",
+    )
+    if not baseline_result:
+        baseline_result = {
+            "score": None if pd.isna(score) else round(float(score), 1),
+            "pillar_impacts": [],
+            "feature_impacts": [],
+            "subcat_impacts": [],
+            "mode": "registry_score_only",
+            "probability": None,
+        }
     compare_values = get_current_compare_values(row)
+    submitted_values = get_current_feature_values(row)
     operational_assumptions = build_operational_assumptions(
         row,
         snapshot_values=compare_values,
         is_benchmark_stale=False,
     )
+
     set_latest_prediction_snapshot(
         nct_id,
-        result,
+        baseline_result,
         submitted_values,
         previous_snapshot=None,
         source="prerecorded_baseline",
@@ -6181,10 +6203,25 @@ def ensure_simulation_baseline_snapshot(row):
         operational_assumptions=operational_assumptions,
         text_context=build_text_context_for_narrative(row),
     )
-    st.session_state.analysis_result = result
+    st.session_state.analysis_result = baseline_result
     st.session_state.analysis_nct_id = nct_id
     st.session_state.detail_completion_tab_visible = True
     st.session_state.detail_prediction_notice = False
+    logger.warning("Using registry baseline snapshot for simulation comparisons: %s", reason)
+
+
+def ensure_simulation_baseline_snapshot(row):
+    nct_id = str(row.get(ID_COL, st.session_state.get("selected_nct_id", "")))
+    if not nct_id:
+        return
+    if get_latest_prediction_snapshot(nct_id):
+        ensure_hidden_baseline_review_initialized(row)
+        return
+    ensure_planned_enrollment_state(row)
+    ensure_planned_sites_state(row)
+    ensure_planned_duration_state(row)
+    seed_simulation_baseline_snapshot_from_registry(row, "simulation mode baseline initialization")
+    ensure_hidden_baseline_review_initialized(row)
 
 
 def set_simulation_initial_score(row=None):
@@ -6202,8 +6239,14 @@ def set_simulation_initial_score(row=None):
 def start_prediction_request():
     st.session_state.detail_completion_tab_visible = True
     st.session_state.detail_prediction_notice = False
+    st.session_state.prediction_error_notice = None
     st.session_state.trigger_prediction = True
     st.session_state.completion_score_tab_jump_nonce += 1
+
+
+def set_prediction_error_notice(message):
+    st.session_state.prediction_error_notice = message
+    st.session_state.trigger_prediction = False
 
 
 def is_valid_trial_id(selected_id):
@@ -7598,7 +7641,81 @@ def _render_trial_feature_control(field_id, row):
         )
 
 
+def _render_simulation_text_shell_panel(label, value, state_suffix, panel_suffix, height):
+    trial_key = st.session_state.get("selected_nct_id", "no_trial")
+    shared_key = f"text_{trial_key}_{state_suffix}"
+    widget_key = f"{shared_key}_features"
+    safe_value = "" if value == "N/A" else str(value)
+
+    if shared_key not in st.session_state:
+        st.session_state[shared_key] = safe_value
+    if st.session_state.get(widget_key) != st.session_state.get(shared_key):
+        _safe_set_session_value(widget_key, st.session_state.get(shared_key, safe_value))
+
+    def _sync_text_feature_widget():
+        st.session_state[shared_key] = st.session_state.get(widget_key, "")
+        st.session_state.simulation_has_edits = True
+        queue_simulation_reprediction_if_score_visible()
+
+    with st.container(key=f"summary_side_shell_{panel_suffix}"):
+        with st.container(key=f"summary_side_inner_{panel_suffix}"):
+            st.markdown("<div class='trial-meta-top-gap'></div>", unsafe_allow_html=True)
+
+            with st.container(key=f"meta_native_field_{panel_suffix}"):
+                st.text_area(
+                    label,
+                    key=widget_key,
+                    height=height,
+                    on_change=_sync_text_feature_widget,
+                    disabled=not st.session_state.get("global_edit_mode", False),
+                )
+
+            st.markdown("<div class='trial-meta-bottom-gap'></div>", unsafe_allow_html=True)
+
+
+def render_trial_features_text_cards(row):
+    left_col, middle_col = st.columns([0.82, 3.70], gap="xsmall")
+
+    with left_col:
+        _render_simulation_text_shell_panel(
+            label="Conditions",
+            value=trial_val(row, "conditions_ui"),
+            state_suffix="conditions",
+            panel_suffix="simulation_conditions_block",
+            height=SIMULATION_CONDITIONS_TEXTAREA_HEIGHT,
+        )
+
+    with middle_col:
+        _render_simulation_text_shell_panel(
+            label="Study Summary",
+            value=trial_val(row, "summary_ui"),
+            state_suffix="study_summary",
+            panel_suffix="simulation_study_summary_block",
+            height=TEXTAREA_HEIGHTS["study_summary"],
+        )
+
+        bottom_left, bottom_right = st.columns(2, gap="xsmall")
+        with bottom_left:
+            _render_simulation_text_shell_panel(
+                label="Interventions",
+                value=trial_val(row, "interventions_ui"),
+                state_suffix="interventions",
+                panel_suffix="simulation_interventions_block",
+                height=TEXTAREA_HEIGHTS["interventions"],
+            )
+        with bottom_right:
+            _render_simulation_text_shell_panel(
+                label="Primary Outcomes",
+                value=trial_val(row, "primary_outcomes_ui"),
+                state_suffix="primary_outcomes",
+                panel_suffix="simulation_primary_outcomes_block",
+                height=TEXTAREA_HEIGHTS["primary_outcomes"],
+            )
+
+
 def render_trial_features_tab(row):
+    render_trial_features_text_cards(row)
+
     grouped = {pillar: [] for pillar in SIMULATION_PILLAR_ORDER}
     for field_id in SIMULATION_FEATURE_IDS:
         ui = TAXONOMY.get(field_id, {}).get("ui", {})
@@ -8406,6 +8523,8 @@ def render_trial_detail_tabs_refined(row):
             get_analysis_result_for_selected_trial(row)
 
     score_visible = st.session_state.get("detail_completion_tab_visible", False)
+    if st.session_state.get("prediction_error_notice"):
+        st.error(st.session_state.prediction_error_notice)
 
     with st.container(key="trial_detail_tabs"):
         if simulation_mode and score_visible:
@@ -8624,28 +8743,42 @@ def get_analysis_result_for_selected_trial(row):
     ):
         with st.spinner("Analyzing signals..."):
             try:
+                if not is_simulation_mode:
+                    result = build_prerecorded_audit_decomposition_result(row, TAXONOMY)
+                    if not result:
+                        audit_log(
+                            "prediction_prerecorded_unavailable",
+                            **get_selected_trial_audit_fields(),
+                        )
+                        set_prediction_error_notice("Prerecorded score decomposition is unavailable for this trial.")
+                        return None
+
+                    st.session_state.analysis_result = result
+                    st.session_state.analysis_nct_id = st.session_state.selected_nct_id
+                    st.session_state.trigger_prediction = False
+                    st.session_state.prediction_error_notice = None
+
+                    audit_log(
+                        "prediction_success",
+                        score=result.get("score"),
+                        **get_selected_trial_audit_fields(),
+                    )
+                    return result
+
                 if not API_URL:
-                    st.error("Prediction service is not configured.")
+                    set_prediction_error_notice("Prediction service is not configured.")
                     return None
 
-                row_to_predict: pd.Series = get_edited_row(row) if is_simulation_mode else row.copy()
+                row_to_predict: pd.Series = get_edited_row(row)
                 prediction_payload = row_to_predict.replace({np.nan: None}).to_dict()
-                prediction_payload["simulation_mode"] = is_simulation_mode
-                previous_snapshot = (
-                    get_latest_prediction_snapshot(st.session_state.selected_nct_id)
-                    if is_simulation_mode
-                    else None
-                )
-                submitted_values = get_current_feature_values(row) if is_simulation_mode else None
-                compare_values = get_current_compare_values(row) if is_simulation_mode else None
-                operational_assumptions = (
-                    build_operational_assumptions(
-                        row,
-                        snapshot_values=compare_values,
-                        is_benchmark_stale=False,
-                    )
-                    if is_simulation_mode
-                    else None
+                prediction_payload["simulation_mode"] = True
+                previous_snapshot = get_latest_prediction_snapshot(st.session_state.selected_nct_id)
+                submitted_values = get_current_feature_values(row)
+                compare_values = get_current_compare_values(row)
+                operational_assumptions = build_operational_assumptions(
+                    row,
+                    snapshot_values=compare_values,
+                    is_benchmark_stale=False,
                 )
 
                 res = requests.post(
@@ -8660,19 +8793,19 @@ def get_analysis_result_for_selected_trial(row):
                     st.session_state.analysis_result = result
                     st.session_state.analysis_nct_id = st.session_state.selected_nct_id
                     st.session_state.trigger_prediction = False
+                    st.session_state.prediction_error_notice = None
 
-                    if is_simulation_mode:
-                        snapshot = set_latest_prediction_snapshot(
-                            st.session_state.selected_nct_id,
-                            result,
-                            submitted_values,
-                            previous_snapshot=previous_snapshot,
-                            source="simulation_ptc",
-                            compare_values=compare_values,
-                            operational_assumptions=operational_assumptions,
-                            text_context=build_text_context_for_narrative(row),
-                        )
-                        st.session_state.analysis_result = snapshot["result"]
+                    snapshot = set_latest_prediction_snapshot(
+                        st.session_state.selected_nct_id,
+                        result,
+                        submitted_values,
+                        previous_snapshot=previous_snapshot,
+                        source="simulation_ptc",
+                        compare_values=compare_values,
+                        operational_assumptions=operational_assumptions,
+                        text_context=build_text_context_for_narrative(row),
+                    )
+                    st.session_state.analysis_result = snapshot["result"]
 
                     audit_log(
                         "prediction_success",
@@ -8680,8 +8813,7 @@ def get_analysis_result_for_selected_trial(row):
                         **get_selected_trial_audit_fields(),
                     )
 
-                    if is_simulation_mode:
-                        st.rerun()
+                    st.rerun()
                 else:
                     audit_log(
                         "prediction_api_error",
@@ -8689,7 +8821,7 @@ def get_analysis_result_for_selected_trial(row):
                         **get_selected_trial_audit_fields(),
                     )
 
-                    st.error(f"API Error: {res.status_code}")
+                    set_prediction_error_notice(f"API Error: {res.status_code}")
                     return None
 
             except requests.exceptions.Timeout:
@@ -8698,7 +8830,7 @@ def get_analysis_result_for_selected_trial(row):
                     **get_selected_trial_audit_fields(),
                 )
 
-                st.error("API Error: request timed out.")
+                set_prediction_error_notice("API Error: request timed out.")
                 return None
 
             except requests.exceptions.RequestException:
@@ -8708,7 +8840,7 @@ def get_analysis_result_for_selected_trial(row):
                 )
 
                 logger.exception("Prediction API request failed")
-                st.error("Prediction service is temporarily unavailable. Please try again later.")
+                set_prediction_error_notice("Prediction service is temporarily unavailable. Please try again later.")
                 return None
 
             except ValueError:
@@ -8718,7 +8850,7 @@ def get_analysis_result_for_selected_trial(row):
                 )
 
                 logger.exception("Prediction API returned an invalid response")
-                st.error("Prediction service returned an invalid response. Please try again later.")
+                set_prediction_error_notice("Prediction service returned an invalid response. Please try again later.")
                 return None
 
             except Exception:
@@ -8728,7 +8860,7 @@ def get_analysis_result_for_selected_trial(row):
                 )
 
                 logger.exception("Unexpected prediction workflow error")
-                st.error("An unexpected error occurred. Please try again later.")
+                set_prediction_error_notice("An unexpected error occurred. Please try again later.")
                 return None
 
     if st.session_state.get("trigger_prediction", False):

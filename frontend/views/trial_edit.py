@@ -19,6 +19,7 @@ import requests
 
 # IMPORT PLOTTING UTILS
 from frontend.utils.plot import plot_success_gauge, plot_impact_bar, plot_treemap
+from frontend.utils.audit_decomposition import build_prerecorded_audit_decomposition_result
 
 # Load environment variables
 load_dotenv()
@@ -5082,36 +5083,13 @@ def ensure_simulation_baseline_snapshot(row):
     if not nct_id or get_latest_prediction_snapshot(nct_id):
         return
 
-    if not API_URL:
-        st.error("Prediction service is not configured.")
-        return
-
-    with st.spinner("Loading baseline completion score..."):
-        payload = row.replace({np.nan: None}).to_dict()
-        payload["simulation_mode"] = False
-        try:
-            res = requests.post(API_URL, json=payload, timeout=API_TIMEOUT_SECONDS)
-        except requests.exceptions.Timeout:
-            st.error("API Error: request timed out.")
-            return
-        except requests.exceptions.RequestException:
-            logger.exception("Baseline prediction API request failed")
-            st.error("Prediction service is temporarily unavailable. Please try again later.")
-            return
-
-    if res.status_code != 200:
-        st.error(f"API Error: {res.status_code}")
-        return
-
-    try:
-        result = res.json()
-    except ValueError:
-        logger.exception("Baseline prediction API returned an invalid response")
-        st.error("Prediction service returned an invalid response. Please try again later.")
-        return
-
-    if result.get("error"):
-        st.error(result.get("error"))
+    result = build_prerecorded_audit_decomposition_result(
+        row,
+        TAXONOMY,
+        mode="audit_prerecorded",
+    )
+    if not result:
+        st.error("Prerecorded baseline score decomposition is unavailable for this trial.")
         return
 
     submitted_values = get_current_feature_values(row)
@@ -6764,20 +6742,37 @@ def get_analysis_result_for_selected_trial(row):
     ):
         with st.spinner("Analyzing signals..."):
             try:
+                if not is_simulation_mode:
+                    result = build_prerecorded_audit_decomposition_result(row, TAXONOMY)
+                    if not result:
+                        audit_log(
+                            "prediction_prerecorded_unavailable",
+                            **get_selected_trial_audit_fields(),
+                        )
+                        st.error("Prerecorded score decomposition is unavailable for this trial.")
+                        return None
+
+                    st.session_state.analysis_result = result
+                    st.session_state.analysis_nct_id = st.session_state.selected_nct_id
+                    st.session_state.trigger_prediction = False
+
+                    audit_log(
+                        "prediction_success",
+                        score=result.get("score"),
+                        **get_selected_trial_audit_fields(),
+                    )
+                    return result
+
                 if not API_URL:
                     st.error("Prediction service is not configured.")
                     return None
 
-                row_to_predict: pd.Series = get_edited_row(row) if is_simulation_mode else row.copy()
+                row_to_predict: pd.Series = get_edited_row(row)
                 prediction_payload = row_to_predict.replace({np.nan: None}).to_dict()
-                prediction_payload["simulation_mode"] = is_simulation_mode
-                previous_snapshot = (
-                    get_latest_prediction_snapshot(st.session_state.selected_nct_id)
-                    if is_simulation_mode
-                    else None
-                )
-                submitted_values = get_current_feature_values(row) if is_simulation_mode else None
-                compare_values = get_current_compare_values(row) if is_simulation_mode else None
+                prediction_payload["simulation_mode"] = True
+                previous_snapshot = get_latest_prediction_snapshot(st.session_state.selected_nct_id)
+                submitted_values = get_current_feature_values(row)
+                compare_values = get_current_compare_values(row)
 
                 res = requests.post(
                     API_URL,
@@ -6792,16 +6787,15 @@ def get_analysis_result_for_selected_trial(row):
                     st.session_state.analysis_nct_id = st.session_state.selected_nct_id
                     st.session_state.trigger_prediction = False
 
-                    if is_simulation_mode:
-                        snapshot = set_latest_prediction_snapshot(
-                            st.session_state.selected_nct_id,
-                            result,
-                            submitted_values,
-                            previous_snapshot=previous_snapshot,
-                            source="simulation_ptc",
-                            compare_values=compare_values
-                        )
-                        st.session_state.analysis_result = snapshot["result"]
+                    snapshot = set_latest_prediction_snapshot(
+                        st.session_state.selected_nct_id,
+                        result,
+                        submitted_values,
+                        previous_snapshot=previous_snapshot,
+                        source="simulation_ptc",
+                        compare_values=compare_values
+                    )
+                    st.session_state.analysis_result = snapshot["result"]
 
                     audit_log(
                         "prediction_success",
@@ -6809,8 +6803,7 @@ def get_analysis_result_for_selected_trial(row):
                         **get_selected_trial_audit_fields(),
                     )
 
-                    if is_simulation_mode:
-                        st.rerun()
+                    st.rerun()
                 else:
                     audit_log(
                         "prediction_api_error",
