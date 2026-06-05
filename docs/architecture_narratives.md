@@ -2,11 +2,11 @@
 
 ## Document Role
 
-This file owns the future serious-game narrative layer: LLM commentary, Coherence Score, Coherence Adjustment, Adjusted Trial Value Score, facilitator/participant outputs, and narrative payload contracts.
+This file owns the future serious-game narrative layer: LLM commentary, Design Coherence Review, Quality Review, Quality Adjustment, Final Candidate Score, facilitator/participant outputs, and narrative payload contracts.
 
 It should not own the existing XGBoost Completion Score, SHAP impact mechanics, or simulation UI state; use `docs/architecture_edit.md` for those. It should consume operational benchmark metadata from `docs/architecture_estimation.md` rather than redefining benchmark construction.
 
-Efficient update rule: change this file when narrative inputs/outputs, LLM contracts, Coherence scoring, or participant/facilitator interpretation rules change. Do not implement or imply changes to XGBoost, SHAP, calibration, or operational benchmark construction here.
+Efficient update rule: change this file when narrative inputs/outputs, LLM contracts, Quality Review scoring, or participant/facilitator interpretation rules change. Do not implement or imply changes to XGBoost, SHAP, calibration, or operational benchmark construction here.
 
 ## 1. Purpose Of The Narrative Architecture
 
@@ -20,49 +20,53 @@ The future layer should help participants reason about this trade-off without gi
 
 ## 2. Core Scoring Boundary
 
-The LLM layer is separate from the existing prediction system.
+The LLM layer is separate from the existing prediction system. The serious-game score stack has three layers:
 
-- `Completion Score`: the existing XGBoost, SHAP, therapeutic-area calibrated score from `/predict`, shown in points from 0 to 100.
-- `Coherence Score`: the user-facing second score, from 0 to 100, assessing design defensibility and risk-mitigation quality.
-- `Coherence Adjustment`: a deterministic application calculation, bounded from `-20` to `+20` points.
-- `Adjusted Trial Value Score`: a deterministic application calculation.
+1. `Completion Score`: the existing XGBoost, SHAP, therapeutic-area calibrated score from `/predict`, shown in points from 0 to 100.
+2. `Quality Review`: a constrained LLM structured reviewer that evaluates coherence, scientific rigor, operational feasibility, text consistency, and change integrity.
+3. `Final Candidate Score`: a deterministic application calculation: `Completion Score + Quality Adjustment`.
+
+The LLM must not generate the final score. The LLM returns structured ratings, evidence fields, narrative, and continuity fields. The application then performs two deterministic calculations:
+
+1. Convert validated Quality Review ratings into a bounded `Quality Adjustment`.
+2. Add the Quality Adjustment to the XGBoost `Completion Score` to calculate `Final Candidate Score`.
 
 ```text
-coherence_adjustment = clamp(round((coherence_score - 70) * 0.67), -20, +20)
+quality_adjustment = clamp(app_mapped_review_points, -10, +10)
 
-adjusted_trial_value_score = clamp(
-    completion_score + coherence_adjustment,
+final_candidate_score = clamp(
+    completion_score + quality_adjustment,
     0,
     100
 )
 ```
 
+The initial V1 range should not use `-20` to `+20`, because that would allow the LLM-derived layer to dominate the XGBoost Completion Score. Future calibration can revisit the mapping after playtesting, but the total adjustment should remain modest.
+
 Example:
 
 - Completion Score: `72`
-- Coherence Score: `84`
-- Coherence Adjustment: `+9`
-- Adjusted Trial Value Score: `81`
+- Quality Adjustment: `+4`
+- Final Candidate Score: `76`
 
 Interpretation:
 
-- Coherence Score around `70` is neutral.
-- Coherence Score below `70` creates a negative adjustment.
-- Coherence Score above `70` creates a positive adjustment.
-- This allows the narrative layer to recognize trials that are inherently risky but well strengthened by the participant's design choices.
-- A trial below `50` on Completion Score can be boosted if the clinical operations design meaningfully mitigates risk.
+- The Completion Score remains the modelled likelihood of completion.
+- The Quality Adjustment is a small serious-game modifier for design defensibility and quality of choices.
+- The Final Candidate Score can recognize a risky but well-strengthened design without replacing or rewriting XGBoost.
+- A trial below `50` on Completion Score can improve modestly if the design choices meaningfully mitigate risk, but the adjustment must remain bounded.
 
 Terminology:
 
 - `Completion Score` = modelled likelihood of completion.
-- `Coherence Score` = design defensibility and risk-mitigation quality.
-- `Coherence Adjustment` = bounded point bonus or penalty.
-- `Adjusted Trial Value Score` = final serious-game score.
-- `Design Coherence Review` = narrative explanation.
+- `Quality Review` = structured LLM review of design coherence, rigor, operational fit, text consistency, and change integrity.
+- `Quality Adjustment` = bounded application-calculated point bonus or penalty.
+- `Final Candidate Score` = Completion Score plus Quality Adjustment.
+- `Design Coherence Review` = participant-facing narrative explanation.
 
-In plain scoring terms, `Adjusted Trial Value Score = Completion Score + Coherence Adjustment`, with application-level bounds applied.
+In plain scoring terms, `Final Candidate Score = Completion Score + Quality Adjustment`, with application-level bounds applied.
 
-The application, not the LLM, calculates the Coherence Adjustment and Adjusted Trial Value Score. The LLM must never modify the XGBoost completion score, SHAP values, pillar impacts, therapeutic-area calibration, prediction pipeline, or audit/demo parity behavior.
+The application, not the LLM, calculates the Quality Adjustment and Final Candidate Score. The LLM must never modify the XGBoost completion score, SHAP values, pillar impacts, therapeutic-area calibration, prediction pipeline, or audit/demo parity behavior.
 
 Core boundary:
 
@@ -70,8 +74,8 @@ Core boundary:
 - The LLM never modifies SHAP values.
 - The LLM never modifies therapeutic-area calibration.
 - The LLM never rewrites the prediction score.
-- The LLM returns Coherence Score and explanation.
-- The application calculates Coherence Adjustment and Adjusted Trial Value Score.
+- The LLM returns structured Quality Review ratings, evidence fields, explanation, and continuity fields.
+- The application maps validated review ratings into Quality Adjustment and Final Candidate Score.
 
 ## 3. Current Technical Foundation
 
@@ -95,16 +99,40 @@ Intended flow:
 
 1. Facilitator selects an existing trial.
 2. User opens Simulation Mode.
-3. The system creates a hidden baseline enrichment object from the original selected-trial state and the baseline prediction snapshot.
+3. The system creates a hidden baseline review object from the original selected-trial state and the baseline prediction snapshot.
 4. Participants do not immediately see a detailed LLM narrative. Showing rich interpretation before the exercise could reveal too much guidance.
 5. Participants change structured dropdown fields and, later, optional short text fields.
 6. Participants click `Predict Trial Completion`.
 7. XGBoost returns the new completion score, pillar impacts, and impact decomposition through the existing prediction path.
-8. The narrative layer receives baseline context, previous prediction, current prediction, changed fields, score deltas, SHAP/pillar movement, and prior narrative memory.
-9. The UI displays the Design Coherence Review below or near the score and charts.
-10. Participants iterate.
+8. The narrative layer receives baseline context, previous prediction, current prediction, changed fields, score deltas, SHAP/pillar movement, operational benchmark metadata, text context, and prior storyline memory.
+9. The application validates the structured Quality Review, calculates Quality Adjustment and Final Candidate Score, and stores a compact storyline update.
+10. The UI displays the Design Coherence Review below or near the score and charts.
+11. Participants iterate.
 
 The visible narrative should usually compare the current prediction against the previous prediction. Internally, the LLM should also receive enough baseline and path memory to avoid contradicting prior feedback.
+
+### Baseline Review Object
+
+For existing-study mode, generate a baseline review once per selected study and store it for the session. The baseline review is normally hidden from participants at the start of the exercise, but it should be passed into later review calls so the LLM can evaluate how the design path evolved from the original trial.
+
+The stored baseline review should include:
+
+- Baseline prediction snapshot.
+- Baseline structured Trial Features.
+- Baseline operational assumptions and source metadata.
+- Baseline study summary and endpoint text, when available.
+- Baseline strengths.
+- Baseline concerns.
+- Baseline text/structured consistency flags.
+- Baseline compact memory summary.
+
+Later prediction reviews should receive:
+
+- Baseline review.
+- Previous iteration review.
+- Compact storyline memory.
+- Current delta packet.
+- Current snapshot.
 
 ## 5. Scratch Mode User Experience, Future Version
 
@@ -123,9 +151,9 @@ Scratch mode may require additional field completeness rules because there is no
 
 After each prediction, the participant view should display:
 
-- `Adjusted Trial Value Score`, shown in the main gauge.
+- `Final Candidate Score`, shown in the main gauge when adjusted view is enabled.
 - `Completion Score` as a component score.
-- `Coherence Score` as a component score.
+- `Quality Adjustment` as a component value.
 - A short `Operational Assumptions` note.
 - Concise `Design Coherence Review`.
 
@@ -193,7 +221,7 @@ Potential facilitator fields:
 
 The facilitator view may be more direct, but it must still not override the model score or present itself as clinical truth. It should support discussion facilitation, not adjudicate trial validity.
 
-## 8. Coherence Score Rubric
+## 8. Quality Review Rubric
 
 The LLM should apply an internal rubric across at least these dimensions:
 
@@ -203,15 +231,17 @@ The LLM should apply an internal rubric across at least these dimensions:
 - Scientific rigor: whether the design preserves interpretability, biological plausibility, and evidentiary value.
 - Operational feasibility: whether the design appears proportionate and executable without becoming trivially easy at the expense of value.
 - Change integrity: whether participants genuinely improved the design or mainly gamed completion likelihood.
+- Text consistency: whether editable text fields such as study summary and primary endpoint description remain consistent with the structured design.
+- Cross-pillar coherence: whether choices that are reasonable in isolation remain coherent in combination across therapeutic context, scientific challenge, patient profile, execution framework, operational assumptions, and text.
 
-The Coherence Score should reflect both current design coherence and change integrity:
+The Quality Review should reflect both current design coherence and change integrity:
 
 - Current design coherence: whether the revised design is coherent and defensible now.
 - Change integrity: whether the path from baseline to current design appears like meaningful improvement, acceptable simplification, or score-seeking shortcut behavior.
 
-For v1, one Coherence Score is shown to users. Internally, the LLM should still consider both final design coherence and quality of changes.
+For V1, do not make a numeric `Coherence Score` the primary user-facing concept. It can sound falsely precise and may be mistaken for a competing prediction model. The user-facing concepts should be `Design Coherence Review`, `Quality Adjustment`, and `Final Candidate Score`.
 
-The Coherence Score is bidirectional. It should reward:
+The Quality Review is bidirectional. It should recognize:
 
 - Strong endpoint and comparator logic.
 - Coherent population definition.
@@ -234,17 +264,100 @@ Principle:
 
 ```text
 One weak feature creates a discussion point.
-Several weak or conflicting features create a Coherence Score penalty.
-A difficult design can receive a positive Coherence Adjustment if the participant strengthens it in a coherent and defensible way.
+Several weak or conflicting features create a Quality Adjustment penalty.
+A difficult design can receive a positive Quality Adjustment if the participant strengthens it in a coherent and defensible way.
 ```
 
-Recommended Coherence Score interpretation:
+Recommended V1 review ratings:
 
-- `85` to `100`: difficult but highly coherent, rigorous, and strategically defensible.
-- `70` to `84`: coherent and balanced, with strengths outweighing trade-offs.
-- `55` to `69`: unresolved weaknesses or simplifications that need discussion.
-- `40` to `54`: meaningful evidence, feasibility, or change-integrity concerns.
-- `0` to `39`: serious coherence problem or shortcut-driven design.
+- `strong`: coherent, rigorous, and strategically defensible in the current context.
+- `acceptable`: balanced, with strengths outweighing trade-offs.
+- `weak`: unresolved weakness or simplification that needs discussion.
+- `conflicting`: meaningful evidence, feasibility, text-consistency, or change-integrity concern.
+
+For change integrity, use:
+
+- `improved`: the path appears to strengthen the design.
+- `neutral`: the change appears broadly neutral for quality.
+- `simplified`: the change simplifies execution but may reduce evidence value.
+- `potential_shortcut`: the change appears score-seeking or weakens defensibility.
+
+For text consistency, use:
+
+- `consistent`.
+- `minor_tension`.
+- `material_tension`.
+- `contradiction`.
+
+The application should map these validated ratings to a bounded Quality Adjustment. A concern should affect the Quality Adjustment only when the LLM provides supporting `evidence_fields`; otherwise it can appear in the narrative but should not move the score.
+
+### Quality Assessment Pillars For Visuals
+
+The internal Quality Review rubric can be more detailed than the user-facing plot structure. For visual display, V1 should use three Quality Assessment pillars. These pillars are organized around the narrative jobs the review must perform:
+
+1. `Evidence Coherence`: does the revised design still produce interpretable, decision-useful evidence?
+2. `Population & Strategy Fit`: does the selected population and strategic intent still match the disease setting and study purpose?
+3. `Execution Plausibility`: are the operational assumptions and implementation choices credible for this design, and does the change path look defensible rather than shortcut-driven?
+
+Recommended V1 Quality Assessment hierarchy:
+
+```text
+Quality Assessment
+├── Evidence Coherence
+│   ├── Endpoint & Comparator Fit
+│   └── Scientific Rigor
+├── Population & Strategy Fit
+│   ├── Population Relevance
+│   └── Development Fit
+└── Execution Plausibility
+    ├── Operational Scale Fit
+    └── Change Integrity
+```
+
+Internal rubric-to-visual mapping:
+
+```text
+Evidence Coherence =
+    endpoint_and_comparator_logic
+  + scientific_rigor
+  + endpoint-related text consistency
+
+Population & Strategy Fit =
+    development_question_fit
+  + population_relevance
+  + study-summary / criteria consistency
+
+Execution Plausibility =
+    operational_scale_fit
+  + change_integrity
+  + operational / intervention consistency
+```
+
+`Text consistency` should not be a standalone visual pillar in V1. It should be routed to the Quality Assessment pillar affected by the inconsistency:
+
+- Endpoint text conflict -> `Evidence Coherence`.
+- Study-summary or strategic-intent conflict -> `Population & Strategy Fit`.
+- Intervention complexity or operational text conflict -> `Execution Plausibility` or `Evidence Coherence`, depending on the evidence fields.
+
+Operational assumptions should remain outside the XGBoost `Execution Framework` contribution. They may appear in the Simulation Mode editing area near Execution Framework for workflow reasons, but in adjusted-score plots they belong under:
+
+```text
+Quality Assessment -> Execution Plausibility -> Operational Scale Fit
+```
+
+This keeps model-facing `Execution Framework` impacts distinct from non-XGBoost operational quality review.
+
+For reproducibility, the application should derive these three plotted Quality Assessment pillars from validated `quality_review_domains`. The LLM may provide suggested grouping language, but the app owns the final pillar/subcategory point mapping used in charts and score math.
+
+Recommended V1 point caps before total clamping:
+
+```text
+Each Quality Assessment pillar: normally -4 to +3 points.
+Each Quality Assessment subcategory: normally -3 to +2 points.
+Total Quality Adjustment: clamp to -10 to +10.
+```
+
+This prevents one quality dimension from dominating the Final Candidate Score and keeps the Quality Adjustment modest relative to the XGBoost Completion Score.
 
 ## 9. Shortcut Detection Concept
 
@@ -272,7 +385,7 @@ Operational assumptions are deterministic scenario stress tests.
 They help the narrative judge whether selected enrollment, site count, and total duration assumptions are coherent with the trial profile.
 They do not enter the XGBoost model.
 They do not directly change the Completion Score.
-They feed the future Coherence Score only.
+They feed the future Quality Review only.
 ```
 
 Active fields:
@@ -283,128 +396,24 @@ operational_assumptions.planned_sites
 operational_assumptions.planned_duration_months
 ```
 
-Source priority:
+Source priorities, cohort hierarchy, defaulting logic, and benchmark status calculation are owned by `docs/architecture_estimation.md`. The narrative layer consumes that metadata; it does not rebuild or reinterpret benchmark construction.
+
+The user does not write a free-text justification for planned enrollment, planned sites, or planned duration in the platform. Instead, the Quality Review assesses whether the operational assumptions are coherent with the current structured design, text context, and benchmark metadata.
+
+System-filled benchmark/default values are neutral. They should not create a positive Quality Adjustment simply because they sit inside a benchmark range. They become evaluated scenario assumptions when the user keeps them as the current assumption for a prediction snapshot or actively edits them.
+
+Generic operational interpretation rule for enrollment, sites, and duration:
 
 ```text
-1. Use planned/estimated enrollment if available.
-2. Use completed-trial actual enrollment only when it represents a final observed value.
-3. If missing, use a simple benchmark default from similar historical trials.
-4. If the user edits it, source becomes user scenario.
+Operational benchmark status alone is context, not a penalty.
+Operational benchmark status plus conflicting design context can affect Execution Plausibility.
+System-filled benchmark/default values are neutral unless retained as the current scenario or edited by the participant.
+Participant-edited values are scenario choices and can be evaluated against both benchmark metadata and the current structured design.
 ```
 
-The user does not write a free-text justification for planned enrollment in the platform. Instead, the enrollment assumption is assessed against the current design choices. The enrollment assumption must be supported by the selected trial profile.
+### Operational Benchmark Context
 
-If planned enrollment is missing and the system uses a benchmark-derived default, that default is neutral. It should not create a positive Coherence Score effect simply because it sits inside the benchmark range. It becomes an evaluated scenario assumption only when the user keeps it as the current assumption for a prediction snapshot or actively edits it.
-
-Practical behavior:
-
-- `model_default` inside benchmark = neutral.
-- `user_scenario` inside benchmark = usually neutral or lightly supportive if consistent with the design.
-- `user_scenario` outside benchmark = discussion signal, not automatic penalty.
-- `user_scenario` outside benchmark + conflicting design signals = possible Coherence Score penalty.
-
-### Enrollment Benchmark Classification
-
-The system should classify the enrollment assumption deterministically before sending it to the LLM.
-
-Benchmark cohort hierarchy, pragmatic v1 version:
-
-```text
-Level 1: same phase + same indication + rare disease flag
-Level 2: same phase + same therapeutic area + rare disease flag
-Level 3: same phase + same therapeutic area
-Level 4: same phase only
-```
-
-Additional features such as therapeutic modality, sponsor tier, administration complexity, line of therapy, or population subtype can be used as secondary support/conflict signals when sufficient historical coverage exists. However, v1 should avoid making the benchmark hierarchy overly granular, because excessive stratification can quickly reduce cohort sizes and create unstable percentile estimates. Sponsor tier is legitimate as a contextual support signal inside the Coherence Score logic, but it should not usually define the primary benchmark cohort unless enough comparable trials are available.
-
-Use the strictest level with enough historical trials. A simple minimum sample size threshold, such as `n >= 50`, is appropriate for v1; if the cohort is smaller, relax one level.
-
-For the first implementation, the benchmark can be based on the simple deterministic hierarchy:
-
-```text
-phase + indication / therapeutic area + rare disease flag
-```
-
-Calculate benchmark percentiles:
-
-```text
-P25 = low benchmark
-P50 = typical benchmark
-P75 = high benchmark
-P90 = very high benchmark
-```
-
-Classify user/current enrollment:
-
-```text
-if enrollment < P25:
-    enrollment_status = "below_benchmark"
-
-if P25 <= enrollment <= P75:
-    enrollment_status = "typical"
-
-if P75 < enrollment <= P90:
-    enrollment_status = "ambitious"
-
-if enrollment > P90:
-    enrollment_status = "above_benchmark_high"
-```
-
-The classification is deterministic. The LLM interprets the label but does not invent it.
-
-The deterministic enrollment label is a benchmark position, not a clinical judgment. Clinical interpretation belongs to the Coherence Score layer. For example, below-benchmark enrollment may become an evidence concern depending on phase, endpoint rigor, indication, and development intent, but the benchmark layer itself only reports position relative to similar trials.
-
-### Optional Calibration Analysis Before Hardening V1
-
-Later calibration may investigate within the existing system which trial features most strongly influence enrollment burden and enrollment feasibility:
-
-1. Start with exploratory analysis on historical trials.
-2. Identify which structured trial features correlate most with higher or lower enrollment sizes.
-3. Use deterministic/statistical logic first, not LLM inference.
-4. Use those findings to define the enrollment support/conflict signals used in the Coherence Score.
-
-Suggested investigation logic:
-
-- Analyze enrollment distributions by phase, indication, therapeutic area, rare disease status, sponsor class, modality, line of therapy, age group, endpoint type, endpoint duration, administration complexity, and comparator type.
-- Use feature importance analysis, an enrollment proxy model, SHAP on the enrollment proxy model, correlation analysis, percentile segmentation, and clustering of similar trials.
-- Determine which features consistently explain very high enrollment expectations, recruitment difficulty, operational feasibility, and realistic versus unrealistic enrollment assumptions.
-- Classify signals into supportive of large enrollment, neutral, and conflicting with large enrollment.
-
-This can ground the enrollment coherence layer in observed historical patterns, avoid arbitrary LLM reasoning, keep the system deterministic and auditable, and help define bounded enrollment effects inside the Coherence Score.
-
-V1 now works with deterministic benchmark metadata for enrollment, sites, and duration. Optional calibration analysis can improve future coherence interpretation, but should not block the first serious-game narrative implementation.
-
-### Enrollment Support Signals
-
-The enrollment benchmark label alone is not enough. The platform should assess whether the selected trial profile supports the enrollment assumption.
-
-Therapeutic modality should influence whether an enrollment assumption is supported by the current design, but it should not usually define the primary benchmark cohort in v1. A complex cell or gene therapy may weaken support for very large enrollment, while an oral small-molecule therapy in a common adult condition may support a larger enrollment assumption.
-
-Supportive signals include:
-
-- Common indication.
-- Non-rare disease.
-- Adult population.
-- Broader patient profile.
-- Earlier line of therapy.
-- Larger sponsor tier.
-- Simpler administration.
-- Simple endpoint structure.
-- Sufficient primary endpoint duration.
-- Phase III context when a large confirmatory trial is expected.
-
-Conflicting signals include:
-
-- Rare disease.
-- Pediatric population.
-- Severe or fragile population.
-- Later-line population.
-- Complex therapeutic modality.
-- Complex administration.
-- Strict endpoint or hard clinical endpoint.
-- Short endpoint duration.
-- Niche indication.
+For V1, the narrative layer should consume operational benchmark metadata, not require a separate operational support/conflict rule engine. The LLM should receive benchmark status, source metadata, confidence flags, and relevant structured design fields, then evaluate whether the operational assumption is coherent with the current design.
 
 Examples:
 
@@ -414,44 +423,31 @@ high but potentially supported.
 
 Rare pediatric Phase II gene therapy + 1,200 patients:
 above benchmark high and weakly supported by the design.
+
+Short duration + short-term endpoint:
+potentially coherent.
+
+Short duration + endpoint text implying long-term clinical outcome:
+possible Evidence Coherence concern.
 ```
 
-Support level values:
+Explicit support/conflict signals are optional future derived fields. If implemented later, their methodology belongs in `docs/architecture_estimation.md` or a future calibration note, and the signals must be deterministic, auditable, and not invented by the LLM. Until then, benchmark metadata plus structured design context is sufficient for V1 Quality Review.
+
+### Bounded Operational Effect
+
+Operational assumptions should not dominate the Quality Adjustment. Planned Enrollment, Planned Sites, and Planned Duration together should normally affect only:
 
 ```text
-support_level = "supported_by_current_design | partly_supported_by_current_design | weakly_supported_by_current_design"
+Quality Assessment -> Execution Plausibility -> Operational Scale Fit
 ```
 
-### Bounded Enrollment Effect
-
-Enrollment must not dominate the Coherence Score. It is one operational-feasibility signal among the broader rubric:
-
-- Development-question fit.
-- Population relevance.
-- Endpoint / evidence coherence.
-- Scientific rigor.
-- Operational feasibility.
-- Change integrity.
-
-Enrollment mainly affects:
-
-- Population relevance.
-- Operational feasibility.
-- Change integrity when the participant changes enrollment in a way that appears to game the score.
-
-Recommended cap:
-
-```text
-Enrollment should normally have a maximum standalone effect of about -10 to +4 points inside the Coherence Score logic.
-```
-
-This means high enrollment alone should not destroy the trial, low enrollment alone should not destroy the trial, enrollment becomes more important when combined with other conflicting choices, and several inconsistent design choices together can materially reduce Coherence Score.
+They remain bounded by the Quality Assessment pillar/subcategory caps. Operational benchmark status alone is context, not a penalty; it becomes score-relevant only when combined with coherent supporting or conflicting design evidence.
 
 ## 11. Input Payload Architecture
 
 The future LLM input object should be assembled after the existing prediction response has been received and after the application has created the latest prediction snapshot.
 
-The payload must preserve the separation between the existing prediction system and the LLM narrative layer. XGBoost/TreeSHAP outputs explain completion-score movement; structured serious-game fields and operational assumptions define the broader design-reasoning space for the Coherence Score.
+The payload must preserve the separation between the existing prediction system and the LLM narrative layer. XGBoost/TreeSHAP outputs explain completion-score movement; structured serious-game fields, operational assumptions, and text context define the broader design-reasoning space for the Quality Review.
 
 This is conceptual JSON for planning only, not an implementation contract yet:
 
@@ -565,12 +561,12 @@ This is conceptual JSON for planning only, not an implementation contract yet:
     "current_snapshot_id": "...",
     "iteration_number": 2,
     "changed_fields": [],
-    "previous_narrative_memory": "..."
+    "compact_storyline_memory": "..."
   }
 }
 ```
 
-The payload should include all active operational assumptions: `planned_enrollment`, `planned_sites`, and `planned_duration_months`. These assumptions remain outside XGBoost and Completion Score; they feed narrative / Coherence only.
+The payload should include all active operational assumptions: `planned_enrollment`, `planned_sites`, and `planned_duration_months`. These assumptions remain outside XGBoost and Completion Score; they feed narrative / Quality Review only.
 
 Operational-assumption values are assembled after the latest prediction snapshot. If the user changes fields that define an operational benchmark cohort, the affected benchmark becomes stale until the next `Predict Trial Completion` action. Enrollment and sites react to the implemented benchmark cohort fields. Duration reacts only to phase, indication, therapeutic area, rare-disease status, and primary endpoint duration bin. Duration does not use therapeutic modality in v1.
 
@@ -582,68 +578,225 @@ Missing or brief free-text fields should not be heavily penalized unless they di
 
 ## 12. Output JSON Contract
 
-The LLM should return structured JSON. The application should validate the response, apply bounds to numeric fields, and calculate the adjusted score deterministically.
+The LLM should return structured JSON. The application should validate the response, reject or downgrade malformed scoring fields, and calculate the Quality Adjustment and Final Candidate Score deterministically.
+
+The LLM should not return the final score as an authority. It should return review ratings, evidence fields, narrative, and continuity fields.
 
 Proposed contract:
 
 ```json
 {
-  "coherence_score": 84,
-  "coherence_confidence": "low | medium | high",
-  "coherence_summary": "short one-sentence explanation",
-  "participant_narrative": {
+  "score_movement_review": {
+    "summary": "short explanation of the observed Completion Score movement",
+    "model_supported_reasons": [],
+    "cautions": []
+  },
+  "quality_review_domains": {
+    "development_question_fit": {
+      "rating": "strong | acceptable | weak | conflicting",
+      "rationale": "...",
+      "evidence_fields": []
+    },
+    "scientific_rigor": {
+      "rating": "strong | acceptable | weak | conflicting",
+      "rationale": "...",
+      "evidence_fields": []
+    },
+    "population_relevance": {
+      "rating": "strong | acceptable | weak | conflicting",
+      "rationale": "...",
+      "evidence_fields": []
+    },
+    "endpoint_and_comparator_logic": {
+      "rating": "strong | acceptable | weak | conflicting",
+      "rationale": "...",
+      "evidence_fields": []
+    },
+    "operational_scale_fit": {
+      "rating": "strong | acceptable | weak | conflicting",
+      "rationale": "...",
+      "evidence_fields": []
+    },
+    "change_integrity": {
+      "rating": "improved | neutral | simplified | potential_shortcut",
+      "rationale": "...",
+      "evidence_fields": []
+    },
+    "text_consistency": {
+      "rating": "consistent | minor_tension | material_tension | contradiction",
+      "rationale": "...",
+      "evidence_fields": []
+    }
+  },
+  "participant_review": {
     "what_changed": "...",
     "why_completion_score_may_have_moved": "...",
-    "what_design_may_have_gained": "...",
-    "what_design_may_have_sacrificed": "...",
-    "enrollment_coherence_note": "...",
-    "question_for_team": "..."
+    "what_the_design_gained": "...",
+    "what_the_design_may_have_sacrificed": "...",
+    "operational_feasibility_note": "...",
+    "text_consistency_note": "...",
+    "challenge_question": "..."
   },
-  "facilitator_view": {
+  "facilitator_view_optional": {
     "shortcut_risk": "low | moderate | high",
-    "change_integrity": "legitimate_improvement | acceptable_simplification | potential_shortcut | high_risk_shortcut | unclear",
+    "change_integrity": "improved | neutral | simplified | potential_shortcut | unclear",
     "main_tradeoff": "...",
     "coherence_concern": "...",
     "suggested_facilitator_probe": "...",
     "memory_update": "..."
   },
+  "continuity": {
+    "prior_concerns_resolved": [],
+    "prior_concerns_worsened": [],
+    "prior_concerns_unchanged": [],
+    "new_concerns": [],
+    "storyline_update": "..."
+  },
   "trace": {
     "main_features_considered": [],
     "main_pillars_considered": [],
-    "enrollment_status": "below_benchmark | typical | ambitious | above_benchmark_high | not_available",
+    "operational_statuses_considered": [],
     "compared_against": "previous_prediction",
     "should_repeat_prior_warning": false
   }
 }
 ```
 
+`facilitator_view_optional` may be omitted in the first V1 implementation. The minimum provider contract is the participant review, quality review domains, continuity fields, and trace fields needed for validation and replay.
+
+The LLM does not return final Quality Assessment pillar/subcategory point contributions. The application derives them from validated `quality_review_domains`, evidence fields, and the documented deterministic mapping. This keeps plotted Quality Assessment contributions reproducible.
+
 The application calculates:
 
 ```text
-coherence_adjustment = clamp(round((coherence_score - 70) * 0.67), -20, +20)
+evidence_coherence_points = deterministic_map(validated_evidence_coherence_ratings)
+population_strategy_points = deterministic_map(validated_population_strategy_ratings)
+execution_plausibility_points = deterministic_map(validated_execution_plausibility_ratings)
 
-adjusted_trial_value_score = clamp(
-    completion_score + coherence_adjustment,
+rating_points =
+    evidence_coherence_points
+  + population_strategy_points
+  + execution_plausibility_points
+
+quality_adjustment = clamp(rating_points, -10, +10)
+
+final_candidate_score = clamp(
+    completion_score + quality_adjustment,
     0,
     100
 )
 ```
 
-The adjusted score should be rounded by application logic using a documented UI rule. The LLM should not return the adjusted score as an authority.
+Suggested initial V1 mapping:
+
+```text
+strong = +1
+acceptable = 0
+weak = -2
+conflicting = -4
+
+change_integrity:
+improved = +1
+neutral = 0
+simplified = -2
+potential_shortcut = -4
+
+text_consistency:
+consistent = 0
+minor_tension = -1
+material_tension = -2
+contradiction = -4
+```
+
+The final score should be rounded by application logic using a documented UI rule. A domain rating should affect the Quality Adjustment only when the LLM provides supporting `evidence_fields`; otherwise the point effect should be zero and the issue can remain narrative-only.
+
+Guardrails:
+
+- If all validated Quality Review domains are `acceptable`, `neutral`, or otherwise non-concerning, `Quality Adjustment = 0`.
+- A positive Quality Adjustment requires evidence that the participant strengthened design quality, not merely that the design avoided obvious concerns.
+- Benchmark-typical operational assumptions are neutral by default; they do not create a positive Quality Adjustment unless supported by broader design improvements.
+- Low-confidence operational benchmark metadata should be narrative-first. It should affect points only when multiple conflict signals agree.
 
 ## 13. Plot Integration Guidance
 
-Plot integration should be conservative for v1:
+Plot integration should preserve source clarity while allowing an adjusted-score view.
 
-- Gauge: shows `Adjusted Trial Value Score`.
-- Small score cards: show `Completion Score` and `Coherence Score`.
-- For v1, the bar chart and treemap remain XGBoost-first.
-- Add one visible enrollment coherence note below or near the charts.
-- The enrollment coherence note should be shown as a separate narrative or small card, not redistributed into SHAP-style pillar or subcategory impacts.
-- Do not attempt pillar-level attribution for the Coherence Score in v1.
-- Do not create fake SHAP attribution.
+Use a toggle:
 
-If a future version mixes coherence into the bar chart or treemap, rename the chart to `Adjusted Design Drivers` and clearly distinguish XGBoost impacts from coherence adjustments.
+```text
+Completion Score View
+Final Candidate Score View
+```
+
+### Completion Score View
+
+This is the existing model-first view:
+
+- Gauge: `Completion Score`.
+- Bar chart: four XGBoost / SHAP-derived completion pillars.
+- Treemap: existing XGBoost / SHAP-derived completion hierarchy.
+- Labels should remain tied to Completion Score drivers.
+
+### Final Candidate Score View
+
+This is the adjusted serious-game view:
+
+- Gauge: `Final Candidate Score`.
+- Component cards:
+  - `Completion Score`.
+  - `Quality Adjustment`.
+  - `Final Candidate Score`.
+- Bar chart may show seven bars:
+  - Four Completion Score pillars:
+    - `Therapeutic Context`.
+    - `Scientific Challenge`.
+    - `Patient Profile`.
+    - `Execution Framework`.
+  - Three Quality Assessment pillars:
+    - `Evidence Coherence`.
+    - `Population & Strategy Fit`.
+    - `Execution Plausibility`.
+- Use visual separation or a distinct color family so users can see that the first four bars are XGBoost / SHAP-derived and the last three are structured Quality Review contributions.
+
+Recommended adjusted treemap structure:
+
+```text
+Final Candidate Score
+├── Completion Score
+│   ├── Therapeutic Context
+│   ├── Scientific Challenge
+│   ├── Patient Profile
+│   └── Execution Framework
+└── Quality Assessment
+    ├── Evidence Coherence
+    │   ├── Endpoint & Comparator Fit
+    │   └── Scientific Rigor
+    ├── Population & Strategy Fit
+    │   ├── Population Relevance
+    │   └── Development Fit
+    └── Execution Plausibility
+        ├── Operational Scale Fit
+        └── Change Integrity
+```
+
+The treemap should make source boundaries explicit:
+
+```text
+Completion Score = XGBoost / SHAP-derived
+Quality Assessment = structured LLM review, app-scored
+```
+
+Do not create fake SHAP attribution. Quality Assessment values are not SHAP values and should not be described as model drivers. Use terms such as `Quality Review Contributions` or `Quality Assessment` rather than `SHAP drivers`.
+
+Operational assumptions should not be redistributed into the XGBoost `Execution Framework` branch. In adjusted view, Planned Enrollment, Planned Sites, and Planned Duration should contribute only through `Quality Assessment -> Execution Plausibility -> Operational Scale Fit`.
+
+Treemap signed-value rule:
+
+- Tile labels show signed point contribution.
+- Color indicates positive versus negative contribution.
+- Tile size should use absolute magnitude or a fixed group sizing rule, because treemap area cannot directly represent negative values.
+- The root label should show the Final Candidate Score, but the chart should not imply that negative tile areas add arithmetically as positive area.
+- Completion Score and Quality Assessment branches should be visually separated so users do not confuse app-scored quality contributions with SHAP-derived model impacts.
 
 ## 14. Narrative Tone Rules
 
@@ -678,16 +831,57 @@ Recommended stored state per serious-game session:
 - Support level per iteration.
 - Supporting signals per iteration.
 - Conflicting signals per iteration.
-- Coherence Score per iteration.
-- Coherence Adjustment per iteration.
-- Adjusted Trial Value Score per iteration.
+- Quality Review ratings per iteration.
+- Quality Adjustment per iteration.
+- Final Candidate Score per iteration.
 - Pillar impacts and pillar deltas.
 - Feature drivers and deltas.
-- Participant narrative.
+- Participant review.
 - Facilitator view.
 - Compact memory update.
 
-After several iterations, the system should pass a compact case memory summary rather than the full raw history every time. This avoids long context, repeated warnings, and drift in the narrative. Raw history can still be stored for audit, export, or facilitator debrief.
+The storyline should be application-owned, not implicit LLM memory. After each review, store:
+
+- Iteration number.
+- Changed fields.
+- Changed operational assumptions.
+- Score movement.
+- Quality Adjustment.
+- Main gain.
+- Main trade-off.
+- Resolved concerns.
+- Persistent concerns.
+- New concerns.
+- Storyline update.
+
+For the next prediction, pass baseline review, previous review, compact storyline memory, current delta packet, and current snapshot. After several iterations, the system should pass a compact case memory summary rather than the full raw history every time. This avoids long context, repeated warnings, and drift in the narrative. Raw history can still be stored for audit, export, or facilitator debrief.
+
+### Review Regeneration And No-Op Policy
+
+The application should decide whether a new Quality Review is needed before calling the LLM. This prevents the narrative from changing when the user has not materially changed the scenario.
+
+Do not call the LLM and do not create a new storyline step when:
+
+- No model-facing Trial Features changed.
+- No active operational assumptions changed.
+- No editable text fields changed materially.
+- Completion Score and operational metadata are unchanged.
+
+For no-op predictions, reuse the latest validated review and leave Quality Adjustment, Final Candidate Score, and storyline memory unchanged.
+
+For minor text-only edits, use a materiality gate before triggering a full review:
+
+```text
+Normalize text -> compare to previous text -> classify as no-op, minor wording, or material meaning change.
+```
+
+Examples:
+
+- Typo, punctuation, casing, whitespace, or a single wording cleanup = no new review.
+- A short clarification that does not alter endpoint, population, intervention, or operational meaning = no full review; optionally update displayed text only.
+- A text edit that changes endpoint intent, population scope, intervention description, rationale, or creates a structured-field contradiction = material text change and may trigger a new Quality Review.
+
+If a text-only material change triggers review, the narrative should state that the design variables did not change and the review changed only because the textual rationale/context changed. The application should avoid presenting this as a new model-score movement.
 
 ## 16. Reproducibility And Provider Fallback
 
@@ -704,6 +898,7 @@ Recommended trace fields to store for each narrative pass:
 - System fingerprint or equivalent provider metadata, when available.
 - Input JSON.
 - Output JSON.
+- Input hash.
 - Timestamp.
 - Iteration ID.
 - Baseline ID.
@@ -711,7 +906,18 @@ Recommended trace fields to store for each narrative pass:
 
 The goal is to make repeated runs as consistent as possible while acknowledging that exact determinism is not guaranteed for LLM outputs.
 
-Provider abstraction should be thin. The application should own payload construction, validation, adjusted-score calculation, persistence, and UI rendering. Provider-specific code should own only model invocation and response normalization.
+Provider abstraction should be thin. The application should own payload construction, validation, Quality Adjustment calculation, persistence, cache lookup, and UI rendering. Provider-specific code should own only model invocation and response normalization.
+
+Use a deterministic input hash based on prompt version, rubric version, baseline snapshot, current snapshot, storyline memory, and text context. If the same input hash is reviewed again, reuse the stored validated review instead of calling the provider again. Generate the baseline review once per selected study and store it for the session.
+
+Validation and failure behavior:
+
+- If the LLM provider call fails, show Completion Score only and mark Quality Adjustment as unavailable for the current snapshot.
+- Do not reuse a stale Quality Adjustment for a new snapshot.
+- If JSON is malformed or fails schema validation, discard scoring fields and either show no narrative or show only validated narrative fields.
+- If a domain rating is valid but lacks required `evidence_fields`, set its point contribution to zero and keep the issue narrative-only.
+- If partial JSON validates, the application may render validated narrative sections, but Final Candidate Score should be calculated only from validated scoring fields.
+- Store validation status and failure reason with the review trace.
 
 ## 17. Fields And Source-Of-Truth Principle
 
@@ -719,7 +925,16 @@ The structured feature registry remains the primary design source of truth for t
 
 The LLM narrative layer should treat structured dropdown and numeric fields as the primary source of truth. Short text fields are secondary. They should help detect contradiction, missing rationale, or narrative inconsistency. Missing or brief free-text fields should not be heavily penalized unless they directly contradict structured trial features.
 
-If structured fields and text fields conflict, the LLM should flag the inconsistency rather than silently penalize the Coherence Score. For example, if the structured fields say `adult_ml` is adult-only but the summary says the intended treatment population includes elderly patients with high disease burden, the LLM may flag a population-relevance concern.
+If structured fields and text fields conflict, the LLM should flag the inconsistency rather than silently penalize the Quality Adjustment. For example, if the structured fields say `adult_ml` is adult-only but the summary says the intended treatment population includes elderly patients with high disease burden, the LLM may flag a population-relevance concern.
+
+User-editable text is untrusted context. The provider prompt must instruct the model to ignore any instructions, scoring requests, or role changes embedded inside study summary, endpoint, intervention, eligibility, or other trial text fields. Text can provide rationale, context, or contradiction evidence, but it must not override structured fields unless a future UI explicitly marks it as participant rationale.
+
+Text conflict handling:
+
+- Flag the inconsistency first.
+- Route it to the affected Quality Assessment pillar.
+- Require `evidence_fields` before it can affect Quality Adjustment.
+- Treat missing, brief, or noisy text as low-confidence context rather than a direct penalty.
 
 ### Field Selection for LLM Narrative Layer
 
@@ -884,7 +1099,7 @@ This list should help the LLM interpret why the Completion Score moved. It shoul
 
 #### Non-Direct Fields That Still Matter
 
-The following four fields are essential for the Coherence Score even if they are not direct transformed XGBoost/SHAP fields:
+The following four fields are essential for the Quality Review even if they are not direct transformed XGBoost/SHAP fields:
 
 - `therapeutic_area_ml`: essential for disease-setting context and therapeutic-area calibration.
 - `strategic_ambition_ml`: essential for development-question fit.
@@ -906,6 +1121,8 @@ Recommended v1 core text context:
 
 These two text fields are the core text context for v1.
 
+`primary_endpoint_description` should be treated as strongly recommended when the UI supports it, because it materially improves endpoint and duration coherence review.
+
 #### Optional Text Fields
 
 Optional text fields for better coherence checking:
@@ -913,6 +1130,12 @@ Optional text fields for better coherence checking:
 - `primary_outcomes_ui`
   - UI source: `primary_outcomes`
   - Use: endpoint coherence, evidence value, endpoint timing, interpretability.
+- `primary_endpoint_description`
+  - UI source: future editable short endpoint field, when present.
+  - Use: endpoint coherence, duration fit, evidence value, and consistency with endpoint rigor / endpoint structure.
+- `interventions_ui`
+  - UI source: future optional intervention context, when present and clean enough.
+  - Use: modality, mechanism, operational complexity, and consistency with structured therapeutic modality.
 - `criteria_ui`
   - UI source: `eligibility_criteria`
   - Use: population relevance, inclusion/exclusion coherence, shortcut detection when population restrictions appear inconsistent with the stated study objective.
@@ -926,7 +1149,7 @@ The architecture should avoid relying heavily on long or noisy free-text fields 
 Fields that should not be core scoring inputs in v1:
 
 - `conditions_ui`
-- `interventions_ui`
+- Long or noisy `interventions_ui`
 - Long `eligibility_criteria`
 - Long protocol-style descriptions
 
@@ -957,27 +1180,32 @@ Always send:
 - `score_delta`
 - `pillar_impacts`
 - `pillar_deltas`
+- `changed_fields`
+- `compact_storyline_memory`
+
+Send when implemented or derivable from available SHAP/subcategory data:
+
 - `top_positive_feature_drivers`
 - `top_negative_feature_drivers`
 - `top_feature_impact_changes`
-- `changed_fields`
-- `previous_narrative_memory`
 
 Optionally send:
 
 - `primary_outcomes_ui`
+- `primary_endpoint_description`
+- `interventions_ui`, when clean enough for short context
 - `criteria_ui`
 
 Do not rely heavily on:
 
 - `conditions_ui`
-- `interventions_ui`
+- Long or noisy `interventions_ui`
 - Long eligibility text
 - Long protocol-style descriptions
 
-#### Role In The Coherence Score
+#### Role In The Quality Review
 
-The field set should support the Coherence Score rubric by evaluating:
+The field set should support the Quality Review rubric by evaluating:
 
 - Development-question fit.
 - Population relevance.
@@ -1018,11 +1246,18 @@ The stored serious-game snapshot should include:
 - Benchmark percentiles.
 - Benchmark status labels.
 - Support/conflict signals, when implemented.
-- Coherence Score.
-- Coherence Adjustment.
-- Adjusted Trial Value Score.
+- Quality Review ratings.
+- Quality Assessment pillar/subcategory contributions.
+- Quality Adjustment.
+- Final Candidate Score.
+- Input hash.
+- Prompt version.
+- Rubric version.
+- Validation status.
+- Failure reason, if any.
+- Compact storyline memory.
 
-Storage should keep `Coherence Score`, `Coherence Adjustment`, and `Adjusted Trial Value Score` as explicit fields rather than storing only a derived narrative explanation.
+Storage should keep `Quality Review` ratings, `Quality Adjustment`, and `Final Candidate Score` as explicit fields rather than storing only a derived narrative explanation.
 
 ## 19. Non-Goals For This Architecture Phase
 
@@ -1045,8 +1280,11 @@ Storage should keep `Coherence Score`, `Coherence Adjustment`, and `Adjusted Tri
 - No market layer in v1.
 - No full operational scale engine in v1.
 - No full operational-estimation engine in v1.
-- No pillar-level coherence redistribution in v1.
+- No redistribution of Quality Adjustment into XGBoost / SHAP Completion Score pillars.
 - No feature-level LLM pseudo-SHAP in v1.
+- No LLM-generated final score.
+- No nearest-neighbor / similarity cohorts in v1.
+- No full feature-norm benchmark table in v1.
 
 ## 20. V1 Roadmap Summary
 
@@ -1055,12 +1293,29 @@ V1 serious-game narrative layer:
 - Keep XGBoost unchanged.
 - Use Planned Enrollment, Planned Sites, and Planned Duration as deterministic operational assumptions.
 - Classify operational assumptions against similar-trial benchmarks.
-- Use operational assumptions as bounded inputs into the future Coherence Score.
-- Make Coherence Score bidirectional.
-- Calculate a bounded Coherence Adjustment.
-- Calculate Adjusted Trial Value Score additively.
-- Keep bar chart and treemap XGBoost-first.
+- Use operational assumptions as bounded inputs into the future Quality Review.
+- Make Quality Review bidirectional.
+- Map Quality Review into three user-facing Quality Assessment pillars: Evidence Coherence, Population & Strategy Fit, and Execution Plausibility.
+- Calculate a bounded Quality Adjustment in application logic.
+- Calculate Final Candidate Score additively.
+- Keep Completion Score View XGBoost-first.
+- In Final Candidate Score View, show Completion Score and Quality Assessment as separate branches or grouped contributions.
 - Show a narrative panel explaining design trade-offs.
+- Store compact storyline memory so later predictions build on earlier changes.
+
+Implementation staging:
+
+1. Contract fixtures: define a small set of static example scenarios before implementation. Include at least baseline, model-facing edit, operational-only edit, material text-only edit, and no-op/minor text edit. For each fixture, record expected review ratings, Quality Adjustment, Final Candidate Score behavior, and storyline behavior.
+2. Deterministic review packet builder: assemble baseline/current/previous snapshots, changed fields, operational metadata, score deltas, text context, and compact storyline memory without calling an LLM.
+3. Validation and scoring engine: validate review JSON, enforce `evidence_fields`, derive Quality Assessment pillars/subcategories, apply pillar/subcategory caps, apply zero/positive-adjustment guardrails, clamp Quality Adjustment, and calculate Final Candidate Score.
+4. Mock reviewer: use deterministic fake JSON responses based on the fixtures to test validation, scoring math, no-op behavior, text-materiality behavior, and failure handling.
+5. Storage and replay: persist validated review traces in session state first, including input hash, validation status, Quality Adjustment, Final Candidate Score, and compact storyline memory. Reuse cached reviews for identical input hashes.
+6. Minimal UI panel: render Completion Score, Quality Adjustment, Final Candidate Score, Design Coherence Review, and compact Quality Assessment rows. Do not build adjusted treemap yet.
+7. Hidden baseline continuity: generate/store the hidden baseline review and verify that later iteration reviews use baseline review, previous review, and compact storyline memory consistently.
+8. Thin LLM provider wrapper: add the provider abstraction only after packet building, validation, scoring, caching, replay, and mock UI work. Provider code invokes the model and normalizes JSON only. The application owns scoring.
+9. First adjusted-score visual: add Final Candidate Score View with component cards and the seven-bar grouped chart.
+10. Two-branch adjusted treemap: add only after the simpler adjusted view is stable and understandable; defer to V1.1 if it slows the first implementation.
+11. Calibration/playtesting: review examples and tune rating-to-point mapping within the `-10` to `+10` total Quality Adjustment range.
 
 ## 21. Open Questions
 
@@ -1069,6 +1324,6 @@ V1 serious-game narrative layer:
 - Exact participant versus facilitator UI placement.
 - Exact provider abstraction for OpenAI/Gemini.
 - Exact number of previous iterations to keep raw before summarization.
-- Exact Coherence Score calibration examples after v1 playtesting.
+- Exact Quality Adjustment calibration examples after v1 playtesting.
 - Whether facilitator view is hidden behind an expander or separate mode.
 - Whether final governance recommendation is generated by participants, LLM, or both.
