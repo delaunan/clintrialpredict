@@ -2,7 +2,7 @@
 
 ## Document Role
 
-This file owns the future serious-game narrative layer: LLM commentary, Design Coherence Review, Quality Review, Quality Adjustment, Final Candidate Score, facilitator/participant outputs, and narrative payload contracts.
+This file owns the future serious-game narrative layer: LLM commentary, Quality Review, Quality Adjustment, Final Candidate Score, facilitator/participant outputs, and narrative payload contracts.
 
 It should not own the existing XGBoost Completion Score, SHAP impact mechanics, or simulation UI state; use `docs/architecture_edit.md` for those. It should consume operational benchmark metadata from `docs/architecture_estimation.md` rather than redefining benchmark construction.
 
@@ -59,10 +59,9 @@ Interpretation:
 Terminology:
 
 - `Completion Score` = modelled likelihood of completion.
-- `Quality Review` = structured LLM review of design coherence, rigor, operational fit, text consistency, and change integrity.
+- `Quality Review` = participant-facing narrative explanation and structured LLM review of design coherence, rigor, operational fit, text consistency, and change integrity.
 - `Quality Adjustment` = bounded application-calculated point bonus or penalty.
 - `Final Candidate Score` = Completion Score plus Quality Adjustment.
-- `Design Coherence Review` = participant-facing narrative explanation.
 
 In plain scoring terms, `Final Candidate Score = Completion Score + Quality Adjustment`, with application-level bounds applied.
 
@@ -106,7 +105,7 @@ Intended flow:
 7. XGBoost returns the new completion score, pillar impacts, and impact decomposition through the existing prediction path.
 8. The narrative layer receives baseline context, previous prediction, current prediction, changed fields, score deltas, SHAP/pillar movement, operational benchmark metadata, text context, and prior storyline memory.
 9. The application validates the structured Quality Review, calculates Quality Adjustment and Final Candidate Score, and stores a compact storyline update.
-10. The UI displays the Design Coherence Review below or near the score and charts.
+10. The UI displays the Quality Review below or near the score and charts.
 11. Participants iterate.
 
 The visible narrative should usually compare the current prediction against the previous prediction. Internally, the LLM should also receive enough baseline and path memory to avoid contradicting prior feedback.
@@ -155,7 +154,7 @@ After each prediction, the participant view should display:
 - `Completion Score` as a component score.
 - `Quality Adjustment` as a component value.
 - A short `Operational Assumptions` note.
-- Concise `Design Coherence Review`.
+- Concise `Quality Review`.
 
 Participant narrative sections:
 
@@ -239,7 +238,7 @@ The Quality Review should reflect both current design coherence and change integ
 - Current design coherence: whether the revised design is coherent and defensible now.
 - Change integrity: whether the path from baseline to current design appears like meaningful improvement, acceptable simplification, or score-seeking shortcut behavior.
 
-For V1, do not make a numeric `Coherence Score` the primary user-facing concept. It can sound falsely precise and may be mistaken for a competing prediction model. The user-facing concepts should be `Design Coherence Review`, `Quality Adjustment`, and `Final Candidate Score`.
+For V1, do not make a numeric `Coherence Score` or `Quality Score` the primary user-facing concept. These can sound falsely precise and may be mistaken for competing prediction models. The user-facing concepts should be `Quality Review`, `Quality Adjustment`, and `Final Candidate Score`.
 
 The Quality Review is bidirectional. It should recognize:
 
@@ -1310,7 +1309,7 @@ Implementation staging:
 3. Validation and scoring engine: validate review JSON, enforce `evidence_fields`, derive Quality Assessment pillars/subcategories, apply pillar/subcategory caps, apply zero/positive-adjustment guardrails, clamp Quality Adjustment, and calculate Final Candidate Score. Current implementation artifact: `src/narratives/scoring.py`, validated by `scripts/check_narrative_scoring.py`.
 4. Mock reviewer: use deterministic fake JSON responses based on the fixtures to test validation, scoring math, no-op behavior, text-materiality behavior, and failure handling. Current implementation artifact: `src/narratives/mock_reviewer.py`, validated by `scripts/check_narrative_mock_reviewer.py`.
 5. Storage and replay: persist validated review traces in session state first, including input hash, validation status, Quality Adjustment, Final Candidate Score, and compact storyline memory. Reuse cached reviews for identical input hashes. Current implementation artifact: `src/narratives/review_store.py`, validated by `scripts/check_narrative_review_store.py`.
-6. Minimal UI panel: render Completion Score, Quality Adjustment, Final Candidate Score, Design Coherence Review, and compact Quality Assessment rows. Do not build adjusted treemap yet.
+6. Minimal UI panel: render Completion Score, Quality Adjustment, Final Candidate Score, Quality Review, and compact Quality Assessment rows. Do not build adjusted treemap yet. Current implementation artifact: `frontend/views/trial_simulator.py`, using the provider-free packet builder, mock reviewer, and session-state review store.
 7. Hidden baseline continuity: generate/store the hidden baseline review and verify that later iteration reviews use baseline review, previous review, and compact storyline memory consistently.
 8. Thin LLM provider wrapper: add the provider abstraction only after packet building, validation, scoring, caching, replay, and mock UI work. Provider code invokes the model and normalizes JSON only. The application owns scoring.
 9. First adjusted-score visual: add Final Candidate Score View with component cards and the seven-bar grouped chart.

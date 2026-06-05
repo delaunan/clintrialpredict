@@ -28,6 +28,10 @@ from src.operational_benchmarks import (
     planned_sites_metadata,
     planned_sites_default_from_operational_benchmark,
 )
+from src.narratives.packet_builder import build_review_packet
+from src.narratives.review_store import (
+    replay_or_review_with_mock,
+)
 
 # Load environment variables
 load_dotenv()
@@ -4241,6 +4245,90 @@ def inject_custom_styles():
                 margin-top: 5px !important;
             }}
 
+            html body .quality-review-card {{
+                border: 1px solid #d8dee8 !important;
+                border-radius: 12px !important;
+                background: #fbfcfe !important;
+                padding: 11px 12px !important;
+                margin-top: 8px !important;
+                font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
+                color: #334155 !important;
+            }}
+
+            html body .quality-review-title {{
+                color: #1f2937 !important;
+                font-size: 0.88rem !important;
+                font-weight: 850 !important;
+                line-height: 1.1 !important;
+                margin-bottom: 7px !important;
+            }}
+
+            html body .quality-review-components {{
+                display: grid !important;
+                grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+                gap: 6px !important;
+                margin-bottom: 8px !important;
+            }}
+
+            html body .quality-review-metric {{
+                border: 1px solid #e2e8f0 !important;
+                border-radius: 8px !important;
+                background: #ffffff !important;
+                padding: 6px 7px !important;
+                min-width: 0 !important;
+            }}
+
+            html body .quality-review-metric-label {{
+                color: #64748b !important;
+                font-size: 0.66rem !important;
+                font-weight: 750 !important;
+                line-height: 1.1 !important;
+                text-transform: uppercase !important;
+            }}
+
+            html body .quality-review-metric-value {{
+                color: #1f2937 !important;
+                font-size: 0.95rem !important;
+                font-weight: 850 !important;
+                line-height: 1.2 !important;
+                margin-top: 2px !important;
+                overflow-wrap: anywhere !important;
+            }}
+
+            html body .quality-review-row {{
+                display: flex !important;
+                align-items: center !important;
+                justify-content: space-between !important;
+                gap: 8px !important;
+                border-top: 1px solid #e5eaf1 !important;
+                padding-top: 5px !important;
+                margin-top: 5px !important;
+                font-size: 0.74rem !important;
+                line-height: 1.25 !important;
+                font-weight: 650 !important;
+            }}
+
+            html body .quality-review-points {{
+                flex: 0 0 auto !important;
+                font-weight: 850 !important;
+            }}
+
+            html body .quality-review-text {{
+                color: #475569 !important;
+                font-size: 0.74rem !important;
+                line-height: 1.32 !important;
+                margin-top: 6px !important;
+                font-weight: 500 !important;
+            }}
+
+            html body .quality-review-muted {{
+                color: #64748b !important;
+                font-size: 0.71rem !important;
+                line-height: 1.3 !important;
+                margin-top: 6px !important;
+                font-weight: 500 !important;
+            }}
+
             /* Resolution scaling — mirrors the app's existing breakpoints so the
                Trial Features grid grows with the screen like every other view. */
             @media (min-width: 1800px) and (min-height: 950px) {{
@@ -5425,6 +5513,104 @@ def append_simulation_prediction_history(snapshot):
         "previous_operational_display_values": snapshot.get("previous_operational_display_values"),
         "operational_assumptions": snapshot.get("operational_assumptions"),
     })
+
+
+def get_simulation_prediction_history_for_trial(nct_id):
+    nct_id = str(nct_id or "").strip()
+    return [
+        item
+        for item in st.session_state.get("simulation_prediction_history", [])
+        if str(item.get("nct_id") or "").strip() == nct_id
+    ]
+
+
+def get_baseline_prediction_snapshot(nct_id):
+    for item in get_simulation_prediction_history_for_trial(nct_id):
+        if item.get("source") == "prerecorded_baseline":
+            return item
+    return None
+
+
+def get_previous_prediction_snapshot(nct_id, current_snapshot):
+    current_timestamp = (current_snapshot or {}).get("timestamp")
+    candidates = [
+        item
+        for item in get_simulation_prediction_history_for_trial(nct_id)
+        if item.get("timestamp") != current_timestamp
+    ]
+    return candidates[-1] if candidates else None
+
+
+def build_trial_identity_for_narrative(row):
+    nct_id = str(row.get(ID_COL, st.session_state.get("selected_nct_id", "")))
+    title = trial_val(row, "title") or trial_val(row, "brief_title") or nct_id
+    return {
+        "nct_id": nct_id,
+        "trial_label": title,
+        "lead_sponsor_canonical": trial_val(row, "lead_sponsor_canonical"),
+        "start_year": trial_val(row, "start_year"),
+    }
+
+
+def build_text_context_for_narrative(row):
+    trial_key = str(row.get(ID_COL, st.session_state.get("selected_nct_id", "no_trial")))
+    context = {}
+    output_keys = {
+        "top_title": "title",
+        "study_summary": "summary_ui",
+        "primary_outcomes": "primary_outcomes_ui",
+        "interventions": "interventions_ui",
+        "eligibility_criteria": "criteria_ui",
+    }
+
+    for panel_key, output_key in output_keys.items():
+        text_key = f"text_{trial_key}_{panel_key}"
+        candidates = TRIAL_EDITOR_TEXT_FIELDS.get(panel_key, ())
+        value = st.session_state.get(text_key)
+        if value in (None, "") and candidates:
+            value = trial_val(row, candidates[0])
+        if value not in (None, ""):
+            context[output_key] = value
+
+    return context
+
+
+def get_narrative_session_id(nct_id):
+    return f"{get_audit_session_id()}:{str(nct_id or '').strip()}"
+
+
+def get_quality_review_trace_state_key(nct_id):
+    return f"narrative_quality_review_trace_{str(nct_id or '').strip()}"
+
+
+def get_quality_review_trace_for_snapshot(row, snapshot):
+    if not snapshot or snapshot.get("source") == "prerecorded_baseline":
+        return None
+
+    nct_id = str(snapshot.get("nct_id") or row.get(ID_COL, st.session_state.get("selected_nct_id", "")))
+    session_id = get_narrative_session_id(nct_id)
+    packet = build_review_packet(
+        current_snapshot=snapshot,
+        previous_snapshot=get_previous_prediction_snapshot(nct_id, snapshot),
+        baseline_snapshot=get_baseline_prediction_snapshot(nct_id),
+        trial_identity=build_trial_identity_for_narrative(row),
+        text_context=build_text_context_for_narrative(row),
+        compact_storyline_memory="",
+    )
+
+    state_key = get_quality_review_trace_state_key(nct_id)
+    cached_trace = st.session_state.get(state_key)
+    if cached_trace and cached_trace.get("input_hash") == packet.get("input_hash"):
+        return cached_trace
+
+    trace = replay_or_review_with_mock(
+        st.session_state,
+        packet=packet,
+        session_id=session_id,
+        baseline_id=(packet.get("iteration_context") or {}).get("baseline_snapshot_id"),
+    )
+    st.session_state[state_key] = trace
+    return trace
 
 
 def _mapped_value_for_option_key(field_id, option_key):
@@ -7927,6 +8113,140 @@ def render_duration_assumption_card(row):
     )
 
 
+def _format_quality_points(value):
+    numeric = pd.to_numeric(value, errors="coerce")
+    if pd.isna(numeric):
+        return "N/A"
+    return f"{int(round(float(numeric))):+d}"
+
+
+def _quality_points_color(value):
+    numeric = pd.to_numeric(value, errors="coerce")
+    if pd.isna(numeric) or abs(float(numeric)) < 0.0001:
+        return "#64748b"
+    return PLOT_BLUE_DEEP_RGB if float(numeric) > 0 else PLOT_RED_DEEP_RGB
+
+
+def _quality_review_metric(label, value, color="#1f2937"):
+    return (
+        "<div class='quality-review-metric'>"
+        f"<div class='quality-review-metric-label'>{html.escape(label)}</div>"
+        f"<div class='quality-review-metric-value' style='color:{color};'>{html.escape(str(value))}</div>"
+        "</div>"
+    )
+
+
+def _quality_review_unavailable_card(title, message, muted):
+    st.markdown(
+        (
+            "<div class='quality-review-card'>"
+            f"<div class='quality-review-title'>{html.escape(title)}</div>"
+            f"<div class='quality-review-text'>{html.escape(message)}</div>"
+            f"<div class='quality-review-muted'>{html.escape(muted)}</div>"
+            "</div>"
+        ),
+        unsafe_allow_html=True,
+    )
+
+
+def render_quality_review_panel(row):
+    if not st.session_state.get("global_edit_mode", False):
+        return
+
+    nct_id = str(row.get(ID_COL, st.session_state.get("selected_nct_id", "")))
+    snapshot = get_latest_prediction_snapshot(nct_id)
+    if not snapshot:
+        return
+
+    if snapshot.get("source") == "prerecorded_baseline":
+        _quality_review_unavailable_card(
+            "Quality Review",
+            "Quality Review appears after the first scenario prediction.",
+            "The baseline review remains hidden so participants start from the original trial context.",
+        )
+        return
+
+    if has_pending_simulation_changes(row):
+        _quality_review_unavailable_card(
+            "Quality Review",
+            "Click Predict to update the Quality Review for the current scenario.",
+            "The displayed Completion Score and previous review still reflect the last submitted prediction.",
+        )
+        return
+
+    trace = get_quality_review_trace_for_snapshot(row, snapshot)
+    if not trace:
+        return
+
+    status = str(trace.get("status") or "unavailable")
+    if trace.get("quality_adjustment") is None or trace.get("final_candidate_score") is None:
+        reason = trace.get("failure_reason") or "; ".join(trace.get("validation_errors") or [])
+        if not reason and status == "no_fixture_match":
+            reason = "No mock Quality Review fixture matched this live scenario."
+        _quality_review_unavailable_card(
+            "Quality Review",
+            "Quality Review is not available for this scenario in the current mock-review phase.",
+            reason or "Validation did not produce an adjusted score.",
+        )
+        return
+
+    completion_score = snapshot.get("score")
+    quality_adjustment = trace.get("quality_adjustment")
+    final_candidate_score = trace.get("final_candidate_score")
+    participant = (trace.get("validated_review") or {}).get("participant_review") or {}
+    assessment = trace.get("quality_assessment") or {}
+    pillars = assessment.get("pillars") or {}
+
+    metric_html = "".join([
+        _quality_review_metric("Completion", f"{float(completion_score):.1f}" if completion_score is not None else "N/A"),
+        _quality_review_metric(
+            "Adjustment",
+            _format_quality_points(quality_adjustment),
+            _quality_points_color(quality_adjustment),
+        ),
+        _quality_review_metric("Final", str(final_candidate_score)),
+    ])
+
+    pillar_html = ""
+    for pillar in pillars.values():
+        label = str(pillar.get("label") or "Quality Assessment")
+        points = pillar.get("points")
+        pillar_html += (
+            "<div class='quality-review-row'>"
+            f"<span>{html.escape(label)}</span>"
+            f"<span class='quality-review-points' style='color:{_quality_points_color(points)};'>"
+            f"{html.escape(_format_quality_points(points))}</span>"
+            "</div>"
+        )
+
+    narrative_lines = [
+        participant.get("what_changed"),
+        participant.get("what_the_design_gained"),
+        participant.get("what_the_design_may_have_sacrificed"),
+        participant.get("operational_feasibility_note"),
+        participant.get("challenge_question"),
+    ]
+    narrative_html = "".join(
+        f"<div class='quality-review-text'>{html.escape(str(line))}</div>"
+        for line in narrative_lines
+        if isinstance(line, str) and line.strip()
+    )
+
+    cached_note = "Replayed from review cache." if trace.get("cached") else "Generated by deterministic mock reviewer."
+    st.markdown(
+        (
+            "<div class='quality-review-card'>"
+            "<div class='quality-review-title'>Quality Review</div>"
+            f"<div class='quality-review-components'>{metric_html}</div>"
+            f"{pillar_html}"
+            f"{narrative_html}"
+            f"<div class='quality-review-muted'>{html.escape(cached_note)}</div>"
+            "</div>"
+        ),
+        unsafe_allow_html=True,
+    )
+
+
 def get_simulation_pillar_delta_map():
     snapshot = get_latest_prediction_snapshot(st.session_state.get("selected_nct_id", ""))
     if not snapshot or snapshot.get("source") != "simulation_ptc":
@@ -8391,6 +8711,7 @@ def render_completion_prediction_tab(row):
                 render_enrollment_assumption_card(row)
                 render_site_assumption_card(row)
                 render_duration_assumption_card(row)
+                render_quality_review_panel(row)
 
             render_summary_plot_shell_panel(
                 panel_suffix="completion_prediction_left_top_block",
