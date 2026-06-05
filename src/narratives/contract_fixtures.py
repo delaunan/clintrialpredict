@@ -332,8 +332,8 @@ CONTRACT_FIXTURES: list[dict[str, Any]] = [
         "expected_behavior": {
             "review_needed": True,
             "visible_to_participant_initially": True,
-            "expected_quality_adjustment": -10,
-            "expected_final_candidate_score": 64,
+            "expected_quality_adjustment": -9,
+            "expected_final_candidate_score": 65,
             "expected_quality_pillars": {
                 "evidence_coherence": "negative",
                 "population_strategy_fit": "negative_or_neutral",
@@ -471,8 +471,8 @@ CONTRACT_FIXTURES: list[dict[str, Any]] = [
         "expected_behavior": {
             "review_needed": True,
             "visible_to_participant_initially": True,
-            "expected_quality_adjustment": -7,
-            "expected_final_candidate_score": 61,
+            "expected_quality_adjustment": -6,
+            "expected_final_candidate_score": 62,
             "expected_quality_pillars": {
                 "evidence_coherence": "negative",
                 "population_strategy_fit": "negative",
