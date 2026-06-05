@@ -554,6 +554,22 @@ This is conceptual JSON for planning only, not an implementation contract yet:
     "top_negative_feature_drivers": [],
     "top_feature_impact_changes": []
   },
+  "review_context": {
+    "baseline_review": {
+      "trace_id": "...",
+      "status": "reviewed",
+      "quality_adjustment": 0,
+      "final_candidate_score": 68,
+      "compact_storyline_memory": "..."
+    },
+    "previous_review": {
+      "trace_id": "...",
+      "status": "reviewed",
+      "quality_adjustment": -2,
+      "final_candidate_score": 70,
+      "compact_storyline_memory": "..."
+    }
+  },
   "iteration_context": {
     "baseline_snapshot_id": "...",
     "previous_snapshot_id": "...",
@@ -1310,7 +1326,7 @@ Implementation staging:
 4. Mock reviewer: use deterministic fake JSON responses based on the fixtures to test validation, scoring math, no-op behavior, text-materiality behavior, and failure handling. Current implementation artifact: `src/narratives/mock_reviewer.py`, validated by `scripts/check_narrative_mock_reviewer.py`.
 5. Storage and replay: persist validated review traces in session state first, including input hash, validation status, Quality Adjustment, Final Candidate Score, and compact storyline memory. Reuse cached reviews for identical input hashes. Current implementation artifact: `src/narratives/review_store.py`, validated by `scripts/check_narrative_review_store.py`.
 6. Minimal UI panel: render Completion Score, Quality Adjustment, Final Candidate Score, Quality Review, and compact Quality Assessment rows. Do not build adjusted treemap yet. Current implementation artifact: `frontend/views/trial_simulator.py`, using the provider-free packet builder, mock reviewer, and session-state review store.
-7. Hidden baseline continuity: generate/store the hidden baseline review and verify that later iteration reviews use baseline review, previous review, and compact storyline memory consistently.
+7. Hidden baseline continuity: generate/store the hidden baseline review and verify that later iteration reviews use baseline review, previous review, and compact storyline memory consistently. Current implementation artifacts: `src/narratives/packet_builder.py`, `frontend/views/trial_simulator.py`, and `scripts/check_narrative_packet_builder.py`.
 8. Thin LLM provider wrapper: add the provider abstraction only after packet building, validation, scoring, caching, replay, and mock UI work. Provider code invokes the model and normalizes JSON only. The application owns scoring.
 9. First adjusted-score visual: add Final Candidate Score View with component cards and the seven-bar grouped chart.
 10. Two-branch adjusted treemap: add only after the simpler adjusted view is stable and understandable; defer to V1.1 if it slows the first implementation.

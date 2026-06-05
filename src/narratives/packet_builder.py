@@ -254,11 +254,47 @@ def _iteration_number(current_snapshot: dict[str, Any], previous_snapshot: dict[
     return 0 if source == "prerecorded_baseline" else 1
 
 
+def _compact_review_context(trace: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not trace:
+        return None
+    if trace.get("status") not in {"reviewed", "reused_previous_review"}:
+        return None
+
+    validated = trace.get("validated_review") or {}
+    continuity = validated.get("continuity") or {}
+    participant = validated.get("participant_review") or {}
+    return json_safe({
+        "trace_id": trace.get("trace_id"),
+        "status": trace.get("status"),
+        "validation_status": trace.get("validation_status"),
+        "quality_adjustment": trace.get("quality_adjustment"),
+        "final_candidate_score": trace.get("final_candidate_score"),
+        "changed_fields": trace.get("changed_fields") or [],
+        "score_movement": trace.get("score_movement"),
+        "participant_review": {
+            "what_changed": participant.get("what_changed"),
+            "what_the_design_gained": participant.get("what_the_design_gained"),
+            "what_the_design_may_have_sacrificed": participant.get("what_the_design_may_have_sacrificed"),
+            "challenge_question": participant.get("challenge_question"),
+        },
+        "continuity": {
+            "prior_concerns_resolved": continuity.get("prior_concerns_resolved") or [],
+            "prior_concerns_worsened": continuity.get("prior_concerns_worsened") or [],
+            "prior_concerns_unchanged": continuity.get("prior_concerns_unchanged") or [],
+            "new_concerns": continuity.get("new_concerns") or [],
+            "storyline_update": continuity.get("storyline_update"),
+        },
+        "compact_storyline_memory": trace.get("compact_storyline_memory") or "",
+    })
+
+
 def build_review_packet(
     *,
     current_snapshot: dict[str, Any],
     previous_snapshot: dict[str, Any] | None = None,
     baseline_snapshot: dict[str, Any] | None = None,
+    baseline_review_trace: dict[str, Any] | None = None,
+    previous_review_trace: dict[str, Any] | None = None,
     trial_identity: dict[str, Any] | None = None,
     text_context: dict[str, Any] | None = None,
     compact_storyline_memory: str = "",
@@ -300,6 +336,10 @@ def build_review_packet(
             "top_positive_feature_drivers": _feature_driver_values(current_snapshot, "top_positive_feature_drivers"),
             "top_negative_feature_drivers": _feature_driver_values(current_snapshot, "top_negative_feature_drivers"),
             "top_feature_impact_changes": _feature_driver_values(current_snapshot, "top_feature_impact_changes"),
+        },
+        "review_context": {
+            "baseline_review": _compact_review_context(baseline_review_trace),
+            "previous_review": _compact_review_context(previous_review_trace),
         },
         "iteration_context": {
             "baseline_snapshot_id": _snapshot_id(baseline_snapshot, "baseline"),

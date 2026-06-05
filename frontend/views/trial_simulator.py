@@ -30,6 +30,7 @@ from src.operational_benchmarks import (
 )
 from src.narratives.packet_builder import build_review_packet
 from src.narratives.review_store import (
+    compact_storyline_from_trace,
     replay_or_review_with_mock,
 )
 
@@ -5583,23 +5584,74 @@ def get_quality_review_trace_state_key(nct_id):
     return f"narrative_quality_review_trace_{str(nct_id or '').strip()}"
 
 
+def get_hidden_baseline_review_trace_state_key(nct_id):
+    return f"narrative_hidden_baseline_review_trace_{str(nct_id or '').strip()}"
+
+
+def get_hidden_baseline_review_trace(row, baseline_snapshot):
+    if not baseline_snapshot:
+        return None
+
+    nct_id = str(baseline_snapshot.get("nct_id") or row.get(ID_COL, st.session_state.get("selected_nct_id", "")))
+    state_key = get_hidden_baseline_review_trace_state_key(nct_id)
+    cached_trace = st.session_state.get(state_key)
+    session_id = f"{get_narrative_session_id(nct_id)}:hidden_baseline"
+
+    packet = build_review_packet(
+        current_snapshot=baseline_snapshot,
+        previous_snapshot=None,
+        baseline_snapshot=baseline_snapshot,
+        trial_identity=build_trial_identity_for_narrative(row),
+        text_context=build_text_context_for_narrative(row),
+        compact_storyline_memory="",
+    )
+
+    if cached_trace and cached_trace.get("input_hash") == packet.get("input_hash"):
+        return cached_trace
+
+    trace = replay_or_review_with_mock(
+        st.session_state,
+        packet=packet,
+        session_id=session_id,
+        baseline_id=(packet.get("iteration_context") or {}).get("baseline_snapshot_id"),
+    )
+    st.session_state[state_key] = trace
+    return trace
+
+
+def get_trace_current_snapshot_id(trace):
+    packet = (trace or {}).get("input_packet") or {}
+    return (packet.get("iteration_context") or {}).get("current_snapshot_id")
+
+
 def get_quality_review_trace_for_snapshot(row, snapshot):
     if not snapshot or snapshot.get("source") == "prerecorded_baseline":
         return None
 
     nct_id = str(snapshot.get("nct_id") or row.get(ID_COL, st.session_state.get("selected_nct_id", "")))
     session_id = get_narrative_session_id(nct_id)
+    state_key = get_quality_review_trace_state_key(nct_id)
+    cached_trace = st.session_state.get(state_key)
+    current_snapshot_id = snapshot.get("snapshot_id") or snapshot.get("timestamp")
+    if cached_trace and get_trace_current_snapshot_id(cached_trace) == current_snapshot_id:
+        return cached_trace
+
+    previous_trace = cached_trace
+    baseline_snapshot = get_baseline_prediction_snapshot(nct_id)
+    baseline_trace = get_hidden_baseline_review_trace(row, baseline_snapshot)
+    compact_storyline_memory = compact_storyline_from_trace(previous_trace)
+
     packet = build_review_packet(
         current_snapshot=snapshot,
         previous_snapshot=get_previous_prediction_snapshot(nct_id, snapshot),
-        baseline_snapshot=get_baseline_prediction_snapshot(nct_id),
+        baseline_snapshot=baseline_snapshot,
+        baseline_review_trace=baseline_trace,
+        previous_review_trace=previous_trace,
         trial_identity=build_trial_identity_for_narrative(row),
         text_context=build_text_context_for_narrative(row),
-        compact_storyline_memory="",
+        compact_storyline_memory=compact_storyline_memory,
     )
 
-    state_key = get_quality_review_trace_state_key(nct_id)
-    cached_trace = st.session_state.get(state_key)
     if cached_trace and cached_trace.get("input_hash") == packet.get("input_hash"):
         return cached_trace
 

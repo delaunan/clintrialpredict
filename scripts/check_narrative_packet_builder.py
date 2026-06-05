@@ -15,6 +15,7 @@ from src.narratives.packet_builder import (  # noqa: E402
     ACTIVE_OPERATIONAL_ASSUMPTION_KEYS,
     DIRECT_XGBOOST_SHAP_FIELDS,
     STRUCTURED_FEATURE_KEYS,
+    build_review_packet,
     build_review_packet_from_fixture,
     stable_packet_hash,
 )
@@ -34,6 +35,7 @@ def _check_packet(fixture: dict, errors: list[str]) -> None:
         "structured_features",
         "operational_assumptions",
         "model_interpretation",
+        "review_context",
         "iteration_context",
         "input_hash",
     ):
@@ -71,10 +73,83 @@ def _check_packet(fixture: dict, errors: list[str]) -> None:
     if iteration.get("compact_storyline_memory") != source_iteration.get("compact_storyline_memory"):
         errors.append(f"{fixture_id}: compact_storyline_memory changed")
 
+    review_context = packet.get("review_context")
+    if not isinstance(review_context, dict):
+        errors.append(f"{fixture_id}: review_context must be an object")
+    elif set(review_context) != {"baseline_review", "previous_review"}:
+        errors.append(f"{fixture_id}: review_context keys changed")
+
     packet_without_hash = dict(packet)
     input_hash = packet_without_hash.pop("input_hash", None)
     if stable_packet_hash(packet_without_hash) != input_hash:
         errors.append(f"{fixture_id}: input_hash is not stable over packet content")
+
+
+def _check_review_continuity_context(errors: list[str]) -> None:
+    fixture = next(
+        item for item in get_contract_fixtures()
+        if item["fixture_id"] == "model_facing_endpoint_shortcut_v1"
+    )
+    baseline_trace = {
+        "trace_id": "baseline-trace",
+        "status": "reviewed",
+        "validation_status": "valid",
+        "quality_adjustment": 0,
+        "final_candidate_score": 68,
+        "changed_fields": [],
+        "score_movement": 0,
+        "validated_review": {
+            "participant_review": {
+                "what_changed": "Baseline",
+                "what_the_design_gained": "Baseline gain",
+                "what_the_design_may_have_sacrificed": "Baseline trade-off",
+                "challenge_question": "Baseline question",
+            },
+            "continuity": {
+                "new_concerns": [],
+                "storyline_update": "Baseline memory",
+            },
+        },
+        "compact_storyline_memory": "Baseline memory",
+    }
+    previous_trace = {
+        **baseline_trace,
+        "trace_id": "previous-trace",
+        "quality_adjustment": -2,
+        "final_candidate_score": 66,
+        "changed_fields": ["operational_assumptions.planned_enrollment"],
+        "score_movement": 0,
+        "compact_storyline_memory": "Previous iteration memory",
+    }
+    packet = fixture["input_packet"]
+    built = build_review_packet_from_fixture(fixture)
+    continuity_packet = build_review_packet(
+        current_snapshot={
+            "snapshot_id": packet["iteration_context"].get("current_snapshot_id"),
+            "structured_features": packet.get("structured_features", {}),
+            "operational_assumptions": packet.get("operational_assumptions", {}),
+            "model_interpretation": packet.get("model_interpretation", {}),
+            "changed_fields": packet["iteration_context"].get("changed_fields", []),
+        },
+        previous_snapshot={"snapshot_id": packet["iteration_context"].get("previous_snapshot_id"), "score": 68},
+        baseline_snapshot={"snapshot_id": packet["iteration_context"].get("baseline_snapshot_id")},
+        baseline_review_trace=baseline_trace,
+        previous_review_trace=previous_trace,
+        compact_storyline_memory="Previous iteration memory",
+    )
+
+    context = continuity_packet.get("review_context") or {}
+    if context.get("baseline_review", {}).get("trace_id") != "baseline-trace":
+        errors.append("continuity packet missing baseline review context")
+    if context.get("previous_review", {}).get("trace_id") != "previous-trace":
+        errors.append("continuity packet missing previous review context")
+    if (
+        continuity_packet.get("iteration_context", {}).get("compact_storyline_memory")
+        != "Previous iteration memory"
+    ):
+        errors.append("continuity packet missing compact storyline memory")
+    if built.get("review_context", {}).get("previous_review") is not None:
+        errors.append("fixture packet without review traces should not invent previous review context")
 
 
 def main() -> int:
@@ -82,6 +157,7 @@ def main() -> int:
     fixtures = get_contract_fixtures()
     for fixture in fixtures:
         _check_packet(fixture, errors)
+    _check_review_continuity_context(errors)
 
     if errors:
         for error in errors:
