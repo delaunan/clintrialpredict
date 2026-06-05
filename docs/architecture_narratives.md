@@ -10,7 +10,7 @@ Efficient update rule: change this file when narrative inputs/outputs, LLM contr
 
 ## 1. Purpose Of The Narrative Architecture
 
-This document defines the future design for adding a serious-game narrative layer around single-trial simulation in ClinTrialPredict. It is planning-only: no code, API, UI, model, taxonomy, or parity behavior is changed by this document.
+This document defines the staged design for adding a serious-game narrative layer around single-trial simulation in ClinTrialPredict. The first implementation artifact is limited to static contract fixtures; no API, UI, model, taxonomy, prediction, or parity behavior is changed by this document.
 
 The current edit/simulation workflow remains the foundation. A facilitator selects an existing trial, participants adjust structured Trial Features, and the application calls the existing prediction flow to produce a completion score with SHAP-derived impact decomposition.
 
@@ -1261,9 +1261,9 @@ Storage should keep `Quality Review` ratings, `Quality Adjustment`, and `Final C
 
 ## 19. Non-Goals For This Architecture Phase
 
-- No code implementation now.
-- No UI implementation now.
-- No new API endpoint now.
+- No production LLM implementation in the contract-fixture phase.
+- No UI implementation in the contract-fixture phase.
+- No new API endpoint in the contract-fixture phase.
 - No model retraining.
 - No retraining of XGBoost for v1.
 - No change to XGBoost prediction logic.
@@ -1305,7 +1305,7 @@ V1 serious-game narrative layer:
 
 Implementation staging:
 
-1. Contract fixtures: define a small set of static example scenarios before implementation. Include at least baseline, model-facing edit, operational-only edit, material text-only edit, and no-op/minor text edit. For each fixture, record expected review ratings, Quality Adjustment, Final Candidate Score behavior, and storyline behavior.
+1. Contract fixtures: define a small set of static example scenarios before implementation. Include at least baseline, model-facing edit, operational-only edit, material text-only edit, and no-op/minor text edit. For each fixture, record expected review ratings, Quality Adjustment, Final Candidate Score behavior, and storyline behavior. Current implementation artifact: `src/narratives/contract_fixtures.py`, validated by `scripts/check_narrative_contract_fixtures.py`.
 2. Deterministic review packet builder: assemble baseline/current/previous snapshots, changed fields, operational metadata, score deltas, text context, and compact storyline memory without calling an LLM.
 3. Validation and scoring engine: validate review JSON, enforce `evidence_fields`, derive Quality Assessment pillars/subcategories, apply pillar/subcategory caps, apply zero/positive-adjustment guardrails, clamp Quality Adjustment, and calculate Final Candidate Score.
 4. Mock reviewer: use deterministic fake JSON responses based on the fixtures to test validation, scoring math, no-op behavior, text-materiality behavior, and failure handling.
