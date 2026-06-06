@@ -116,6 +116,21 @@ def _check_review_continuity_context(errors: list[str]) -> None:
         "changed_fields": [],
         "score_movement": 0,
         "validated_review": {
+            "score_movement_review": {
+                "summary": "Baseline score reflects an acceptable original design profile.",
+            },
+            "quality_review_domains": {
+                "scientific_rigor": {
+                    "rating": "acceptable",
+                    "rationale": "Baseline endpoint and allocation preserve conventional rigor.",
+                    "evidence_fields": ["endpoint_rigor_ml", "allocation_ml"],
+                },
+                "text_consistency": {
+                    "rating": "consistent",
+                    "rationale": "Baseline text aligns with the structured design.",
+                    "evidence_fields": ["summary_ui"],
+                },
+            },
             "participant_review": {
                 "what_changed": "Baseline",
                 "what_the_design_gained": "Baseline gain",
@@ -167,6 +182,19 @@ def _check_review_continuity_context(errors: list[str]) -> None:
         errors.append("hidden baseline review context should not expose final_candidate_score")
     if context.get("baseline_review", {}).get("quality_numeric_context") != "hidden_baseline_qualitative_only":
         errors.append("hidden baseline review context should be marked qualitative-only")
+    if (
+        context.get("baseline_review", {}).get("baseline_score_movement_summary")
+        != "Baseline score reflects an acceptable original design profile."
+    ):
+        errors.append("hidden baseline review context should preserve score movement summary")
+    baseline_domains = context.get("baseline_review", {}).get("baseline_quality_domain_ratings") or {}
+    if baseline_domains.get("scientific_rigor", {}).get("rating") != "acceptable":
+        errors.append("hidden baseline review context should preserve qualitative domain ratings")
+    if not context.get("baseline_review", {}).get("baseline_strengths"):
+        errors.append("hidden baseline review context should include compact baseline strengths")
+    consistency_flags = context.get("baseline_review", {}).get("baseline_consistency_flags") or {}
+    if consistency_flags.get("text_consistency", {}).get("rating") != "consistent":
+        errors.append("hidden baseline review context should preserve consistency flags")
     if context.get("previous_review", {}).get("quality_adjustment") != -2:
         errors.append("previous visible review context should preserve quality_adjustment")
     if context.get("previous_review", {}).get("final_candidate_score") != 66:

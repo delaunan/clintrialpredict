@@ -492,7 +492,7 @@ def _compact_review_context(
     validated = trace.get("validated_review") or {}
     continuity = validated.get("continuity") or {}
     participant = validated.get("participant_review") or {}
-    return json_safe({
+    compact = {
         "input_hash": trace.get("input_hash"),
         "iteration_id": trace.get("iteration_id"),
         "status": trace.get("status"),
@@ -516,7 +516,54 @@ def _compact_review_context(
             "storyline_update": continuity.get("storyline_update"),
         },
         "compact_storyline_memory": trace.get("compact_storyline_memory") or "",
-    })
+    }
+
+    if not include_quality_scores:
+        score_movement = validated.get("score_movement_review") or {}
+        if not isinstance(score_movement, dict):
+            score_movement = {}
+        domains = validated.get("quality_review_domains") or {}
+        if not isinstance(domains, dict):
+            domains = {}
+        compact["baseline_score_movement_summary"] = score_movement.get("summary")
+        compact["baseline_quality_domain_ratings"] = {
+            domain_name: {
+                "rating": domain.get("rating"),
+                "rationale": domain.get("rationale"),
+                "evidence_fields": domain.get("evidence_fields") or [],
+            }
+            for domain_name, domain in sorted(domains.items())
+            if isinstance(domain, dict)
+        }
+        compact["baseline_strengths"] = [
+            domain.get("rationale")
+            for domain in domains.values()
+            if isinstance(domain, dict) and domain.get("rating") in {"strong", "acceptable", "consistent"}
+        ]
+        compact["baseline_concerns"] = [
+            domain.get("rationale")
+            for domain in domains.values()
+            if isinstance(domain, dict)
+            and domain.get("rating") in {
+                "weak",
+                "conflicting",
+                "minor_tension",
+                "material_tension",
+                "contradiction",
+                "potential_shortcut",
+                "simplified",
+            }
+        ]
+        text_consistency = domains.get("text_consistency") if isinstance(domains, dict) else None
+        compact["baseline_consistency_flags"] = {
+            "text_consistency": {
+                "rating": text_consistency.get("rating"),
+                "rationale": text_consistency.get("rationale"),
+                "evidence_fields": text_consistency.get("evidence_fields") or [],
+            }
+        } if isinstance(text_consistency, dict) else {}
+
+    return json_safe(compact)
 
 
 def build_review_packet(
