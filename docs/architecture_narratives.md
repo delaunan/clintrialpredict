@@ -565,6 +565,23 @@ This is conceptual JSON for planning only, not an implementation contract yet:
     "direct_xgboost_shap_fields": [],
     "pillar_impacts": {},
     "pillar_deltas": {},
+    "xgboost_impact_changes": [
+      {
+        "impact_level": "pillar | subcategory",
+        "name": "Execution Framework",
+        "pillar": "Execution Framework",
+        "subcategory": null,
+        "baseline_impact": 1.0,
+        "previous_impact": 1.0,
+        "current_impact": 3.0,
+        "delta_from_previous": 2.0,
+        "delta_from_baseline": 2.0,
+        "changed_since_previous": true,
+        "changed_from_baseline": true,
+        "direction_from_previous": "increased",
+        "direction_from_baseline": "increased"
+      }
+    ],
     "top_positive_feature_drivers": [],
     "top_negative_feature_drivers": [],
     "top_feature_impact_changes": []
@@ -605,6 +622,19 @@ This is conceptual JSON for planning only, not an implementation contract yet:
     "current_snapshot_id": "...",
     "iteration_number": 2,
     "changed_fields": [],
+    "field_changes": [
+      {
+        "field": "comparator_benchmark_ml",
+        "change_type": "structured_feature",
+        "baseline_value": "ACTIVE_MODERN_STANDARD",
+        "baseline_label": "Active (Modern Standard)",
+        "previous_value": "ACTIVE_MODERN_STANDARD",
+        "previous_label": "Active (Modern Standard)",
+        "current_value": "PLACEBO",
+        "current_label": "Placebo Control",
+        "changed_by_user": true
+      }
+    ],
     "compact_storyline_memory": "..."
   }
 }
@@ -621,6 +651,13 @@ Structured dropdown fields are the primary source of truth. Short text fields ar
 Missing or brief free-text fields should not be heavily penalized unless they directly contradict structured trial features or make an otherwise important design claim impossible to interpret.
 
 For structured Trial Features, narrative packets should use taxonomy option keys as the canonical value where an option key exists, and should include human-readable labels separately in `structured_feature_display_values`. For example, `endpoint_structure_ml = MULTI_COMPOSITE` should be paired with display label `Multi/Composite`. Numeric fields keep numeric values. The packet should include `field_dictionary_version` so prompts and providers know which taxonomy meanings and option definitions apply without repeating the full field dictionary in every packet. Narrative field meanings must be generated from the production taxonomy source path in `src/prep/pipeline.py`, not patched only into `models/taxonomy_01.json`, so rerunning `notebooks/production_01.ipynb` preserves them.
+
+Narrative packets should keep scenario edit facts separate from model explanation facts:
+
+- `iteration_context.field_changes` records what the participant changed, with baseline, previous, and current values/labels. This covers structured Trial Features, changed text-context fields, and operational assumptions when available.
+- `model_interpretation.xgboost_impact_changes` records what moved in the model explanation, with baseline, previous, and current impact values plus deltas. `changed_since_previous` marks local movement since the last prediction; `changed_from_baseline` marks accumulated drift from the original trial. These entries are XGBoost/SHAP explanation facts at pillar or subcategory level, not proof of clinical causality and not necessarily limited to fields the participant directly edited.
+
+The LLM should use `field_changes` to explain what changed in the scenario and `xgboost_impact_changes` to weight which model-explanation movements were material. It should not infer that every model impact movement was directly caused by a single changed field.
 
 Before a new prediction result is committed or displayed, the application may run a conservative structured/text alignment gate. This gate is deterministic and intentionally small in V1. It looks only for a few obvious material mismatches, starting with endpoint-structure and placebo/control signals that appear inconsistent between Trial Features and editable text. When a material mismatch is detected, the prediction workflow pauses before new scoring. The participant either corrects the structured field/text or adds a short explanation. That explanation becomes `clarification_context` in the review packet and is available to the LLM as participant scenario context.
 
@@ -1241,6 +1278,8 @@ Always send:
 - `pillar_impacts`
 - `pillar_deltas`
 - `changed_fields`
+- `field_changes`
+- `xgboost_impact_changes`
 - `compact_storyline_memory`
 
 Send when implemented or derivable from available SHAP/subcategory data:
@@ -1369,7 +1408,7 @@ V1 serious-game narrative layer:
 Implementation staging:
 
 1. Contract fixtures: define a small set of static example scenarios before implementation. Include at least baseline, model-facing edit, operational-only edit, material text-only edit, generic structured/text clarification, clarified structured/text review, and no-op/minor text edit. For each fixture, record expected review ratings, Quality Adjustment, Final Candidate Score behavior, clarification behavior, and storyline behavior. Current implementation artifact: `src/narratives/contract_fixtures.py`, validated by `scripts/check_narrative_contract_fixtures.py`.
-2. Deterministic review packet builder: assemble baseline/current/previous snapshots, changed fields, operational metadata, score deltas, text context, user clarification context, field dictionary version, canonical taxonomy option-key values, display labels, and compact storyline memory without calling an LLM. Current implementation artifact: `src/narratives/packet_builder.py`, validated by `scripts/check_narrative_packet_builder.py`.
+2. Deterministic review packet builder: assemble baseline/current/previous snapshots, changed fields, explicit field-change deltas, operational metadata, score deltas, XGBoost impact movements, text context, user clarification context, field dictionary version, canonical taxonomy option-key values, display labels, and compact storyline memory without calling an LLM. Current implementation artifact: `src/narratives/packet_builder.py`, validated by `scripts/check_narrative_packet_builder.py`.
 3. Validation and scoring engine: validate review JSON, enforce `evidence_fields`, derive Quality Assessment pillars/subcategories, apply pillar/subcategory caps, apply zero/positive-adjustment guardrails, clamp Quality Adjustment, and calculate Final Candidate Score. Current implementation artifact: `src/narratives/scoring.py`, validated by `scripts/check_narrative_scoring.py`.
 4. Mock reviewer: use deterministic fake JSON responses based on the fixtures to test validation, scoring math, no-op behavior, text-materiality behavior, and failure handling. Current implementation artifact: `src/narratives/mock_reviewer.py`, validated by `scripts/check_narrative_mock_reviewer.py`.
 5. Storage and replay: persist validated review traces in session state first, including input hash, validation status, Quality Adjustment, Final Candidate Score, and compact storyline memory. Reuse cached reviews for identical input hashes. Current implementation artifact: `src/narratives/review_store.py`, validated by `scripts/check_narrative_review_store.py`. This is prototype storage only and does not yet satisfy the durable cross-team baseline requirement.

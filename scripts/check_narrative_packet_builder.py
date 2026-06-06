@@ -215,6 +215,126 @@ def _check_canonical_values_prefer_compare_values(errors: list[str]) -> None:
         errors.append("packet should not include criteria_ui by default")
 
 
+def _check_field_and_impact_changes(errors: list[str]) -> None:
+    baseline_snapshot = {
+        "snapshot_id": "baseline",
+        "compare_values": {
+            "endpoint_rigor_ml": "HARD_CLINICAL",
+            "comparator_benchmark_ml": "ACTIVE_MODERN_STANDARD",
+        },
+        "display_values": {
+            "endpoint_rigor_ml": "Hard Clinical (Survival/Death)",
+            "comparator_benchmark_ml": "Active (Modern Standard)",
+        },
+        "text_context": {"summary_ui": "Original summary."},
+        "score": 68,
+        "pillar_impacts": [
+            {"Pillar": "Scientific Challenge", "Impact": -1.0},
+            {"Pillar": "Execution Framework", "Impact": 1.0},
+        ],
+        "feature_impacts": [
+            {"Pillar": "Scientific Challenge", "Subcategory": "Protocol Architecture", "Impact": -1.0},
+            {"Pillar": "Execution Framework", "Subcategory": "Methodological Setup", "Impact": 1.0},
+        ],
+    }
+    previous_snapshot = {
+        **baseline_snapshot,
+        "snapshot_id": "previous",
+        "score": 70,
+        "compare_values": {
+            "endpoint_rigor_ml": "SURROGATE",
+            "comparator_benchmark_ml": "ACTIVE_MODERN_STANDARD",
+        },
+        "display_values": {
+            "endpoint_rigor_ml": "Surrogate / Biomarker",
+            "comparator_benchmark_ml": "Active (Modern Standard)",
+        },
+        "pillar_impacts": [
+            {"Pillar": "Scientific Challenge", "Impact": 0.5},
+            {"Pillar": "Execution Framework", "Impact": 1.0},
+        ],
+        "feature_impacts": [
+            {"Pillar": "Scientific Challenge", "Subcategory": "Protocol Architecture", "Impact": 0.5},
+            {"Pillar": "Execution Framework", "Subcategory": "Methodological Setup", "Impact": 1.0},
+        ],
+    }
+    current_snapshot = {
+        **previous_snapshot,
+        "snapshot_id": "current",
+        "score": 74,
+        "compare_values": {
+            "endpoint_rigor_ml": "SURROGATE",
+            "comparator_benchmark_ml": "PLACEBO",
+        },
+        "display_values": {
+            "endpoint_rigor_ml": "Surrogate / Biomarker",
+            "comparator_benchmark_ml": "Placebo Control",
+        },
+        "text_context": {"summary_ui": "Revised summary."},
+        "changed_fields": ["comparator_benchmark_ml"],
+        "changed_text_context_fields": ["summary_ui"],
+        "pillar_impacts": [
+            {"Pillar": "Scientific Challenge", "Impact": 0.5},
+            {"Pillar": "Execution Framework", "Impact": 3.0},
+        ],
+        "feature_impacts": [
+            {"Pillar": "Scientific Challenge", "Subcategory": "Protocol Architecture", "Impact": 0.5},
+            {"Pillar": "Execution Framework", "Subcategory": "Methodological Setup", "Impact": 3.0},
+        ],
+        "operational_assumptions": {
+            "planned_enrollment": {},
+            "planned_sites": {},
+            "planned_duration_months": {},
+        },
+    }
+    packet = build_review_packet(
+        current_snapshot=current_snapshot,
+        previous_snapshot=previous_snapshot,
+        baseline_snapshot=baseline_snapshot,
+    )
+    field_changes = packet.get("iteration_context", {}).get("field_changes") or []
+    comparator_change = next(
+        (item for item in field_changes if item.get("field") == "comparator_benchmark_ml"),
+        None,
+    )
+    if not comparator_change:
+        errors.append("packet should include structured field_changes for edited fields")
+    elif (
+        comparator_change.get("previous_value") != "ACTIVE_MODERN_STANDARD"
+        or comparator_change.get("current_value") != "PLACEBO"
+        or comparator_change.get("baseline_value") != "ACTIVE_MODERN_STANDARD"
+    ):
+        errors.append("structured field_changes should include baseline, previous, and current values")
+
+    text_change = next(
+        (item for item in field_changes if item.get("field") == "text_context.summary_ui"),
+        None,
+    )
+    if not text_change or text_change.get("change_type") != "text_context":
+        errors.append("packet should include text field_changes for changed text context")
+
+    impact_changes = packet.get("model_interpretation", {}).get("xgboost_impact_changes") or []
+    execution_change = next(
+        (
+            item for item in impact_changes
+            if item.get("impact_level") == "pillar" and item.get("name") == "Execution Framework"
+        ),
+        None,
+    )
+    if not execution_change:
+        errors.append("packet should include XGBoost pillar impact changes")
+    elif (
+        execution_change.get("baseline_impact") != 1.0
+        or execution_change.get("previous_impact") != 1.0
+        or execution_change.get("current_impact") != 3.0
+        or execution_change.get("delta_from_previous") != 2.0
+        or execution_change.get("delta_from_baseline") != 2.0
+        or execution_change.get("changed_since_previous") is not True
+        or execution_change.get("changed_from_baseline") is not True
+    ):
+        errors.append("XGBoost impact changes should include baseline, previous, current, and deltas")
+
+
 def main() -> int:
     errors: list[str] = []
     fixtures = get_contract_fixtures()
@@ -222,6 +342,7 @@ def main() -> int:
         _check_packet(fixture, errors)
     _check_review_continuity_context(errors)
     _check_canonical_values_prefer_compare_values(errors)
+    _check_field_and_impact_changes(errors)
 
     if errors:
         for error in errors:

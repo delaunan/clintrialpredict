@@ -21,7 +21,9 @@ def _result(score: int) -> dict:
     return {
         "score": score,
         "pillar_impacts": [{"Pillar": "Execution Framework", "Impact": 1.0}],
-        "subcat_impacts": [],
+        "subcat_impacts": [
+            {"Pillar": "Execution Framework", "Subcategory": "Methodological Setup", "Impact": 1.0},
+        ],
     }
 
 
@@ -92,6 +94,11 @@ def main() -> int:
         errors.append("packet should prefer taxonomy option-key compare_values over model-facing submitted_values")
     if current_packet.get("structured_feature_display_values", {}).get("phase_ml") != "Phase 3":
         errors.append("packet should expose display values separately")
+    field_changes = current_packet.get("iteration_context", {}).get("field_changes") or []
+    if not any(item.get("field") == "text_context.summary_ui" for item in field_changes):
+        errors.append("packet should expose readable field_changes for text-context updates")
+    if current_packet.get("model_interpretation", {}).get("xgboost_impact_changes"):
+        errors.append("unchanged live-style model impacts should not invent xgboost_impact_changes")
     baseline_context = (current_packet.get("review_context") or {}).get("baseline_review") or {}
     if not baseline_context.get("input_hash"):
         errors.append("packet should include compact baseline review context by input_hash")

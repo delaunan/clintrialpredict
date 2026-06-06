@@ -215,6 +215,135 @@ def _pillar_deltas(current_snapshot: dict[str, Any], previous_snapshot: dict[str
     return deltas
 
 
+def _snapshot_feature_impacts(snapshot: dict[str, Any] | None) -> list[dict[str, Any]]:
+    snapshot = snapshot or {}
+    impacts = _first_present(
+        snapshot.get("feature_impacts"),
+        snapshot.get("subcat_impacts"),
+        snapshot.get("model_interpretation", {}).get("feature_impacts"),
+        snapshot.get("model_interpretation", {}).get("subcat_impacts"),
+        snapshot.get("result", {}).get("feature_impacts"),
+        snapshot.get("result", {}).get("subcat_impacts"),
+        [],
+    )
+    return json_safe(impacts) if isinstance(impacts, list) else []
+
+
+def _impact_value(item: dict[str, Any]) -> float | None:
+    value = _first_present(item.get("Impact"), item.get("impact"), item.get("value"))
+    if isinstance(value, (int, float)):
+        return float(value)
+    return None
+
+
+def _impact_index(
+    snapshot: dict[str, Any] | None,
+    *,
+    level: str,
+) -> dict[str, dict[str, Any]]:
+    if level == "pillar":
+        items = _pillar_impacts(snapshot)
+        if isinstance(items, dict):
+            return {
+                str(name): {"name": str(name), "impact": float(value)}
+                for name, value in items.items()
+                if isinstance(value, (int, float))
+            }
+    else:
+        items = _snapshot_feature_impacts(snapshot)
+
+    if not isinstance(items, list):
+        return {}
+
+    indexed: dict[str, dict[str, Any]] = {}
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        if level == "pillar":
+            name = item.get("Pillar") or item.get("pillar")
+            subcategory = None
+        else:
+            pillar = item.get("Pillar") or item.get("pillar")
+            subcategory = item.get("Subcategory") or item.get("subcategory")
+            name = f"{pillar}.{subcategory}" if pillar and subcategory else subcategory
+        impact = _impact_value(item)
+        if name is None or impact is None:
+            continue
+        indexed[str(name)] = {
+            "name": str(name),
+            "pillar": item.get("Pillar") or item.get("pillar"),
+            "subcategory": subcategory,
+            "impact": round(impact, 1),
+        }
+    return indexed
+
+
+def _impact_changes(
+    current_snapshot: dict[str, Any],
+    previous_snapshot: dict[str, Any] | None,
+    baseline_snapshot: dict[str, Any] | None,
+) -> list[dict[str, Any]]:
+    changes: list[dict[str, Any]] = []
+    for level in ("pillar", "subcategory"):
+        current = _impact_index(current_snapshot, level=level)
+        previous = _impact_index(previous_snapshot, level=level)
+        baseline = _impact_index(baseline_snapshot, level=level)
+        names = sorted(set(current) | set(previous) | set(baseline))
+        for name in names:
+            current_impact = current.get(name, {}).get("impact")
+            previous_impact = previous.get(name, {}).get("impact")
+            baseline_impact = baseline.get(name, {}).get("impact")
+            if current_impact is None:
+                continue
+
+            delta_from_previous = None
+            if previous_impact is not None:
+                delta_from_previous = round(float(current_impact) - float(previous_impact), 1)
+
+            delta_from_baseline = None
+            if baseline_impact is not None:
+                delta_from_baseline = round(float(current_impact) - float(baseline_impact), 1)
+
+            if not delta_from_previous and not delta_from_baseline:
+                continue
+
+            source = current.get(name) or previous.get(name) or baseline.get(name) or {}
+            changes.append({
+                "impact_level": level,
+                "name": name,
+                "pillar": source.get("pillar") or (name if level == "pillar" else None),
+                "subcategory": source.get("subcategory"),
+                "baseline_impact": baseline_impact,
+                "previous_impact": previous_impact,
+                "current_impact": current_impact,
+                "delta_from_previous": delta_from_previous,
+                "delta_from_baseline": delta_from_baseline,
+                "changed_since_previous": bool(delta_from_previous),
+                "changed_from_baseline": bool(delta_from_baseline),
+                "direction_from_previous": _impact_direction(delta_from_previous),
+                "direction_from_baseline": _impact_direction(delta_from_baseline),
+            })
+
+    return sorted(
+        changes,
+        key=lambda item: max(
+            abs(item.get("delta_from_previous") or 0),
+            abs(item.get("delta_from_baseline") or 0),
+        ),
+        reverse=True,
+    )
+
+
+def _impact_direction(delta: float | None) -> str | None:
+    if delta is None:
+        return None
+    if delta > 0:
+        return "increased"
+    if delta < 0:
+        return "decreased"
+    return "unchanged"
+
+
 def _feature_driver_values(snapshot: dict[str, Any], key: str) -> list[Any]:
     interpretation = snapshot.get("model_interpretation", {})
     value = interpretation.get(key)
@@ -244,6 +373,93 @@ def _changed_fields(current_snapshot: dict[str, Any]) -> list[str]:
         seen.add(field)
         ordered.append(field)
     return ordered
+
+
+def _changed_field_entry(
+    field_id: str,
+    *,
+    change_type: str,
+    current_value: Any,
+    previous_value: Any,
+    baseline_value: Any,
+    current_label: Any = None,
+    previous_label: Any = None,
+    baseline_label: Any = None,
+) -> dict[str, Any]:
+    return {
+        "field": field_id,
+        "change_type": change_type,
+        "baseline_value": json_safe(baseline_value),
+        "baseline_label": json_safe(_first_present(baseline_label, baseline_value)),
+        "previous_value": json_safe(previous_value),
+        "previous_label": json_safe(_first_present(previous_label, previous_value)),
+        "current_value": json_safe(current_value),
+        "current_label": json_safe(_first_present(current_label, current_value)),
+        "changed_by_user": True,
+    }
+
+
+def _field_changes(
+    current_snapshot: dict[str, Any],
+    previous_snapshot: dict[str, Any] | None,
+    baseline_snapshot: dict[str, Any] | None,
+) -> list[dict[str, Any]]:
+    changes: list[dict[str, Any]] = []
+    changed_fields = _changed_fields(current_snapshot)
+
+    current_values = _snapshot_values(current_snapshot)
+    previous_values = _snapshot_values(previous_snapshot)
+    baseline_values = _snapshot_values(baseline_snapshot)
+    current_display = _snapshot_display_values(current_snapshot)
+    previous_display = _snapshot_display_values(previous_snapshot)
+    baseline_display = _snapshot_display_values(baseline_snapshot)
+
+    current_text = _snapshot_text_context(current_snapshot)
+    previous_text = _snapshot_text_context(previous_snapshot)
+    baseline_text = _snapshot_text_context(baseline_snapshot)
+
+    current_operational = current_snapshot.get("operational_assumptions") or {}
+    previous_operational = (previous_snapshot or {}).get("operational_assumptions") or {}
+    baseline_operational = (baseline_snapshot or {}).get("operational_assumptions") or {}
+
+    for field in changed_fields:
+        if field.startswith("text_context."):
+            text_key = field.split(".", 1)[1]
+            changes.append(_changed_field_entry(
+                field,
+                change_type="text_context",
+                current_value=current_text.get(text_key),
+                previous_value=previous_text.get(text_key),
+                baseline_value=baseline_text.get(text_key),
+            ))
+            continue
+
+        if field.startswith("operational_assumptions."):
+            assumption_key = field.split(".", 1)[1]
+            changes.append(_changed_field_entry(
+                field,
+                change_type="operational_assumption",
+                current_value=current_operational.get(assumption_key),
+                previous_value=previous_operational.get(assumption_key),
+                baseline_value=baseline_operational.get(assumption_key),
+                previous_label=((previous_snapshot or {}).get("previous_operational_display_values") or {}).get(
+                    assumption_key
+                ),
+            ))
+            continue
+
+        changes.append(_changed_field_entry(
+            field,
+            change_type="structured_feature",
+            current_value=current_values.get(field),
+            previous_value=previous_values.get(field),
+            baseline_value=baseline_values.get(field),
+            current_label=current_display.get(field),
+            previous_label=previous_display.get(field),
+            baseline_label=baseline_display.get(field),
+        ))
+
+    return changes
 
 
 def _snapshot_id(snapshot: dict[str, Any] | None, fallback: str | None = None) -> str | None:
@@ -354,6 +570,7 @@ def build_review_packet(
             "direct_xgboost_shap_fields": list(DIRECT_XGBOOST_SHAP_FIELDS),
             "pillar_impacts": _pillar_impacts(current_snapshot),
             "pillar_deltas": _pillar_deltas(current_snapshot, previous_snapshot),
+            "xgboost_impact_changes": _impact_changes(current_snapshot, previous_snapshot, baseline_snapshot),
             "top_positive_feature_drivers": _feature_driver_values(current_snapshot, "top_positive_feature_drivers"),
             "top_negative_feature_drivers": _feature_driver_values(current_snapshot, "top_negative_feature_drivers"),
             "top_feature_impact_changes": _feature_driver_values(current_snapshot, "top_feature_impact_changes"),
@@ -374,6 +591,7 @@ def build_review_packet(
             "current_snapshot_id": _snapshot_id(current_snapshot),
             "iteration_number": _iteration_number(current_snapshot, previous_snapshot),
             "changed_fields": _changed_fields(current_snapshot),
+            "field_changes": _field_changes(current_snapshot, previous_snapshot, baseline_snapshot),
             "compact_storyline_memory": compact_storyline_memory,
         },
     }
