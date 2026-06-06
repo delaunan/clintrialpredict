@@ -1005,6 +1005,14 @@ Recommended trace fields to store for each narrative pass:
 - Baseline ID.
 - Session ID.
 
+Trace robustness staging:
+
+- Current prototype trace should remain simple and session-state compatible. It should store `input_packet`, provider/mock `output_json`, `validated_review`, validation status/errors, app-owned Quality Adjustment, Final Candidate Score, Quality Assessment, clarification issues, user clarifications, changed fields, score movement, provider/model identity, and compact storyline memory.
+- Worth doing before or alongside real-provider prompt work: add prompt identity fields once prompt files exist, such as prompt template hash, system prompt hash, and response schema version. Add an explicit pre-review gate status, such as `passed` or `clarification_needed`, if clarification debugging becomes ambiguous. Add a compact evidence-audit summary only if unsupported evidence fields become hard to inspect from `quality_assessment`.
+- Defer until real LLM provider integration: raw provider response, parsed JSON response, token usage, latency, provider response ID, finish reason, temperature, seed, system fingerprint, and provider-specific safety/refusal metadata. These fields are not meaningful for the deterministic mock reviewer.
+- Defer until durable storage: database/file persistence, shared trial-level baseline review records, cross-team replay, facilitator export, retention policy, privacy controls, and schema migration strategy.
+- Do not expand the prompt packet just because the trace stores more audit data. Store enough for audit; send only curated current-context fields to the LLM.
+
 The goal is to make repeated runs as consistent as possible while acknowledging that exact determinism is not guaranteed for LLM outputs.
 
 Provider abstraction should be thin. The application should own payload construction, validation, Quality Adjustment calculation, persistence, cache lookup, and UI rendering. Provider-specific code should own only model invocation and response normalization. The V1 provider boundary starts with a deterministic mock provider and an explicit unsupported-provider failure path; real OpenAI/Gemini invocation can be added behind the same boundary later.
