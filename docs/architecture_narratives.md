@@ -369,7 +369,7 @@ This prevents one quality dimension from dominating the Final Candidate Score an
 
 ## 9. Shortcut Detection Concept
 
-A shortcut is not simply a change that increases the completion score. A shortcut is a change that increases completion likelihood while potentially weakening evidence value, scientific rigor, population relevance, endpoint interpretability, or strategic defensibility.
+A shortcut is not simply a change that increases the completion score. A higher Completion Score can reflect a more robust, better-governed, better-aligned, or lower-risk development pattern, but it can also reflect simplification or loss of evidence value when scientific challenge, endpoint rigor, comparator credibility, population relevance, or interpretability is reduced. For example, a Data Monitoring Committee may increase operational oversight and completion confidence in one context while adding complexity or risk in another. A shortcut is a change that increases completion likelihood while potentially weakening evidence value, scientific rigor, population relevance, endpoint interpretability, or strategic defensibility.
 
 Examples:
 
@@ -675,6 +675,7 @@ Proposed contract:
 {
   "score_movement_review": {
     "summary": "short explanation of the observed Completion Score movement",
+    "clinical_design_interpretation": "participant-facing explanation in clinical trial / pharma development language",
     "model_supported_reasons": [],
     "cautions": []
   },
@@ -751,7 +752,9 @@ Proposed contract:
 
 `facilitator_view_optional` may be omitted in the first V1 implementation. The minimum provider contract is the participant review, quality review domains, continuity fields, and trace fields needed for validation and replay.
 
-The LLM does not return final Quality Assessment pillar/subcategory point contributions. The application derives them from validated `quality_review_domains`, evidence fields, and the documented deterministic mapping. This keeps plotted Quality Assessment contributions reproducible.
+Participant-facing narrative should translate model evidence into clinical trial / pharma development language. The provider may use `field_changes`, `xgboost_impact_changes`, `score_delta`, and pillar/subcategory movement internally, but visible explanations should avoid technical model terms such as SHAP, feature impact, XGBoost movement, or pillar delta unless the facilitator view explicitly asks for model diagnostics. Preferred language should discuss endpoint maturity, evidence strength, comparator credibility, blinding/control implications, recruitment burden, trial duration, patient population fit, operational complexity, execution feasibility, development strategy, design shortcut risk, and regulatory persuasiveness.
+
+The LLM does not return `Quality Adjustment`, `Final Candidate Score`, or final Quality Assessment pillar/subcategory point contributions. The application derives them from validated `quality_review_domains`, evidence fields, and the documented deterministic mapping. If a provider returns app-owned score fields, validation should mark them as ignored and the application should still calculate its own values. This keeps plotted Quality Assessment contributions reproducible.
 
 The application calculates:
 
@@ -795,12 +798,21 @@ material_tension = -2
 contradiction = -4
 ```
 
-The final score should be rounded by application logic using a documented UI rule. A domain rating should affect the Quality Adjustment only when the LLM provides supporting `evidence_fields`; otherwise the point effect should be zero and the issue can remain narrative-only.
+The final score should be rounded by application logic using a documented UI rule. A domain rating should affect the Quality Adjustment only when the LLM provides supporting `evidence_fields`; otherwise the point effect should be zero and the issue can remain narrative-only. Evidence fields must also reference evidence available in the review packet. Unsupported evidence references are preserved for auditability but do not move the Quality Adjustment.
+
+Allowed evidence references may cite:
+
+- direct structured/text fields, such as `endpoint_rigor_ml`, `primary_outcomes_ui`, or `text_context.primary_outcomes_ui`
+- operational fields and nested metadata, such as `operational_assumptions.planned_enrollment.support_level`
+- clarification context, such as `clarification_context.user_clarifications`
+- Step-2 delta evidence, such as `field_changes.endpoint_rigor_ml`
+- model explanation sections or names, such as `xgboost_impact_changes`, `Execution Framework`, or `xgboost_impact_changes.Execution Framework`
 
 Guardrails:
 
 - If all validated Quality Review domains are `acceptable`, `neutral`, or otherwise non-concerning, `Quality Adjustment = 0`.
 - A positive Quality Adjustment requires evidence that the participant strengthened design quality, not merely that the design avoided obvious concerns.
+- Unsupported `evidence_fields` have zero scoring effect even when the rating is non-neutral.
 - Benchmark-typical operational assumptions are neutral by default; they do not create a positive Quality Adjustment unless supported by broader design improvements.
 - Low-confidence operational benchmark metadata should be narrative-first. It should affect points only when multiple conflict signals agree.
 
@@ -996,6 +1008,15 @@ Recommended trace fields to store for each narrative pass:
 The goal is to make repeated runs as consistent as possible while acknowledging that exact determinism is not guaranteed for LLM outputs.
 
 Provider abstraction should be thin. The application should own payload construction, validation, Quality Adjustment calculation, persistence, cache lookup, and UI rendering. Provider-specific code should own only model invocation and response normalization. The V1 provider boundary starts with a deterministic mock provider and an explicit unsupported-provider failure path; real OpenAI/Gemini invocation can be added behind the same boundary later.
+
+Future real-provider prompts must use a funnel instruction:
+
+- Use `iteration_context.field_changes` to identify what the participant changed.
+- Use `model_interpretation.xgboost_impact_changes` to understand model movement and materiality.
+- Treat XGBoost/SHAP movement as model explanation evidence, not proof of clinical causality.
+- Translate model evidence into clinical trial / pharma development language for participant-facing text. Explain why the revised scenario may look more or less completion-like, robust, feasible, governed, strategically aligned, risk-reduced, simplified, or less evidence-generating in terms of endpoint timing, comparator choice, population scope, oversight, operational burden, trial duration, scientific challenge, or development strategy rather than exposing raw model vocabulary. Do not equate a higher Completion Score with simplification by default, but do flag simplification or value loss when the evidence points that way.
+- Produce domain ratings, rationale, evidence fields, participant-facing narrative, continuity, and trace fields.
+- Do not calculate or return `Quality Adjustment`, `Final Candidate Score`, or Quality Assessment point values. The application calculates those from the validated domain ratings.
 
 Use a deterministic input hash based on prompt version, rubric version, baseline snapshot, current snapshot, storyline memory, and text context. If the same input hash is reviewed again with the same provider/model cache namespace, reuse the stored validated review instead of calling the provider again. Generate the baseline review once per selected study and store it for the session. Hashable review context should avoid session-specific trace IDs; use stable input hashes and iteration IDs instead.
 
@@ -1409,7 +1430,7 @@ Implementation staging:
 
 1. Contract fixtures: define a small set of static example scenarios before implementation. Include at least baseline, model-facing edit, operational-only edit, material text-only edit, generic structured/text clarification, clarified structured/text review, and no-op/minor text edit. For each fixture, record expected review ratings, Quality Adjustment, Final Candidate Score behavior, clarification behavior, and storyline behavior. Current implementation artifact: `src/narratives/contract_fixtures.py`, validated by `scripts/check_narrative_contract_fixtures.py`.
 2. Deterministic review packet builder: assemble baseline/current/previous snapshots, changed fields, explicit field-change deltas, operational metadata, score deltas, XGBoost impact movements, text context, user clarification context, field dictionary version, canonical taxonomy option-key values, display labels, and compact storyline memory without calling an LLM. Current implementation artifact: `src/narratives/packet_builder.py`, validated by `scripts/check_narrative_packet_builder.py`.
-3. Validation and scoring engine: validate review JSON, enforce `evidence_fields`, derive Quality Assessment pillars/subcategories, apply pillar/subcategory caps, apply zero/positive-adjustment guardrails, clamp Quality Adjustment, and calculate Final Candidate Score. Current implementation artifact: `src/narratives/scoring.py`, validated by `scripts/check_narrative_scoring.py`.
+3. Validation and scoring engine: validate review JSON, enforce packet-supported `evidence_fields`, derive Quality Assessment pillars/subcategories, apply subcategory/pillar/total caps, apply zero/positive-adjustment guardrails, clamp Quality Adjustment, and calculate Final Candidate Score. Current implementation artifact: `src/narratives/scoring.py`, validated by `scripts/check_narrative_scoring.py`.
 4. Mock reviewer: use deterministic fake JSON responses based on the fixtures to test validation, scoring math, no-op behavior, text-materiality behavior, and failure handling. Current implementation artifact: `src/narratives/mock_reviewer.py`, validated by `scripts/check_narrative_mock_reviewer.py`.
 5. Storage and replay: persist validated review traces in session state first, including input hash, validation status, Quality Adjustment, Final Candidate Score, and compact storyline memory. Reuse cached reviews for identical input hashes. Current implementation artifact: `src/narratives/review_store.py`, validated by `scripts/check_narrative_review_store.py`. This is prototype storage only and does not yet satisfy the durable cross-team baseline requirement.
 6. Minimal UI panel: render Completion Score, Quality Adjustment, Final Candidate Score, Quality Review, and compact Quality Assessment rows. Do not build adjusted treemap yet. Current implementation artifact: `frontend/views/trial_simulator.py`, using the provider-free packet builder, mock reviewer, and session-state review store.

@@ -63,6 +63,12 @@ QUALITY_ADJUSTMENT_MAX = 10
 FINAL_SCORE_MIN = 0
 FINAL_SCORE_MAX = 100
 
+APP_OWNED_SCORE_FIELDS = {
+    "quality_adjustment",
+    "final_candidate_score",
+    "quality_assessment",
+}
+
 PARTICIPANT_REVIEW_KEYS = {
     "what_changed",
     "why_completion_score_may_have_moved",
@@ -142,6 +148,96 @@ def _domain_pillar(domain_name: str, evidence_fields: list[str]) -> str:
 
 def _is_positive_rating(domain_name: str, rating: str) -> bool:
     return DOMAIN_RATING_POINTS[domain_name].get(rating, 0) > 0
+
+
+def _add_nested_evidence_refs(refs: set[str], prefix: str, value: Any) -> None:
+    refs.add(prefix)
+    if isinstance(value, dict):
+        for key, child in value.items():
+            _add_nested_evidence_refs(refs, f"{prefix}.{key}", child)
+
+
+def _evidence_reference_set(packet: dict[str, Any]) -> set[str]:
+    refs = {
+        "completion_score",
+        "score_delta",
+        "pillar_impacts",
+        "pillar_deltas",
+        "field_changes",
+        "xgboost_impact_changes",
+        "clarification_context.user_clarifications",
+    }
+
+    for section_name in ("trial_identity", "text_context", "structured_features", "structured_feature_display_values"):
+        section = packet.get(section_name) or {}
+        if not isinstance(section, dict):
+            continue
+        for key, value in section.items():
+            refs.add(str(key))
+            refs.add(f"{section_name}.{key}")
+            if isinstance(value, dict):
+                _add_nested_evidence_refs(refs, f"{section_name}.{key}", value)
+
+    operational = packet.get("operational_assumptions") or {}
+    if isinstance(operational, dict):
+        for key, value in operational.items():
+            refs.add(str(key))
+            _add_nested_evidence_refs(refs, f"operational_assumptions.{key}", value)
+
+    model = packet.get("model_interpretation") or {}
+    if isinstance(model, dict):
+        for key, value in model.items():
+            refs.add(str(key))
+            refs.add(f"model_interpretation.{key}")
+            if isinstance(value, dict):
+                _add_nested_evidence_refs(refs, f"model_interpretation.{key}", value)
+
+    iteration = packet.get("iteration_context") or {}
+    if isinstance(iteration, dict):
+        for field in iteration.get("changed_fields") or []:
+            refs.add(str(field))
+        for change in iteration.get("field_changes") or []:
+            if not isinstance(change, dict):
+                continue
+            field = str(change.get("field") or "")
+            if field:
+                refs.add(field)
+                refs.add(f"field_changes.{field}")
+
+    impact_changes = model.get("xgboost_impact_changes") if isinstance(model, dict) else []
+    for impact in impact_changes or []:
+        if not isinstance(impact, dict):
+            continue
+        for key in ("name", "pillar", "subcategory"):
+            value = impact.get(key)
+            if value:
+                refs.add(str(value))
+                refs.add(f"xgboost_impact_changes.{value}")
+
+    return refs
+
+
+def _review_with_supported_evidence(packet: dict[str, Any], validated_review: dict[str, Any]) -> dict[str, Any]:
+    supported_refs = _evidence_reference_set(packet)
+    review = deepcopy(validated_review)
+    for domain in (review.get("quality_review_domains") or {}).values():
+        evidence_fields = [str(field) for field in domain.get("evidence_fields") or []]
+        supported = [field for field in evidence_fields if field in supported_refs]
+        unsupported = [field for field in evidence_fields if field not in supported_refs]
+        domain["supported_evidence_fields"] = supported
+        domain["unsupported_evidence_fields"] = unsupported
+        if domain.get("point_effect") and not supported:
+            domain["point_effect"] = 0
+            notes = list(domain.get("validation_notes") or [])
+            notes.append("rating has no point effect because evidence_fields do not reference packet evidence")
+            domain["validation_notes"] = notes
+    return review
+
+
+def _domain_supported_evidence_fields(domain: dict[str, Any]) -> list[str]:
+    if "supported_evidence_fields" in domain:
+        return deepcopy(domain.get("supported_evidence_fields") or [])
+    return deepcopy(domain.get("evidence_fields") or [])
 
 
 def _validated_domain(domain_name: str, domain: Any) -> tuple[dict[str, Any], list[str]]:
@@ -239,9 +335,11 @@ def _quality_contributions(validated_domains: dict[str, dict[str, Any]]) -> dict
             "raw_points": raw_points,
             "points": subcategory_points,
             "evidence_fields": deepcopy(evidence_fields),
+            "supported_evidence_fields": _domain_supported_evidence_fields(domain),
+            "unsupported_evidence_fields": deepcopy(domain.get("unsupported_evidence_fields") or []),
         }
         pillars[pillar_key]["raw_points"] += subcategory_points
-        if _is_positive_rating(domain_name, str(domain.get("rating"))) and evidence_fields:
+        if _is_positive_rating(domain_name, str(domain.get("rating"))) and _domain_supported_evidence_fields(domain):
             positive_domains_with_evidence += 1
 
     for pillar in pillars.values():
@@ -278,6 +376,9 @@ def validate_review_json(review: dict[str, Any]) -> dict[str, Any]:
             "continuity": {},
             "trace": {},
         }
+
+    for field_name in sorted(APP_OWNED_SCORE_FIELDS.intersection(review)):
+        errors.append(f"{field_name} is application-owned and ignored if returned by provider")
 
     domains = review.get("quality_review_domains")
     validated_domains: dict[str, dict[str, Any]] = {}
@@ -336,7 +437,8 @@ def score_validated_review(packet: dict[str, Any], validated_review: dict[str, A
             "input_hash": packet.get("input_hash") or stable_packet_hash(packet),
         }
 
-    contributions = _quality_contributions(validated_review.get("quality_review_domains") or {})
+    scoring_review = _review_with_supported_evidence(packet, validated_review)
+    contributions = _quality_contributions(scoring_review.get("quality_review_domains") or {})
     final_candidate_score = clamp(
         float(completion_score) + contributions["quality_adjustment"],
         FINAL_SCORE_MIN,
