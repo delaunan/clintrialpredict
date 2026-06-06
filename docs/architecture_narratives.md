@@ -588,6 +588,17 @@ This is conceptual JSON for planning only, not an implementation contract yet:
       "compact_storyline_memory": "..."
     }
   },
+  "clarification_context": {
+    "user_clarifications": [
+      {
+        "issue_id": "...",
+        "field_id": "...",
+        "structured_value": "...",
+        "text_signal": "...",
+        "explanation": "..."
+      }
+    ]
+  },
   "iteration_context": {
     "baseline_snapshot_id": "...",
     "previous_snapshot_id": "...",
@@ -608,6 +619,10 @@ The LLM should use operational source metadata, not the compact UI label, to dis
 Structured dropdown fields are the primary source of truth. Short text fields are secondary and should be used for coherence checking, contradiction detection, and narrative context rather than as the main source of scoring. Narrative packets should send canonical submitted structured values first and display labels separately, so future providers can reason from readable labels without losing model-facing value provenance.
 
 Missing or brief free-text fields should not be heavily penalized unless they directly contradict structured trial features or make an otherwise important design claim impossible to interpret.
+
+Before a new prediction result is committed or displayed, the application may run a conservative structured/text alignment gate. This gate is deterministic and intentionally small in V1. It looks only for a few obvious material mismatches, starting with endpoint-structure and placebo/control signals that appear inconsistent between Trial Features and editable text. When a material mismatch is detected, the prediction workflow pauses before new scoring. The participant either corrects the structured field/text or adds a short explanation. That explanation becomes `clarification_context` in the review packet and is available to the LLM as participant scenario context.
+
+The alignment gate should not become a broad NLP adjudication engine in V1. Its job is to prevent the LLM from silently deciding which field is true when the scenario may simply be asynchronous. Ambiguous or low-confidence tensions should continue into the Quality Review as narrative context rather than blocking review. Additional deterministic mismatch checks, such as endpoint timing, comparator, biomarker, or population-age checks, should be added only after they have low false-positive risk and fixture coverage. A future LLM alignment pass may provide broader semantic comparison, but its findings should be treated as clarification suggestions with confidence/severity, not automatic truth or direct scoring.
 
 ## 12. Output JSON Contract
 
@@ -916,6 +931,8 @@ Examples:
 
 If a text-only material change triggers review, the narrative should state that the design variables did not change and the review changed only because the textual rationale/context changed. The application should avoid presenting this as a new model-score movement.
 
+For obvious structured/text mismatches, run a clarification gate before committing new scoring rather than immediately creating a prediction snapshot or full review. If the participant corrects the structured field or text, the next prediction uses the corrected scenario. If the participant keeps the structured value and adds an explanation, the explanation is stored with the snapshot and included in `clarification_context`. The Quality Review can then discuss the clarified scenario and may still flag residual clarity concerns. The clarification step should not create a new Completion Score, Quality Adjustment, Final Candidate Score, or storyline entry until a full validated prediction/review workflow is generated.
+
 ## 16. Reproducibility And Provider Fallback
 
 The architecture should support OpenAI and Gemini provider calls later without binding product logic to one provider.
@@ -964,10 +981,12 @@ User-editable text is untrusted context. The provider prompt must instruct the m
 
 Text conflict handling:
 
-- Flag the inconsistency first.
+- For obvious material mismatches, pause the prediction workflow before new scoring and ask the participant to correct the scenario or add an explanation.
+- For softer tensions, continue Quality Review and flag the inconsistency in narrative context.
 - Route it to the affected Quality Assessment pillar.
 - Require `evidence_fields` before it can affect Quality Adjustment.
 - Treat missing, brief, or noisy text as low-confidence context rather than a direct penalty.
+- Do not let the LLM silently choose whether structured fields or text fields are true. For Completion Score, structured Trial Features are authoritative. For Quality Review, structured fields remain primary context, while text and user explanations provide clarification, contradiction evidence, or scenario rationale.
 
 ### Field Selection for LLM Narrative Layer
 
@@ -1340,14 +1359,14 @@ V1 serious-game narrative layer:
 
 Implementation staging:
 
-1. Contract fixtures: define a small set of static example scenarios before implementation. Include at least baseline, model-facing edit, operational-only edit, material text-only edit, and no-op/minor text edit. For each fixture, record expected review ratings, Quality Adjustment, Final Candidate Score behavior, and storyline behavior. Current implementation artifact: `src/narratives/contract_fixtures.py`, validated by `scripts/check_narrative_contract_fixtures.py`.
-2. Deterministic review packet builder: assemble baseline/current/previous snapshots, changed fields, operational metadata, score deltas, text context, and compact storyline memory without calling an LLM. Current implementation artifact: `src/narratives/packet_builder.py`, validated by `scripts/check_narrative_packet_builder.py`.
+1. Contract fixtures: define a small set of static example scenarios before implementation. Include at least baseline, model-facing edit, operational-only edit, material text-only edit, generic structured/text clarification, clarified structured/text review, and no-op/minor text edit. For each fixture, record expected review ratings, Quality Adjustment, Final Candidate Score behavior, clarification behavior, and storyline behavior. Current implementation artifact: `src/narratives/contract_fixtures.py`, validated by `scripts/check_narrative_contract_fixtures.py`.
+2. Deterministic review packet builder: assemble baseline/current/previous snapshots, changed fields, operational metadata, score deltas, text context, user clarification context, and compact storyline memory without calling an LLM. Current implementation artifact: `src/narratives/packet_builder.py`, validated by `scripts/check_narrative_packet_builder.py`.
 3. Validation and scoring engine: validate review JSON, enforce `evidence_fields`, derive Quality Assessment pillars/subcategories, apply pillar/subcategory caps, apply zero/positive-adjustment guardrails, clamp Quality Adjustment, and calculate Final Candidate Score. Current implementation artifact: `src/narratives/scoring.py`, validated by `scripts/check_narrative_scoring.py`.
 4. Mock reviewer: use deterministic fake JSON responses based on the fixtures to test validation, scoring math, no-op behavior, text-materiality behavior, and failure handling. Current implementation artifact: `src/narratives/mock_reviewer.py`, validated by `scripts/check_narrative_mock_reviewer.py`.
 5. Storage and replay: persist validated review traces in session state first, including input hash, validation status, Quality Adjustment, Final Candidate Score, and compact storyline memory. Reuse cached reviews for identical input hashes. Current implementation artifact: `src/narratives/review_store.py`, validated by `scripts/check_narrative_review_store.py`. This is prototype storage only and does not yet satisfy the durable cross-team baseline requirement.
 6. Minimal UI panel: render Completion Score, Quality Adjustment, Final Candidate Score, Quality Review, and compact Quality Assessment rows. Do not build adjusted treemap yet. Current implementation artifact: `frontend/views/trial_simulator.py`, using the provider-free packet builder, mock reviewer, and session-state review store.
 7. Hidden baseline continuity: generate/store the hidden baseline review and verify that later iteration reviews use baseline review, previous review, and compact storyline memory consistently. Current implementation artifacts: `src/narratives/packet_builder.py`, `frontend/views/trial_simulator.py`, and `scripts/check_narrative_packet_builder.py`.
-8. Thin LLM provider wrapper: add the provider abstraction only after packet building, validation, scoring, caching, replay, and mock UI work. Provider code invokes the model and normalizes JSON only. The application owns scoring. Current implementation artifact: `src/narratives/provider.py`, validated by `scripts/check_narrative_provider.py`; the simulator still uses the deterministic mock provider.
+8. Thin LLM provider wrapper: add the provider abstraction only after packet building, validation, scoring, caching, replay, mock UI work, and deterministic clarification gating. Provider code invokes the model and normalizes JSON only; it should not decide field truth when structured/text inputs are asynchronous. The application owns scoring and returns `clarification_needed` before new scoring/provider review for unresolved material mismatches. Current implementation artifact: `src/narratives/provider.py`, validated by `scripts/check_narrative_provider.py`; the simulator still uses the deterministic mock provider.
 9. First adjusted-score visual: add Final Candidate Score View with component cards and the seven-bar grouped chart.
 10. Durable baseline store: add a database-backed baseline review repository keyed by trial/version and input hash. It should use create-if-missing semantics so the first team creates the hidden baseline and later teams reuse it.
 11. Two-branch adjusted treemap: add only after the simpler adjusted view is stable and understandable; defer to V1.1 if it slows the first implementation.

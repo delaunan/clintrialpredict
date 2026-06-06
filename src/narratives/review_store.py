@@ -105,6 +105,8 @@ def _build_trace(
         "final_candidate_score": scoring.get("final_candidate_score"),
         "quality_assessment": deepcopy(scoring.get("quality_assessment") or {}),
         "failure_reason": review_result.get("failure_reason"),
+        "clarification_issues": deepcopy(review_result.get("clarification_issues") or []),
+        "user_clarifications": deepcopy((packet.get("clarification_context") or {}).get("user_clarifications") or []),
         "changed_fields": deepcopy(iteration_context.get("changed_fields") or []),
         "score_movement": (packet.get("model_interpretation") or {}).get("score_delta"),
         "compact_storyline_memory": compact_storyline_from_trace({"validated_review": validated_review}),

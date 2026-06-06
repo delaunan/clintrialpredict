@@ -37,6 +37,7 @@ def _check_packet(fixture: dict, errors: list[str]) -> None:
         "operational_assumptions",
         "model_interpretation",
         "review_context",
+        "clarification_context",
         "iteration_context",
         "input_hash",
     ):
@@ -79,6 +80,12 @@ def _check_packet(fixture: dict, errors: list[str]) -> None:
         errors.append(f"{fixture_id}: review_context must be an object")
     elif set(review_context) != {"baseline_review", "previous_review"}:
         errors.append(f"{fixture_id}: review_context keys changed")
+
+    clarification_context = packet.get("clarification_context")
+    if not isinstance(clarification_context, dict):
+        errors.append(f"{fixture_id}: clarification_context must be an object")
+    elif "user_clarifications" not in clarification_context:
+        errors.append(f"{fixture_id}: clarification_context missing user_clarifications")
 
     packet_without_hash = dict(packet)
     input_hash = packet_without_hash.pop("input_hash", None)

@@ -313,6 +313,7 @@ def build_review_packet(
     previous_review_trace: dict[str, Any] | None = None,
     trial_identity: dict[str, Any] | None = None,
     text_context: dict[str, Any] | None = None,
+    user_clarifications: list[dict[str, Any]] | None = None,
     compact_storyline_memory: str = "",
     mode: str = MODE_EXISTING_STUDY,
 ) -> dict[str, Any]:
@@ -364,6 +365,9 @@ def build_review_packet(
             ),
             "previous_review": _compact_review_context(previous_review_trace),
         },
+        "clarification_context": {
+            "user_clarifications": json_safe(user_clarifications or []),
+        },
         "iteration_context": {
             "baseline_snapshot_id": _snapshot_id(baseline_snapshot, "baseline"),
             "previous_snapshot_id": _snapshot_id(previous_snapshot),
@@ -403,5 +407,6 @@ def build_review_packet_from_fixture(fixture: dict[str, Any]) -> dict[str, Any]:
             "trial_identity": packet.get("trial_identity", {}),
             "text_context": packet.get("text_context", {}),
         },
+        user_clarifications=(packet.get("clarification_context") or {}).get("user_clarifications") or [],
         compact_storyline_memory=packet["iteration_context"].get("compact_storyline_memory", ""),
     )

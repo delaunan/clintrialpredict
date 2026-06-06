@@ -335,6 +335,7 @@ These rules are the current edit-trial behavior contract. Future refinements sho
 - Turning simulation mode on must show Trial Features and create a local baseline snapshot from original selected-trial values if no current simulation snapshot exists for that selected trial. For existing audit trials, this baseline should use the pre-saved audit SHAP/decomposition artifacts (`models/shap_values_01.joblib` plus taxonomy/model feature names) to populate the baseline gauge, impact bar, and treemap without running XGBoost prediction or encoding.
 - Turning simulation mode on should also initialize the hidden baseline Quality Review context for the narrative layer. This is hidden from participants and must not expose Quality Adjustment, Final Candidate Score, or baseline narrative comments.
 - Dropdown changes rerun Streamlit but must not call `/predict`; only `Predict Trial Completion` may run a user-requested simulation prediction.
+- In `trial_simulator`, `Predict Trial Completion` may first pause on a same-page narrative Clarification Gate when deterministic structured/text alignment checks find an obvious material mismatch. This preflight is UI/narrative-only, does not call `/predict`, does not create a new Completion Score snapshot, and is owned by `docs/architecture_narratives.md`. If the user edits fields/text, prediction should be requested again from the corrected scenario. If the user only adds explanations, those explanations enter `clarification_context` and the same prediction request may continue.
 - Turning simulation mode off must reset visible Trial Features values to the original selected-trial values, clear simulation-only state, clear Trial Features widget keys, restore the normal audit tab layout, and prevent edited values from leaking into the audit gauge, treemap, or impact bar.
 - Changing selected trial must clear simulation prediction state and initialize editor values from the newly selected row.
 
@@ -343,6 +344,7 @@ These rules are the current edit-trial behavior contract. Future refinements sho
 - Simulation prediction must submit the edited row with `simulation_mode: true`.
 - Audit prediction must use the original selected row and the existing precomputed/audit path.
 - No user action except `Predict Trial Completion` may run a new simulation prediction.
+- A narrative clarification preflight may run before `/predict` in `trial_simulator`; unresolved clarification must block new scoring rather than submit an asynchronous scenario.
 - For existing selected trials, baseline snapshot creation when simulation mode turns on is local and must not call `/predict`. It may load precomputed audit SHAP/decomposition artifacts, but it must not run the live XGBoost prediction pipeline. This baseline is not a user-run simulation prediction and does not replace explicit `Predict Trial Completion` behavior.
 - Audit decomposition assembly is shared through `src/scoring/decomposition.py`. The API uses it after audit SHAP lookup or live TreeSHAP generation; the frontend uses `frontend/utils/audit_decomposition.py` to call the same assembly locally for no-edit prerecorded audit results.
 - Across `trial_audit.py`, `trial_edit.py`, and `trial_simulator.py`, no-edit Completion Score actions should use local prerecorded SHAP decomposition rather than `/predict`. This includes normal/audit Predict clicks and existing-trial Simulation Mode baseline snapshots. `/predict` is reserved for edited model-facing simulation scenarios that require live XGBoost/TreeSHAP.
@@ -374,6 +376,7 @@ Clinical_Score = clip(round(50 + sum(rounded pillar impacts), 1), 1, 99)
 - In simulation mode with score visible, tab order is `Trial Information`, `Population Details`, `Completion Score`, `Trial Features`; when Simulation Mode is toggled on, `Trial Features` opens by default.
 - `Predict Trial Completion` is grey/visually inactive when current visible Trial Features values match the latest prediction snapshot. It may remain enabled for implementation simplicity, but clicking it in this state must not run prediction.
 - `Predict Trial Completion` is blue/active when at least one visible Trial Features value has pending changes.
+- If a required structured/text clarification appears, keep the user on the same page. `Continue Prediction` may proceed only after the user corrects the fields/text or adds explanations for the remaining mismatch items.
 - If the user changes a field and then reverts all fields back to the latest snapshot values, `Predict Trial Completion` turns grey/inactive again.
 - Field-level pending-change UI must continue using the existing soft-blue highlight.
 - When a field has pending changes, show the previous value from the latest prediction snapshot inline after the field label.

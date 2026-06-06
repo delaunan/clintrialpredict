@@ -19,6 +19,8 @@ REQUIRED_SCENARIO_TYPES = {
     "model_facing_edit",
     "operational_only_edit",
     "material_text_only_edit",
+    "text_structured_alignment_clarification",
+    "clarified_text_structured_alignment_review",
     "no_op_minor_text_edit",
 }
 
@@ -482,6 +484,126 @@ CONTRACT_FIXTURES: list[dict[str, Any]] = [
         },
     },
     {
+        "fixture_id": "endpoint_structure_text_alignment_requires_clarification_v1",
+        "scenario_type": "text_structured_alignment_clarification",
+        "description": "Structured endpoint setting and text appear materially misaligned; Quality Review should pause for clarification.",
+        "input_packet": {
+            **_base_packet(),
+            "structured_features": {
+                **BASELINE_STRUCTURED_FEATURES,
+                "endpoint_structure_ml": "MULTI_COMPOSITE",
+            },
+            "text_context": {
+                **_base_packet()["text_context"],
+                "primary_outcomes_ui": "The study has a single primary endpoint: progression-free survival.",
+            },
+            "model_interpretation": {
+                **_base_packet()["model_interpretation"],
+                "completion_score": 70,
+                "previous_completion_score": 68,
+                "score_delta": 2,
+                "top_feature_impact_changes": ["endpoint_structure_ml"],
+            },
+            "iteration_context": {
+                **_base_packet()["iteration_context"],
+                "previous_snapshot_id": "fixture-baseline",
+                "current_snapshot_id": "fixture-alignment-clarification",
+                "iteration_number": 1,
+                "changed_fields": ["endpoint_structure_ml", "text_context.primary_outcomes_ui"],
+                "compact_storyline_memory": "Baseline was acceptable; no prior participant concern.",
+            },
+        },
+        "mock_review": None,
+        "expected_behavior": {
+            "review_needed": True,
+            "clarification_needed": True,
+            "visible_to_participant_initially": True,
+            "expected_clarification_issues": ["endpoint_structure_text_mismatch"],
+            "expected_quality_adjustment": None,
+            "expected_final_candidate_score": None,
+            "storyline_behavior": "pause_quality_review_until_user_corrects_or_explains_alignment_issue",
+        },
+    },
+    {
+        "fixture_id": "endpoint_structure_text_alignment_explained_v1",
+        "scenario_type": "clarified_text_structured_alignment_review",
+        "description": "The same apparent endpoint mismatch has a user explanation, so Quality Review can proceed using clarified context.",
+        "input_packet": {
+            **_base_packet(),
+            "structured_features": {
+                **BASELINE_STRUCTURED_FEATURES,
+                "endpoint_structure_ml": "MULTI_COMPOSITE",
+            },
+            "text_context": {
+                **_base_packet()["text_context"],
+                "primary_outcomes_ui": "The study has a single primary endpoint: progression-free survival.",
+            },
+            "clarification_context": {
+                "user_clarifications": [
+                    {
+                        "issue_id": "endpoint_structure_text_mismatch",
+                        "field_id": "endpoint_structure_ml",
+                        "explanation": (
+                            "The visible endpoint text names the main clinical endpoint; "
+                            "a second co-primary biomarker endpoint is handled in the scenario design."
+                        ),
+                    }
+                ],
+            },
+            "model_interpretation": {
+                **_base_packet()["model_interpretation"],
+                "completion_score": 70,
+                "previous_completion_score": 68,
+                "score_delta": 2,
+                "top_feature_impact_changes": ["endpoint_structure_ml"],
+            },
+            "iteration_context": {
+                **_base_packet()["iteration_context"],
+                "previous_snapshot_id": "fixture-baseline",
+                "current_snapshot_id": "fixture-alignment-explained",
+                "iteration_number": 1,
+                "changed_fields": ["endpoint_structure_ml", "text_context.primary_outcomes_ui"],
+                "compact_storyline_memory": "Baseline was acceptable; no prior participant concern.",
+            },
+        },
+        "mock_review": _review(
+            movement_summary="The Completion Score may have changed because endpoint structure changed.",
+            domains={
+                "development_question_fit": _domain("acceptable", "The explanation keeps the confirmatory intent interpretable.", ["strategic_ambition_ml", "endpoint_structure_ml"]),
+                "scientific_rigor": _domain("acceptable", "The clarified co-primary structure can remain defensible if both endpoints are prospectively specified.", ["endpoint_structure_ml", "primary_outcomes_ui"]),
+                "population_relevance": _domain("acceptable", "Population scope did not materially change.", ["adult_ml", "older_adult_ml"]),
+                "endpoint_and_comparator_logic": _domain("weak", "The text still names only one endpoint, so endpoint hierarchy should be clearer.", ["endpoint_structure_ml", "primary_outcomes_ui"]),
+                "operational_scale_fit": _domain("acceptable", "Operational assumptions remain typical.", ["operational_assumptions.planned_duration_months.duration_status"]),
+                "change_integrity": _domain("neutral", "The user clarified an apparent mismatch rather than changing the model-facing field.", ["endpoint_structure_ml", "clarification_context.user_clarifications"]),
+                "text_consistency": _domain("minor_tension", "The explanation reduces the apparent contradiction but the visible endpoint text remains incomplete.", ["endpoint_structure_ml", "primary_outcomes_ui", "clarification_context.user_clarifications"]),
+            },
+            participant_review=_participant_review(
+                "Endpoint structure and endpoint text appeared misaligned, and the team added clarification.",
+                "The Completion Score may have moved because the structured endpoint setting changed.",
+                "The explanation may preserve the intended co-primary endpoint strategy.",
+                "The design may still sacrifice clarity if the endpoint text names only one endpoint.",
+                "Operational assumptions remain typical.",
+                "The added explanation reduces the apparent mismatch but should remain visible in the scenario rationale.",
+                "Is the endpoint hierarchy clear enough for another team to understand the scenario without the clarification note?",
+            ),
+            storyline_update="Endpoint-structure mismatch was explained; minor text clarity concern remains.",
+            new_concerns=["endpoint_text_clarity_after_clarification"],
+            operational_statuses=["typical"],
+        ),
+        "expected_behavior": {
+            "review_needed": True,
+            "visible_to_participant_initially": True,
+            "expected_quality_adjustment": -3,
+            "expected_final_candidate_score": 67,
+            "expected_quality_pillars": {
+                "evidence_coherence": "negative",
+                "population_strategy_fit": "neutral",
+                "execution_plausibility": "neutral",
+            },
+            "storyline_behavior": "append_clarified_alignment_iteration",
+        },
+    },
+    {
         "fixture_id": "noop_minor_text_cleanup_v1",
         "scenario_type": "no_op_minor_text_edit",
         "description": "Participant makes only casing/punctuation cleanup; review should be reused.",
@@ -582,21 +704,31 @@ def validate_contract_fixtures(fixtures: list[dict[str, Any]] | None = None) -> 
             errors.append(f"{fixture_id}: expected_behavior must be a dict")
             continue
 
+        clarification_needed = expected.get("clarification_needed") is True
+
         if "expected_quality_adjustment" not in expected:
             errors.append(f"{fixture_id}: missing expected_quality_adjustment")
         else:
             adjustment = expected["expected_quality_adjustment"]
-            if not isinstance(adjustment, int) or adjustment < -10 or adjustment > 10:
+            if clarification_needed and adjustment is None:
+                pass
+            elif not isinstance(adjustment, int) or adjustment < -10 or adjustment > 10:
                 errors.append(f"{fixture_id}: expected_quality_adjustment must be an int between -10 and 10")
 
         if "expected_final_candidate_score" not in expected:
             errors.append(f"{fixture_id}: missing expected_final_candidate_score")
         else:
             final_score = expected["expected_final_candidate_score"]
-            if not isinstance(final_score, int) or final_score < 0 or final_score > 100:
+            if clarification_needed and final_score is None:
+                pass
+            elif not isinstance(final_score, int) or final_score < 0 or final_score > 100:
                 errors.append(f"{fixture_id}: expected_final_candidate_score must be an int between 0 and 100")
 
-        if "expected_quality_adjustment" in expected and "expected_final_candidate_score" in expected:
+        if (
+            not clarification_needed
+            and "expected_quality_adjustment" in expected
+            and "expected_final_candidate_score" in expected
+        ):
             completion_score = packet.get("model_interpretation", {}).get("completion_score")
             if isinstance(completion_score, int):
                 calculated = max(0, min(100, completion_score + expected["expected_quality_adjustment"]))
@@ -610,6 +742,12 @@ def validate_contract_fixtures(fixtures: list[dict[str, Any]] | None = None) -> 
 
         review_needed = expected.get("review_needed")
         review = fixture.get("mock_review")
+        if clarification_needed:
+            if review is not None:
+                errors.append(f"{fixture_id}: clarification fixture must not define mock_review before user explanation")
+            if expected.get("expected_clarification_issues") is None:
+                errors.append(f"{fixture_id}: clarification fixture must define expected_clarification_issues")
+            continue
         if review_needed is False:
             if review is not None:
                 errors.append(f"{fixture_id}: no-op fixture must not define mock_review")

@@ -85,6 +85,29 @@ def review_packet_with_mock(
         }
 
     expected = fixture["expected_behavior"]
+    if expected.get("clarification_needed") is True:
+        return {
+            "review_needed": True,
+            "reuse_previous_review": False,
+            "provider": "mock",
+            "status": "clarification_needed",
+            "fixture_id": fixture["fixture_id"],
+            "failure_reason": "Quality Review needs user clarification for apparent structured/text mismatch.",
+            "clarification_issues": [
+                {"issue_id": issue_id}
+                for issue_id in expected.get("expected_clarification_issues", [])
+            ],
+            "review": None,
+            "validated_review": None,
+            "scoring": {
+                "validation_status": "unavailable",
+                "validation_errors": ["Quality Review needs user clarification for apparent structured/text mismatch."],
+                "quality_adjustment": None,
+                "final_candidate_score": None,
+                "quality_assessment": {},
+                "input_hash": packet.get("input_hash"),
+            },
+        }
     if expected.get("review_needed") is False:
         return {
             "review_needed": False,

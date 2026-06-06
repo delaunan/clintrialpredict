@@ -16,6 +16,7 @@ from src.narratives.provider import (  # noqa: E402
     FAILURE_UNSUPPORTED_PROVIDER,
     MOCK_MODEL_NAME,
     PROVIDER_MOCK,
+    STATUS_CLARIFICATION_NEEDED,
     review_packet_with_provider,
 )
 
@@ -37,6 +38,39 @@ def main() -> int:
         errors.append("mock provider result did not expose deterministic metadata")
     if mock_result.get("scoring", {}).get("quality_adjustment") != fixture["expected_behavior"]["expected_quality_adjustment"]:
         errors.append("mock provider did not preserve scoring result")
+
+    baseline_fixture = next(
+        item for item in get_contract_fixtures()
+        if item["fixture_id"] == "baseline_hidden_review_v1"
+    )
+    baseline_packet = build_review_packet_from_fixture(baseline_fixture)
+    baseline_result = review_packet_with_provider(baseline_packet, provider=PROVIDER_MOCK)
+    if baseline_result.get("status") == STATUS_CLARIFICATION_NEEDED:
+        errors.append("provider should not require participant clarification for hidden baseline review")
+
+    clarification_fixture = next(
+        item for item in get_contract_fixtures()
+        if item["fixture_id"] == "endpoint_structure_text_alignment_requires_clarification_v1"
+    )
+    clarification_packet = build_review_packet_from_fixture(clarification_fixture)
+    clarification_result = review_packet_with_provider(clarification_packet, provider=PROVIDER_MOCK)
+    if clarification_result.get("status") != STATUS_CLARIFICATION_NEEDED:
+        errors.append("provider should pause unresolved structured/text mismatch before review")
+    if clarification_result.get("review") is not None:
+        errors.append("clarification-needed provider result should not return review JSON")
+    if clarification_result.get("scoring", {}).get("quality_adjustment") is not None:
+        errors.append("clarification-needed provider result should not return Quality Adjustment")
+
+    explained_fixture = next(
+        item for item in get_contract_fixtures()
+        if item["fixture_id"] == "endpoint_structure_text_alignment_explained_v1"
+    )
+    explained_packet = build_review_packet_from_fixture(explained_fixture)
+    explained_result = review_packet_with_provider(explained_packet, provider=PROVIDER_MOCK)
+    if explained_result.get("status") != "reviewed":
+        errors.append("provider should continue review when alignment issue has user explanation")
+    if explained_result.get("scoring", {}).get("quality_adjustment") != explained_fixture["expected_behavior"]["expected_quality_adjustment"]:
+        errors.append("explained alignment fixture did not preserve scoring result")
 
     unsupported = review_packet_with_provider(packet, provider="not_configured")
     if unsupported.get("status") != FAILURE_UNSUPPORTED_PROVIDER:

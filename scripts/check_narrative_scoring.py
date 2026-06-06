@@ -18,9 +18,9 @@ from src.narratives.scoring import validate_and_score_review  # noqa: E402
 def _check_fixture(fixture: dict, errors: list[str]) -> None:
     fixture_id = fixture["fixture_id"]
     expected = fixture["expected_behavior"]
-    if expected.get("review_needed") is False:
+    if expected.get("review_needed") is False or expected.get("clarification_needed") is True:
         if fixture.get("mock_review") is not None:
-            errors.append(f"{fixture_id}: no-op fixture should not define mock_review")
+            errors.append(f"{fixture_id}: non-reviewed fixture should not define mock_review")
         return
 
     packet = build_review_packet_from_fixture(fixture)
