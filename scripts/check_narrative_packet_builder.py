@@ -14,6 +14,7 @@ from src.narratives.contract_fixtures import get_contract_fixtures  # noqa: E402
 from src.narratives.packet_builder import (  # noqa: E402
     ACTIVE_OPERATIONAL_ASSUMPTION_KEYS,
     DIRECT_XGBOOST_SHAP_FIELDS,
+    FIELD_DICTIONARY_VERSION,
     STRUCTURED_FEATURE_KEYS,
     build_review_packet,
     build_review_packet_from_fixture,
@@ -29,6 +30,7 @@ def _check_packet(fixture: dict, errors: list[str]) -> None:
     for key in (
         "prompt_version",
         "rubric_version",
+        "field_dictionary_version",
         "mode",
         "trial_identity",
         "text_context",
@@ -48,8 +50,14 @@ def _check_packet(fixture: dict, errors: list[str]) -> None:
         errors.append(f"{fixture_id}: prompt_version changed")
     if packet.get("rubric_version") != source_packet.get("rubric_version"):
         errors.append(f"{fixture_id}: rubric_version changed")
+    if packet.get("field_dictionary_version") != FIELD_DICTIONARY_VERSION:
+        errors.append(f"{fixture_id}: field_dictionary_version changed")
     if packet.get("mode") != source_packet.get("mode"):
         errors.append(f"{fixture_id}: mode changed")
+
+    text_context = packet.get("text_context") or {}
+    if "criteria_ui" in text_context:
+        errors.append(f"{fixture_id}: criteria_ui should not be sent by default in V1 narrative packets")
 
     missing_features = set(STRUCTURED_FEATURE_KEYS).difference(packet.get("structured_features", {}))
     if missing_features:
@@ -172,12 +180,48 @@ def _check_review_continuity_context(errors: list[str]) -> None:
         errors.append("fixture packet without review traces should not invent previous review context")
 
 
+def _check_canonical_values_prefer_compare_values(errors: list[str]) -> None:
+    packet = build_review_packet(
+        current_snapshot={
+            "snapshot_id": "canonical-check",
+            "submitted_values": {
+                "endpoint_structure_ml": 1,
+                "has_placebo_ml": 1,
+            },
+            "compare_values": {
+                "endpoint_structure_ml": "MULTI_COMPOSITE",
+                "has_placebo_ml": "1",
+            },
+            "display_values": {
+                "endpoint_structure_ml": "Multi/Composite",
+                "has_placebo_ml": "Yes",
+            },
+            "model_interpretation": {"completion_score": 70},
+            "text_context": {"criteria_ui": "Long eligibility criteria should be deferred by default."},
+            "operational_assumptions": {
+                "planned_enrollment": {},
+                "planned_sites": {},
+                "planned_duration_months": {},
+            },
+        },
+    )
+    structured = packet.get("structured_features") or {}
+    display = packet.get("structured_feature_display_values") or {}
+    if structured.get("endpoint_structure_ml") != "MULTI_COMPOSITE":
+        errors.append("packet should prefer taxonomy option key compare_values over model-facing submitted_values")
+    if display.get("endpoint_structure_ml") != "Multi/Composite":
+        errors.append("packet should preserve human-readable display values")
+    if "criteria_ui" in (packet.get("text_context") or {}):
+        errors.append("packet should not include criteria_ui by default")
+
+
 def main() -> int:
     errors: list[str] = []
     fixtures = get_contract_fixtures()
     for fixture in fixtures:
         _check_packet(fixture, errors)
     _check_review_continuity_context(errors)
+    _check_canonical_values_prefer_compare_values(errors)
 
     if errors:
         for error in errors:

@@ -5626,7 +5626,6 @@ def build_text_context_for_narrative(row):
         "conditions": "conditions_ui",
         "primary_outcomes": "primary_outcomes_ui",
         "interventions": "interventions_ui",
-        "eligibility_criteria": "criteria_ui",
     }
 
     for panel_key, output_key in output_keys.items():

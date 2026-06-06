@@ -33,8 +33,8 @@ def main() -> int:
         "timestamp": "baseline-ts",
         "nct_id": "NCT-LIVE-FLOW",
         "source": "prerecorded_baseline",
-        "submitted_values": {"phase_ml": "Phase 3", "endpoint_rigor_ml": "Clinical outcome"},
-        "compare_values": {"phase_ml": "3", "endpoint_rigor_ml": "clinical"},
+        "submitted_values": {"phase_ml": 4, "endpoint_rigor_ml": 3},
+        "compare_values": {"phase_ml": "PHASE3", "endpoint_rigor_ml": "HARD_CLINICAL"},
         "display_values": {"phase_ml": "Phase 3", "endpoint_rigor_ml": "Clinical outcome"},
         "result": _result(68),
         "score": 68,
@@ -88,8 +88,8 @@ def main() -> int:
         errors.append("text-context changes should appear in packet changed_fields")
     if current_packet.get("iteration_context", {}).get("iteration_number") != 1:
         errors.append("current packet should preserve frontend iteration_number")
-    if current_packet.get("structured_features", {}).get("phase_ml") != "Phase 3":
-        errors.append("packet should prefer canonical submitted_values over compare_values")
+    if current_packet.get("structured_features", {}).get("phase_ml") != "PHASE3":
+        errors.append("packet should prefer taxonomy option-key compare_values over model-facing submitted_values")
     if current_packet.get("structured_feature_display_values", {}).get("phase_ml") != "Phase 3":
         errors.append("packet should expose display values separately")
     baseline_context = (current_packet.get("review_context") or {}).get("baseline_review") or {}

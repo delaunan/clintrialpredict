@@ -26,7 +26,8 @@
           ["REPRODUCTIVE", "Reproductive"],
           ["RESPIRATORY", "Respiratory"],
           ["UNCLASSIFIED", "Other / Unclassified"]
-        ]
+        ],
+        "meaning": "Broad clinical domain used to contextualize disease area, benchmarks, calibration, and trial design interpretation."
       },
       "encoding": "ordinal",
       "mapping": {
@@ -57,7 +58,8 @@
         "label": "Indication",
         "pillar": "Therapeutic Context",
         "subgroup": "Therapeutic Area Profile",
-        "priority": 1
+        "priority": 1,
+        "meaning": "Specific GBD Level 3 disease or condition category used to anchor clinical context and similar-trial comparisons."
       },
       "encoding": "target"
     },
@@ -78,7 +80,8 @@
         "options": [
           ["1", "Yes"],
           ["0", "Unlikely"]
-        ]
+        ],
+        "meaning": "Whether the selected condition should be treated as rare for design, feasibility, and population-context reasoning."
       },
       "encoding": "ordinal",
       "mapping": {
@@ -104,7 +107,8 @@
           ["PHASE2", "Phase 2"],
           ["PHASE2/PHASE3", "Phase 2/3"],
           ["PHASE3", "Phase 3"]
-        ]
+        ],
+        "meaning": "Clinical development phase, used to interpret evidence expectations, trial purpose, and operational scale."
       },
       "encoding": "ordinal",
       "mapping": {
@@ -126,7 +130,8 @@
           ["SIGNAL_SEARCH", "Efficacy / Signal Detection"],
           ["PIVOTAL_INTENT", "Confirmatory / Registration"],
           ["UNKNOWN", "Unknown Intent"]
-        ]
+        ],
+        "meaning": "Implied development objective, such as dose characterization, signal detection, or registration-enabling confirmation."
       },
       "encoding": "ordinal",
       "mapping": {
@@ -147,7 +152,8 @@
           ["NO_PRECEDENT", "Novel Target (No Prior Approvals)"],
           ["PRECEDENT_IN_OTHER", "Established in Other"],
           ["PRECEDENT_IN_INDICATION", "Established in Indication"]
-        ]
+        ],
+        "meaning": "Degree of prior precedent for the therapeutic target in the indication or related settings."
       },
       "encoding": "ordinal",
       "mapping": {
@@ -176,7 +182,8 @@
           ["PROTEIN_DEGRADER", "Protein Degrader"],
           ["EPIGENETIC_REGULATOR", "Epigenetic Regulator"],
           ["OTHER_PATHWAY", "Other Pathway / Unknown"]
-        ]
+        ],
+        "meaning": "Biological pathway or mechanism class used to contextualize scientific novelty and plausibility."
       },
       "encoding": "ordinal",
       "mapping": {
@@ -212,7 +219,8 @@
           ["RADIOPHARMACEUTICAL", "Radiopharmaceutical"],
           ["PEPTIDE_HORMONES", "Peptide Hormones"],
           ["OTHER_MODALITY", "Other Modality"]
-        ]
+        ],
+        "meaning": "Therapeutic product modality, used to interpret mechanism, delivery, evidence expectations, and operational complexity."
       },
       "encoding": "ordinal",
       "mapping": {
@@ -240,7 +248,8 @@
           ["NEXT_GEN_OPTIMIZED", "Next-Gen / Optimized"],
           ["FIRST_IN_CLASS", "First-in-Class (Novel)"],
           ["UNKNOWN", "Not Specified"]
-        ]
+        ],
+        "meaning": "Relative innovation level of the intervention, from established/copy to first-in-class novelty."
       },
       "encoding": "ordinal",
       "mapping": {
@@ -263,7 +272,8 @@
           ["FACTORIAL", "Factorial"],
           ["PARALLEL", "Parallel"],
           ["UNKNOWN", "Not Specified"]
-        ]
+        ],
+        "meaning": "Basic study arm structure, such as single-group, crossover, factorial, sequential, or parallel design."
       },
       "encoding": "ordinal",
       "mapping": {
@@ -286,7 +296,8 @@
           ["TREATMENT", "Treatment"],
           ["SUPPORTIVE_CARE", "Supportive Care"],
           ["UNKNOWN", "Other Purpose / Unknown"]
-        ]
+        ],
+        "meaning": "Primary purpose of the study, such as treatment, prevention, supportive care, or other purpose."
       },
       "encoding": "ordinal",
       "mapping": {
@@ -312,7 +323,8 @@
           ["STATIC", "Static Design"],
           ["ADAPTIVE", "Adaptive Design"],
           ["UNKNOWN", "Not Specified"]
-        ]
+        ],
+        "meaning": "Whether the trial uses a static or adaptive design structure."
       },
       "encoding": "ordinal",
       "mapping": {
@@ -332,7 +344,8 @@
           ["SUBJECTIVE_PRO", "Subjective / Patient Reported"],
           ["SURROGATE", "Surrogate / Biomarker"],
           ["UNKNOWN", "Not Specified / Unknown"]
-        ]
+        ],
+        "meaning": "Type and evidentiary rigor of the primary endpoint, such as hard clinical, subjective/PRO, surrogate, or unknown."
       },
       "encoding": "ordinal",
       "mapping": {
@@ -352,7 +365,8 @@
           ["MULTI_COMPOSITE", "Multi/Composite"],
           ["SINGLE_GOAL", "Single Goal"],
           ["UNKNOWN", "Not Specified"]
-        ]
+        ],
+        "meaning": "Whether the primary endpoint structure is single-goal or multi/composite."
       },
       "encoding": "ordinal",
       "mapping": {
@@ -370,7 +384,8 @@
         "options": [
           ["0", "No"],
           ["1", "Yes"]
-        ]
+        ],
+        "meaning": "Whether participant selection or stratification is based on biomarker status."
       },
       "encoding": "ordinal",
       "mapping": {
@@ -396,7 +411,8 @@
           ["MID_CAP", "Mid-Cap Pharma"],
           ["BIOTECH", "Biotech and Emerging Pharma"],
           ["UNKNOWN", "Unknown Sponsor Tier"]
-        ]
+        ],
+        "meaning": "Sponsor scale/type category used as execution-capability and trial-footprint context."
       },
       "encoding": "ordinal",
       "mapping": {
@@ -418,7 +434,8 @@
           ["DOUBLE", "Double Blind"],
           ["TRIPLE", "Triple Blind"],
           ["QUADRUPLE", "Quadruple Blind"]
-        ]
+        ],
+        "meaning": "Masking/blinding approach used to control assessment or performance bias."
       },
       "encoding": "ordinal",
       "mapping": {
@@ -441,7 +458,8 @@
           ["RANDOMIZED", "Randomized"],
           ["NON-RANDOMIZED", "Non-Randomized"],
           ["UNKNOWN", "Not Specified / Not Applicable"]
-        ]
+        ],
+        "meaning": "Whether participants are assigned by randomized, non-randomized, or unspecified allocation."
       },
       "encoding": "ordinal",
       "mapping": {
@@ -462,7 +480,8 @@
         "options": [
           ["0", "No"],
           ["1", "Yes"]
-        ]
+        ],
+        "meaning": "Whether the trial includes a Data Monitoring Committee or similar oversight structure."
       },
       "encoding": "ordinal",
       "mapping": {
@@ -486,7 +505,8 @@
         "options": [
           ["0", "No"],
           ["1", "Yes"]
-        ]
+        ],
+        "meaning": "Whether the structured trial scenario includes placebo control exposure."
       },
       "encoding": "ordinal",
       "mapping": {
@@ -512,7 +532,8 @@
           ["PLACEBO", "Placebo Control"],
           ["ACTIVE_LEGACY_STANDARD", "Active (Legacy Standard)"],
           ["ACTIVE_MODERN_STANDARD", "Active (Modern Standard)"]
-        ]
+        ],
+        "meaning": "Comparator/control strategy used as benchmark context for evidence interpretation."
       },
       "encoding": "ordinal",
       "mapping": {
@@ -528,7 +549,8 @@
         "label": "Maximum Primary Endpoint Duration",
         "pillar": "Execution Framework",
         "subgroup": "Trial Complexity Footprint",
-        "priority": 24.0
+        "priority": 24.0,
+        "meaning": "Model-facing duration in months for the longest primary endpoint timing horizon."
       },
       "encoding": "numeric"
     },
@@ -537,7 +559,8 @@
         "label": "Number of Arms",
         "pillar": "Execution Framework",
         "subgroup": "Trial Complexity Footprint",
-        "priority": 22.0
+        "priority": 22.0,
+        "meaning": "Number of intervention/comparator arms in the structured trial design."
       },
       "encoding": "numeric"
     },
@@ -552,7 +575,8 @@
           ["ROUTINE_INFUSION", "Routine (Injection/IV)"],
           ["INTENSIVE_MANAGEMENT", "Intensive (Hospitalized)"],
           ["UNKNOWN", "Not Specified"]
-        ]
+        ],
+        "meaning": "Administration and delivery complexity of the intervention strategy."
       },
       "encoding": "ordinal",
       "mapping": {
@@ -596,7 +620,8 @@
           ["CHRONIC_PROGRESSIVE", "Chronic Progressive"],
           ["ACUTE_CRITICAL", "Acute / Critical"],
           ["ADVANCED_METASTATIC", "Advanced / Metastatic"]
-        ]
+        ],
+        "meaning": "Clinical severity or burden of the target patient population."
       },
       "encoding": "ordinal",
       "mapping": {
@@ -621,7 +646,8 @@
           ["LATER_LINE", "Later-Line (2nd+)"],
           ["REFRACTORY_RELAPSED", "Refractory / Relapsed"],
           ["UNKNOWN", "Not Applicable or Not Specified"]
-        ]
+        ],
+        "meaning": "Treatment-line setting or disease-course position targeted by the trial."
       },
       "encoding": "ordinal",
       "mapping": {
@@ -645,7 +671,8 @@
           ["FEMALE", "Female Only"],
           ["MALE", "Male Only"],
           ["UNKNOWN", "Not Specified"]
-        ]
+        ],
+        "meaning": "Gender eligibility scope for trial participation."
       },
       "encoding": "ordinal",
       "mapping": {
@@ -664,7 +691,8 @@
         "options": [
           ["0", "Patients Only"],
           ["1", "Healthy Volunteers Accepted"]
-        ]
+        ],
+        "meaning": "Whether the trial enrolls patients only or allows healthy volunteers."
       },
       "encoding": "ordinal",
       "mapping": {
@@ -683,7 +711,8 @@
           ["1", "Included"],
           ["0", "Excluded"],
           ["UNKNOWN", "Not Specified"]
-        ]
+        ],
+        "meaning": "Whether adult participants are included in the structured eligibility profile."
       },
       "encoding": "ordinal",
       "mapping": {
@@ -702,7 +731,8 @@
           ["1", "Included"],
           ["0", "Excluded"],
           ["UNKNOWN", "Not Specified"]
-        ]
+        ],
+        "meaning": "Whether pediatric participants are included in the structured eligibility profile."
       },
       "encoding": "ordinal",
       "mapping": {
@@ -721,7 +751,8 @@
           ["1", "Included"],
           ["0", "Excluded"],
           ["UNKNOWN", "Not Specified"]
-        ]
+        ],
+        "meaning": "Whether older adult participants are included in the structured eligibility profile."
       },
       "encoding": "ordinal",
       "mapping": {
@@ -869,7 +900,8 @@
         "label": "Title",
         "pillar": "Metadata",
         "subgroup": "Identity",
-        "priority": 104
+        "priority": 104,
+        "meaning": "Trial title used as concise identity and high-level study-objective context for narrative review."
       }
     },
     "lead_sponsor": {
@@ -949,7 +981,8 @@
         "label": "Summary",
         "pillar": "Metadata",
         "subgroup": "Clinical Source Data",
-        "priority": 130
+        "priority": 130,
+        "meaning": "Editable study summary used as the main text context for design rationale, intent, and structured-field coherence."
       }
     },
     "criteria_ui": {
@@ -957,7 +990,8 @@
         "label": "Criteria",
         "pillar": "Metadata",
         "subgroup": "Clinical Source Data",
-        "priority": 131
+        "priority": 131,
+        "meaning": "Eligibility criteria text; deferred from default V1 narrative packets because it can be long and noisy."
       }
     },
     "conditions_ui": {
@@ -965,7 +999,8 @@
         "label": "Conditions",
         "pillar": "Metadata",
         "subgroup": "Clinical Source Data",
-        "priority": 132
+        "priority": 132,
+        "meaning": "Condition/disease text used as supporting clinical context for indication and population coherence."
       }
     },
     "interventions_ui": {
@@ -973,7 +1008,8 @@
         "label": "Interventions",
         "pillar": "Metadata",
         "subgroup": "Clinical Source Data",
-        "priority": 133
+        "priority": 133,
+        "meaning": "Intervention text used as supporting context for modality, mechanism, delivery complexity, and comparator coherence."
       }
     },
     "primary_outcomes_ui": {
@@ -981,7 +1017,8 @@
         "label": "Primary Outcomes",
         "pillar": "Metadata",
         "subgroup": "Clinical Source Data",
-        "priority": 134
+        "priority": 134,
+        "meaning": "Primary outcome text used for endpoint coherence, endpoint structure, timing, and interpretability review."
       }
     },
     "alpha_drug_name": {

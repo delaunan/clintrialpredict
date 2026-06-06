@@ -14,6 +14,7 @@ from typing import Any
 from src.narratives.contract_fixtures import PROMPT_VERSION, RUBRIC_VERSION
 
 MODE_EXISTING_STUDY = "existing_study"
+FIELD_DICTIONARY_VERSION = "taxonomy_01_narrative_v1"
 
 TRIAL_IDENTITY_KEYS = (
     "nct_id",
@@ -27,9 +28,7 @@ TEXT_CONTEXT_KEYS = (
     "summary_ui",
     "conditions_ui",
     "primary_outcomes_ui",
-    "primary_endpoint_description",
     "interventions_ui",
-    "criteria_ui",
 )
 
 STRUCTURED_FEATURE_KEYS = (
@@ -127,8 +126,8 @@ def _snapshot_values(snapshot: dict[str, Any] | None) -> dict[str, Any]:
     snapshot = snapshot or {}
     return (
         snapshot.get("structured_features")
-        or snapshot.get("submitted_values")
         or snapshot.get("compare_values")
+        or snapshot.get("submitted_values")
         or {}
     )
 
@@ -335,6 +334,7 @@ def build_review_packet(
     packet = {
         "prompt_version": PROMPT_VERSION,
         "rubric_version": RUBRIC_VERSION,
+        "field_dictionary_version": FIELD_DICTIONARY_VERSION,
         "mode": mode,
         "trial_identity": _select_keys(current_identity, TRIAL_IDENTITY_KEYS),
         "text_context": _select_keys(current_text, TEXT_CONTEXT_KEYS),
@@ -391,6 +391,7 @@ def build_review_packet_from_fixture(fixture: dict[str, Any]) -> dict[str, Any]:
             "trial_identity": packet.get("trial_identity", {}),
             "text_context": packet.get("text_context", {}),
             "structured_features": packet.get("structured_features", {}),
+            "display_values": packet.get("structured_feature_display_values", {}),
             "operational_assumptions": packet.get("operational_assumptions", {}),
             "model_interpretation": packet.get("model_interpretation", {}),
             "changed_fields": packet["iteration_context"].get("changed_fields", []),

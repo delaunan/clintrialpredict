@@ -253,7 +253,7 @@ Current Trial Features layout:
 - Bottom right: `Execution Framework`
 - The layout is visually finalized as of this session: four white rounded pillar cards, two fields per row by default, single-field rows left-aligned at half-card width, equal top-row card heights, equal bottom-row card heights, compact row-to-row spacing, and enlarged pillar icon/title headers with extra separation before the first field row.
 - `number_of_arms_ml` remains an integer input. `primary_duration_months_ml` uses one-decimal display/comparison with `0.1` increments, matching the model-facing preprocessing rule.
-- The text-context cards share the existing Trial Information text state and feed narrative `text_context`; they do not enter XGBoost Completion Score.
+- The top text-context cards share the existing Trial Information text state and feed narrative `text_context`; they do not enter XGBoost Completion Score. In V1 narrative packets, `Conditions`, `Study Summary`, `Interventions`, and `Primary Outcomes` are sent by default. Long `Eligibility Criteria` remains editable/displayed but is deferred from default narrative packets unless a future compact eligibility summary or explicit narrative-edit policy is added.
 
 Current Trial Features row structure:
 

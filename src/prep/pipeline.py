@@ -1170,6 +1170,57 @@ def preprocessor():
         verbose_feature_names_out=True
     )
 
+NARRATIVE_FIELD_MEANINGS = {
+    "therapeutic_area_ml": "Broad clinical domain used to contextualize disease area, benchmarks, calibration, and trial design interpretation.",
+    "gbd_cause_id_3_ml": "Specific GBD Level 3 disease or condition category used to anchor clinical context and similar-trial comparisons.",
+    "is_rare_disease_ml": "Whether the selected condition should be treated as rare for design, feasibility, and population-context reasoning.",
+    "phase_ml": "Clinical development phase, used to interpret evidence expectations, trial purpose, and operational scale.",
+    "strategic_ambition_ml": "Implied development objective, such as dose characterization, signal detection, or registration-enabling confirmation.",
+    "target_precedent_ml": "Degree of prior precedent for the therapeutic target in the indication or related settings.",
+    "target_pathway_class_ml": "Biological pathway or mechanism class used to contextualize scientific novelty and plausibility.",
+    "therapeutic_modality_ml": "Therapeutic product modality, used to interpret mechanism, delivery, evidence expectations, and operational complexity.",
+    "innovation_tier_ml": "Relative innovation level of the intervention, from established/copy to first-in-class novelty.",
+    "intervention_model_ml": "Basic study arm structure, such as single-group, crossover, factorial, sequential, or parallel design.",
+    "primary_purpose_ml": "Primary purpose of the study, such as treatment, prevention, supportive care, or other purpose.",
+    "adaptive_design_ml": "Whether the trial uses a static or adaptive design structure.",
+    "endpoint_rigor_ml": "Type and evidentiary rigor of the primary endpoint, such as hard clinical, subjective/PRO, surrogate, or unknown.",
+    "endpoint_structure_ml": "Whether the primary endpoint structure is single-goal or multi/composite.",
+    "biomarker_stratification_ml": "Whether participant selection or stratification is based on biomarker status.",
+    "patient_severity_ml": "Clinical severity or burden of the target patient population.",
+    "line_of_therapy_ml": "Treatment-line setting or disease-course position targeted by the trial.",
+    "gender_ml": "Gender eligibility scope for trial participation.",
+    "healthy_volunteers_ml": "Whether the trial enrolls patients only or allows healthy volunteers.",
+    "adult_ml": "Whether adult participants are included in the structured eligibility profile.",
+    "child_ml": "Whether pediatric participants are included in the structured eligibility profile.",
+    "older_adult_ml": "Whether older adult participants are included in the structured eligibility profile.",
+    "masking_ml": "Masking/blinding approach used to control assessment or performance bias.",
+    "allocation_ml": "Whether participants are assigned by randomized, non-randomized, or unspecified allocation.",
+    "has_dmc_ml": "Whether the trial includes a Data Monitoring Committee or similar oversight structure.",
+    "has_placebo_ml": "Whether the structured trial scenario includes placebo control exposure.",
+    "comparator_benchmark_ml": "Comparator/control strategy used as benchmark context for evidence interpretation.",
+    "administration_complexity_ml": "Administration and delivery complexity of the intervention strategy.",
+    "number_of_arms_ml": "Number of intervention/comparator arms in the structured trial design.",
+    "sponsor_tier_ml": "Sponsor scale/type category used as execution-capability and trial-footprint context.",
+    "primary_duration_months_ml": "Model-facing duration in months for the longest primary endpoint timing horizon.",
+    "title": "Trial title used as concise identity and high-level study-objective context for narrative review.",
+    "summary_ui": "Editable study summary used as the main text context for design rationale, intent, and structured-field coherence.",
+    "criteria_ui": "Eligibility criteria text; deferred from default V1 narrative packets because it can be long and noisy.",
+    "conditions_ui": "Condition/disease text used as supporting clinical context for indication and population coherence.",
+    "interventions_ui": "Intervention text used as supporting context for modality, mechanism, delivery complexity, and comparator coherence.",
+    "primary_outcomes_ui": "Primary outcome text used for endpoint coherence, endpoint structure, timing, and interpretability review.",
+}
+
+
+def _apply_narrative_field_meanings(registry):
+    fields = registry.get("FIELDS", {})
+    for field_id, meaning in NARRATIVE_FIELD_MEANINGS.items():
+        field = fields.get(field_id)
+        if not isinstance(field, dict):
+            continue
+        ui = field.setdefault("ui", {})
+        ui["meaning"] = meaning
+
+
 def export_pipeline_taxonomy(output_path):
     """
     Exports the PIPELINE_REGISTRY as a JSON file to serve as the source of truth
@@ -1195,6 +1246,7 @@ def export_pipeline_taxonomy(output_path):
         return obj
 
     sanitized_registry = sanitize(PIPELINE_REGISTRY)
+    _apply_narrative_field_meanings(sanitized_registry)
 
     out_p = Path(output_path)
     out_p.parent.mkdir(parents=True, exist_ok=True)

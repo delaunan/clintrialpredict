@@ -463,6 +463,7 @@ This is conceptual JSON for planning only, not an implementation contract yet:
 {
   "prompt_version": "narratives_v1",
   "rubric_version": "design_coherence_v1",
+  "field_dictionary_version": "taxonomy_01_narrative_v1",
   "mode": "existing_study",
   "trial_identity": {
     "nct_id": "...",
@@ -475,8 +476,7 @@ This is conceptual JSON for planning only, not an implementation contract yet:
     "summary_ui": "...",
     "conditions_ui": "...",
     "primary_outcomes_ui": "...",
-    "interventions_ui": "...",
-    "criteria_ui": "..."
+    "interventions_ui": "..."
   },
   "structured_features": {
     "therapeutic_area_ml": "...",
@@ -619,6 +619,8 @@ The LLM should use operational source metadata, not the compact UI label, to dis
 Structured dropdown fields are the primary source of truth. Short text fields are secondary and should be used for coherence checking, contradiction detection, and narrative context rather than as the main source of scoring. Narrative packets should send canonical submitted structured values first and display labels separately, so future providers can reason from readable labels without losing model-facing value provenance.
 
 Missing or brief free-text fields should not be heavily penalized unless they directly contradict structured trial features or make an otherwise important design claim impossible to interpret.
+
+For structured Trial Features, narrative packets should use taxonomy option keys as the canonical value where an option key exists, and should include human-readable labels separately in `structured_feature_display_values`. For example, `endpoint_structure_ml = MULTI_COMPOSITE` should be paired with display label `Multi/Composite`. Numeric fields keep numeric values. The packet should include `field_dictionary_version` so prompts and providers know which taxonomy meanings and option definitions apply without repeating the full field dictionary in every packet. Narrative field meanings must be generated from the production taxonomy source path in `src/prep/pipeline.py`, not patched only into `models/taxonomy_01.json`, so rerunning `notebooks/production_01.ipynb` preserves them.
 
 Before a new prediction result is committed or displayed, the application may run a conservative structured/text alignment gate. This gate is deterministic and intentionally small in V1. It looks only for a few obvious material mismatches, starting with endpoint-structure and placebo/control signals that appear inconsistent between Trial Features and editable text. When a material mismatch is detected, the prediction workflow pauses before new scoring. The participant either corrects the structured field/text or adds a short explanation. That explanation becomes `clarification_context` in the review packet and is available to the LLM as participant scenario context.
 
@@ -1160,9 +1162,9 @@ The following four fields are essential for the Quality Review even if they are 
 
 The LLM should use these fields for design coherence and scientific rigor even if they do not carry direct SHAP contribution in the current model path.
 
-#### Core Text Fields for v1
+#### Default Text Fields For v1
 
-Recommended v1 core text context:
+Recommended v1 default text context:
 
 - `title`
   - UI source: `top_title`
@@ -1170,27 +1172,30 @@ Recommended v1 core text context:
 - `summary_ui`
   - UI source: `study_summary`
   - Use: main design rationale, trial intent, coherence between structured fields and written study description.
+- `conditions_ui`
+  - UI source: `conditions`
+  - Use: supporting clinical context for indication and population coherence.
+- `primary_outcomes_ui`
+  - UI source: `primary_outcomes`
+  - Use: endpoint coherence, evidence value, endpoint timing, interpretability.
+- `interventions_ui`
+  - UI source: `interventions`
+  - Use: modality, mechanism, operational complexity, and consistency with structured therapeutic modality.
 
-These two text fields are the core text context for v1.
+These fields are sent when present. They support coherence review only; they do not enter XGBoost Completion Score.
 
 `primary_endpoint_description` should be treated as strongly recommended when the UI supports it, because it materially improves endpoint and duration coherence review.
 
 #### Optional Text Fields
 
-Optional text fields for better coherence checking:
+Optional future text fields for better coherence checking:
 
-- `primary_outcomes_ui`
-  - UI source: `primary_outcomes`
-  - Use: endpoint coherence, evidence value, endpoint timing, interpretability.
 - `primary_endpoint_description`
   - UI source: future editable short endpoint field, when present.
   - Use: endpoint coherence, duration fit, evidence value, and consistency with endpoint rigor / endpoint structure.
-- `interventions_ui`
-  - UI source: future optional intervention context, when present and clean enough.
-  - Use: modality, mechanism, operational complexity, and consistency with structured therapeutic modality.
 - `criteria_ui`
   - UI source: `eligibility_criteria`
-  - Use: population relevance, inclusion/exclusion coherence, shortcut detection when population restrictions appear inconsistent with the stated study objective.
+  - Use: deferred optional context for population relevance, inclusion/exclusion coherence, and shortcut detection when a future compact eligibility summary is available.
 
 These optional fields can improve coherence analysis, but they should not be required for the serious-game v1 experience.
 
@@ -1223,6 +1228,9 @@ Always send:
 - `start_year`
 - `title`
 - `summary_ui`
+- `conditions_ui`, when present
+- `primary_outcomes_ui`, when present
+- `interventions_ui`, when present
 - All 31 structured Trial Features
 - `operational_assumptions.planned_enrollment` benchmark and support metadata
 - `operational_assumptions.planned_sites` benchmark and source metadata
@@ -1243,10 +1251,11 @@ Send when implemented or derivable from available SHAP/subcategory data:
 
 Optionally send:
 
-- `primary_outcomes_ui`
 - `primary_endpoint_description`
-- `interventions_ui`, when clean enough for short context
-- `criteria_ui`
+
+Defer by default:
+
+- `criteria_ui`, unless a future compact eligibility summary or explicit narrative-edit policy is added
 
 Do not rely heavily on:
 
@@ -1360,7 +1369,7 @@ V1 serious-game narrative layer:
 Implementation staging:
 
 1. Contract fixtures: define a small set of static example scenarios before implementation. Include at least baseline, model-facing edit, operational-only edit, material text-only edit, generic structured/text clarification, clarified structured/text review, and no-op/minor text edit. For each fixture, record expected review ratings, Quality Adjustment, Final Candidate Score behavior, clarification behavior, and storyline behavior. Current implementation artifact: `src/narratives/contract_fixtures.py`, validated by `scripts/check_narrative_contract_fixtures.py`.
-2. Deterministic review packet builder: assemble baseline/current/previous snapshots, changed fields, operational metadata, score deltas, text context, user clarification context, and compact storyline memory without calling an LLM. Current implementation artifact: `src/narratives/packet_builder.py`, validated by `scripts/check_narrative_packet_builder.py`.
+2. Deterministic review packet builder: assemble baseline/current/previous snapshots, changed fields, operational metadata, score deltas, text context, user clarification context, field dictionary version, canonical taxonomy option-key values, display labels, and compact storyline memory without calling an LLM. Current implementation artifact: `src/narratives/packet_builder.py`, validated by `scripts/check_narrative_packet_builder.py`.
 3. Validation and scoring engine: validate review JSON, enforce `evidence_fields`, derive Quality Assessment pillars/subcategories, apply pillar/subcategory caps, apply zero/positive-adjustment guardrails, clamp Quality Adjustment, and calculate Final Candidate Score. Current implementation artifact: `src/narratives/scoring.py`, validated by `scripts/check_narrative_scoring.py`.
 4. Mock reviewer: use deterministic fake JSON responses based on the fixtures to test validation, scoring math, no-op behavior, text-materiality behavior, and failure handling. Current implementation artifact: `src/narratives/mock_reviewer.py`, validated by `scripts/check_narrative_mock_reviewer.py`.
 5. Storage and replay: persist validated review traces in session state first, including input hash, validation status, Quality Adjustment, Final Candidate Score, and compact storyline memory. Reuse cached reviews for identical input hashes. Current implementation artifact: `src/narratives/review_store.py`, validated by `scripts/check_narrative_review_store.py`. This is prototype storage only and does not yet satisfy the durable cross-team baseline requirement.
