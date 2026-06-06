@@ -992,6 +992,29 @@ For obvious structured/text mismatches, run a clarification gate before committi
 
 The architecture should support OpenAI and Gemini provider calls later without binding product logic to one provider.
 
+Provider selection and secret handling:
+
+- Default provider should be OpenAI. Gemini should be configured as an explicit fallback provider so the app can switch when OpenAI is unavailable, rate-limited, or operationally unsuitable.
+- Provider config code must read secrets from environment variables or deployment secret managers only. It must never store API keys in committed Python files, notebooks, docs, fixtures, or frontend state.
+- Local development may use `.env` loaded by `python-dotenv`, following the existing project pattern. Deployment should use Cloud Run environment variables or Secret Manager-backed values.
+- Recommended environment variables:
+  - `NARRATIVE_LLM_PROVIDER=openai`
+  - `NARRATIVE_LLM_FALLBACK_PROVIDER=gemini`
+  - `OPENAI_API_KEY`
+  - `OPENAI_NARRATIVE_MODEL`
+  - `GEMINI_API_KEY` or existing `GOOGLE_API_KEY`
+  - `GEMINI_NARRATIVE_MODEL`
+  - `NARRATIVE_LLM_TEMPERATURE`
+  - `NARRATIVE_LLM_SEED`, only for providers/models that support seed-like reproducibility.
+- As of the June 2026 planning decision, the preferred OpenAI default is a pinned GPT-5.5 snapshot, such as `gpt-5.5-2026-04-23`, rather than a floating alias. `gpt-5.5-pro-2026-04-23` can be considered for slower, high-quality hidden baseline generation or offline review, but not as the default live interactive model unless latency and cost are acceptable.
+- Gemini fallback should be configured with an explicit model ID rather than hard-coded in product logic. Prefer a high-quality Gemini Pro model for fallback review quality; choose a stable Flash-family model only when latency, cost, or preview-model risk dominates.
+- Real-provider implementation should use a provider chain: try the configured primary provider first, then the configured fallback only for provider/network/rate-limit failure. Do not fallback when the primary provider returns valid but unfavorable clinical reasoning; that would create provider-shopping behavior.
+- Cache and trace keys must include provider and model name so OpenAI and Gemini outputs for the same packet are not treated as interchangeable.
+- Keep the implementation deliberately small: one provider config reader, one prompt/schema builder, and one normalized provider result shape shared by mock, OpenAI, and Gemini. Avoid separate scoring, packet-building, cache, or UI code paths per provider.
+- Provider fallback should be bounded and auditable. Try at most the configured primary and one configured fallback for a given packet. Store which provider failed, why it failed, and which provider generated the accepted review. Do not silently retry multiple times or cascade across many models.
+- If both providers fail, return an unavailable Quality Review state and show Completion Score only. Do not reuse a stale Quality Adjustment for the new packet.
+- If the fallback provider succeeds, cache the fallback result under its own provider/model namespace. Do not overwrite or pretend it is the primary provider result.
+
 Recommended trace fields to store for each narrative pass:
 
 - Provider.
@@ -1447,7 +1470,7 @@ Implementation staging:
 5. Storage and replay: persist validated review traces in session state first, including input hash, validation status, Quality Adjustment, Final Candidate Score, and compact storyline memory. Reuse cached reviews for identical input hashes. Current implementation artifact: `src/narratives/review_store.py`, validated by `scripts/check_narrative_review_store.py`. This is prototype storage only and does not yet satisfy the durable cross-team baseline requirement.
 6. Minimal UI panel: render Completion Score, Quality Adjustment, Final Candidate Score, Quality Review, and compact Quality Assessment rows. Do not build adjusted treemap yet. Do not expose supported/unsupported evidence fields in the participant panel by default; reserve them for future facilitator/debug views. Revisit whether `score_movement_review.clinical_design_interpretation` should be displayed when real-provider output is implemented. Current implementation artifact: `frontend/views/trial_simulator.py`, using the provider-free packet builder, mock reviewer, and session-state review store.
 7. Hidden baseline continuity: generate/store the hidden baseline review and verify that later iteration reviews use baseline review, previous review, compact non-numeric baseline quality summary, and compact storyline memory consistently. Current implementation is session-level only; it does not yet provide cross-team durable baseline reuse. Current implementation artifacts: `src/narratives/packet_builder.py`, `frontend/views/trial_simulator.py`, and `scripts/check_narrative_packet_builder.py`.
-8. Thin LLM provider wrapper: add the provider abstraction only after packet building, validation, scoring, caching, replay, mock UI work, and deterministic clarification gating. Provider code invokes the model and normalizes JSON only; it should not decide field truth when structured/text inputs are asynchronous. The application owns scoring and returns `clarification_needed` before new scoring/provider review for unresolved material mismatches. Current implementation artifact: `src/narratives/provider.py`, validated by `scripts/check_narrative_provider.py`; the simulator still uses the deterministic mock provider.
+8. Thin LLM provider wrapper: add provider config, prompt/schema scaffolding, and real OpenAI/Gemini provider calls only after packet building, validation, scoring, caching, replay, mock UI work, and deterministic clarification gating. Provider config reads API keys from environment variables or secret managers; it never stores keys in code. Provider code invokes the model and normalizes JSON only; it should not decide field truth when structured/text inputs are asynchronous. The application owns scoring and returns `clarification_needed` before new scoring/provider review for unresolved material mismatches. Current implementation artifact: `src/narratives/provider.py`, validated by `scripts/check_narrative_provider.py`; the simulator still uses the deterministic mock provider.
 9. First adjusted-score visual: add Final Candidate Score View with component cards and the seven-bar grouped chart.
 10. Durable baseline store: add a database-backed baseline review repository keyed by trial/version and input hash. It should use create-if-missing semantics so the first team creates the hidden baseline and later teams reuse it.
 11. Two-branch adjusted treemap: add only after the simpler adjusted view is stable and understandable; defer to V1.1 if it slows the first implementation.
