@@ -185,6 +185,14 @@ def _max_attempts(config: NarrativeProviderConfig) -> int:
     return max(1, int(config.max_retries) + 1)
 
 
+def _gemini_http_options(config: NarrativeProviderConfig, types_module: Any) -> Any:
+    """Build Gemini SDK HTTP controls from the app-owned runtime config."""
+    return types_module.HttpOptions(
+        timeout=int(config.timeout_seconds) * 1000,
+        retry_options=types_module.HttpRetryOptions(attempts=_max_attempts(config)),
+    )
+
+
 def _call_openai_provider(
     packet: dict[str, Any],
     *,
@@ -317,7 +325,8 @@ def _call_gemini_provider(
             seed=config.seed,
             response_mime_type="application/json",
         )
-        client = genai.Client(api_key=settings.api_key)
+        http_options = _gemini_http_options(config, types)
+        client = genai.Client(api_key=settings.api_key, http_options=http_options)
         for attempt in range(1, _max_attempts(config) + 1):
             metadata["attempts"] = attempt
             try:

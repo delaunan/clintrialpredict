@@ -19,6 +19,7 @@ from src.narratives.provider import (  # noqa: E402
     MOCK_MODEL_NAME,
     PROVIDER_MOCK,
     STATUS_CLARIFICATION_NEEDED,
+    _gemini_http_options,
     _score_provider_review,
     review_packet_with_provider_chain,
     review_packet_with_provider,
@@ -102,6 +103,23 @@ def main() -> int:
         errors.append("provider chain should fall back to mock after unavailable openai")
     if fallback_result.get("provider_metadata", {}).get("fallback_after", {}).get("provider") != "openai":
         errors.append("fallback provider result should trace primary provider failure")
+
+    gemini_runtime_config = load_narrative_provider_config({
+        "NARRATIVE_LLM_PROVIDER": "gemini",
+        "NARRATIVE_LLM_FALLBACK_PROVIDER": "gemini",
+        "GEMINI_API_KEY": "test-key",
+        "NARRATIVE_LLM_TIMEOUT_SECONDS": "45",
+        "NARRATIVE_LLM_MAX_RETRIES": "0",
+    })
+    try:
+        from google.genai import types
+        gemini_http_options = _gemini_http_options(gemini_runtime_config, types)
+        if gemini_http_options.timeout != 45000:
+            errors.append("gemini provider should convert timeout seconds to SDK milliseconds")
+        if gemini_http_options.retry_options.attempts != 1:
+            errors.append("gemini provider should disable SDK retries when app max_retries is 0")
+    except Exception as exc:
+        errors.append(f"gemini SDK HTTP option check failed: {exc.__class__.__name__}")
 
     invalid_real_review = _score_provider_review(
         packet,

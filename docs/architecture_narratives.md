@@ -1066,6 +1066,7 @@ Open live-play calibration items before rollout:
 - Repeat timing tests with representative real trial scenarios, not only contract fixtures, before setting production timeout/retry defaults.
 - Make a first qualitative assessment of live participant-review text across several representative real scenarios before deciding whether the prompt should become shorter, more structured, or model-specific.
 - Update the participant UI so Quality Adjustment is clearly integrated with Completion Score into the Final Candidate Score, while still preserving the distinction between XGBoost Completion Score drivers and app-owned Quality Review contributions.
+- During live testing, expose compact timing diagnostics for successful and failed Quality Reviews. The diagnostics should separate hidden-baseline lookup/generation time, visible-review provider/store time, total visible workflow time, provider latency, attempts, cache hits, configured timeout, applied provider timeout, response length, and validation status. These diagnostics belong in an expander for calibration/debugging, not in the main participant narrative.
 
 Recommended trace fields to store for each narrative pass:
 

@@ -4,6 +4,7 @@ import html
 import base64
 import logging
 import re
+import time
 import uuid
 import hashlib
 from datetime import datetime, timezone
@@ -5927,6 +5928,20 @@ def attach_narrative_runtime(trace, runtime):
     return trace
 
 
+def _elapsed_ms(started_at):
+    return int(round((time.monotonic() - started_at) * 1000))
+
+
+def attach_narrative_workflow_metadata(trace, metadata):
+    if not trace:
+        return trace
+    trace = dict(trace)
+    merged = dict(trace.get("workflow_metadata") or {})
+    merged.update({key: value for key, value in dict(metadata or {}).items() if value is not None})
+    trace["workflow_metadata"] = merged
+    return trace
+
+
 def narrative_trace_provider_note(trace):
     if not trace:
         return "Quality Review provider unavailable."
@@ -5941,6 +5956,7 @@ def get_hidden_baseline_review_trace(row, baseline_snapshot):
     if not baseline_snapshot:
         return None
 
+    workflow_started_at = time.monotonic()
     nct_id = str(baseline_snapshot.get("nct_id") or row.get(ID_COL, st.session_state.get("selected_nct_id", "")))
     state_key = get_hidden_baseline_review_trace_state_key(nct_id)
     cached_trace = st.session_state.get(state_key)
@@ -5961,8 +5977,17 @@ def get_hidden_baseline_review_trace(row, baseline_snapshot):
         and cached_trace.get("input_hash") == packet.get("input_hash")
         and narrative_trace_matches_runtime(cached_trace, runtime)
     ):
-        return normalize_hidden_baseline_review_trace(cached_trace)
+        trace = normalize_hidden_baseline_review_trace(cached_trace)
+        trace = attach_narrative_workflow_metadata(trace, {
+            "review_phase": "hidden_baseline",
+            "workflow_latency_ms": _elapsed_ms(workflow_started_at),
+            "session_cache_hit": True,
+            "review_store_cache_hit": bool(trace.get("cached")),
+            "input_hash": packet.get("input_hash"),
+        })
+        return trace
 
+    provider_started_at = time.monotonic()
     trace = replay_or_review_with_provider(
         st.session_state,
         packet=packet,
@@ -5974,6 +5999,14 @@ def get_hidden_baseline_review_trace(row, baseline_snapshot):
     )
     trace = attach_narrative_runtime(trace, runtime)
     trace = normalize_hidden_baseline_review_trace(trace)
+    trace = attach_narrative_workflow_metadata(trace, {
+        "review_phase": "hidden_baseline",
+        "workflow_latency_ms": _elapsed_ms(workflow_started_at),
+        "provider_or_store_latency_ms": _elapsed_ms(provider_started_at),
+        "session_cache_hit": False,
+        "review_store_cache_hit": bool(trace.get("cached")),
+        "input_hash": packet.get("input_hash"),
+    })
     st.session_state[state_key] = trace
     return trace
 
@@ -6003,6 +6036,7 @@ def get_quality_review_trace_for_snapshot(row, snapshot):
     if not snapshot or snapshot.get("source") == "prerecorded_baseline":
         return None
 
+    workflow_started_at = time.monotonic()
     nct_id = str(snapshot.get("nct_id") or row.get(ID_COL, st.session_state.get("selected_nct_id", "")))
     session_id = get_narrative_session_id(nct_id)
     state_key = get_quality_review_trace_state_key(nct_id)
@@ -6019,11 +6053,19 @@ def get_quality_review_trace_for_snapshot(row, snapshot):
         and clarifications_match_trace(cached_trace, user_clarifications)
         and narrative_trace_matches_runtime(cached_trace, runtime)
     ):
-        return cached_trace
+        return attach_narrative_workflow_metadata(cached_trace, {
+            "review_phase": "visible_iteration",
+            "workflow_latency_ms": _elapsed_ms(workflow_started_at),
+            "session_cache_hit": True,
+            "review_store_cache_hit": bool(cached_trace.get("cached")),
+            "current_snapshot_id": current_snapshot_id,
+        })
 
     previous_trace = cached_trace if narrative_trace_matches_runtime(cached_trace, runtime) else None
     baseline_snapshot = get_baseline_prediction_snapshot(nct_id)
+    baseline_started_at = time.monotonic()
     baseline_trace = get_hidden_baseline_review_trace(row, baseline_snapshot)
+    baseline_latency_ms = _elapsed_ms(baseline_started_at)
     compact_storyline_memory = compact_storyline_from_trace(previous_trace)
 
     packet = build_review_packet(
@@ -6043,8 +6085,18 @@ def get_quality_review_trace_for_snapshot(row, snapshot):
         and cached_trace.get("input_hash") == packet.get("input_hash")
         and narrative_trace_matches_runtime(cached_trace, runtime)
     ):
-        return cached_trace
+        return attach_narrative_workflow_metadata(cached_trace, {
+            "review_phase": "visible_iteration",
+            "workflow_latency_ms": _elapsed_ms(workflow_started_at),
+            "baseline_lookup_latency_ms": baseline_latency_ms,
+            "baseline_session_cache_hit": bool((baseline_trace or {}).get("workflow_metadata", {}).get("session_cache_hit")),
+            "baseline_review_store_cache_hit": bool((baseline_trace or {}).get("workflow_metadata", {}).get("review_store_cache_hit")),
+            "session_cache_hit": True,
+            "review_store_cache_hit": bool(cached_trace.get("cached")),
+            "current_snapshot_id": current_snapshot_id,
+        })
 
+    visible_review_started_at = time.monotonic()
     trace = replay_or_review_with_provider(
         st.session_state,
         packet=packet,
@@ -6055,6 +6107,19 @@ def get_quality_review_trace_for_snapshot(row, snapshot):
         use_provider_chain=bool(runtime["use_provider_chain"]),
     )
     trace = attach_narrative_runtime(trace, runtime)
+    trace = attach_narrative_workflow_metadata(trace, {
+        "review_phase": "visible_iteration",
+        "workflow_latency_ms": _elapsed_ms(workflow_started_at),
+        "baseline_lookup_latency_ms": baseline_latency_ms,
+        "visible_provider_or_store_latency_ms": _elapsed_ms(visible_review_started_at),
+        "baseline_session_cache_hit": bool((baseline_trace or {}).get("workflow_metadata", {}).get("session_cache_hit")),
+        "baseline_review_store_cache_hit": bool((baseline_trace or {}).get("workflow_metadata", {}).get("review_store_cache_hit")),
+        "baseline_provider_latency_ms": (baseline_trace or {}).get("provider_metadata", {}).get("latency_ms"),
+        "session_cache_hit": False,
+        "review_store_cache_hit": bool(trace.get("cached")),
+        "current_snapshot_id": current_snapshot_id,
+        "input_hash": packet.get("input_hash"),
+    })
     st.session_state[state_key] = trace
     return trace
 
@@ -8797,14 +8862,27 @@ def _quality_review_diagnostics(trace):
         return
 
     metadata = trace.get("provider_metadata") or {}
+    workflow = trace.get("workflow_metadata") or {}
     diagnostics = {
         "status": trace.get("status"),
         "failure_reason": trace.get("failure_reason"),
+        "workflow_timing": {
+            "review_phase": workflow.get("review_phase"),
+            "workflow_latency_ms": workflow.get("workflow_latency_ms"),
+            "baseline_lookup_latency_ms": workflow.get("baseline_lookup_latency_ms"),
+            "visible_provider_or_store_latency_ms": workflow.get("visible_provider_or_store_latency_ms"),
+            "provider_or_store_latency_ms": workflow.get("provider_or_store_latency_ms"),
+            "baseline_provider_latency_ms": workflow.get("baseline_provider_latency_ms"),
+            "session_cache_hit": workflow.get("session_cache_hit"),
+            "review_store_cache_hit": workflow.get("review_store_cache_hit"),
+            "baseline_session_cache_hit": workflow.get("baseline_session_cache_hit"),
+            "baseline_review_store_cache_hit": workflow.get("baseline_review_store_cache_hit"),
+        },
         "provider": trace.get("provider"),
         "model_name": trace.get("model_name"),
         "prompt_mode": metadata.get("prompt_mode"),
         "attempts": metadata.get("attempts"),
-        "latency_ms": metadata.get("latency_ms"),
+        "provider_latency_ms": metadata.get("latency_ms"),
         "response_text_length": metadata.get("response_text_length"),
         "parsed_json_object": metadata.get("parsed_json_object"),
         "parsed_payload_type": metadata.get("parsed_payload_type"),
@@ -8822,7 +8900,13 @@ def _quality_review_diagnostics(trace):
         for key, value in diagnostics.items()
         if value not in (None, "", [], {})
     }
-    with st.expander("Technical diagnostics", expanded=False):
+    if isinstance(diagnostics.get("workflow_timing"), dict):
+        diagnostics["workflow_timing"] = {
+            key: value
+            for key, value in diagnostics["workflow_timing"].items()
+            if value not in (None, "", [], {})
+        }
+    with st.expander("Quality Review timing and diagnostics", expanded=False):
         st.json(diagnostics)
 
 
@@ -9089,6 +9173,7 @@ def render_quality_review_panel(row):
         ),
         unsafe_allow_html=True,
     )
+    _quality_review_diagnostics(trace)
 
 
 def get_simulation_pillar_delta_map():
