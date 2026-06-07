@@ -60,12 +60,20 @@ def _check_fixture(fixture: dict, errors: list[str]) -> None:
         )
 
     quality_assessment = scoring.get("quality_assessment") or {}
-    if set((quality_assessment.get("pillars") or {})) != {
+    pillars = quality_assessment.get("pillars") or {}
+    if set(pillars) != {
         "evidence_coherence",
         "population_strategy_fit",
         "execution_plausibility",
     }:
         errors.append(f"{fixture_id}: missing expected Quality Assessment pillars")
+    for pillar_name, pillar in pillars.items():
+        domain_total = sum(float(domain.get("points", 0)) for domain in (pillar.get("domains") or {}).values())
+        if domain_total != pillar.get("points"):
+            errors.append(f"{fixture_id}: {pillar_name} domain points should add up to pillar points")
+    pillar_total = sum(float(pillar.get("points", 0)) for pillar in pillars.values())
+    if pillar_total != scoring.get("quality_adjustment"):
+        errors.append(f"{fixture_id}: pillar points should add up to Quality Adjustment")
 
 
 def _check_evidence_required(errors: list[str]) -> None:
@@ -104,7 +112,7 @@ def _check_unsupported_evidence_required(errors: list[str]) -> None:
         errors.append("unsupported evidence guardrail should not report unsupported fields as supported")
 
 
-def _check_cap_reconciliation(errors: list[str]) -> None:
+def _check_score_reconciliation(errors: list[str]) -> None:
     packet, review = _review_template()
     domains = review["quality_review_domains"]
     domains["scientific_rigor"] = {
@@ -120,23 +128,29 @@ def _check_cap_reconciliation(errors: list[str]) -> None:
         .get("domains", {})
     )
     if evidence_domains.get("scientific_rigor", {}).get("points") != -3:
-        errors.append("subcategory cap failed: conflicting should be capped from -4 to -3")
+        errors.append("subcategory mapping failed: conflicting should map to -3")
 
     packet, review = _review_template()
     review["quality_review_domains"]["scientific_rigor"] = {
         "rating": "conflicting",
-        "rationale": "Pillar cap test.",
+        "rationale": "Pillar reconciliation test.",
         "evidence_fields": ["endpoint_rigor_ml"],
     }
     review["quality_review_domains"]["endpoint_and_comparator_logic"] = {
         "rating": "conflicting",
-        "rationale": "Pillar cap test.",
+        "rationale": "Pillar reconciliation test.",
         "evidence_fields": ["comparator_benchmark_ml"],
     }
     result = validate_and_score_review(packet, review)
     evidence_pillar = result["scoring"]["quality_assessment"]["pillars"]["evidence_coherence"]
-    if evidence_pillar.get("raw_points") != -6 or evidence_pillar.get("points") != -4:
-        errors.append("pillar cap failed: evidence_coherence should cap raw -6 to -4")
+    if evidence_pillar.get("raw_points") != -6 or evidence_pillar.get("points") != -6:
+        errors.append("pillar reconciliation failed: evidence_coherence points should equal raw domain total")
+    domain_total = sum(
+        float(domain.get("points", 0))
+        for domain in (evidence_pillar.get("domains") or {}).values()
+    )
+    if domain_total != evidence_pillar.get("points"):
+        errors.append("domain points should add up to the displayed pillar value")
 
     packet, review = _review_template()
     packet["model_interpretation"]["completion_score"] = 3
@@ -149,15 +163,73 @@ def _check_cap_reconciliation(errors: list[str]) -> None:
             rating = "conflicting"
         review["quality_review_domains"][domain_name] = {
             "rating": rating,
-            "rationale": "Total cap test.",
+            "rationale": "Total reconciliation test.",
             "evidence_fields": ["phase_ml"],
         }
     result = validate_and_score_review(packet, review)
     scoring = result["scoring"]
-    if scoring.get("quality_adjustment") != -10:
-        errors.append("total cap failed: Quality Adjustment should clamp to -10")
+    pillar_total = sum(
+        float(pillar.get("points", 0))
+        for pillar in scoring.get("quality_assessment", {}).get("pillars", {}).values()
+    )
+    if scoring.get("quality_adjustment") != pillar_total:
+        errors.append("Quality Adjustment should equal the sum of pillar values")
+    if scoring.get("quality_adjustment") != -21:
+        errors.append("total reconciliation failed: Quality Adjustment should preserve uncapped pillar total")
     if scoring.get("final_candidate_score") != 0:
         errors.append("final score cap failed: Final Candidate Score should clamp to 0")
+
+    packet, review = _review_template()
+    review["quality_review_domains"]["text_consistency"] = {
+        "rating": "minor_tension",
+        "rationale": "Half-point mapping test.",
+        "evidence_fields": ["summary_ui"],
+    }
+    result = validate_and_score_review(packet, review)
+    scoring = result["scoring"]
+    if scoring.get("quality_adjustment") != -0.5:
+        errors.append("half-point mapping failed: minor_tension should contribute -0.5")
+    if scoring.get("final_candidate_score") != packet["model_interpretation"]["completion_score"] - 0.5:
+        errors.append("half-point final score failed: Final Candidate Score should preserve .5 values")
+
+    packet, review = _review_template()
+    review["quality_review_domains"]["scientific_rigor"] = {
+        "rating": "supportive",
+        "rationale": "Middle positive mapping test.",
+        "evidence_fields": ["endpoint_rigor_ml"],
+    }
+    review["quality_review_domains"]["change_integrity"] = {
+        "rating": "partly_improved",
+        "rationale": "Middle positive change mapping test.",
+        "evidence_fields": ["phase_ml"],
+    }
+    result = validate_and_score_review(packet, review)
+    scoring = result["scoring"]
+    if scoring.get("quality_adjustment") != 2:
+        errors.append("middle positive mapping failed: supportive and partly_improved should each contribute +1")
+    if scoring.get("final_candidate_score") != packet["model_interpretation"]["completion_score"] + 2:
+        errors.append("middle positive final score failed: Final Candidate Score should add both +1 ratings")
+
+    packet, review = _review_template()
+    packet["model_interpretation"]["completion_score"] = 88
+    for domain_name in REQUIRED_REVIEW_DOMAINS:
+        if domain_name == "change_integrity":
+            rating = "improved"
+        elif domain_name == "text_consistency":
+            rating = "consistent"
+        else:
+            rating = "strong"
+        review["quality_review_domains"][domain_name] = {
+            "rating": rating,
+            "rationale": "Positive ceiling test.",
+            "evidence_fields": ["phase_ml"],
+        }
+    result = validate_and_score_review(packet, review)
+    scoring = result["scoring"]
+    if scoring.get("quality_adjustment") != 12:
+        errors.append("positive ceiling failed: six positive domains should add to +12")
+    if scoring.get("final_candidate_score") != 100:
+        errors.append("positive final score cap failed: Final Candidate Score should clamp to 100")
 
 
 def _check_app_owned_score_fields_ignored(errors: list[str]) -> None:
@@ -182,7 +254,7 @@ def main() -> int:
         _check_fixture(fixture, errors)
     _check_evidence_required(errors)
     _check_unsupported_evidence_required(errors)
-    _check_cap_reconciliation(errors)
+    _check_score_reconciliation(errors)
     _check_app_owned_score_fields_ignored(errors)
 
     if errors:

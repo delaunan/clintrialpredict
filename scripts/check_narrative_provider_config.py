@@ -23,6 +23,7 @@ from src.narratives.provider_config import (  # noqa: E402
     PROVIDER_GEMINI,
     PROVIDER_OPENAI,
     load_narrative_provider_config,
+    provider_config_cache_namespace,
 )
 
 
@@ -134,6 +135,21 @@ def _check_same_provider_disables_fallback(errors: list[str]) -> None:
         errors.append("fallback should be disabled when it matches primary provider")
 
 
+def _check_cache_namespace_tracks_generation_controls(errors: list[str]) -> None:
+    base = load_narrative_provider_config({
+        "OPENAI_API_KEY": "openai-secret",
+        "GEMINI_API_KEY": "gemini-secret",
+        "NARRATIVE_LLM_SEED": "20260607",
+    })
+    changed = load_narrative_provider_config({
+        "OPENAI_API_KEY": "openai-secret",
+        "GEMINI_API_KEY": "gemini-secret",
+        "NARRATIVE_LLM_SEED": "20260608",
+    })
+    if provider_config_cache_namespace(base) == provider_config_cache_namespace(changed):
+        errors.append("provider cache namespace should change when generation controls change")
+
+
 def _check_local_env_loads_without_printing_secrets(errors: list[str]) -> None:
     load_dotenv()
     config = load_narrative_provider_config(os.environ)
@@ -151,6 +167,7 @@ def main() -> int:
     _check_gemini_key_precedence(errors)
     _check_invalid_values(errors)
     _check_same_provider_disables_fallback(errors)
+    _check_cache_namespace_tracks_generation_controls(errors)
     _check_local_env_loads_without_printing_secrets(errors)
 
     if errors:

@@ -8,6 +8,7 @@ normalization only.
 from __future__ import annotations
 
 import json
+import time
 from typing import Any
 
 import requests
@@ -213,6 +214,7 @@ def _call_openai_provider(
     }
     response_payload = None
     last_error = None
+    started_at = time.monotonic()
     for attempt in range(1, _max_attempts(config) + 1):
         metadata["attempts"] = attempt
         try:
@@ -227,9 +229,12 @@ def _call_openai_provider(
             )
             response.raise_for_status()
             response_payload = response.json()
+            metadata["http_status"] = response.status_code
             break
         except Exception as exc:
             last_error = exc
+            metadata["last_error_type"] = exc.__class__.__name__
+    metadata["latency_ms"] = int(round((time.monotonic() - started_at) * 1000))
     if response_payload is None:
         return _failure_result(
             packet,
@@ -253,7 +258,11 @@ def _call_openai_provider(
             provider_metadata=metadata,
         )
 
-    review = _parse_json_object(_openai_response_text(response_payload))
+    response_text = _openai_response_text(response_payload)
+    metadata["response_status"] = response_payload.get("status")
+    metadata["response_text_length"] = len(response_text)
+    review = _parse_json_object(response_text)
+    metadata["parsed_json_object"] = isinstance(review, dict)
     if review is None:
         return _failure_result(
             packet,
@@ -294,6 +303,7 @@ def _call_gemini_provider(
     )
     response = None
     last_error = None
+    started_at = time.monotonic()
     try:
         from google import genai
         from google.genai import types
@@ -319,6 +329,8 @@ def _call_gemini_provider(
                 break
             except Exception as exc:
                 last_error = exc
+                metadata["last_error_type"] = exc.__class__.__name__
+    metadata["latency_ms"] = int(round((time.monotonic() - started_at) * 1000))
 
     if response is None:
         return _failure_result(
@@ -331,7 +343,11 @@ def _call_gemini_provider(
         )
 
     parsed_payload = getattr(response, "parsed", None)
-    review = parsed_payload if isinstance(parsed_payload, dict) else _parse_json_object(getattr(response, "text", ""))
+    response_text = str(getattr(response, "text", "") or "")
+    metadata["parsed_payload_type"] = type(parsed_payload).__name__ if parsed_payload is not None else None
+    metadata["response_text_length"] = len(response_text)
+    review = parsed_payload if isinstance(parsed_payload, dict) else _parse_json_object(response_text)
+    metadata["parsed_json_object"] = isinstance(review, dict)
     if review is None:
         return _failure_result(
             packet,

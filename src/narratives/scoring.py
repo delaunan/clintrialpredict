@@ -9,24 +9,26 @@ from src.narratives.contract_fixtures import REQUIRED_REVIEW_DOMAINS
 from src.narratives.packet_builder import stable_packet_hash
 
 STANDARD_RATINGS = {
-    "strong": 1,
-    "acceptable": 0,
-    "weak": -2,
-    "conflicting": -4,
+    "strong": 2.0,
+    "supportive": 1.0,
+    "acceptable": 0.0,
+    "weak": -1.5,
+    "conflicting": -3.0,
 }
 
 CHANGE_INTEGRITY_RATINGS = {
-    "improved": 1,
-    "neutral": 0,
-    "simplified": -2,
-    "potential_shortcut": -4,
+    "improved": 2.0,
+    "partly_improved": 1.0,
+    "neutral": 0.0,
+    "simplified": -1.5,
+    "potential_shortcut": -3.0,
 }
 
 TEXT_CONSISTENCY_RATINGS = {
-    "consistent": 0,
-    "minor_tension": -1,
-    "material_tension": -2,
-    "contradiction": -4,
+    "consistent": 0.0,
+    "minor_tension": -0.5,
+    "material_tension": -1.5,
+    "contradiction": -3.0,
 }
 
 DOMAIN_RATING_POINTS = {
@@ -54,12 +56,8 @@ PILLAR_LABELS = {
     "execution_plausibility": "Execution Plausibility",
 }
 
-PILLAR_CAP_MIN = -4
-PILLAR_CAP_MAX = 3
-SUBCATEGORY_CAP_MIN = -3
-SUBCATEGORY_CAP_MAX = 2
-QUALITY_ADJUSTMENT_MIN = -10
-QUALITY_ADJUSTMENT_MAX = 10
+SUBCATEGORY_CAP_MIN = -3.0
+SUBCATEGORY_CAP_MAX = 2.0
 FINAL_SCORE_MIN = 0
 FINAL_SCORE_MAX = 100
 
@@ -120,8 +118,13 @@ EXECUTION_FIELD_TOKENS = (
 )
 
 
-def clamp(value: int | float, minimum: int, maximum: int) -> int:
-    return int(max(minimum, min(maximum, round(float(value)))))
+def _clean_points(value: int | float) -> int | float:
+    numeric = round(float(value), 1)
+    return int(numeric) if numeric.is_integer() else numeric
+
+
+def clamp(value: int | float, minimum: int | float, maximum: int | float) -> int | float:
+    return _clean_points(max(minimum, min(maximum, float(value))))
 
 
 def _field_matches(evidence_fields: list[str], tokens: tuple[str, ...]) -> bool:
@@ -144,10 +147,6 @@ def _domain_pillar(domain_name: str, evidence_fields: list[str]) -> str:
     if domain_name == "text_consistency":
         return route_text_consistency_pillar(evidence_fields)
     return DOMAIN_DEFAULT_PILLARS[domain_name]
-
-
-def _is_positive_rating(domain_name: str, rating: str) -> bool:
-    return DOMAIN_RATING_POINTS[domain_name].get(rating, 0) > 0
 
 
 def _add_nested_evidence_refs(refs: set[str], prefix: str, value: Any) -> None:
@@ -324,11 +323,10 @@ def _quality_contributions(validated_domains: dict[str, dict[str, Any]]) -> dict
         for key, label in PILLAR_LABELS.items()
     }
 
-    positive_domains_with_evidence = 0
     for domain_name, domain in validated_domains.items():
         evidence_fields = domain.get("evidence_fields") or []
         pillar_key = _domain_pillar(domain_name, evidence_fields)
-        raw_points = int(domain.get("point_effect", 0))
+        raw_points = float(domain.get("point_effect", 0))
         subcategory_points = clamp(raw_points, SUBCATEGORY_CAP_MIN, SUBCATEGORY_CAP_MAX)
         pillars[pillar_key]["domains"][domain_name] = {
             "rating": domain.get("rating"),
@@ -339,16 +337,12 @@ def _quality_contributions(validated_domains: dict[str, dict[str, Any]]) -> dict
             "unsupported_evidence_fields": deepcopy(domain.get("unsupported_evidence_fields") or []),
         }
         pillars[pillar_key]["raw_points"] += subcategory_points
-        if _is_positive_rating(domain_name, str(domain.get("rating"))) and _domain_supported_evidence_fields(domain):
-            positive_domains_with_evidence += 1
 
     for pillar in pillars.values():
-        pillar["points"] = clamp(pillar["raw_points"], PILLAR_CAP_MIN, PILLAR_CAP_MAX)
+        pillar["points"] = _clean_points(pillar["raw_points"])
 
-    rating_points = sum(int(pillar["points"]) for pillar in pillars.values())
-    if rating_points > 0 and positive_domains_with_evidence == 0:
-        rating_points = 0
-    quality_adjustment = clamp(rating_points, QUALITY_ADJUSTMENT_MIN, QUALITY_ADJUSTMENT_MAX)
+    rating_points = _clean_points(sum(float(pillar["points"]) for pillar in pillars.values()))
+    quality_adjustment = _clean_points(rating_points)
 
     return {
         "pillars": pillars,

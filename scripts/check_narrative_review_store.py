@@ -101,6 +101,31 @@ def main() -> int:
     if chain_trace.get("provider_metadata", {}).get("fallback_after", {}).get("provider") != "openai":
         errors.append("review store provider-chain trace should preserve fallback metadata")
 
+    cached_chain_trace = replay_or_review_with_provider(
+        state,
+        packet=packet,
+        session_id="chain-session-repeat",
+        config=missing_key_config,
+        use_provider_chain=True,
+    )
+    if cached_chain_trace.get("provider") != "mock" or cached_chain_trace.get("cached") is not True:
+        errors.append("provider-chain fallback result should replay from fallback cache when primary is unavailable")
+
+    available_primary_same_settings = load_narrative_provider_config({
+        "NARRATIVE_LLM_PROVIDER": "openai",
+        "NARRATIVE_LLM_FALLBACK_PROVIDER": "mock",
+        "OPENAI_API_KEY": "fake-key-for-cache-check",
+    })
+    cached_despite_primary_key = replay_or_review_with_provider(
+        state,
+        packet=packet,
+        session_id="chain-session-primary-now-configured",
+        config=available_primary_same_settings,
+        use_provider_chain=True,
+    )
+    if cached_despite_primary_key.get("provider") != "mock" or cached_despite_primary_key.get("cached") is not True:
+        errors.append("provider-chain cache should reuse same-scenario review before calling newly available primary")
+
     latest = latest_trace_for_session(state, session_id)
     if not latest:
         errors.append("latest trace lookup failed")

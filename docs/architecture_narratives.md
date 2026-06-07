@@ -10,7 +10,7 @@ Efficient update rule: change this file when narrative inputs/outputs, LLM contr
 
 ## 1. Purpose Of The Narrative Architecture
 
-This document defines the staged design for adding a serious-game narrative layer around single-trial simulation in ClinTrialPredict. Current implementation covers contract fixtures, deterministic packet building, validation/scoring, mock review, session-state storage/replay, minimal Quality Review UI, hidden baseline continuity, provider configuration, real OpenAI/Gemini provider boundaries, and prompt-mode scaffolding. The simulator still uses the deterministic mock provider by default until live-provider UI activation is explicitly enabled.
+This document defines the staged design for adding a serious-game narrative layer around single-trial simulation in ClinTrialPredict. Current implementation covers contract fixtures, deterministic packet building, validation/scoring, mock review, session-state storage/replay, minimal Quality Review UI, hidden baseline continuity, provider configuration, real OpenAI/Gemini provider boundaries, prompt-mode scaffolding, and opt-in live-provider UI routing. The simulator still uses the deterministic mock provider by default unless `NARRATIVE_LIVE_REVIEW_ENABLED=1` explicitly enables the live provider chain.
 
 The current edit/simulation workflow remains the foundation. A facilitator selects an existing trial, participants adjust structured Trial Features, and the application calls the existing prediction flow to produce a completion score with SHAP-derived impact decomposition.
 
@@ -28,11 +28,11 @@ The LLM layer is separate from the existing prediction system. The serious-game 
 
 The LLM must not generate the final score. The LLM returns structured ratings, evidence fields, narrative, and continuity fields. The application then performs two deterministic calculations:
 
-1. Convert validated Quality Review ratings into a bounded `Quality Adjustment`.
+1. Convert validated Quality Review ratings into a reconciled `Quality Adjustment`.
 2. Add the Quality Adjustment to the XGBoost `Completion Score` to calculate `Final Candidate Score`.
 
 ```text
-quality_adjustment = clamp(app_mapped_review_points, -10, +10)
+quality_adjustment = sum(app_mapped_quality_pillar_points)
 
 final_candidate_score = clamp(
     completion_score + quality_adjustment,
@@ -41,7 +41,7 @@ final_candidate_score = clamp(
 )
 ```
 
-The initial V1 range should not use `-20` to `+20`, because that would allow the LLM-derived layer to dominate the XGBoost Completion Score. Future calibration can revisit the mapping after playtesting, but the total adjustment should remain modest.
+The V1 scoring display should reconcile exactly: domain/subcategory contributions add up to their Quality Assessment pillar, and Quality Assessment pillars add up to the Quality Adjustment. There is no separate pillar cap and no separate total Quality Adjustment cap. The final candidate score is still clamped to the 0-100 display range.
 
 Example:
 
@@ -60,7 +60,7 @@ Terminology:
 
 - `Completion Score` = modelled likelihood of completion.
 - `Quality Review` = participant-facing narrative explanation and structured LLM review of design coherence, rigor, operational fit, text consistency, and change integrity.
-- `Quality Adjustment` = bounded application-calculated point bonus or penalty.
+- `Quality Adjustment` = application-calculated point bonus or penalty derived from reconciled Quality Assessment pillars.
 - `Final Candidate Score` = Completion Score plus Quality Adjustment.
 
 In plain scoring terms, `Final Candidate Score = Completion Score + Quality Adjustment`, with application-level bounds applied.
@@ -281,6 +281,7 @@ A difficult design can receive a positive Quality Adjustment if the participant 
 Recommended V1 review ratings:
 
 - `strong`: coherent, rigorous, and strategically defensible in the current context.
+- `supportive`: positive and defensible, but not enough to deserve the top positive rating.
 - `acceptable`: balanced, with strengths outweighing trade-offs.
 - `weak`: unresolved weakness or simplification that needs discussion.
 - `conflicting`: meaningful evidence, feasibility, text-consistency, or change-integrity concern.
@@ -288,6 +289,7 @@ Recommended V1 review ratings:
 For change integrity, use:
 
 - `improved`: the path appears to strengthen the design.
+- `partly_improved`: the path appears directionally positive, but with limited or mixed support.
 - `neutral`: the change appears broadly neutral for quality.
 - `simplified`: the change simplifies execution but may reduce evidence value.
 - `potential_shortcut`: the change appears score-seeking or weakens defensibility.
@@ -299,7 +301,7 @@ For text consistency, use:
 - `material_tension`.
 - `contradiction`.
 
-The application should map these validated ratings to a bounded Quality Adjustment. A concern should affect the Quality Adjustment only when the LLM provides supporting `evidence_fields`; otherwise it can appear in the narrative but should not move the score.
+The application should map these validated ratings to a reconciled Quality Adjustment. A concern should affect the Quality Adjustment only when the LLM provides supporting `evidence_fields`; otherwise it can appear in the narrative but should not move the score.
 
 ### Quality Assessment Pillars For Visuals
 
@@ -359,15 +361,17 @@ This keeps model-facing `Execution Framework` impacts distinct from non-XGBoost 
 
 For reproducibility, the application should derive these three plotted Quality Assessment pillars from validated `quality_review_domains`. The LLM may provide suggested grouping language, but the app owns the final pillar/subcategory point mapping used in charts and score math.
 
-Recommended V1 point caps before total clamping:
+Recommended V1 point mapping:
 
 ```text
-Each Quality Assessment pillar: normally -4 to +3 points.
 Each Quality Assessment subcategory: normally -3 to +2 points.
-Total Quality Adjustment: clamp to -10 to +10.
+Ratings may map to whole-point or half-point values.
+Each Quality Assessment pillar: sum of its subcategories.
+Total Quality Adjustment: sum of Quality Assessment pillars.
 ```
 
-This prevents one quality dimension from dominating the Final Candidate Score and keeps the Quality Adjustment modest relative to the XGBoost Completion Score.
+This keeps the displayed Quality Assessment internally reconciled. If later playtesting shows that Quality Adjustment is too strong, adjust domain rating weights rather than adding hidden pillar or total caps that make rows fail to add up.
+With the current V1 mapping, the maximum Quality Adjustment is `+12` because six non-text quality domains can each contribute `+2`; `text_consistency` is neutral at best. The minimum Quality Adjustment is `-21` because seven domains can each contribute `-3`.
 
 ## 9. Shortcut Detection Concept
 
@@ -451,7 +455,7 @@ Operational assumptions should not dominate the Quality Adjustment. Planned Enro
 Quality Assessment -> Execution Plausibility -> Operational Scale Fit
 ```
 
-They remain bounded by the Quality Assessment pillar/subcategory caps. Operational benchmark status alone is context, not a penalty; it becomes score-relevant only when combined with coherent supporting or conflicting design evidence.
+They remain controlled by the Quality Assessment subcategory/domain mapping. Operational benchmark status alone is context, not a penalty; it becomes score-relevant only when combined with coherent supporting or conflicting design evidence.
 
 ## 11. Input Payload Architecture
 
@@ -661,9 +665,9 @@ Narrative packets should keep scenario edit facts separate from model explanatio
 
 The LLM should use `field_changes` to explain what changed in the scenario and `xgboost_impact_changes` to weight which model-explanation movements were material. It should not infer that every model impact movement was directly caused by a single changed field.
 
-Before a new prediction result is committed or displayed, the application may run a conservative structured/text alignment gate. This gate is deterministic and intentionally small in V1. It looks only for a few obvious material mismatches, starting with endpoint-structure and placebo/control signals that appear inconsistent between Trial Features and editable text. When a material mismatch is detected, the prediction workflow pauses before new scoring. The participant either corrects the structured field/text or adds a short explanation. That explanation becomes `clarification_context` in the review packet and is available to the LLM as participant scenario context.
+Before a new prediction result is committed or displayed, the application may run a conservative structured/text alignment gate. This gate is deterministic and intentionally small in V1. It looks only for a few obvious material mismatches, starting with endpoint-structure, endpoint-rigor, and placebo/control signals that appear inconsistent between Trial Features and editable text. For example, if the structured endpoint rigor is set to hard clinical outcome but the endpoint text clearly describes immunogenicity, antibody titers, seroprotection, biomarker, or surrogate evidence, the prediction workflow should pause before new scoring. The participant either corrects the structured field/text or adds a short explanation. That explanation becomes `clarification_context` in the review packet and is available to the LLM as participant scenario context.
 
-The alignment gate should not become a broad NLP adjudication engine in V1. Its job is to prevent the LLM from silently deciding which field is true when the scenario may simply be asynchronous. Ambiguous or low-confidence tensions should continue into the Quality Review as narrative context rather than blocking review. Additional deterministic mismatch checks, such as endpoint timing, comparator, biomarker, or population-age checks, should be added only after they have low false-positive risk and fixture coverage. A future LLM alignment pass may provide broader semantic comparison, but its findings should be treated as clarification suggestions with confidence/severity, not automatic truth or direct scoring.
+The alignment gate should not become a broad NLP adjudication engine in V1. Its job is to prevent the LLM from silently deciding which field is true when the scenario may simply be asynchronous. Ambiguous or low-confidence tensions should continue into the Quality Review as narrative context rather than blocking review. Additional deterministic mismatch checks, such as endpoint timing, comparator, or population-age checks, should be added only after they have low false-positive risk and fixture coverage. A future LLM alignment pass may provide broader semantic comparison, but its findings should be treated as clarification suggestions with confidence/severity, not automatic truth or direct scoring.
 
 ## 12. Output JSON Contract
 
@@ -683,32 +687,32 @@ Proposed contract:
   },
   "quality_review_domains": {
     "development_question_fit": {
-      "rating": "strong | acceptable | weak | conflicting",
+      "rating": "strong | supportive | acceptable | weak | conflicting",
       "rationale": "...",
       "evidence_fields": []
     },
     "scientific_rigor": {
-      "rating": "strong | acceptable | weak | conflicting",
+      "rating": "strong | supportive | acceptable | weak | conflicting",
       "rationale": "...",
       "evidence_fields": []
     },
     "population_relevance": {
-      "rating": "strong | acceptable | weak | conflicting",
+      "rating": "strong | supportive | acceptable | weak | conflicting",
       "rationale": "...",
       "evidence_fields": []
     },
     "endpoint_and_comparator_logic": {
-      "rating": "strong | acceptable | weak | conflicting",
+      "rating": "strong | supportive | acceptable | weak | conflicting",
       "rationale": "...",
       "evidence_fields": []
     },
     "operational_scale_fit": {
-      "rating": "strong | acceptable | weak | conflicting",
+      "rating": "strong | supportive | acceptable | weak | conflicting",
       "rationale": "...",
       "evidence_fields": []
     },
     "change_integrity": {
-      "rating": "improved | neutral | simplified | potential_shortcut",
+      "rating": "improved | partly_improved | neutral | simplified | potential_shortcut",
       "rationale": "...",
       "evidence_fields": []
     },
@@ -729,7 +733,7 @@ Proposed contract:
   },
   "facilitator_view_optional": {
     "shortcut_risk": "low | moderate | high",
-    "change_integrity": "improved | neutral | simplified | potential_shortcut | unclear",
+    "change_integrity": "improved | partly_improved | neutral | simplified | potential_shortcut | unclear",
     "main_tradeoff": "...",
     "coherence_concern": "...",
     "suggested_facilitator_probe": "...",
@@ -754,6 +758,8 @@ Proposed contract:
 
 `facilitator_view_optional` may be omitted in the first V1 implementation. The minimum provider contract is the participant review, quality review domains, continuity fields, and trace fields needed for validation and replay.
 
+The provider prompt should also include qualitative `rating_guidance_by_domain` for the allowed rating labels. This guidance explains labels such as `supportive` and `partly_improved` in clinical terms so the LLM can choose the right category. It is not model-owned scoring, and it should not expose or ask the provider to calculate point values.
+
 Participant-facing narrative should translate model evidence into clinical trial / pharma development language. The provider may use `field_changes`, `xgboost_impact_changes`, `score_delta`, and pillar/subcategory movement internally, but visible explanations should avoid technical model terms such as SHAP, feature impact, XGBoost movement, or pillar delta unless the facilitator view explicitly asks for model diagnostics. Preferred language should discuss endpoint maturity, evidence strength, comparator credibility, blinding/control implications, recruitment burden, trial duration, patient population fit, operational complexity, execution feasibility, development strategy, design shortcut risk, and regulatory persuasiveness.
 
 The LLM does not return `Quality Adjustment`, `Final Candidate Score`, or final Quality Assessment pillar/subcategory point contributions. The application derives them from validated `quality_review_domains`, evidence fields, and the documented deterministic mapping. If a provider returns app-owned score fields, validation should mark them as ignored and the application should still calculate its own values. This keeps plotted Quality Assessment contributions reproducible.
@@ -770,7 +776,7 @@ rating_points =
   + population_strategy_points
   + execution_plausibility_points
 
-quality_adjustment = clamp(rating_points, -10, +10)
+quality_adjustment = rating_points
 
 final_candidate_score = clamp(
     completion_score + quality_adjustment,
@@ -782,25 +788,29 @@ final_candidate_score = clamp(
 Suggested initial V1 mapping:
 
 ```text
-strong = +1
+strong = +2
+supportive = +1
 acceptable = 0
-weak = -2
-conflicting = -4
+weak = -1.5
+conflicting = -3
 
 change_integrity:
-improved = +1
+improved = +2
+partly_improved = +1
 neutral = 0
-simplified = -2
-potential_shortcut = -4
+simplified = -1.5
+potential_shortcut = -3
 
 text_consistency:
 consistent = 0
-minor_tension = -1
-material_tension = -2
-contradiction = -4
+minor_tension = -0.5
+material_tension = -1.5
+contradiction = -3
 ```
 
-The final score should be rounded by application logic using a documented UI rule. A domain rating should affect the Quality Adjustment only when the LLM provides supporting `evidence_fields`; otherwise the point effect should be zero and the issue can remain narrative-only. Evidence fields must also reference evidence available in the review packet. Unsupported evidence references are preserved for auditability but do not move the Quality Adjustment.
+The middle positive ratings, `supportive` and `partly_improved`, allow the review to recognize directionally favorable design quality without forcing every positive observation into the top rating. The maximum Quality Adjustment remains `+12`; the middle ratings add nuance rather than increasing the ceiling.
+
+The final score should preserve half-point values when they occur and display one decimal only when needed. A domain rating should affect the Quality Adjustment only when the LLM provides supporting `evidence_fields`; otherwise the point effect should be zero and the issue can remain narrative-only. Evidence fields must also reference evidence available in the review packet. Unsupported evidence references are preserved for auditability but do not move the Quality Adjustment.
 
 Allowed evidence references may cite:
 
@@ -891,7 +901,7 @@ Do not create fake SHAP attribution. Quality Assessment values are not SHAP valu
 
 Operational assumptions should not be redistributed into the XGBoost `Execution Framework` branch. In adjusted view, Planned Enrollment, Planned Sites, and Planned Duration should contribute only through `Quality Assessment -> Execution Plausibility -> Operational Scale Fit`.
 
-The minimal participant panel does not need to expose all validation/debug fields. It may show Completion Score, Quality Adjustment, Final Candidate Score, the three Quality Assessment pillars, and concise participant-review narrative. Future facilitator or debug views should consider exposing packet-supported versus unsupported `evidence_fields` from `quality_assessment` so facilitators can audit whether a review rating was grounded in packet evidence. Future real-provider UI work should also decide whether `score_movement_review.clinical_design_interpretation` becomes visible in the participant panel, since it is intended to translate model movement into clinical trial / pharma development language.
+The minimal participant panel does not need to expose all validation/debug fields. It should show Completion Score, Quality Adjustment, Final Candidate Score, the three Quality Assessment pillars, signed domain contribution direction, and concise participant-review narrative. It should not expose raw LLM rating labels such as `supportive`, `weak`, or `partly_improved` in the participant panel; those categories are consumed by the application to calculate and audit the score. Future facilitator or debug views should consider exposing packet-supported versus unsupported `evidence_fields` and raw domain ratings from `quality_assessment` so facilitators can audit whether a review rating was grounded in packet evidence. Future real-provider UI work should also decide whether `score_movement_review.clinical_design_interpretation` becomes visible in the participant panel, since it is intended to translate model movement into clinical trial / pharma development language.
 
 Treemap signed-value rule:
 
@@ -998,6 +1008,7 @@ Provider selection and secret handling:
 - Provider config code must read secrets from environment variables or deployment secret managers only. It must never store API keys in committed Python files, notebooks, docs, fixtures, or frontend state.
 - Local development may use `.env` loaded by `python-dotenv`, following the existing project pattern. Deployment should use Cloud Run environment variables or Secret Manager-backed values.
 - Recommended environment variables:
+  - `NARRATIVE_LIVE_REVIEW_ENABLED=1`, only when the simulator should call the configured live provider chain instead of the mock reviewer.
   - `NARRATIVE_LLM_PROVIDER=openai`
   - `NARRATIVE_LLM_FALLBACK_PROVIDER=gemini`
   - `OPENAI_API_KEY`
@@ -1010,18 +1021,51 @@ Provider selection and secret handling:
   - `NARRATIVE_LLM_MAX_OUTPUT_TOKENS=6000`
   - `NARRATIVE_LLM_TIMEOUT_SECONDS`
   - `NARRATIVE_LLM_MAX_RETRIES`
-- Current setup status: local `.env` can hold these values, and `src/narratives/provider_config.py` reads and validates them without making any LLM API call. `scripts/check_narrative_openai_smoke.py` and `scripts/check_narrative_gemini_smoke.py` can run opt-in API smoke tests when `RUN_NARRATIVE_OPENAI_SMOKE=1` or `RUN_NARRATIVE_GEMINI_SMOKE=1` is set; they skip by default to avoid accidental network calls or API spend. `src/narratives/provider.py` now contains real OpenAI and Gemini invocation helpers behind the same normalized provider result shape, but the simulator still uses the deterministic mock provider by default until live review activation is explicitly enabled. Live wrapper checks have validated one full fixture review with OpenAI and one full fixture review with Gemini using the normalized provider boundary.
-- Provider config, prompt/schema fixtures, and opt-in OpenAI/Gemini smoke testing are implemented. The next activation step is to enable real OpenAI/Gemini review calls through the existing provider chain in the simulator UI only after deciding the participant-facing failure and fallback behavior.
+- Current setup status: local `.env` can hold these values, and `src/narratives/provider_config.py` reads and validates them without making any LLM API call. `scripts/check_narrative_openai_smoke.py` and `scripts/check_narrative_gemini_smoke.py` can run opt-in API smoke tests when `RUN_NARRATIVE_OPENAI_SMOKE=1` or `RUN_NARRATIVE_GEMINI_SMOKE=1` is set; they skip by default to avoid accidental network calls or API spend. `src/narratives/provider.py` contains real OpenAI and Gemini invocation helpers behind the same normalized provider result shape. `frontend/views/trial_simulator.py` uses the deterministic mock provider by default and routes both hidden baseline and visible Quality Review calls through the live provider chain only when `NARRATIVE_LIVE_REVIEW_ENABLED=1`. Live wrapper checks have validated one full fixture review with OpenAI and one full fixture review with Gemini using the normalized provider boundary.
+- Provider config, prompt/schema fixtures, opt-in OpenAI/Gemini smoke testing, and opt-in simulator UI routing are implemented. If live routing is enabled and both providers fail or validation does not produce a complete Quality Review, the participant panel shows Completion Score only and marks Quality Review unavailable for the current scenario, with a narrow retry action for live-provider failures. It does not reuse a stale Quality Adjustment. The next implementation step is the first adjusted-score visual.
 - As of the June 2026 planning decision, the preferred OpenAI default is a pinned GPT-5.5 snapshot, such as `gpt-5.5-2026-04-23`, rather than a floating alias. `gpt-5.5-pro-2026-04-23` can be considered for slower, high-quality hidden baseline generation or offline review, but not as the default live interactive model unless latency and cost are acceptable.
 - Gemini fallback should be configured with an explicit model ID rather than hard-coded in product logic. Prefer a high-quality Gemini Pro model for fallback review quality; choose a stable Flash-family model only when latency, cost, or preview-model risk dominates.
 - Real-provider implementation should use a provider chain: try the configured primary provider first, then the configured fallback only for provider/network/rate-limit/unavailable failure. Do not fallback when the primary provider returns valid but unfavorable clinical reasoning, or when the provider returns malformed/invalid review JSON; that would create provider-shopping behavior and hide prompt/contract problems that should be fixed.
-- Cache and trace keys must include provider and model name so OpenAI and Gemini outputs for the same packet are not treated as interchangeable.
+- Cache and trace keys must include provider, model name, and live generation-control namespace so OpenAI and Gemini outputs, or outputs produced with different reproducibility settings, are not treated as interchangeable.
+- For live provider-chain calls, if the same input packet and same live generation-control namespace already have a validated cached review, reuse it before calling any provider. This keeps provider fallback transparent to participants: the app does not regenerate a review just because the provider that answered last time differs from the provider that would answer now.
 - Keep the implementation deliberately small: one provider config reader, one prompt/schema builder, and one normalized provider result shape shared by mock, OpenAI, and Gemini. Avoid separate scoring, packet-building, cache, or UI code paths per provider.
 - Provider fallback should be bounded and auditable. Try at most the configured primary and one configured fallback for a given packet. Store which provider failed, why it failed, and which provider generated the accepted review. Do not silently retry multiple times or cascade across many models.
+- Provider identity should remain transparent to participants. The participant panel should not say whether OpenAI, Gemini, or another live provider produced a review. Provider and model names belong in trace/debug/facilitator metadata only.
 - If both providers fail, return an unavailable Quality Review state and show Completion Score only. Do not reuse a stale Quality Adjustment for the new packet.
 - If the fallback provider succeeds, cache the fallback result under its own provider/model namespace. Do not overwrite or pretend it is the primary provider result.
 - Full narrative reviews need enough output budget for reasoning plus seven domain ratings and participant-facing review lines. Treat incomplete provider responses caused by output-token limits as provider failures, not as valid reviews.
 - Runtime controls such as temperature, seed, reasoning effort, and JSON-output controls are provider/model-specific. Config may read them, but real provider code should send only parameters supported by the selected model. For the pinned GPT-5.5 OpenAI snapshot, use `reasoning.effort` from `OPENAI_REASONING_EFFORT`, request JSON output through the Responses API text format, and do not send temperature or seed unless a future model-specific capability check proves they are accepted. For Gemini, send temperature and seed only through Gemini's supported generation config and request JSON through Gemini's response MIME/config path. Store configured versus applied generation controls in provider metadata for every real provider result.
+- Live latency must be measured separately for provider smoke calls, hidden baseline generation, visible iteration review, provider-chain fallback, and cache replay. Current helper script: `scripts/benchmark_narrative_latency.py`. Use it to compare OpenAI and Gemini on the same baseline/iteration packets, estimate worst-case timeout budget from `timeout_seconds * (max_retries + 1) * provider_count`, and test interactive profiles such as lower timeout, no retry, lower reasoning effort, or smaller output budget.
+- Current UI behavior creates or ensures hidden baseline review context when Simulation Mode initializes a baseline snapshot. With live review enabled, this can create an invisible wait on toggle. The hidden baseline trace is stored only in Streamlit session state and reusable only within the same running session/runtime/input hash; it is not durable across app restarts or separate teams. Deferring hidden baseline generation until the first Predict click would make toggle faster but move the baseline wait into the first prediction workflow, where the first visible review may require baseline generation followed by visible iteration generation.
+
+Live-provider latency experiments run during the June 2026 implementation session:
+
+- Minimal provider smoke checks were fast and only prove key/config/connectivity: OpenAI completed in about 2.5 seconds and Gemini completed in about 5.0 seconds. These smoke timings are not representative of the full Quality Review prompt.
+- Full hidden-baseline generation with OpenAI, high reasoning effort, 6000 max output tokens, 60 second timeout, and one retry took about 120 seconds and succeeded after two attempts. This confirms that hidden baseline creation can be a substantial invisible wait if triggered when Simulation Mode opens.
+- A full visible-iteration provider-chain call with the same high-quality settings took about 149 seconds: OpenAI timed out, then Gemini fallback succeeded in about 28 seconds. This shows that fallback can rescue the review, but the primary-provider timeout is paid first.
+- A lower-latency interactive profile tested `OPENAI_REASONING_EFFORT=medium`, `NARRATIVE_LLM_MAX_OUTPUT_TOKENS=3500`, timeout 35 seconds, and zero retries. In that profile, baseline-chain calls were still about 56 seconds because OpenAI timed out first and Gemini then answered. Visible-iteration calls were about 62 seconds when Gemini returned non-JSON. Failed reviews are not cached as reusable validated reviews, so repeating the same failed scenario may call providers again.
+- Direct provider comparison on the same baseline and visible-iteration packets, with timeout 90 seconds, zero retries, 3500 max output tokens, and medium OpenAI reasoning effort, showed OpenAI slower but valid on both packets: about 36 seconds for baseline and 50 seconds for visible iteration. Gemini was faster on baseline, about 22 seconds and valid, and faster on visible iteration, about 26 seconds, but returned malformed/non-JSON output for the visible-iteration contract.
+- Current interpretation: OpenAI is the more reliable full-contract provider in these tests; Gemini is a useful fallback and faster when it returns valid JSON, but the full visible-iteration prompt/schema needs additional Gemini hardening before Gemini can be treated as equally reliable.
+- Current interactive recommendation for live playtesting is `OPENAI_REASONING_EFFORT=medium`, `NARRATIVE_LLM_MAX_OUTPUT_TOKENS=3500`, `NARRATIVE_LLM_TIMEOUT_SECONDS=60`, and `NARRATIVE_LLM_MAX_RETRIES=0`. Current high-quality/offline recommendation is `OPENAI_REASONING_EFFORT=high`, `NARRATIVE_LLM_MAX_OUTPUT_TOKENS=6000`, `NARRATIVE_LLM_TIMEOUT_SECONDS=90`, and `NARRATIVE_LLM_MAX_RETRIES=1`, accepting materially slower waits.
+- The main artificial slowdown drivers are primary-provider timeout, retry count, reasoning effort, output budget, and hidden-baseline generation timing. With timeout 60 seconds, one retry, primary plus fallback, the worst-case provider wait can approach 240 seconds before normal generation overhead.
+- Cache behavior should be interpreted carefully: validated successful reviews can be replayed for the same packet and same generation-control namespace; malformed, incomplete, provider-error, or validation-failed reviews should not be treated as reusable Quality Reviews.
+- Local Completion Score prediction API latency was not measured in these provider benchmarks because the local `/health` endpoint was unavailable during the shell check. The observed multi-minute UI delay was dominated by live LLM generation and provider fallback, not by known XGBoost scoring work.
+
+Implementation-time cost-control decision after the first billing check:
+
+- During active coding and UI iteration, keep live review disabled by default with `NARRATIVE_LIVE_REVIEW_ENABLED=0`. This makes the deterministic mock path the default and prevents accidental API spend.
+- For many low-cost live tests per day, use a single cheap primary provider rather than a fallback chain. The current local development profile is Gemini-only with no effective fallback: `NARRATIVE_LLM_PROVIDER=gemini`, `NARRATIVE_LLM_FALLBACK_PROVIDER=gemini`, `GEMINI_NARRATIVE_MODEL=gemini-3-flash-preview`, `NARRATIVE_LLM_MAX_OUTPUT_TOKENS=2500`, `NARRATIVE_LLM_TIMEOUT_SECONDS=45`, and `NARRATIVE_LLM_MAX_RETRIES=0`. The config loader collapses same-provider fallback to `None`.
+- Keep the OpenAI model configured as a cheaper reserve option, such as `gpt-5.4-mini`, rather than `gpt-5.5` during implementation. `gpt-5.5` should be reserved for rare high-quality/offline validation, not repeated local development testing.
+- This implementation-time profile is intentionally different from the later production resilience design. Production can re-enable a primary/fallback chain after latency, reliability, budget, and provider-output quality are calibrated.
+
+Open live-play calibration items before rollout:
+
+- Decide whether hidden baseline generation remains on Simulation Mode toggle or is deferred until first `Predict Trial Completion`. Toggle-time generation makes the first prediction faster after the wait; first-predict generation keeps toggle responsive but can make the first prediction require both baseline and visible-review calls.
+- Harden Gemini's full visible-iteration JSON reliability before relying on it as a comparable fallback for participant-facing reviews. Candidate improvements include a stricter Gemini response schema, smaller response contract, or prompt/schema simplification, while preserving app-owned validation and scoring.
+- Measure the local `/predict` API separately once the API is running, so model scoring time is separated from provider time in latency budgets.
+- Repeat timing tests with representative real trial scenarios, not only contract fixtures, before setting production timeout/retry defaults.
+- Make a first qualitative assessment of live participant-review text across several representative real scenarios before deciding whether the prompt should become shorter, more structured, or model-specific.
+- Update the participant UI so Quality Adjustment is clearly integrated with Completion Score into the Final Candidate Score, while still preserving the distinction between XGBoost Completion Score drivers and app-owned Quality Review contributions.
 
 Recommended trace fields to store for each narrative pass:
 
@@ -1043,8 +1087,8 @@ Recommended trace fields to store for each narrative pass:
 Trace robustness staging:
 
 - Current prototype trace should remain simple and session-state compatible. It should store `input_packet`, provider/mock `output_json`, `validated_review`, validation status/errors, app-owned Quality Adjustment, Final Candidate Score, Quality Assessment, clarification issues, user clarifications, changed fields, score movement, provider/model identity, and compact storyline memory.
-- Current real-provider traces store prompt template version and response schema version in provider metadata. Add prompt template hashes only if prompt version strings are not enough for audit. Add an explicit pre-review gate status, such as `passed` or `clarification_needed`, if clarification debugging becomes ambiguous. Add a compact evidence-audit summary only if unsupported evidence fields become hard to inspect from `quality_assessment`.
-- Defer until live-provider UI activation or durable provider tracing: raw provider response, parsed JSON response, token usage, latency, provider response ID, finish reason, temperature, seed, system fingerprint, and provider-specific safety/refusal metadata. These fields are not meaningful for the deterministic mock reviewer and are not required for the current mock-default simulator path.
+- Current real-provider traces store prompt template version, response schema version, configured/applied generation controls, attempts, latency, parse status, response text length, and fallback-after metadata in provider metadata. The UI may expose these fields in a compact technical diagnostics expander when live Quality Review is unavailable, without showing API keys, raw prompts, or raw provider output. Add prompt template hashes only if prompt version strings are not enough for audit. Add an explicit pre-review gate status, such as `passed` or `clarification_needed`, if clarification debugging becomes ambiguous. Add a compact evidence-audit summary only if unsupported evidence fields become hard to inspect from `quality_assessment`.
+- Defer until durable provider tracing: raw provider response, parsed JSON response, token usage, latency, provider response ID, finish reason, temperature, seed, system fingerprint, and provider-specific safety/refusal metadata. These fields are not meaningful for the deterministic mock reviewer and are not required for the current mock-default simulator path.
 - Defer until durable storage: database/file persistence, shared trial-level baseline review records, cross-team replay, facilitator export, retention policy, privacy controls, and schema migration strategy.
 - Do not expand the prompt packet just because the trace stores more audit data. Store enough for audit; send only curated current-context fields to the LLM.
 
@@ -1461,10 +1505,10 @@ V1 serious-game narrative layer:
 - Keep XGBoost unchanged.
 - Use Planned Enrollment, Planned Sites, and Planned Duration as deterministic operational assumptions.
 - Classify operational assumptions against similar-trial benchmarks.
-- Use operational assumptions as bounded inputs into the future Quality Review.
+- Use operational assumptions as structured inputs into the future Quality Review.
 - Make Quality Review bidirectional.
 - Map Quality Review into three user-facing Quality Assessment pillars: Evidence Coherence, Population & Strategy Fit, and Execution Plausibility.
-- Calculate a bounded Quality Adjustment in application logic.
+- Calculate a reconciled Quality Adjustment in application logic.
 - Calculate Final Candidate Score additively.
 - Keep Completion Score View XGBoost-first.
 - In Final Candidate Score View, show Completion Score and Quality Assessment as separate branches or grouped contributions.
@@ -1475,16 +1519,16 @@ Implementation staging:
 
 1. Contract fixtures: define a small set of static example scenarios before implementation. Include at least baseline, model-facing edit, operational-only edit, material text-only edit, generic structured/text clarification, clarified structured/text review, and no-op/minor text edit. For each fixture, record expected review ratings, Quality Adjustment, Final Candidate Score behavior, clarification behavior, and storyline behavior. Current implementation artifact: `src/narratives/contract_fixtures.py`, validated by `scripts/check_narrative_contract_fixtures.py`.
 2. Deterministic review packet builder: assemble baseline/current/previous snapshots, changed fields, explicit field-change deltas, operational metadata, score deltas, XGBoost impact movements, text context, user clarification context, field dictionary version, canonical taxonomy option-key values, display labels, and compact storyline memory without calling an LLM. Current implementation artifact: `src/narratives/packet_builder.py`, validated by `scripts/check_narrative_packet_builder.py`.
-3. Validation and scoring engine: validate review JSON, enforce packet-supported `evidence_fields`, derive Quality Assessment pillars/subcategories, apply subcategory/pillar/total caps, apply zero/positive-adjustment guardrails, clamp Quality Adjustment, and calculate Final Candidate Score. Current implementation artifact: `src/narratives/scoring.py`, validated by `scripts/check_narrative_scoring.py`.
+3. Validation and scoring engine: validate review JSON, enforce packet-supported `evidence_fields`, derive Quality Assessment pillars/subcategories, apply subcategory/domain caps, apply zero/positive-adjustment guardrails, require domain totals to equal pillar totals and pillar totals to equal Quality Adjustment, and calculate Final Candidate Score. Current implementation artifact: `src/narratives/scoring.py`, validated by `scripts/check_narrative_scoring.py`.
 4. Mock reviewer: use deterministic fake JSON responses based on the fixtures to test validation, scoring math, no-op behavior, text-materiality behavior, and failure handling. Current implementation artifact: `src/narratives/mock_reviewer.py`, validated by `scripts/check_narrative_mock_reviewer.py`.
 5. Storage and replay: persist validated review traces in session state first, including input hash, validation status, Quality Adjustment, Final Candidate Score, and compact storyline memory. Reuse cached reviews for identical input hashes. Current implementation artifact: `src/narratives/review_store.py`, validated by `scripts/check_narrative_review_store.py`. It supports direct mock replay now and an optional provider-chain path for future live-provider activation without reusing mock cache entries as real-provider reviews. This is prototype storage only and does not yet satisfy the durable cross-team baseline requirement.
 6. Minimal UI panel: render Completion Score, Quality Adjustment, Final Candidate Score, Quality Review, and compact Quality Assessment rows. Do not build adjusted treemap yet. Do not expose supported/unsupported evidence fields in the participant panel by default; reserve them for future facilitator/debug views. Revisit whether `score_movement_review.clinical_design_interpretation` should be displayed when real-provider output is implemented. Current implementation artifact: `frontend/views/trial_simulator.py`, using the provider-free packet builder, mock reviewer, and session-state review store.
 7. Hidden baseline continuity: generate/store the hidden baseline review and verify that later iteration reviews use baseline review, previous review, compact non-numeric baseline quality summary, and compact storyline memory consistently. Current implementation is session-level only; it does not yet provide cross-team durable baseline reuse. Current implementation artifacts: `src/narratives/packet_builder.py`, `frontend/views/trial_simulator.py`, and `scripts/check_narrative_packet_builder.py`.
-8. Thin LLM provider wrapper: add provider config first, then opt-in config-path API smoke tests, then provider-chain invocation through the same normalized result shape for mock, OpenAI, and Gemini. Provider config reads API keys from environment variables or secret managers; it never stores keys in code. Current implementation artifacts: `src/narratives/provider.py`, `src/narratives/provider_config.py`, and `src/narratives/prompt_builder.py`, validated by `scripts/check_narrative_provider.py`, `scripts/check_narrative_provider_config.py`, `scripts/check_narrative_prompt_builder.py`, and the skipped-by-default `scripts/check_narrative_openai_smoke.py` / `scripts/check_narrative_gemini_smoke.py`; the simulator still uses the deterministic mock provider by default. Provider code invokes the model and normalizes JSON only; it should not decide field truth when structured/text inputs are asynchronous. The application owns scoring and returns `clarification_needed` before new scoring/provider review for unresolved material mismatches. Explicit live-review UI activation remains the next work before participant-facing real LLM use.
-9. First adjusted-score visual: add Final Candidate Score View with component cards and the seven-bar grouped chart.
+8. Thin LLM provider wrapper: add provider config first, then opt-in config-path API smoke tests, then provider-chain invocation through the same normalized result shape for mock, OpenAI, and Gemini, then an explicit simulator UI activation flag. Provider config reads API keys from environment variables or secret managers; it never stores keys in code. Current implementation artifacts: `src/narratives/provider.py`, `src/narratives/provider_config.py`, `src/narratives/prompt_builder.py`, `src/narratives/review_store.py`, and the opt-in routing in `frontend/views/trial_simulator.py`, validated by `scripts/check_narrative_provider.py`, `scripts/check_narrative_provider_config.py`, `scripts/check_narrative_prompt_builder.py`, `scripts/check_narrative_review_store.py`, and the skipped-by-default `scripts/check_narrative_openai_smoke.py` / `scripts/check_narrative_gemini_smoke.py`; the simulator still uses the deterministic mock provider by default unless `NARRATIVE_LIVE_REVIEW_ENABLED=1`. Provider code invokes the model and normalizes JSON only; it should not decide field truth when structured/text inputs are asynchronous. The application owns scoring and returns `clarification_needed` before new scoring/provider review for unresolved material mismatches. Live-provider UI routing is available, but durable provider tracing and live-play calibration remain future work.
+9. First adjusted-score visual: add Final Candidate Score View with component cards and the seven-bar grouped chart. Current implementation artifact: `frontend/views/trial_simulator.py` renders Completion Score, Quality Adjustment, Final Candidate Score, and a seven-domain contribution chart grouped under the three Quality Assessment pillars inside the Quality Review panel. The displayed domain-row contributions use the same app-owned scoring values as the pillar totals, so rows add up to pillars and pillars add up to the Quality Adjustment. This is intentionally simpler than an adjusted treemap and does not change XGBoost charts.
 10. Durable baseline store: add a database-backed baseline review repository keyed by trial/version and input hash. It should use create-if-missing semantics so the first team creates the hidden baseline and later teams reuse it.
 11. Two-branch adjusted treemap: add only after the simpler adjusted view is stable and understandable; defer to V1.1 if it slows the first implementation.
-12. Calibration/playtesting: review examples and tune rating-to-point mapping within the `-10` to `+10` total Quality Adjustment range.
+12. Calibration/playtesting: review examples and tune rating-to-point mapping if the resulting Quality Adjustment is too strong or too weak.
 
 ## 21. Open Questions
 

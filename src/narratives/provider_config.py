@@ -254,3 +254,19 @@ def load_narrative_provider_config(env: Mapping[str, str]) -> NarrativeProviderC
         max_retries=max_retries,
         validation_errors=errors,
     )
+
+
+def provider_config_cache_namespace(config: NarrativeProviderConfig) -> str:
+    """Return a non-secret cache namespace for live provider-chain reviews."""
+    openai = config.provider_settings(PROVIDER_OPENAI)
+    gemini = config.provider_settings(PROVIDER_GEMINI)
+    return "|".join([
+        f"provider={config.provider}",
+        f"fallback={config.fallback_provider or 'none'}",
+        f"openai_model={(openai.model if openai else '')}",
+        f"gemini_model={(gemini.model if gemini else '')}",
+        f"temperature={config.temperature}",
+        f"seed={config.seed}",
+        f"openai_reasoning_effort={config.openai_reasoning_effort}",
+        f"max_output_tokens={config.max_output_tokens}",
+    ])

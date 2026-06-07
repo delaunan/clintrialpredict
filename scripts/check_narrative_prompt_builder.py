@@ -45,6 +45,15 @@ def main() -> int:
         errors.append("response contract should expose stable schema version")
     if set(contract.get("required_quality_review_domains") or []) != set(DOMAIN_RATING_POINTS):
         errors.append("response contract should include all scoring domains")
+    guidance = contract.get("rating_guidance_by_domain") or {}
+    if set(guidance) != set(DOMAIN_RATING_POINTS):
+        errors.append("response contract should include qualitative rating guidance for all scoring domains")
+    if "supportive" not in guidance.get("scientific_rigor", {}):
+        errors.append("standard rating guidance should define the middle positive supportive label")
+    if "partly_improved" not in guidance.get("change_integrity", {}):
+        errors.append("change-integrity guidance should define the middle positive partly_improved label")
+    if "contradiction" not in guidance.get("text_consistency", {}):
+        errors.append("text-consistency guidance should define contradiction")
     if set(contract.get("required_participant_review_fields") or []) != PARTICIPANT_REVIEW_KEYS:
         errors.append("response contract should include all participant-review fields")
     if set(contract.get("forbidden_provider_fields") or []) != set(FORBIDDEN_PROVIDER_SCORE_FIELDS):

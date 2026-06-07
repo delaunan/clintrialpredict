@@ -21,6 +21,29 @@ FORBIDDEN_PROVIDER_SCORE_FIELDS = (
     "quality_assessment",
 )
 
+STANDARD_RATING_GUIDANCE = {
+    "strong": "coherent, rigorous, and strategically defensible in the current context",
+    "supportive": "positive and defensible, but not enough to deserve the top positive rating",
+    "acceptable": "balanced or neutral, with strengths outweighing trade-offs",
+    "weak": "unresolved weakness or simplification that needs discussion",
+    "conflicting": "material evidence, feasibility, text-consistency, or change-integrity concern",
+}
+
+CHANGE_INTEGRITY_RATING_GUIDANCE = {
+    "improved": "the path appears to strengthen the design",
+    "partly_improved": "the path appears directionally positive, but with limited or mixed support",
+    "neutral": "the change appears broadly neutral for quality",
+    "simplified": "the change simplifies execution but may reduce evidence value",
+    "potential_shortcut": "the change appears score-seeking or weakens defensibility",
+}
+
+TEXT_CONSISTENCY_RATING_GUIDANCE = {
+    "consistent": "structured fields, text, and clarifications appear aligned",
+    "minor_tension": "small inconsistency or missing detail that should be noted",
+    "material_tension": "important inconsistency that may affect interpretation",
+    "contradiction": "direct contradiction between text, structured fields, or clarifications",
+}
+
 
 def provider_response_contract() -> dict[str, Any]:
     """Return the app-owned response contract expected from real providers."""
@@ -28,10 +51,21 @@ def provider_response_contract() -> dict[str, Any]:
         domain: sorted(DOMAIN_RATING_POINTS[domain])
         for domain in REQUIRED_DOMAIN_NAMES
     }
+    rating_guidance = {
+        domain: (
+            CHANGE_INTEGRITY_RATING_GUIDANCE
+            if domain == "change_integrity"
+            else TEXT_CONSISTENCY_RATING_GUIDANCE
+            if domain == "text_consistency"
+            else STANDARD_RATING_GUIDANCE
+        )
+        for domain in REQUIRED_DOMAIN_NAMES
+    }
     return {
         "schema_version": RESPONSE_SCHEMA_VERSION,
         "required_quality_review_domains": list(REQUIRED_DOMAIN_NAMES),
         "allowed_ratings_by_domain": rating_contract,
+        "rating_guidance_by_domain": rating_guidance,
         "required_domain_fields": ["rating", "rationale", "evidence_fields"],
         "required_participant_review_fields": sorted(PARTICIPANT_REVIEW_KEYS),
         "required_top_level_objects": [

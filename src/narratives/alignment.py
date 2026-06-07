@@ -20,6 +20,16 @@ def _text_blob(packet: dict[str, Any]) -> str:
     return " ".join(parts).lower()
 
 
+def _text_field_blob(packet: dict[str, Any], *field_ids: str) -> str:
+    text_context = packet.get("text_context") or {}
+    parts = [
+        str(text_context.get(field_id))
+        for field_id in field_ids
+        if text_context.get(field_id) is not None
+    ]
+    return " ".join(parts).lower()
+
+
 def _feature_value(packet: dict[str, Any], field_id: str) -> str:
     structured = packet.get("structured_features") or {}
     display = packet.get("structured_feature_display_values") or {}
@@ -90,6 +100,36 @@ def detect_alignment_issues(packet: dict[str, Any]) -> list[dict[str, Any]]:
                 field_id="endpoint_structure_ml",
                 structured_value=endpoint_structure,
                 text_signal="text appears to describe a single primary endpoint",
+            )
+        )
+
+    endpoint_rigor = _feature_value(packet, "endpoint_rigor_ml")
+    hard_clinical_value = any(
+        token in endpoint_rigor
+        for token in ("hard clinical", "survival", "death", "hard_clinical")
+    )
+    endpoint_text = _text_field_blob(packet, "primary_outcomes_ui", "primary_outcomes")
+    surrogate_endpoint_text = _has_any(
+        endpoint_text,
+        (
+            r"\bimmunogenicity\b",
+            r"\bantibody\b",
+            r"\bantibodies\b",
+            r"\btiter\b",
+            r"\btiters\b",
+            r"\bseroprotection\b",
+            r"\bseroconversion\b",
+            r"\bbiomarker\b",
+            r"\bsurrogate\b",
+        ),
+    )
+    if hard_clinical_value and surrogate_endpoint_text:
+        issues.append(
+            _issue(
+                issue_id="endpoint_rigor_text_mismatch",
+                field_id="endpoint_rigor_ml",
+                structured_value=endpoint_rigor,
+                text_signal="text appears to describe surrogate, biomarker, immunogenicity, or antibody endpoint evidence rather than hard clinical outcome evidence",
             )
         )
 

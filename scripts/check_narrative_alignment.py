@@ -49,6 +49,32 @@ def main() -> int:
     if _issue_ids(placebo_packet) != {"placebo_text_structured_mismatch"}:
         errors.append("placebo mismatch should require placebo_text_structured_mismatch")
 
+    endpoint_rigor_packet = {
+        **endpoint_packet,
+        "structured_features": {"endpoint_rigor_ml": "HARD_CLINICAL"},
+        "structured_feature_display_values": {"endpoint_rigor_ml": "Hard Clinical (Survival/Death)"},
+        "text_context": {
+            "primary_outcomes_ui": "Primary endpoints are immunogenicity antibody titers and seroprotection rate."
+        },
+        "clarification_context": {"user_clarifications": []},
+    }
+    if _issue_ids(endpoint_rigor_packet) != {"endpoint_rigor_text_mismatch"}:
+        errors.append("hard-clinical endpoint rigor with immunogenicity text should require endpoint_rigor_text_mismatch")
+
+    endpoint_rigor_explained_packet = {
+        **endpoint_rigor_packet,
+        "clarification_context": {
+            "user_clarifications": [
+                {
+                    "issue_id": "endpoint_rigor_text_mismatch",
+                    "explanation": "The hard clinical value is intentional because later adjudicated clinical protection is the decision endpoint.",
+                }
+            ]
+        },
+    }
+    if _issue_ids(endpoint_rigor_explained_packet):
+        errors.append("explained endpoint-rigor mismatch should not require clarification")
+
     if errors:
         for error in errors:
             print(f"ERROR: {error}")

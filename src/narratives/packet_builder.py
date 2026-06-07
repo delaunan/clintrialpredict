@@ -538,7 +538,16 @@ def _compact_review_context(
         compact["baseline_strengths"] = [
             domain.get("rationale")
             for domain in domains.values()
-            if isinstance(domain, dict) and domain.get("rating") in {"strong", "acceptable", "consistent"}
+            if isinstance(domain, dict)
+            and domain.get("rating")
+            in {
+                "strong",
+                "supportive",
+                "acceptable",
+                "improved",
+                "partly_improved",
+                "consistent",
+            }
         ]
         compact["baseline_concerns"] = [
             domain.get("rationale")

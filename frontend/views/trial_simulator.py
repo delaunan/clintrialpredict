@@ -35,6 +35,11 @@ from src.narratives.review_store import (
     compact_storyline_from_trace,
     replay_or_review_with_provider,
 )
+from src.narratives.provider_config import (
+    PROVIDER_MOCK,
+    load_narrative_provider_config,
+    provider_config_cache_namespace,
+)
 
 # Load environment variables
 load_dotenv()
@@ -75,6 +80,12 @@ SIMULATION_SNAPSHOT_SCORE_DELTA_SOURCES = {
     OPERATIONAL_ASSUMPTION_UPDATE_SOURCE,
     TEXT_CONTEXT_UPDATE_SOURCE,
     "simulation_enrollment_update",
+}
+NARRATIVE_LIVE_REVIEW_ENABLED = str(os.getenv("NARRATIVE_LIVE_REVIEW_ENABLED", "")).strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
 }
 
 API_URL = os.getenv("API_URL", "").strip()
@@ -4326,6 +4337,105 @@ def inject_custom_styles():
                 font-weight: 850 !important;
             }}
 
+            html body .quality-contribution-chart {{
+                border: 1px solid #e5eaf1 !important;
+                border-radius: 8px !important;
+                background: #ffffff !important;
+                padding: 7px 8px !important;
+                margin: 8px 0 6px 0 !important;
+            }}
+
+            html body .quality-contribution-title {{
+                color: #334155 !important;
+                font-size: 0.72rem !important;
+                line-height: 1.1 !important;
+                font-weight: 850 !important;
+                text-transform: uppercase !important;
+                margin-bottom: 6px !important;
+            }}
+
+            html body .quality-contribution-group {{
+                margin-top: 6px !important;
+            }}
+
+            html body .quality-contribution-group:first-of-type {{
+                margin-top: 0 !important;
+            }}
+
+            html body .quality-contribution-group-head {{
+                display: flex !important;
+                align-items: center !important;
+                justify-content: space-between !important;
+                gap: 8px !important;
+                color: #475569 !important;
+                font-size: 0.70rem !important;
+                line-height: 1.2 !important;
+                font-weight: 800 !important;
+                margin: 4px 0 3px 0 !important;
+            }}
+
+            html body .quality-contribution-row {{
+                display: grid !important;
+                grid-template-columns: minmax(96px, 1.15fr) minmax(96px, 1fr) 38px !important;
+                align-items: center !important;
+                gap: 6px !important;
+                min-height: 21px !important;
+                color: #475569 !important;
+                font-size: 0.68rem !important;
+                line-height: 1.15 !important;
+                font-weight: 620 !important;
+            }}
+
+            html body .quality-contribution-label {{
+                overflow-wrap: anywhere !important;
+            }}
+
+            html body .quality-contribution-points {{
+                text-align: right !important;
+                font-weight: 850 !important;
+            }}
+
+            html body .quality-contribution-bar-wrap {{
+                position: relative !important;
+                height: 8px !important;
+                border-radius: 999px !important;
+                background: #eef2f7 !important;
+                overflow: hidden !important;
+            }}
+
+            html body .quality-contribution-zero {{
+                position: absolute !important;
+                top: 0 !important;
+                bottom: 0 !important;
+                left: 50% !important;
+                width: 1px !important;
+                background: #cbd5e1 !important;
+                z-index: 2 !important;
+            }}
+
+            html body .quality-contribution-bar {{
+                position: absolute !important;
+                top: 0 !important;
+                bottom: 0 !important;
+                max-width: 50% !important;
+            }}
+
+            html body .quality-contribution-bar.positive {{
+                left: 50% !important;
+                background: #2f62a6 !important;
+            }}
+
+            html body .quality-contribution-bar.negative {{
+                right: 50% !important;
+                background: #b03f3f !important;
+            }}
+
+            html body .quality-contribution-bar.neutral {{
+                left: 50% !important;
+                width: 0 !important;
+                background: #94a3b8 !important;
+            }}
+
             html body .quality-review-text {{
                 color: #475569 !important;
                 font-size: 0.74rem !important;
@@ -5772,6 +5882,61 @@ def normalize_hidden_baseline_review_trace(trace):
     return normalized
 
 
+def narrative_review_runtime():
+    """Return the active narrative provider runtime for the simulator UI."""
+    if not NARRATIVE_LIVE_REVIEW_ENABLED:
+        return {
+            "provider": PROVIDER_MOCK,
+            "config": None,
+            "use_provider_chain": False,
+            "runtime_key": "mock:fixture_hash_mock_v1",
+        }
+
+    config = load_narrative_provider_config(os.environ)
+    primary_settings = config.provider_settings(config.provider)
+    fallback_settings = config.fallback_settings()
+    fallback_key = (
+        f"{fallback_settings.provider}:{fallback_settings.model}"
+        if fallback_settings
+        else "none"
+    )
+    primary_key = (
+        f"{primary_settings.provider}:{primary_settings.model}"
+        if primary_settings
+        else str(config.provider)
+    )
+    return {
+        "provider": config.provider,
+        "config": config,
+        "use_provider_chain": True,
+        "runtime_key": f"chain:{primary_key}:fallback:{fallback_key}:{provider_config_cache_namespace(config)}",
+    }
+
+
+def narrative_trace_matches_runtime(trace, runtime):
+    if not trace:
+        return False
+    return str(trace.get("review_runtime_key") or "") == str(runtime.get("runtime_key") or "")
+
+
+def attach_narrative_runtime(trace, runtime):
+    if not trace:
+        return trace
+    trace = dict(trace)
+    trace["review_runtime_key"] = runtime.get("runtime_key")
+    return trace
+
+
+def narrative_trace_provider_note(trace):
+    if not trace:
+        return "Quality Review provider unavailable."
+    if trace.get("cached"):
+        return "Replayed from review cache."
+    if trace.get("provider") == PROVIDER_MOCK:
+        return "Generated by deterministic mock reviewer."
+    return "Generated by Quality Review engine."
+
+
 def get_hidden_baseline_review_trace(row, baseline_snapshot):
     if not baseline_snapshot:
         return None
@@ -5780,6 +5945,7 @@ def get_hidden_baseline_review_trace(row, baseline_snapshot):
     state_key = get_hidden_baseline_review_trace_state_key(nct_id)
     cached_trace = st.session_state.get(state_key)
     session_id = f"{get_narrative_session_id(nct_id)}:hidden_baseline"
+    runtime = narrative_review_runtime()
 
     packet = build_review_packet(
         current_snapshot=baseline_snapshot,
@@ -5790,7 +5956,11 @@ def get_hidden_baseline_review_trace(row, baseline_snapshot):
         compact_storyline_memory="",
     )
 
-    if cached_trace and cached_trace.get("input_hash") == packet.get("input_hash"):
+    if (
+        cached_trace
+        and cached_trace.get("input_hash") == packet.get("input_hash")
+        and narrative_trace_matches_runtime(cached_trace, runtime)
+    ):
         return normalize_hidden_baseline_review_trace(cached_trace)
 
     trace = replay_or_review_with_provider(
@@ -5798,8 +5968,11 @@ def get_hidden_baseline_review_trace(row, baseline_snapshot):
         packet=packet,
         session_id=session_id,
         baseline_id=(packet.get("iteration_context") or {}).get("baseline_snapshot_id"),
-        provider="mock",
+        provider=runtime["provider"],
+        config=runtime["config"],
+        use_provider_chain=bool(runtime["use_provider_chain"]),
     )
+    trace = attach_narrative_runtime(trace, runtime)
     trace = normalize_hidden_baseline_review_trace(trace)
     st.session_state[state_key] = trace
     return trace
@@ -5835,6 +6008,7 @@ def get_quality_review_trace_for_snapshot(row, snapshot):
     state_key = get_quality_review_trace_state_key(nct_id)
     cached_trace = st.session_state.get(state_key)
     current_snapshot_id = snapshot.get("snapshot_id") or snapshot.get("timestamp")
+    runtime = narrative_review_runtime()
     user_clarifications = (
         snapshot.get("user_clarifications")
         or get_user_clarifications_for_snapshot(nct_id, current_snapshot_id)
@@ -5843,10 +6017,11 @@ def get_quality_review_trace_for_snapshot(row, snapshot):
         cached_trace
         and get_trace_current_snapshot_id(cached_trace) == current_snapshot_id
         and clarifications_match_trace(cached_trace, user_clarifications)
+        and narrative_trace_matches_runtime(cached_trace, runtime)
     ):
         return cached_trace
 
-    previous_trace = cached_trace
+    previous_trace = cached_trace if narrative_trace_matches_runtime(cached_trace, runtime) else None
     baseline_snapshot = get_baseline_prediction_snapshot(nct_id)
     baseline_trace = get_hidden_baseline_review_trace(row, baseline_snapshot)
     compact_storyline_memory = compact_storyline_from_trace(previous_trace)
@@ -5863,7 +6038,11 @@ def get_quality_review_trace_for_snapshot(row, snapshot):
         compact_storyline_memory=compact_storyline_memory,
     )
 
-    if cached_trace and cached_trace.get("input_hash") == packet.get("input_hash"):
+    if (
+        cached_trace
+        and cached_trace.get("input_hash") == packet.get("input_hash")
+        and narrative_trace_matches_runtime(cached_trace, runtime)
+    ):
         return cached_trace
 
     trace = replay_or_review_with_provider(
@@ -5871,8 +6050,11 @@ def get_quality_review_trace_for_snapshot(row, snapshot):
         packet=packet,
         session_id=session_id,
         baseline_id=(packet.get("iteration_context") or {}).get("baseline_snapshot_id"),
-        provider="mock",
+        provider=runtime["provider"],
+        config=runtime["config"],
+        use_provider_chain=bool(runtime["use_provider_chain"]),
     )
+    trace = attach_narrative_runtime(trace, runtime)
     st.session_state[state_key] = trace
     return trace
 
@@ -7161,6 +7343,16 @@ def _render_native_meta_field(label, field_id, row, key_suffix=""):
     token = _field_token(field_id, key_suffix=key_suffix)
 
     with st.container(key=f"meta_native_field_{token}"):
+        if (
+            st.session_state.get("global_edit_mode", False)
+            and field_id in {"lead_sponsor_canonical", "start_date"}
+        ):
+            readonly_key = _readonly_widget_key(state_key, f"meta_{key_suffix}" if key_suffix else "meta")
+            readonly_value = trial_val(row, field_id)
+            _safe_set_session_value(readonly_key, "" if readonly_value == "N/A" else str(readonly_value))
+            st.text_input(label, key=readonly_key, disabled=True)
+            return
+
         if (
             st.session_state.get("global_edit_mode", False)
             and field_id in SIMULATION_FEATURE_ID_SET
@@ -8482,7 +8674,18 @@ def _format_quality_points(value):
     numeric = pd.to_numeric(value, errors="coerce")
     if pd.isna(numeric):
         return "N/A"
-    return f"{int(round(float(numeric))):+d}"
+    numeric = round(float(numeric), 1)
+    if numeric.is_integer():
+        return f"{int(numeric):+d}"
+    return f"{numeric:+.1f}"
+
+
+def _format_candidate_score(value):
+    numeric = pd.to_numeric(value, errors="coerce")
+    if pd.isna(numeric):
+        return "N/A"
+    numeric = round(float(numeric), 1)
+    return f"{int(numeric)}" if numeric.is_integer() else f"{numeric:.1f}"
 
 
 def _quality_points_color(value):
@@ -8501,6 +8704,81 @@ def _quality_review_metric(label, value, color="#1f2937"):
     )
 
 
+QUALITY_REVIEW_DOMAIN_LABELS = {
+    "development_question_fit": "Development Question",
+    "scientific_rigor": "Scientific Rigor",
+    "population_relevance": "Population Relevance",
+    "endpoint_and_comparator_logic": "Endpoint & Comparator",
+    "operational_scale_fit": "Operational Scale",
+    "change_integrity": "Change Integrity",
+    "text_consistency": "Text Consistency",
+}
+
+
+def _quality_domain_contribution_html(domain_name, domain, display_points=None):
+    points = pd.to_numeric(display_points if display_points is not None else (domain or {}).get("points"), errors="coerce")
+    if pd.isna(points):
+        points = 0
+    points = float(points)
+    width_pct = min(50.0, abs(points) / 4.0 * 50.0)
+    side_class = "positive" if points > 0 else "negative" if points < 0 else "neutral"
+    label = QUALITY_REVIEW_DOMAIN_LABELS.get(str(domain_name), str(domain_name).replace("_", " ").title())
+    return (
+        "<div class='quality-contribution-row'>"
+        f"<div class='quality-contribution-label'>{html.escape(label)}</div>"
+        "<div class='quality-contribution-bar-wrap'>"
+        "<div class='quality-contribution-zero'></div>"
+        f"<div class='quality-contribution-bar {side_class}' style='width:{width_pct:.1f}%;'></div>"
+        "</div>"
+        f"<div class='quality-contribution-points' style='color:{_quality_points_color(points)};'>"
+        f"{html.escape(_format_quality_points(points))}</div>"
+        "</div>"
+    )
+
+
+def _quality_adjusted_visual_html(assessment):
+    pillars = (assessment or {}).get("pillars") or {}
+    if not pillars:
+        return ""
+
+    sections = []
+    for pillar in pillars.values():
+        domains = pillar.get("domains") or {}
+        if not domains:
+            continue
+        pillar_points = pillar.get("points")
+        rows = "".join(
+            _quality_domain_contribution_html(
+                domain_name,
+                domains[domain_name],
+            )
+            for domain_name in QUALITY_REVIEW_DOMAIN_LABELS
+            if domain_name in domains
+        )
+        if not rows:
+            continue
+        sections.append(
+            "<div class='quality-contribution-group'>"
+            "<div class='quality-contribution-group-head'>"
+            f"<span>{html.escape(str(pillar.get('label') or 'Quality Assessment'))}</span>"
+            f"<span style='color:{_quality_points_color(pillar_points)};'>"
+            f"{html.escape(_format_quality_points(pillar_points))}</span>"
+            "</div>"
+            f"{rows}"
+            "</div>"
+        )
+
+    if not sections:
+        return ""
+
+    return (
+        "<div class='quality-contribution-chart'>"
+        "<div class='quality-contribution-title'>Quality Review Contributions</div>"
+        f"{''.join(sections)}"
+        "</div>"
+    )
+
+
 def _quality_review_unavailable_card(title, message, muted):
     st.markdown(
         (
@@ -8512,6 +8790,40 @@ def _quality_review_unavailable_card(title, message, muted):
         ),
         unsafe_allow_html=True,
     )
+
+
+def _quality_review_diagnostics(trace):
+    if not trace or trace.get("provider") == PROVIDER_MOCK:
+        return
+
+    metadata = trace.get("provider_metadata") or {}
+    diagnostics = {
+        "status": trace.get("status"),
+        "failure_reason": trace.get("failure_reason"),
+        "provider": trace.get("provider"),
+        "model_name": trace.get("model_name"),
+        "prompt_mode": metadata.get("prompt_mode"),
+        "attempts": metadata.get("attempts"),
+        "latency_ms": metadata.get("latency_ms"),
+        "response_text_length": metadata.get("response_text_length"),
+        "parsed_json_object": metadata.get("parsed_json_object"),
+        "parsed_payload_type": metadata.get("parsed_payload_type"),
+        "last_error_type": metadata.get("last_error_type"),
+        "configured_generation_controls": metadata.get("configured_generation_controls"),
+        "applied_generation_controls": metadata.get("applied_generation_controls"),
+        "fallback_after": metadata.get("fallback_after"),
+        "validation_status": trace.get("validation_status"),
+        "validation_errors": trace.get("validation_errors"),
+        "input_hash": trace.get("input_hash"),
+        "changed_fields": trace.get("changed_fields"),
+    }
+    diagnostics = {
+        key: value
+        for key, value in diagnostics.items()
+        if value not in (None, "", [], {})
+    }
+    with st.expander("Technical diagnostics", expanded=False):
+        st.json(diagnostics)
 
 
 def render_quality_review_clarification_gate(row, snapshot, trace):
@@ -8671,6 +8983,7 @@ def render_quality_review_panel(row):
     snapshot = get_latest_prediction_snapshot(nct_id)
     if not snapshot:
         return
+    current_snapshot_id = snapshot.get("snapshot_id") or snapshot.get("timestamp")
 
     if snapshot.get("source") == "prerecorded_baseline":
         _quality_review_unavailable_card(
@@ -8701,11 +9014,22 @@ def render_quality_review_panel(row):
         reason = trace.get("failure_reason") or "; ".join(trace.get("validation_errors") or [])
         if not reason and status == "no_fixture_match":
             reason = "No mock Quality Review fixture matched this live scenario."
+        message = (
+            "Quality Review is not available for this scenario in the current mock-review phase."
+            if trace.get("provider") == PROVIDER_MOCK
+            else "Quality Review is not available for this scenario."
+        )
         _quality_review_unavailable_card(
             "Quality Review",
-            "Quality Review is not available for this scenario in the current mock-review phase.",
+            message,
             reason or "Validation did not produce an adjusted score.",
         )
+        _quality_review_diagnostics(trace)
+        if trace.get("provider") != PROVIDER_MOCK:
+            if st.button("Retry Quality Review", key=f"quality_review_retry_{nct_id}_{current_snapshot_id}", type="secondary"):
+                st.session_state.pop(get_quality_review_trace_state_key(nct_id), None)
+                st.session_state.pop(get_hidden_baseline_review_trace_state_key(nct_id), None)
+                st.rerun()
         return
 
     completion_score = snapshot.get("score")
@@ -8714,6 +9038,7 @@ def render_quality_review_panel(row):
     participant = (trace.get("validated_review") or {}).get("participant_review") or {}
     assessment = trace.get("quality_assessment") or {}
     pillars = assessment.get("pillars") or {}
+    adjusted_visual_html = _quality_adjusted_visual_html(assessment)
 
     metric_html = "".join([
         _quality_review_metric("Completion", f"{float(completion_score):.1f}" if completion_score is not None else "N/A"),
@@ -8722,7 +9047,7 @@ def render_quality_review_panel(row):
             _format_quality_points(quality_adjustment),
             _quality_points_color(quality_adjustment),
         ),
-        _quality_review_metric("Final", str(final_candidate_score)),
+        _quality_review_metric("Final", _format_candidate_score(final_candidate_score)),
     ])
 
     pillar_html = ""
@@ -8750,12 +9075,13 @@ def render_quality_review_panel(row):
         if isinstance(line, str) and line.strip()
     )
 
-    cached_note = "Replayed from review cache." if trace.get("cached") else "Generated by deterministic mock reviewer."
+    cached_note = narrative_trace_provider_note(trace)
     st.markdown(
         (
             "<div class='quality-review-card'>"
             "<div class='quality-review-title'>Quality Review</div>"
             f"<div class='quality-review-components'>{metric_html}</div>"
+            f"{adjusted_visual_html}"
             f"{pillar_html}"
             f"{narrative_html}"
             f"<div class='quality-review-muted'>{html.escape(cached_note)}</div>"

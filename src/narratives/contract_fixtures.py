@@ -377,8 +377,8 @@ CONTRACT_FIXTURES: list[dict[str, Any]] = [
         "expected_behavior": {
             "review_needed": True,
             "visible_to_participant_initially": True,
-            "expected_quality_adjustment": -9,
-            "expected_final_candidate_score": 65,
+            "expected_quality_adjustment": -11.0,
+            "expected_final_candidate_score": 63,
             "expected_quality_pillars": {
                 "evidence_coherence": "negative",
                 "population_strategy_fit": "negative_or_neutral",
@@ -454,8 +454,8 @@ CONTRACT_FIXTURES: list[dict[str, Any]] = [
         "expected_behavior": {
             "review_needed": True,
             "visible_to_participant_initially": True,
-            "expected_quality_adjustment": -2,
-            "expected_final_candidate_score": 66,
+            "expected_quality_adjustment": -1.5,
+            "expected_final_candidate_score": 66.5,
             "expected_quality_pillars": {
                 "evidence_coherence": "neutral",
                 "population_strategy_fit": "neutral",
@@ -516,7 +516,7 @@ CONTRACT_FIXTURES: list[dict[str, Any]] = [
         "expected_behavior": {
             "review_needed": True,
             "visible_to_participant_initially": True,
-            "expected_quality_adjustment": -6,
+            "expected_quality_adjustment": -6.0,
             "expected_final_candidate_score": 62,
             "expected_quality_pillars": {
                 "evidence_coherence": "negative",
@@ -644,8 +644,8 @@ CONTRACT_FIXTURES: list[dict[str, Any]] = [
         "expected_behavior": {
             "review_needed": True,
             "visible_to_participant_initially": True,
-            "expected_quality_adjustment": -3,
-            "expected_final_candidate_score": 67,
+            "expected_quality_adjustment": -2.0,
+            "expected_final_candidate_score": 68,
             "expected_quality_pillars": {
                 "evidence_coherence": "negative",
                 "population_strategy_fit": "neutral",
@@ -763,8 +763,8 @@ def validate_contract_fixtures(fixtures: list[dict[str, Any]] | None = None) -> 
             adjustment = expected["expected_quality_adjustment"]
             if clarification_needed and adjustment is None:
                 pass
-            elif not isinstance(adjustment, int) or adjustment < -10 or adjustment > 10:
-                errors.append(f"{fixture_id}: expected_quality_adjustment must be an int between -10 and 10")
+            elif not isinstance(adjustment, (int, float)):
+                errors.append(f"{fixture_id}: expected_quality_adjustment must be numeric")
 
         if "expected_final_candidate_score" not in expected:
             errors.append(f"{fixture_id}: missing expected_final_candidate_score")
@@ -772,8 +772,8 @@ def validate_contract_fixtures(fixtures: list[dict[str, Any]] | None = None) -> 
             final_score = expected["expected_final_candidate_score"]
             if clarification_needed and final_score is None:
                 pass
-            elif not isinstance(final_score, int) or final_score < 0 or final_score > 100:
-                errors.append(f"{fixture_id}: expected_final_candidate_score must be an int between 0 and 100")
+            elif not isinstance(final_score, (int, float)) or final_score < 0 or final_score > 100:
+                errors.append(f"{fixture_id}: expected_final_candidate_score must be numeric between 0 and 100")
 
         if (
             not clarification_needed
@@ -781,7 +781,7 @@ def validate_contract_fixtures(fixtures: list[dict[str, Any]] | None = None) -> 
             and "expected_final_candidate_score" in expected
         ):
             completion_score = packet.get("model_interpretation", {}).get("completion_score")
-            if isinstance(completion_score, int):
+            if isinstance(completion_score, (int, float)):
                 calculated = max(0, min(100, completion_score + expected["expected_quality_adjustment"]))
                 if calculated != expected["expected_final_candidate_score"]:
                     errors.append(
@@ -789,7 +789,7 @@ def validate_contract_fixtures(fixtures: list[dict[str, Any]] | None = None) -> 
                         "from completion_score + expected_quality_adjustment"
                     )
             else:
-                errors.append(f"{fixture_id}: model_interpretation.completion_score must be an int")
+                errors.append(f"{fixture_id}: model_interpretation.completion_score must be numeric")
 
         review_needed = expected.get("review_needed")
         review = fixture.get("mock_review")

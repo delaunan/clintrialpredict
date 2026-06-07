@@ -12,7 +12,7 @@ from src.narratives.provider import (
     review_packet_with_provider,
     review_packet_with_provider_chain,
 )
-from src.narratives.provider_config import NarrativeProviderConfig
+from src.narratives.provider_config import NarrativeProviderConfig, provider_config_cache_namespace
 
 NARRATIVE_REVIEW_STATE_KEY = "narrative_review_store_v1"
 
@@ -65,12 +65,18 @@ def _trace_id(session_id: str, input_hash: str, iteration_id: Any) -> str:
     return f"{session_id}:{iteration_id}:{input_hash}"
 
 
-def _cache_key(input_hash: str | None, provider: str | None, model_name: str | None) -> str | None:
+def _cache_key(
+    input_hash: str | None,
+    provider: str | None,
+    model_name: str | None,
+    cache_namespace: str | None = None,
+) -> str | None:
     if not input_hash:
         return None
     provider_key = str(provider or PROVIDER_MOCK).strip().lower()
     model_key = str(model_name or (MOCK_MODEL_NAME if provider_key == PROVIDER_MOCK else "")).strip()
-    return f"{provider_key}:{model_key}:{input_hash}"
+    namespace_key = str(cache_namespace or "").strip()
+    return f"{provider_key}:{model_key}:{namespace_key}:{input_hash}"
 
 
 def _build_trace(
@@ -80,6 +86,7 @@ def _build_trace(
     session_id: str,
     baseline_id: str | None = None,
     cached: bool = False,
+    cache_namespace: str | None = None,
 ) -> dict[str, Any]:
     iteration_context = packet.get("iteration_context") or {}
     scoring = review_result.get("scoring") or {}
@@ -94,6 +101,7 @@ def _build_trace(
         "timestamp": _utc_now(),
         "provider": review_result.get("provider"),
         "model_name": review_result.get("model_name"),
+        "cache_namespace": cache_namespace,
         "provider_metadata": deepcopy(review_result.get("provider_metadata") or {}),
         "status": review_result.get("status"),
         "cached": cached,
@@ -128,6 +136,7 @@ def store_review_trace(
     session_id: str,
     baseline_id: str | None = None,
     cached: bool = False,
+    cache_namespace: str | None = None,
 ) -> dict[str, Any]:
     """Persist a review trace and cache it by input hash when appropriate."""
     store = get_review_store(state)
@@ -137,11 +146,17 @@ def store_review_trace(
         session_id=session_id,
         baseline_id=baseline_id,
         cached=cached,
+        cache_namespace=cache_namespace,
     )
     input_hash = trace["input_hash"]
 
     if input_hash and review_result.get("status") in {"reviewed", "reused_previous_review"}:
-        cache_key = _cache_key(input_hash, trace.get("provider"), trace.get("model_name"))
+        cache_key = _cache_key(
+            input_hash,
+            trace.get("provider"),
+            trace.get("model_name"),
+            trace.get("cache_namespace"),
+        )
         if cache_key:
             store["reviews_by_hash"][cache_key] = deepcopy(trace)
 
@@ -156,12 +171,33 @@ def cached_review_trace(
     *,
     provider: str = PROVIDER_MOCK,
     model_name: str | None = None,
+    cache_namespace: str | None = None,
 ) -> dict[str, Any] | None:
-    cache_key = _cache_key(input_hash, provider, model_name)
+    cache_key = _cache_key(input_hash, provider, model_name, cache_namespace)
     if not cache_key:
         return None
     trace = get_review_store(state)["reviews_by_hash"].get(cache_key)
     return deepcopy(trace) if trace else None
+
+
+def cached_review_trace_for_namespace(
+    state: MutableMapping[str, Any],
+    input_hash: str | None,
+    *,
+    cache_namespace: str | None,
+) -> dict[str, Any] | None:
+    """Return any reusable provider-chain review for the same input/settings."""
+    if not input_hash or not cache_namespace:
+        return None
+    for trace in reversed(get_review_store(state)["trace_history"]):
+        if trace.get("input_hash") != input_hash:
+            continue
+        if trace.get("cache_namespace") != cache_namespace:
+            continue
+        if trace.get("status") not in {"reviewed", "reused_previous_review"}:
+            continue
+        return deepcopy(trace)
+    return None
 
 
 def replay_or_review_with_provider(
@@ -178,19 +214,22 @@ def replay_or_review_with_provider(
 ) -> dict[str, Any]:
     """Reuse cached review traces for identical inputs, otherwise call provider."""
     input_hash = packet.get("input_hash")
+    cache_namespace = provider_config_cache_namespace(config) if use_provider_chain and config is not None else None
     if failure_mode is None:
-        cache_provider = provider
-        cache_model_name = model_name
         if use_provider_chain and config is not None:
-            cache_provider = config.provider
-            settings = config.provider_settings(cache_provider)
-            cache_model_name = settings.model if settings else None
-        cached = cached_review_trace(
-            state,
-            str(input_hash) if input_hash else None,
-            provider=cache_provider,
-            model_name=cache_model_name,
-        )
+            cached = cached_review_trace_for_namespace(
+                state,
+                str(input_hash) if input_hash else None,
+                cache_namespace=cache_namespace,
+            )
+        else:
+            cached = cached_review_trace(
+                state,
+                str(input_hash) if input_hash else None,
+                provider=provider,
+                model_name=model_name,
+                cache_namespace=cache_namespace,
+            )
         if cached is not None:
             iteration_id = (packet.get("iteration_context") or {}).get("iteration_number")
             cached["cached"] = True
@@ -240,6 +279,7 @@ def replay_or_review_with_provider(
         session_id=session_id,
         baseline_id=baseline_id,
         cached=False,
+        cache_namespace=cache_namespace,
     )
 
 
