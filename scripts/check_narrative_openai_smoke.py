@@ -64,6 +64,10 @@ def main() -> int:
             "{\"status\":\"ok\",\"purpose\":\"narrative_provider_smoke_test\"}"
         ),
         "max_output_tokens": max_output_tokens,
+        "reasoning": {
+            "effort": config.openai_reasoning_effort,
+        },
+        "text": {"format": {"type": "json_object"}},
     }
 
     try:

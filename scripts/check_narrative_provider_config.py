@@ -18,6 +18,7 @@ from src.narratives.provider_config import (  # noqa: E402
     DEFAULT_MAX_OUTPUT_TOKENS,
     DEFAULT_MAX_RETRIES,
     DEFAULT_OPENAI_MODEL,
+    DEFAULT_OPENAI_REASONING_EFFORT,
     DEFAULT_TIMEOUT_SECONDS,
     PROVIDER_GEMINI,
     PROVIDER_OPENAI,
@@ -45,6 +46,8 @@ def _check_defaults(errors: list[str]) -> None:
         errors.append("default timeout_seconds mismatch")
     if config.max_retries != DEFAULT_MAX_RETRIES:
         errors.append("default max_retries mismatch")
+    if config.openai_reasoning_effort != DEFAULT_OPENAI_REASONING_EFFORT:
+        errors.append("default openai reasoning effort mismatch")
 
 
 def _check_env_values(errors: list[str]) -> None:
@@ -60,6 +63,7 @@ def _check_env_values(errors: list[str]) -> None:
         "NARRATIVE_LLM_MAX_OUTPUT_TOKENS": "3000",
         "NARRATIVE_LLM_TIMEOUT_SECONDS": "45",
         "NARRATIVE_LLM_MAX_RETRIES": "1",
+        "OPENAI_REASONING_EFFORT": "high",
     }
     config = load_narrative_provider_config(env)
     if config.validation_errors:
@@ -82,6 +86,8 @@ def _check_env_values(errors: list[str]) -> None:
         errors.append("timeout seconds should parse as int")
     if config.max_retries != 1:
         errors.append("max retries should parse as int")
+    if config.openai_reasoning_effort != "high":
+        errors.append("openai reasoning effort should come from OPENAI_REASONING_EFFORT")
 
     metadata = config.sanitized_trace_metadata()
     if "openai-secret" in str(metadata) or "google-secret" in str(metadata):
@@ -108,10 +114,11 @@ def _check_invalid_values(errors: list[str]) -> None:
         "NARRATIVE_LLM_MAX_OUTPUT_TOKENS": "0",
         "NARRATIVE_LLM_TIMEOUT_SECONDS": "-1",
         "NARRATIVE_LLM_MAX_RETRIES": "9",
+        "OPENAI_REASONING_EFFORT": "too-high",
     }
     config = load_narrative_provider_config(env)
-    if len(config.validation_errors) != 7:
-        errors.append(f"invalid env should produce seven validation errors, got {config.validation_errors}")
+    if len(config.validation_errors) != 8:
+        errors.append(f"invalid env should produce eight validation errors, got {config.validation_errors}")
     if config.provider != PROVIDER_OPENAI:
         errors.append("invalid primary provider should fall back to openai")
     if config.fallback_provider != PROVIDER_GEMINI:

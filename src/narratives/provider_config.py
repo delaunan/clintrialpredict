@@ -19,9 +19,11 @@ DEFAULT_FALLBACK_PROVIDER = PROVIDER_GEMINI
 DEFAULT_OPENAI_MODEL = "gpt-5.5-2026-04-23"
 DEFAULT_GEMINI_MODEL = "gemini-3.1-pro-preview"
 DEFAULT_TEMPERATURE = 0.0
-DEFAULT_MAX_OUTPUT_TOKENS = 2500
+DEFAULT_MAX_OUTPUT_TOKENS = 6000
 DEFAULT_TIMEOUT_SECONDS = 60
 DEFAULT_MAX_RETRIES = 1
+DEFAULT_OPENAI_REASONING_EFFORT = "high"
+OPENAI_REASONING_EFFORTS = {"none", "minimal", "low", "medium", "high", "xhigh"}
 
 
 @dataclass(frozen=True)
@@ -46,6 +48,7 @@ class NarrativeProviderConfig:
     providers: dict[str, ProviderSettings]
     temperature: float
     seed: int | None
+    openai_reasoning_effort: str
     max_output_tokens: int
     timeout_seconds: int
     max_retries: int
@@ -89,6 +92,7 @@ class NarrativeProviderConfig:
             },
             "temperature": self.temperature,
             "seed": self.seed,
+            "openai_reasoning_effort": self.openai_reasoning_effort,
             "max_output_tokens": self.max_output_tokens,
             "timeout_seconds": self.timeout_seconds,
             "max_retries": self.max_retries,
@@ -208,6 +212,13 @@ def load_narrative_provider_config(env: Mapping[str, str]) -> NarrativeProviderC
 
     temperature = _parse_float(env, "NARRATIVE_LLM_TEMPERATURE", DEFAULT_TEMPERATURE, errors)
     seed = _parse_optional_int(env, "NARRATIVE_LLM_SEED", errors)
+    openai_reasoning_effort = str(
+        _env_value(env, "OPENAI_REASONING_EFFORT", DEFAULT_OPENAI_REASONING_EFFORT)
+        or DEFAULT_OPENAI_REASONING_EFFORT
+    ).strip().lower()
+    if openai_reasoning_effort not in OPENAI_REASONING_EFFORTS:
+        errors.append(f"OPENAI_REASONING_EFFORT must be one of {sorted(OPENAI_REASONING_EFFORTS)}")
+        openai_reasoning_effort = DEFAULT_OPENAI_REASONING_EFFORT
     max_output_tokens = _parse_int(
         env,
         "NARRATIVE_LLM_MAX_OUTPUT_TOKENS",
@@ -237,6 +248,7 @@ def load_narrative_provider_config(env: Mapping[str, str]) -> NarrativeProviderC
         providers=providers,
         temperature=temperature,
         seed=seed,
+        openai_reasoning_effort=openai_reasoning_effort,
         max_output_tokens=max_output_tokens,
         timeout_seconds=timeout_seconds,
         max_retries=max_retries,
