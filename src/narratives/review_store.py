@@ -6,7 +6,8 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from typing import Any, MutableMapping
 
-from src.narratives.provider import MOCK_MODEL_NAME, PROVIDER_MOCK, review_packet_with_provider
+from src.narratives.provider import MOCK_MODEL_NAME, PROVIDER_MOCK, review_packet_with_provider, review_packet_with_provider_chain
+from src.narratives.provider_config import NarrativeProviderConfig
 
 NARRATIVE_REVIEW_STATE_KEY = "narrative_review_store_v1"
 
@@ -167,15 +168,23 @@ def replay_or_review_with_provider(
     provider: str = PROVIDER_MOCK,
     model_name: str | None = None,
     failure_mode: str | None = None,
+    config: NarrativeProviderConfig | None = None,
+    use_provider_chain: bool = False,
 ) -> dict[str, Any]:
     """Reuse cached review traces for identical inputs, otherwise call provider."""
     input_hash = packet.get("input_hash")
     if failure_mode is None:
+        cache_provider = provider
+        cache_model_name = model_name
+        if use_provider_chain and config is not None:
+            cache_provider = config.provider
+            settings = config.provider_settings(cache_provider)
+            cache_model_name = settings.model if settings else None
         cached = cached_review_trace(
             state,
             str(input_hash) if input_hash else None,
-            provider=provider,
-            model_name=model_name,
+            provider=cache_provider,
+            model_name=cache_model_name,
         )
         if cached is not None:
             iteration_id = (packet.get("iteration_context") or {}).get("iteration_number")
@@ -191,12 +200,16 @@ def replay_or_review_with_provider(
             return cached
 
     previous_session_trace = latest_trace_for_session(state, session_id)
-    review_result = review_packet_with_provider(
-        packet,
-        provider=provider,
-        model_name=model_name,
-        failure_mode=failure_mode,
-    )
+    if use_provider_chain and config is not None and failure_mode is None:
+        review_result = review_packet_with_provider_chain(packet, config=config)
+    else:
+        review_result = review_packet_with_provider(
+            packet,
+            provider=provider,
+            model_name=model_name,
+            failure_mode=failure_mode,
+            config=config,
+        )
     if (
         review_result.get("status") == "reused_previous_review"
         and previous_session_trace

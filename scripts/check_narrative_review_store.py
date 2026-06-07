@@ -19,7 +19,9 @@ from src.narratives.review_store import (  # noqa: E402
     compact_storyline_from_trace,
     latest_trace_for_session,
     replay_or_review_with_mock,
+    replay_or_review_with_provider,
 )
+from src.narratives.provider_config import load_narrative_provider_config  # noqa: E402
 
 
 def main() -> int:
@@ -82,6 +84,22 @@ def main() -> int:
     cached_failure = cached_review_trace(state, failure_trace.get("input_hash"))
     if cached_failure and cached_failure.get("status") == "provider_error":
         errors.append("provider failure traces should not be cached as reusable reviews")
+
+    missing_key_config = load_narrative_provider_config({
+        "NARRATIVE_LLM_PROVIDER": "openai",
+        "NARRATIVE_LLM_FALLBACK_PROVIDER": "mock",
+    })
+    chain_trace = replay_or_review_with_provider(
+        state,
+        packet=packet,
+        session_id="chain-session",
+        config=missing_key_config,
+        use_provider_chain=True,
+    )
+    if chain_trace.get("provider") != "mock":
+        errors.append("review store provider-chain path should use fallback provider")
+    if chain_trace.get("provider_metadata", {}).get("fallback_after", {}).get("provider") != "openai":
+        errors.append("review store provider-chain trace should preserve fallback metadata")
 
     latest = latest_trace_for_session(state, session_id)
     if not latest:
