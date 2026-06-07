@@ -6,7 +6,12 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from typing import Any, MutableMapping
 
-from src.narratives.provider import MOCK_MODEL_NAME, PROVIDER_MOCK, review_packet_with_provider, review_packet_with_provider_chain
+from src.narratives.provider import (
+    MOCK_MODEL_NAME,
+    PROVIDER_MOCK,
+    review_packet_with_provider,
+    review_packet_with_provider_chain,
+)
 from src.narratives.provider_config import NarrativeProviderConfig
 
 NARRATIVE_REVIEW_STATE_KEY = "narrative_review_store_v1"

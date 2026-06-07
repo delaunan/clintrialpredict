@@ -159,6 +159,13 @@ def _score_provider_review(
     scored = validate_and_score_review(packet, review)
     scoring = scored["scoring"]
     is_valid = scoring.get("validation_status") == "valid" and scoring.get("quality_adjustment") is not None
+    if not is_valid:
+        scoring = {
+            **scoring,
+            "quality_adjustment": None,
+            "final_candidate_score": None,
+            "quality_assessment": {},
+        }
     return {
         "review_needed": True,
         "reuse_previous_review": False,

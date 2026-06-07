@@ -115,6 +115,24 @@ def main() -> int:
     if invalid_real_review.get("scoring", {}).get("quality_adjustment") is not None:
         errors.append("contract-invalid real provider review should not return Quality Adjustment")
 
+    review_with_app_score = {
+        **fixture["mock_review"],
+        "quality_adjustment": 99,
+    }
+    app_score_result = _score_provider_review(
+        packet,
+        provider="openai",
+        model_name="test-model",
+        review=review_with_app_score,
+        provider_metadata={},
+    )
+    if app_score_result.get("status") != FAILURE_MALFORMED_RESPONSE:
+        errors.append("provider-returned app score field should make result malformed_response")
+    if app_score_result.get("scoring", {}).get("quality_adjustment") is not None:
+        errors.append("provider-returned app score field should suppress Quality Adjustment")
+    if app_score_result.get("scoring", {}).get("final_candidate_score") is not None:
+        errors.append("provider-returned app score field should suppress Final Candidate Score")
+
     if errors:
         for error in errors:
             print(f"ERROR: {error}")

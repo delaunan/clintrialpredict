@@ -10,13 +10,13 @@ Efficient update rule: change this file when narrative inputs/outputs, LLM contr
 
 ## 1. Purpose Of The Narrative Architecture
 
-This document defines the staged design for adding a serious-game narrative layer around single-trial simulation in ClinTrialPredict. The first implementation artifact is limited to static contract fixtures; no API, UI, model, taxonomy, prediction, or parity behavior is changed by this document.
+This document defines the staged design for adding a serious-game narrative layer around single-trial simulation in ClinTrialPredict. Current implementation covers contract fixtures, deterministic packet building, validation/scoring, mock review, session-state storage/replay, minimal Quality Review UI, hidden baseline continuity, provider configuration, real OpenAI/Gemini provider boundaries, and prompt-mode scaffolding. The simulator still uses the deterministic mock provider by default until live-provider UI activation is explicitly enabled.
 
 The current edit/simulation workflow remains the foundation. A facilitator selects an existing trial, participants adjust structured Trial Features, and the application calls the existing prediction flow to produce a completion score with SHAP-derived impact decomposition.
 
 The narrative layer exists because completion likelihood alone is not enough for a serious-game discussion. Some changes may raise completion likelihood by making a trial easier to complete while reducing scientific rigor, evidence value, endpoint interpretability, population relevance, governance quality, or strategic defensibility. Other changes may lower completion likelihood while making the design more robust or more relevant.
 
-The future layer should help participants reason about this trade-off without giving direct optimization instructions. It should interpret score movement, surface design trade-offs, and challenge teams to defend their choices.
+The narrative layer should help participants reason about this trade-off without giving direct optimization instructions. It should interpret score movement, surface design trade-offs, and challenge teams to defend their choices.
 
 ## 2. Core Scoring Boundary
 
@@ -88,7 +88,7 @@ The current architecture provides the data needed for a later narrative layer:
 - `src/prep/pipeline.py` defines the model-facing preprocessing registry and ColumnTransformer behavior for ordinal, target-encoded, and numeric features.
 - `docs/architecture_edit.md` records the current simulation contract, including baseline snapshot behavior, pending-change behavior, and parity requirements.
 
-The future narrative layer should consume these outputs and snapshots. It should not duplicate or reinterpret the model pipeline.
+The narrative layer consumes these outputs and snapshots. It should not duplicate or reinterpret the model pipeline.
 
 ## 4. Existing-Study Mode User Experience
 
@@ -395,7 +395,7 @@ Operational assumptions are deterministic scenario stress tests.
 They help the narrative judge whether selected enrollment, site count, and total duration assumptions are coherent with the trial profile.
 They do not enter the XGBoost model.
 They do not directly change the Completion Score.
-They feed the future Quality Review only.
+They feed the Quality Review only.
 ```
 
 Active fields:
@@ -455,7 +455,7 @@ They remain bounded by the Quality Assessment pillar/subcategory caps. Operation
 
 ## 11. Input Payload Architecture
 
-The future LLM input object should be assembled after the existing prediction response has been received and after the application has created the latest prediction snapshot.
+The LLM input object is assembled after the existing prediction response has been received and after the application has created the latest prediction snapshot.
 
 The payload must preserve the separation between the existing prediction system and the LLM narrative layer. XGBoost/TreeSHAP outputs explain completion-score movement; structured serious-game fields, operational assumptions, and text context define the broader design-reasoning space for the Quality Review.
 
@@ -990,7 +990,7 @@ For obvious structured/text mismatches, run a clarification gate before committi
 
 ## 16. Reproducibility And Provider Fallback
 
-The architecture should support OpenAI and Gemini provider calls later without binding product logic to one provider.
+The architecture supports OpenAI and Gemini provider calls without binding product logic to one provider.
 
 Provider selection and secret handling:
 
@@ -1011,7 +1011,7 @@ Provider selection and secret handling:
   - `NARRATIVE_LLM_TIMEOUT_SECONDS`
   - `NARRATIVE_LLM_MAX_RETRIES`
 - Current setup status: local `.env` can hold these values, and `src/narratives/provider_config.py` reads and validates them without making any LLM API call. `scripts/check_narrative_openai_smoke.py` and `scripts/check_narrative_gemini_smoke.py` can run opt-in API smoke tests when `RUN_NARRATIVE_OPENAI_SMOKE=1` or `RUN_NARRATIVE_GEMINI_SMOKE=1` is set; they skip by default to avoid accidental network calls or API spend. `src/narratives/provider.py` now contains real OpenAI and Gemini invocation helpers behind the same normalized provider result shape, but the simulator still uses the deterministic mock provider by default until live review activation is explicitly enabled. Live wrapper checks have validated one full fixture review with OpenAI and one full fixture review with Gemini using the normalized provider boundary.
-- After provider config and optional OpenAI/Gemini smoke testing are validated, add richer prompt/schema fixtures and then activate real OpenAI/Gemini review calls through the existing provider chain.
+- Provider config, prompt/schema fixtures, and opt-in OpenAI/Gemini smoke testing are implemented. The next activation step is to enable real OpenAI/Gemini review calls through the existing provider chain in the simulator UI only after deciding the participant-facing failure and fallback behavior.
 - As of the June 2026 planning decision, the preferred OpenAI default is a pinned GPT-5.5 snapshot, such as `gpt-5.5-2026-04-23`, rather than a floating alias. `gpt-5.5-pro-2026-04-23` can be considered for slower, high-quality hidden baseline generation or offline review, but not as the default live interactive model unless latency and cost are acceptable.
 - Gemini fallback should be configured with an explicit model ID rather than hard-coded in product logic. Prefer a high-quality Gemini Pro model for fallback review quality; choose a stable Flash-family model only when latency, cost, or preview-model risk dominates.
 - Real-provider implementation should use a provider chain: try the configured primary provider first, then the configured fallback only for provider/network/rate-limit/unavailable failure. Do not fallback when the primary provider returns valid but unfavorable clinical reasoning, or when the provider returns malformed/invalid review JSON; that would create provider-shopping behavior and hide prompt/contract problems that should be fixed.
@@ -1044,20 +1044,20 @@ Trace robustness staging:
 
 - Current prototype trace should remain simple and session-state compatible. It should store `input_packet`, provider/mock `output_json`, `validated_review`, validation status/errors, app-owned Quality Adjustment, Final Candidate Score, Quality Assessment, clarification issues, user clarifications, changed fields, score movement, provider/model identity, and compact storyline memory.
 - Current real-provider traces store prompt template version and response schema version in provider metadata. Add prompt template hashes only if prompt version strings are not enough for audit. Add an explicit pre-review gate status, such as `passed` or `clarification_needed`, if clarification debugging becomes ambiguous. Add a compact evidence-audit summary only if unsupported evidence fields become hard to inspect from `quality_assessment`.
-- Defer until real LLM provider integration: raw provider response, parsed JSON response, token usage, latency, provider response ID, finish reason, temperature, seed, system fingerprint, and provider-specific safety/refusal metadata. These fields are not meaningful for the deterministic mock reviewer.
+- Defer until live-provider UI activation or durable provider tracing: raw provider response, parsed JSON response, token usage, latency, provider response ID, finish reason, temperature, seed, system fingerprint, and provider-specific safety/refusal metadata. These fields are not meaningful for the deterministic mock reviewer and are not required for the current mock-default simulator path.
 - Defer until durable storage: database/file persistence, shared trial-level baseline review records, cross-team replay, facilitator export, retention policy, privacy controls, and schema migration strategy.
 - Do not expand the prompt packet just because the trace stores more audit data. Store enough for audit; send only curated current-context fields to the LLM.
 
 The goal is to make repeated runs as consistent as possible while acknowledging that exact determinism is not guaranteed for LLM outputs.
 
-Provider abstraction should be thin. The application should own payload construction, validation, Quality Adjustment calculation, persistence, cache lookup, and UI rendering. Provider-specific code should own only model invocation and response normalization. The V1 provider boundary starts with a deterministic mock provider and an explicit unsupported-provider failure path; real OpenAI/Gemini invocation can be added behind the same boundary later.
+Provider abstraction should be thin. The application should own payload construction, validation, Quality Adjustment calculation, persistence, cache lookup, and UI rendering. Provider-specific code should own only model invocation and response normalization. The V1 provider boundary includes the deterministic mock provider, explicit unsupported-provider failure path, and real OpenAI/Gemini invocation behind the same normalized result shape.
 
 Real-provider prompts use a funnel instruction, currently implemented in `src/narratives/prompt_builder.py` and validated by `scripts/check_narrative_prompt_builder.py`:
 
 - Use prompt mode `hidden_baseline` for the original trial before participant changes. This mode creates hidden baseline context, qualitative baseline score interpretation, baseline strengths/concerns, consistency flags, and compact memory. It must not write as if the participant changed the scenario and must not expose participant-facing baseline Quality Adjustment, Final Candidate Score, or hidden numeric quality score.
 - Use prompt mode `visible_iteration` for participant-modified scenarios. This mode explains the participant change, Completion Score movement, design gains, possible sacrifices, and continuity with baseline/previous iteration context for the visible Quality Review panel.
-- Use `iteration_context.field_changes` to identify what the participant changed.
-- Use `model_interpretation.xgboost_impact_changes` to understand model movement and materiality.
+- In `visible_iteration` mode, use `iteration_context.field_changes` to identify what the participant changed.
+- Use `model_interpretation.xgboost_impact_changes` to understand model movement and materiality. In `hidden_baseline` mode, do not invent participant edits when `field_changes` is empty.
 - Treat XGBoost/SHAP movement as model explanation evidence, not proof of clinical causality.
 - Translate model evidence into clinical trial / pharma development language for participant-facing text. Explain why the revised scenario may look more or less completion-like, robust, feasible, governed, strategically aligned, risk-reduced, simplified, or less evidence-generating in terms of endpoint timing, comparator choice, population scope, oversight, operational burden, trial duration, scientific challenge, or development strategy rather than exposing raw model vocabulary. Do not equate a higher Completion Score with simplification by default, but do flag simplification or value loss when the evidence points that way.
 - Produce domain ratings, rationale, evidence fields, participant-facing narrative, continuity, and trace fields.
@@ -1491,7 +1491,6 @@ Implementation staging:
 - Whether later versions add, remove, or reorder fields beyond the v1 field-selection policy above.
 - Exact storage mechanism.
 - Exact participant versus facilitator UI placement.
-- Exact provider abstraction for OpenAI/Gemini.
 - Exact number of previous iterations to keep raw before summarization.
 - Exact Quality Adjustment calibration examples after v1 playtesting.
 - Whether facilitator view is hidden behind an expander or separate mode.
