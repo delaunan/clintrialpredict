@@ -21,7 +21,13 @@ from src.narratives.provider_config import (
     PROVIDER_OPENAI,
     ProviderSettings,
 )
-from src.narratives.scoring import DOMAIN_RATING_POINTS, PARTICIPANT_REVIEW_KEYS, validate_and_score_review
+from src.narratives.prompt_builder import (
+    PROMPT_TEMPLATE_VERSION,
+    RESPONSE_SCHEMA_VERSION,
+    build_provider_prompt,
+    infer_prompt_mode,
+)
+from src.narratives.scoring import validate_and_score_review
 
 MOCK_MODEL_NAME = "fixture_hash_mock_v1"
 OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses"
@@ -32,17 +38,6 @@ FAILURE_INCOMPLETE_RESPONSE = "incomplete_response"
 FAILURE_MALFORMED_RESPONSE = "malformed_response"
 STATUS_CLARIFICATION_NEEDED = "clarification_needed"
 STATUS_REVIEWED = "reviewed"
-
-REQUIRED_DOMAIN_NAMES = (
-    "change_integrity",
-    "development_question_fit",
-    "endpoint_and_comparator_logic",
-    "operational_scale_fit",
-    "population_relevance",
-    "scientific_rigor",
-    "text_consistency",
-)
-
 
 def _unavailable_scoring(packet: dict[str, Any], message: str) -> dict[str, Any]:
     return {
@@ -111,29 +106,6 @@ def _parse_json_object(text: str) -> dict[str, Any] | None:
     return parsed if isinstance(parsed, dict) else None
 
 
-def _provider_prompt(packet: dict[str, Any]) -> str:
-    participant_keys = ", ".join(sorted(PARTICIPANT_REVIEW_KEYS))
-    domain_names = ", ".join(REQUIRED_DOMAIN_NAMES)
-    rating_contract = {
-        domain: sorted(DOMAIN_RATING_POINTS[domain])
-        for domain in REQUIRED_DOMAIN_NAMES
-    }
-    packet_json = json.dumps(packet, sort_keys=True, separators=(",", ":"), default=str)
-    return (
-        "You are reviewing a clinical trial design simulation packet. "
-        "Return only one valid compact JSON object. Do not include markdown or prose outside JSON. "
-        "Do not calculate Quality Adjustment or Final Candidate Score; the application calculates those. "
-        "Use field_changes to identify participant edits and xgboost_impact_changes to understand model movement, "
-        "but do not treat model movement as proof of clinical causality. "
-        f"The JSON must include quality_review_domains for exactly these domains: {domain_names}. "
-        "Each domain must contain rating, rationale, and evidence_fields. "
-        f"Allowed ratings by domain: {json.dumps(rating_contract, sort_keys=True, separators=(',', ':'))}. "
-        f"The JSON must include participant_review with these string keys: {participant_keys}. "
-        "Also include score_movement_review, continuity, and trace objects. "
-        f"Packet JSON: {packet_json}"
-    )
-
-
 def _openai_response_text(payload: dict[str, Any]) -> str:
     output_text = payload.get("output_text")
     if isinstance(output_text, str):
@@ -157,6 +129,7 @@ def _real_provider_metadata(
     provider: str,
     config: NarrativeProviderConfig,
     applied_generation_controls: dict[str, Any],
+    prompt_mode: str,
 ) -> dict[str, Any]:
     return {
         "configured_generation_controls": {
@@ -169,6 +142,9 @@ def _real_provider_metadata(
         },
         "applied_generation_controls": applied_generation_controls,
         "real_provider": provider,
+        "prompt_template_version": PROMPT_TEMPLATE_VERSION,
+        "response_schema_version": RESPONSE_SCHEMA_VERSION,
+        "prompt_mode": prompt_mode,
     }
 
 
@@ -207,6 +183,8 @@ def _call_openai_provider(
     config: NarrativeProviderConfig,
     settings: ProviderSettings,
 ) -> dict[str, Any]:
+    prompt_mode = infer_prompt_mode(packet)
+    prompt = build_provider_prompt(packet, prompt_mode=prompt_mode)
     applied_controls = {
         "max_output_tokens": config.max_output_tokens,
         "reasoning_effort": config.openai_reasoning_effort,
@@ -217,10 +195,11 @@ def _call_openai_provider(
         provider=PROVIDER_OPENAI,
         config=config,
         applied_generation_controls=applied_controls,
+        prompt_mode=prompt_mode,
     )
     payload = {
         "model": settings.model,
-        "input": _provider_prompt(packet),
+        "input": prompt,
         "max_output_tokens": config.max_output_tokens,
         "reasoning": {"effort": config.openai_reasoning_effort},
         "text": {"format": {"type": "json_object"}},
@@ -292,6 +271,8 @@ def _call_gemini_provider(
     config: NarrativeProviderConfig,
     settings: ProviderSettings,
 ) -> dict[str, Any]:
+    prompt_mode = infer_prompt_mode(packet)
+    prompt = build_provider_prompt(packet, prompt_mode=prompt_mode)
     applied_controls = {
         "max_output_tokens": config.max_output_tokens,
         "temperature": config.temperature,
@@ -302,6 +283,7 @@ def _call_gemini_provider(
         provider=PROVIDER_GEMINI,
         config=config,
         applied_generation_controls=applied_controls,
+        prompt_mode=prompt_mode,
     )
     response = None
     last_error = None
@@ -324,7 +306,7 @@ def _call_gemini_provider(
             try:
                 response = client.models.generate_content(
                     model=settings.model,
-                    contents=_provider_prompt(packet),
+                    contents=prompt,
                     config=generation_config,
                 )
                 break
