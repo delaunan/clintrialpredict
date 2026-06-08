@@ -456,6 +456,14 @@ TRIAL_EDITOR_TEXT_FIELDS = {
     "eligibility_criteria": ("criteria_ui",),
 }
 
+TEXT_CONTEXT_OUTPUT_KEYS = {
+    "top_title": "title",
+    "study_summary": "summary_ui",
+    "conditions": "conditions_ui",
+    "primary_outcomes": "primary_outcomes_ui",
+    "interventions": "interventions_ui",
+}
+
 
 # ==========================
 # 2. STYLES (Consolidated)
@@ -2210,6 +2218,22 @@ def inject_custom_styles():
             }}
 
             .st-key-trial_detail_tabs .stTabs [data-baseweb="tab-border"] {{
+                display: none !important;
+            }}
+
+            html body .st-key-header_check_scenario_wrap {{
+                display: none !important;
+            }}
+
+            html body:has(.st-key-trial_detail_tabs button[role="tab"][aria-selected="true"]:nth-of-type(3)) .st-key-header_check_scenario_wrap {{
+                display: block !important;
+            }}
+
+            html body:has(.st-key-trial_detail_tabs button[role="tab"][aria-selected="true"]:nth-of-type(4)) .st-key-header_check_scenario_wrap {{
+                display: block !important;
+            }}
+
+            html body:has(.st-key-trial_detail_tabs button[role="tab"][aria-selected="true"]:nth-of-type(3):not(:last-child)) .st-key-header_check_scenario_wrap {{
                 display: none !important;
             }}
 
@@ -4193,6 +4217,24 @@ def inject_custom_styles():
                             var(--ui-control-shadow) !important;
             }}
 
+            html body [class*="st-key-simtext_chg_"] [data-testid="stTextArea"] [data-baseweb="textarea"],
+            html body [class*="st-key-simtext_chg_"] [data-testid="stTextArea"] [data-baseweb="textarea"] > div,
+            html body [class*="st-key-simtext_chg_"] .stTextArea textarea {{
+                background-color: #e8f0fb !important;
+                border-color: #9bbbe2 !important;
+                box-shadow: inset 0 0 0 1px rgba(47,98,166,0.10),
+                            var(--ui-textarea-shadow) !important;
+            }}
+
+            html body [class*="st-key-simtext_prev_"] [data-testid="stTextArea"] [data-baseweb="textarea"],
+            html body [class*="st-key-simtext_prev_"] [data-testid="stTextArea"] [data-baseweb="textarea"] > div,
+            html body [class*="st-key-simtext_prev_"] .stTextArea textarea {{
+                background-color: #f1f5f9 !important;
+                border-color: #cbd5e1 !important;
+                box-shadow: inset 0 0 0 1px rgba(100,116,139,0.08),
+                            var(--ui-textarea-shadow) !important;
+            }}
+
             html body [class*="st-key-operational_assumption_"] {{
                 background-color: #ffffff !important;
                 border: 1px solid #e2e8f0 !important;
@@ -4950,6 +4992,10 @@ def start_search():
 
 
 def reset_detail_prediction_state():
+    selected_id = st.session_state.get("selected_nct_id")
+    if selected_id:
+        clear_prediction_clarification_state(selected_id)
+
     st.session_state.trigger_prediction = False
     st.session_state.analysis_result = None
     st.session_state.analysis_nct_id = None
@@ -5530,6 +5576,38 @@ def _changed_text_context_fields_between(previous_snapshot, text_context):
     return changed
 
 
+def _normalized_text_context_for_fingerprint(text_context):
+    return {
+        key: normalize_text_for_materiality(value)
+        for key, value in sorted((text_context or {}).items())
+    }
+
+
+def _operational_values_for_fingerprint(operational_assumptions):
+    values = {}
+    for assumption_key in ACTIVE_OPERATIONAL_ASSUMPTION_KEYS:
+        raw_value = ((operational_assumptions or {}).get(assumption_key) or {}).get("value")
+        numeric = pd.to_numeric(raw_value, errors="coerce")
+        if pd.isna(numeric):
+            values[assumption_key] = None
+        elif assumption_key == "planned_duration_months":
+            values[assumption_key] = round(float(numeric), 1)
+        else:
+            values[assumption_key] = int(round(float(numeric)))
+    return values
+
+
+def build_scenario_fingerprint(compare_values, operational_assumptions, text_context):
+    return {
+        "structured_features": {
+            field_id: _option_key_for_ui_value(field_id, (compare_values or {}).get(field_id))
+            for field_id in SIMULATION_FEATURE_IDS
+        },
+        "operational_assumptions": _operational_values_for_fingerprint(operational_assumptions),
+        "text_context": _normalized_text_context_for_fingerprint(text_context),
+    }
+
+
 def _next_iteration_context(previous_snapshot, source):
     previous_iteration = ((previous_snapshot or {}).get("iteration_context") or {}).get("iteration_number")
     if isinstance(previous_iteration, int):
@@ -5636,6 +5714,9 @@ def set_latest_prediction_snapshot(
         ),
         "operational_assumptions": _json_safe(operational_assumptions or {}),
         "text_context": _json_safe(text_context),
+        "scenario_fingerprint": _json_safe(
+            build_scenario_fingerprint(compare_values, operational_assumptions, text_context)
+        ),
         "user_clarifications": _json_safe(user_clarifications or []),
         "changed_text_context_fields": changed_text_context_fields,
         "committed_changed_text_context_fields": committed_changed_text_context_fields,
@@ -5728,24 +5809,31 @@ def build_trial_identity_for_narrative(row):
     }
 
 
-def build_text_context_for_narrative(row):
+def get_current_text_panel_value(row, panel_key):
     trial_key = str(row.get(ID_COL, st.session_state.get("selected_nct_id", "no_trial")))
-    context = {}
-    output_keys = {
-        "top_title": "title",
-        "study_summary": "summary_ui",
-        "conditions": "conditions_ui",
-        "primary_outcomes": "primary_outcomes_ui",
-        "interventions": "interventions_ui",
-    }
+    text_key = f"text_{trial_key}_{panel_key}"
+    feature_widget_key = f"{text_key}_features"
 
-    for panel_key, output_key in output_keys.items():
-        text_key = f"text_{trial_key}_{panel_key}"
-        candidates = TRIAL_EDITOR_TEXT_FIELDS.get(panel_key, ())
-        value = st.session_state.get(text_key)
-        if value in (None, "") and candidates:
-            value = trial_val(row, candidates[0])
-        if value not in (None, ""):
+    if st.session_state.get("global_edit_mode", False) and feature_widget_key in st.session_state:
+        value = st.session_state.get(feature_widget_key, "")
+        return value, True
+
+    if text_key in st.session_state:
+        return st.session_state.get(text_key, ""), True
+
+    candidates = TRIAL_EDITOR_TEXT_FIELDS.get(panel_key, ())
+    if not candidates:
+        return None, False
+
+    return trial_val(row, candidates[0]), False
+
+
+def build_text_context_for_narrative(row):
+    context = {}
+
+    for panel_key, output_key in TEXT_CONTEXT_OUTPUT_KEYS.items():
+        value, has_widget_value = get_current_text_panel_value(row, panel_key)
+        if has_widget_value or value not in (None, ""):
             context[output_key] = value
 
     return context
@@ -5795,6 +5883,18 @@ def clear_prediction_clarification_request(nct_id):
     key = get_prediction_clarification_request_state_key(nct_id)
     if key in st.session_state:
         del st.session_state[key]
+
+
+def clear_prediction_clarification_state(nct_id):
+    nct_id = str(nct_id or "").strip()
+    if not nct_id:
+        return
+
+    clear_prediction_clarification_request(nct_id)
+    prefix = f"narrative_prediction_clarifications_{nct_id}_"
+    for key in list(st.session_state.keys()):
+        if str(key).startswith(prefix):
+            del st.session_state[key]
 
 
 def build_pre_prediction_review_packet(row, user_clarifications=None):
@@ -5968,7 +6068,7 @@ def get_hidden_baseline_review_trace(row, baseline_snapshot):
         previous_snapshot=None,
         baseline_snapshot=baseline_snapshot,
         trial_identity=build_trial_identity_for_narrative(row),
-        text_context=build_text_context_for_narrative(row),
+        text_context=baseline_snapshot.get("text_context") or build_text_context_for_narrative(row),
         compact_storyline_memory="",
     )
 
@@ -6358,7 +6458,36 @@ def is_duration_benchmark_stale(row):
     return False
 
 
+def _current_operational_assumptions_for_fingerprint(row):
+    return {
+        assumption_key: {
+            "value": get_current_operational_assumption_value(row, assumption_key)
+        }
+        for assumption_key in ACTIVE_OPERATIONAL_ASSUMPTION_KEYS
+    }
+
+
+def current_scenario_fingerprint(row):
+    return build_scenario_fingerprint(
+        get_current_compare_values(row),
+        _current_operational_assumptions_for_fingerprint(row),
+        build_text_context_for_narrative(row),
+    )
+
+
+def is_current_scenario_submitted(row):
+    nct_id = str(row.get(ID_COL, st.session_state.get("selected_nct_id", "")))
+    snapshot = get_latest_prediction_snapshot(nct_id) or {}
+    fingerprint = snapshot.get("scenario_fingerprint")
+    if not fingerprint:
+        return False
+    return _json_safe(current_scenario_fingerprint(row)) == _json_safe(fingerprint)
+
+
 def get_pending_feature_ids(row):
+    if is_current_scenario_submitted(row):
+        return []
+
     nct_id = str(row.get(ID_COL, st.session_state.get("selected_nct_id", "")))
     snapshot = get_latest_prediction_snapshot(nct_id)
     if not snapshot:
@@ -6383,6 +6512,9 @@ def has_pending_changes(row):
 
 
 def get_pending_operational_assumption_keys(row):
+    if is_current_scenario_submitted(row):
+        return []
+
     nct_id = str(row.get(ID_COL, st.session_state.get("selected_nct_id", "")))
     snapshot = get_latest_prediction_snapshot(nct_id)
     if not snapshot:
@@ -6402,6 +6534,9 @@ def has_pending_operational_assumptions(row):
 
 
 def get_pending_text_context_fields(row):
+    if is_current_scenario_submitted(row):
+        return []
+
     nct_id = str(row.get(ID_COL, st.session_state.get("selected_nct_id", "")))
     snapshot = get_latest_prediction_snapshot(nct_id)
     if not snapshot:
@@ -6411,6 +6546,48 @@ def get_pending_text_context_fields(row):
 
 def has_pending_text_context_changes(row):
     return bool(get_pending_text_context_fields(row))
+
+
+def get_committed_text_context_fields(row):
+    nct_id = str(row.get(ID_COL, st.session_state.get("selected_nct_id", "")))
+    snapshot = get_latest_prediction_snapshot(nct_id) or {}
+    return (
+        snapshot.get("committed_changed_text_context_fields")
+        or snapshot.get("changed_text_context_fields")
+        or []
+    )
+
+
+def text_context_history_state_token(row, state_suffix):
+    output_key = TEXT_CONTEXT_OUTPUT_KEYS.get(state_suffix)
+    return change_state_token(
+        pending=output_key in get_pending_text_context_fields(row),
+        committed=output_key in get_committed_text_context_fields(row),
+    )
+
+
+def _submitted_text_value_for_panel(row, state_suffix, default_value):
+    if not st.session_state.get("global_edit_mode", False):
+        return default_value
+
+    nct_id = str(row.get(ID_COL, st.session_state.get("selected_nct_id", "")))
+    snapshot = get_latest_prediction_snapshot(nct_id) or {}
+    output_key = TEXT_CONTEXT_OUTPUT_KEYS.get(state_suffix)
+    text_context = snapshot.get("text_context") or {}
+    if output_key and output_key in text_context:
+        return text_context.get(output_key)
+    return default_value
+
+
+def _latest_snapshot_id_for_text_panel(row):
+    if not st.session_state.get("global_edit_mode", False):
+        return None
+
+    nct_id = str(row.get(ID_COL, st.session_state.get("selected_nct_id", "")))
+    snapshot = get_latest_prediction_snapshot(nct_id) or {}
+    if snapshot.get("source") == "prerecorded_baseline":
+        return None
+    return snapshot.get("snapshot_id") or snapshot.get("timestamp")
 
 
 def has_pending_enrollment_assumption(row):
@@ -6607,6 +6784,9 @@ def start_prediction_request():
     st.session_state.detail_completion_tab_visible = True
     st.session_state.detail_prediction_notice = False
     st.session_state.prediction_error_notice = None
+    if st.session_state.get("global_edit_mode", False):
+        st.session_state.analysis_result = None
+        st.session_state.analysis_nct_id = None
     st.session_state.trigger_prediction = True
     st.session_state.completion_score_tab_jump_nonce += 1
 
@@ -6732,7 +6912,7 @@ def handle_predict_trial_completion():
         st.session_state.analysis_nct_id = None
         clarification_request = prediction_clarification_preflight(row)
         if clarification_request:
-            st.session_state.detail_completion_tab_visible = True
+            st.session_state.simulation_open_features_tab = True
             st.session_state.detail_prediction_notice = False
             st.session_state.prediction_error_notice = None
             st.session_state.trigger_prediction = False
@@ -6749,7 +6929,28 @@ def handle_predict_trial_completion():
     start_prediction_request()
 
 
+def handle_check_scenario_alignment():
+    row = get_selected_trial_row()
+    if row is None:
+        return
+
+    st.session_state.simulation_open_features_tab = True
+    st.session_state.trial_features_alignment_check_status = "checked"
+    st.session_state.detail_prediction_notice = False
+    st.session_state.prediction_error_notice = None
+
+    clarification_request = prediction_clarification_preflight(row)
+    if clarification_request:
+        st.session_state.trial_features_alignment_check_status = "needs_clarification"
+    else:
+        st.session_state.trial_features_alignment_check_status = "passed"
+
+
 def queue_simulation_reprediction_if_score_visible():
+    st.session_state.trial_features_alignment_check_status = None
+    selected_id = st.session_state.get("selected_nct_id")
+    if selected_id:
+        clear_prediction_clarification_request(selected_id)
     return
 
 
@@ -6758,7 +6959,9 @@ def reset_trial_editor_state():
     if row is None:
         return
 
+    st.session_state.trial_features_alignment_check_status = None
     trial_key = str(row[ID_COL])
+    clear_prediction_clarification_state(trial_key)
 
     for field_id in sorted(set(TRIAL_EDITOR_FIELD_IDS) | SIMULATION_FEATURE_ID_SET | {"gbd_indication_name_3"}):
         state_key = f"input_{trial_key}_{field_id}"
@@ -7069,7 +7272,7 @@ def render_header(is_landing=True, show_predict_button=False, show_back_button=F
         if show_back_button or show_predict_button or show_global_edit_toggle:
 
             with st.container(key="header_action_buttons"):
-                c_toggle, c_back, c_predict = st.columns([1.55, 0.95, 1.75], gap="small", vertical_alignment="top")
+                c_toggle, c_check, c_predict = st.columns([1.55, 1.20, 1.75], gap="small", vertical_alignment="top")
 
                 with c_toggle:
                     if show_global_edit_toggle:
@@ -7079,30 +7282,47 @@ def render_header(is_landing=True, show_predict_button=False, show_back_button=F
                             on_change=handle_global_edit_toggle
                         )
 
-                with c_back:
-                    pass
+                with c_check:
+                    if (
+                        show_predict_button
+                        and st.session_state.get("global_edit_mode", False)
+                    ):
+                        selected_row = get_selected_trial_row()
+                        pending = selected_row is not None and has_pending_simulation_changes(selected_row)
+                        check_passed = st.session_state.get("trial_features_alignment_check_status") == "passed"
+                        check_btn_type = "primary" if pending and not check_passed else "secondary"
+                        with st.container(key="header_check_scenario_wrap"):
+                            st.button(
+                                "Check Scenario",
+                                width="stretch",
+                                type=check_btn_type,
+                                key="header_check_scenario_btn",
+                                disabled=not pending,
+                                on_click=handle_check_scenario_alignment,
+                            )
 
                 with c_predict:
                     if show_predict_button:
                         if st.session_state.get("global_edit_mode", False):
                             selected_row = get_selected_trial_row()
-                            predict_btn_type = (
-                                "primary"
-                                if selected_row is not None and has_pending_simulation_changes(selected_row)
-                                else "secondary"
-                            )
+                            pending = selected_row is not None and has_pending_simulation_changes(selected_row)
+                            check_passed = st.session_state.get("trial_features_alignment_check_status") == "passed"
+                            predict_btn_type = "primary" if pending and check_passed else "secondary"
+                            predict_disabled = pending and not check_passed
                         else:
                             predict_btn_type = (
                                 "secondary"
                                 if st.session_state.get("detail_completion_tab_visible", False)
                                 else "primary"
                             )
+                            predict_disabled = False
 
                         st.button(
                             "Predict Trial Completion",
                             width="stretch",
                             type=predict_btn_type,
                             key="header_predict_btn",
+                            disabled=predict_disabled,
                             on_click=handle_predict_trial_completion
                         )
 
@@ -7857,6 +8077,7 @@ def _sync_planned_enrollment_widget(row):
     st.session_state[value_key] = st.session_state.get(widget_key, 0)
     st.session_state[source_key] = "user_scenario"
     st.session_state.simulation_has_edits = True
+    queue_simulation_reprediction_if_score_visible()
 
 
 def _sync_planned_sites_widget(row):
@@ -7867,6 +8088,7 @@ def _sync_planned_sites_widget(row):
     st.session_state[value_key] = st.session_state.get(widget_key, 0)
     st.session_state[source_key] = "user_scenario"
     st.session_state.simulation_has_edits = True
+    queue_simulation_reprediction_if_score_visible()
 
 
 def _sync_planned_duration_widget(row):
@@ -7878,6 +8100,7 @@ def _sync_planned_duration_widget(row):
     st.session_state[value_key] = 0.0 if pd.isna(value) else round(float(value), 1)
     st.session_state[source_key] = "user_scenario"
     st.session_state.simulation_has_edits = True
+    queue_simulation_reprediction_if_score_visible()
 
 
 def _label_with_previous_value(label, field_id, row):
@@ -8026,34 +8249,47 @@ def _render_trial_feature_control(field_id, row):
         )
 
 
-def _render_simulation_text_shell_panel(label, value, state_suffix, panel_suffix, height):
+def _render_simulation_text_shell_panel(row, label, value, state_suffix, panel_suffix, height):
     trial_key = st.session_state.get("selected_nct_id", "no_trial")
     shared_key = f"text_{trial_key}_{state_suffix}"
     widget_key = f"{shared_key}_features"
+    value = _submitted_text_value_for_panel(
+        row,
+        state_suffix,
+        value,
+    )
     safe_value = "" if value == "N/A" else str(value)
+    snapshot_id = _latest_snapshot_id_for_text_panel(row)
+    hydrated_snapshot_key = f"{widget_key}_hydrated_snapshot"
 
-    if shared_key not in st.session_state:
-        st.session_state[shared_key] = safe_value
-    if st.session_state.get(widget_key) != st.session_state.get(shared_key):
-        _safe_set_session_value(widget_key, st.session_state.get(shared_key, safe_value))
+    if (
+        snapshot_id
+        and st.session_state.get(hydrated_snapshot_key) != snapshot_id
+    ):
+        _safe_set_session_value(widget_key, safe_value)
+        st.session_state[hydrated_snapshot_key] = snapshot_id
+    elif widget_key not in st.session_state:
+        _safe_set_session_value(widget_key, safe_value)
 
     def _sync_text_feature_widget():
-        st.session_state[shared_key] = st.session_state.get(widget_key, "")
+        _safe_set_session_value(shared_key, st.session_state.get(widget_key, ""))
         st.session_state.simulation_has_edits = True
         queue_simulation_reprediction_if_score_visible()
 
+    state_token = text_context_history_state_token(row, state_suffix)
     with st.container(key=f"summary_side_shell_{panel_suffix}"):
         with st.container(key=f"summary_side_inner_{panel_suffix}"):
             st.markdown("<div class='trial-meta-top-gap'></div>", unsafe_allow_html=True)
 
-            with st.container(key=f"meta_native_field_{panel_suffix}"):
-                st.text_area(
-                    label,
-                    key=widget_key,
-                    height=height,
-                    on_change=_sync_text_feature_widget,
-                    disabled=not st.session_state.get("global_edit_mode", False),
-                )
+            with st.container(key=f"simtext_{state_token}_{state_suffix}"):
+                with st.container(key=f"meta_native_field_{panel_suffix}"):
+                    st.text_area(
+                        label,
+                        key=widget_key,
+                        height=height,
+                        on_change=_sync_text_feature_widget,
+                        disabled=not st.session_state.get("global_edit_mode", False),
+                    )
 
             st.markdown("<div class='trial-meta-bottom-gap'></div>", unsafe_allow_html=True)
 
@@ -8063,6 +8299,7 @@ def render_trial_features_text_cards(row):
 
     with left_col:
         _render_simulation_text_shell_panel(
+            row=row,
             label="Conditions",
             value=trial_val(row, "conditions_ui"),
             state_suffix="conditions",
@@ -8072,6 +8309,7 @@ def render_trial_features_text_cards(row):
 
     with middle_col:
         _render_simulation_text_shell_panel(
+            row=row,
             label="Study Summary",
             value=trial_val(row, "summary_ui"),
             state_suffix="study_summary",
@@ -8082,6 +8320,7 @@ def render_trial_features_text_cards(row):
         bottom_left, bottom_right = st.columns(2, gap="xsmall")
         with bottom_left:
             _render_simulation_text_shell_panel(
+                row=row,
                 label="Interventions",
                 value=trial_val(row, "interventions_ui"),
                 state_suffix="interventions",
@@ -8090,6 +8329,7 @@ def render_trial_features_text_cards(row):
             )
         with bottom_right:
             _render_simulation_text_shell_panel(
+                row=row,
                 label="Primary Outcomes",
                 value=trial_val(row, "primary_outcomes_ui"),
                 state_suffix="primary_outcomes",
@@ -8886,7 +9126,13 @@ def _quality_review_diagnostics(trace):
         "response_text_length": metadata.get("response_text_length"),
         "parsed_json_object": metadata.get("parsed_json_object"),
         "parsed_payload_type": metadata.get("parsed_payload_type"),
+        "usage_metadata": metadata.get("usage_metadata"),
+        "finish_metadata": metadata.get("finish_metadata"),
         "last_error_type": metadata.get("last_error_type"),
+        "malformed_json_retry_attempts": metadata.get("malformed_json_retry_attempts"),
+        "malformed_json_retry_latency_ms": metadata.get("malformed_json_retry_latency_ms"),
+        "malformed_json_retry_error_type": metadata.get("malformed_json_retry_error_type"),
+        "malformed_json_retry_controls": metadata.get("malformed_json_retry_controls"),
         "configured_generation_controls": metadata.get("configured_generation_controls"),
         "applied_generation_controls": metadata.get("applied_generation_controls"),
         "fallback_after": metadata.get("fallback_after"),
@@ -9054,6 +9300,17 @@ def render_prediction_clarification_gate(row, request):
         st.rerun()
 
 
+def render_trial_features_prediction_controls(row):
+    nct_id = str(row.get(ID_COL, st.session_state.get("selected_nct_id", "")))
+    clarification_request = get_prediction_clarification_request(nct_id)
+    check_status = st.session_state.get("trial_features_alignment_check_status")
+
+    if clarification_request:
+        render_prediction_clarification_gate(row, clarification_request)
+    elif check_status == "passed":
+        st.success("Scenario consistency check passed. No obvious structured/text mismatch was detected.")
+
+
 def render_quality_review_panel(row):
     if not st.session_state.get("global_edit_mode", False):
         return
@@ -9078,14 +9335,22 @@ def render_quality_review_panel(row):
         return
 
     if has_pending_simulation_changes(row):
+        pending_diagnostics = {
+            "pending_feature_ids": get_pending_feature_ids(row),
+            "pending_text_context_fields": get_pending_text_context_fields(row),
+            "pending_operational_assumptions": get_pending_operational_assumption_keys(row),
+        }
         _quality_review_unavailable_card(
             "Quality Review",
             "Click Predict to update the Quality Review for the current scenario.",
             "The displayed Completion Score and previous review still reflect the last submitted prediction.",
         )
+        with st.expander("Pending scenario diagnostics", expanded=False):
+            st.json(pending_diagnostics)
         return
 
-    trace = get_quality_review_trace_for_snapshot(row, snapshot)
+    with st.spinner("Generating Quality Review..."):
+        trace = get_quality_review_trace_for_snapshot(row, snapshot)
     if not trace:
         return
 
@@ -9323,6 +9588,7 @@ def render_trial_detail_tabs_refined(row):
 
         if simulation_mode and tab_features is not None:
             with tab_features:
+                render_trial_features_prediction_controls(row)
                 render_trial_features_tab(row)
                 render_operational_assumption_inputs(row)
 
@@ -9367,11 +9633,10 @@ def get_edited_row(row: pd.Series) -> pd.Series:
 
     # 2. Update from large text areas
     for panel_key, candidates in TRIAL_EDITOR_TEXT_FIELDS.items():
-        text_key = f"text_{trial_key}_{panel_key}"
         target_col = candidates[0]
-
-        if text_key in st.session_state:
-            edited_row[target_col] = st.session_state[text_key]
+        value, has_widget_value = get_current_text_panel_value(row, panel_key)
+        if has_widget_value:
+            edited_row[target_col] = value
 
     return edited_row
 
@@ -9435,10 +9700,13 @@ def get_analysis_result_for_selected_trial(row):
     if not (st.session_state.trigger_prediction or st.session_state.get("analysis_result")):
         return None
 
-    if (
-        not st.session_state.get("analysis_result")
+    should_run_prediction = (
+        bool(st.session_state.get("trigger_prediction", False))
+        or not st.session_state.get("analysis_result")
         or st.session_state.get("analysis_nct_id") != st.session_state.selected_nct_id
-    ):
+    )
+
+    if should_run_prediction:
         with st.spinner("Analyzing signals..."):
             try:
                 if not is_simulation_mode:

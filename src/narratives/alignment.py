@@ -76,7 +76,17 @@ def detect_alignment_issues(packet: dict[str, Any]) -> list[dict[str, Any]]:
 
     placebo_value = _feature_value(packet, "has_placebo_ml")
     placebo_yes = placebo_value in {"1", "yes", "true", "placebo control"}
-    placebo_no_text = _has_any(text, (r"\bno placebo\b", r"\bwithout placebo\b", r"\bplacebo-free\b"))
+    placebo_no = placebo_value in {"0", "no", "false", "no placebo", "no placebo control"}
+    placebo_no_text = _has_any(
+        text,
+        (
+            r"\bno placebo\b",
+            r"\bno placebo[- ]control\b",
+            r"\bwithout placebo\b",
+            r"\bwithout placebo[- ]control\b",
+            r"\bplacebo-free\b",
+        ),
+    )
     if placebo_yes and placebo_no_text:
         issues.append(
             _issue(
@@ -84,6 +94,26 @@ def detect_alignment_issues(packet: dict[str, Any]) -> list[dict[str, Any]]:
                 field_id="has_placebo_ml",
                 structured_value=placebo_value,
                 text_signal="text appears to describe no placebo use",
+            )
+        )
+    placebo_yes_text = _has_any(
+        text,
+        (
+            r"\bplacebo[- ]controlled\b",
+            r"\bplacebo[- ]control\b",
+            r"\bplacebo control\b",
+            r"\bplacebo arm\b",
+            r"\bplacebo group\b",
+            r"\bcontrolled with placebo\b",
+        ),
+    )
+    if placebo_no and placebo_yes_text and not placebo_no_text:
+        issues.append(
+            _issue(
+                issue_id="placebo_text_structured_mismatch",
+                field_id="has_placebo_ml",
+                structured_value=placebo_value,
+                text_signal="text appears to describe placebo control use",
             )
         )
 

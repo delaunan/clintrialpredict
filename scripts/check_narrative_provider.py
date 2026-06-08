@@ -16,10 +16,16 @@ from src.narratives.provider import (  # noqa: E402
     FAILURE_MALFORMED_RESPONSE,
     FAILURE_PROVIDER_UNAVAILABLE,
     FAILURE_UNSUPPORTED_PROVIDER,
+    GEMINI_MALFORMED_JSON_RETRY_ATTEMPTS,
+    GEMINI_MIN_SCHEMA_OUTPUT_TOKENS,
+    GEMINI_PRIMARY_THINKING_LEVEL,
+    GEMINI_RETRY_OUTPUT_TOKENS,
+    GEMINI_RETRY_THINKING_LEVEL,
     MOCK_MODEL_NAME,
     PROVIDER_MOCK,
     STATUS_CLARIFICATION_NEEDED,
     _gemini_http_options,
+    _record_gemini_response_metadata,
     _score_provider_review,
     review_packet_with_provider_chain,
     review_packet_with_provider,
@@ -108,9 +114,41 @@ def main() -> int:
         "NARRATIVE_LLM_PROVIDER": "gemini",
         "NARRATIVE_LLM_FALLBACK_PROVIDER": "gemini",
         "GEMINI_API_KEY": "test-key",
+        "NARRATIVE_LLM_MAX_OUTPUT_TOKENS": "2500",
         "NARRATIVE_LLM_TIMEOUT_SECONDS": "45",
         "NARRATIVE_LLM_MAX_RETRIES": "0",
     })
+    if GEMINI_MIN_SCHEMA_OUTPUT_TOKENS < 12000:
+        errors.append("Gemini schema output budget should leave margin for longer future reviews")
+    if GEMINI_PRIMARY_THINKING_LEVEL != "medium":
+        errors.append("Gemini primary thinking level should be medium for clinical-trial coherence reviews")
+    if GEMINI_RETRY_THINKING_LEVEL != "low":
+        errors.append("Gemini malformed/MAX_TOKENS retry should lower thinking level for completion reliability")
+    if GEMINI_RETRY_OUTPUT_TOKENS < 16000:
+        errors.append("Gemini retry output budget should be at least 16000 tokens")
+    if GEMINI_MALFORMED_JSON_RETRY_ATTEMPTS != 1:
+        errors.append("Gemini malformed JSON retry should stay bounded to one explicit retry")
+    fake_usage = type("FakeUsage", (), {
+        "prompt_token_count": 100,
+        "candidates_token_count": 40,
+        "thoughts_token_count": 25,
+        "cached_content_token_count": None,
+        "total_token_count": 165,
+    })()
+    fake_candidate = type("FakeCandidate", (), {
+        "finish_reason": "STOP",
+        "safety_ratings": [object()],
+    })()
+    fake_response = type("FakeResponse", (), {
+        "usage_metadata": fake_usage,
+        "candidates": [fake_candidate],
+    })()
+    fake_metadata = {}
+    _record_gemini_response_metadata(fake_metadata, fake_response)
+    if fake_metadata.get("usage_metadata", {}).get("thoughts_token_count") != 25:
+        errors.append("Gemini provider metadata should include thoughts token count when available")
+    if fake_metadata.get("finish_metadata", {}).get("finish_reason") != "STOP":
+        errors.append("Gemini provider metadata should include finish reason when available")
     try:
         from google.genai import types
         gemini_http_options = _gemini_http_options(gemini_runtime_config, types)

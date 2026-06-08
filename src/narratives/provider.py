@@ -26,12 +26,18 @@ from src.narratives.prompt_builder import (
     PROMPT_TEMPLATE_VERSION,
     RESPONSE_SCHEMA_VERSION,
     build_provider_prompt,
+    gemini_response_schema,
     infer_prompt_mode,
 )
 from src.narratives.scoring import validate_and_score_review
 
 MOCK_MODEL_NAME = "fixture_hash_mock_v1"
 OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses"
+GEMINI_MIN_SCHEMA_OUTPUT_TOKENS = 12000
+GEMINI_PRIMARY_THINKING_LEVEL = "medium"
+GEMINI_RETRY_THINKING_LEVEL = "low"
+GEMINI_RETRY_OUTPUT_TOKENS = 16000
+GEMINI_MALFORMED_JSON_RETRY_ATTEMPTS = 1
 FAILURE_UNSUPPORTED_PROVIDER = "unsupported_provider"
 FAILURE_PROVIDER_UNAVAILABLE = "provider_unavailable"
 FAILURE_PROVIDER_ERROR = "provider_error"
@@ -123,6 +129,69 @@ def _openai_response_text(payload: dict[str, Any]) -> str:
             if isinstance(text, str):
                 parts.append(text)
     return "\n".join(parts)
+
+
+def _metadata_value(value: Any) -> Any:
+    if value is None:
+        return None
+    if isinstance(value, (str, int, float, bool)):
+        return value
+    enum_name = getattr(value, "name", None)
+    if enum_name:
+        return str(enum_name)
+    return str(value)
+
+
+def _gemini_usage_metadata(response: Any) -> dict[str, Any]:
+    usage = getattr(response, "usage_metadata", None)
+    if usage is None:
+        return {}
+    fields = (
+        "prompt_token_count",
+        "candidates_token_count",
+        "thoughts_token_count",
+        "cached_content_token_count",
+        "total_token_count",
+    )
+    return {
+        field: _metadata_value(getattr(usage, field, None))
+        for field in fields
+        if getattr(usage, field, None) is not None
+    }
+
+
+def _gemini_finish_metadata(response: Any) -> dict[str, Any]:
+    candidates = getattr(response, "candidates", None) or []
+    if not candidates:
+        return {}
+    first = candidates[0]
+    metadata = {
+        "finish_reason": _metadata_value(getattr(first, "finish_reason", None)),
+    }
+    metadata = {key: value for key, value in metadata.items() if value not in (None, "", [], {})}
+    safety_ratings = getattr(first, "safety_ratings", None)
+    if safety_ratings:
+        metadata["safety_rating_count"] = len(safety_ratings)
+    return metadata
+
+
+def _record_gemini_response_metadata(metadata: dict[str, Any], response: Any) -> None:
+    usage_metadata = _gemini_usage_metadata(response)
+    if usage_metadata:
+        metadata["usage_metadata"] = usage_metadata
+    finish_metadata = _gemini_finish_metadata(response)
+    if finish_metadata:
+        metadata["finish_metadata"] = finish_metadata
+
+
+def _gemini_finish_reason(metadata: dict[str, Any]) -> str | None:
+    finish_reason = (metadata.get("finish_metadata") or {}).get("finish_reason")
+    return str(finish_reason) if finish_reason is not None else None
+
+
+def _gemini_finished_max_tokens(metadata: dict[str, Any]) -> bool:
+    finish_reason = _gemini_finish_reason(metadata)
+    return bool(finish_reason and finish_reason.upper().endswith("MAX_TOKENS"))
 
 
 def _real_provider_metadata(
@@ -268,6 +337,8 @@ def _call_openai_provider(
 
     response_text = _openai_response_text(response_payload)
     metadata["response_status"] = response_payload.get("status")
+    if isinstance(response_payload.get("usage"), dict):
+        metadata["usage_metadata"] = response_payload.get("usage")
     metadata["response_text_length"] = len(response_text)
     review = _parse_json_object(response_text)
     metadata["parsed_json_object"] = isinstance(review, dict)
@@ -297,11 +368,14 @@ def _call_gemini_provider(
 ) -> dict[str, Any]:
     prompt_mode = infer_prompt_mode(packet)
     prompt = build_provider_prompt(packet, prompt_mode=prompt_mode)
+    max_output_tokens = max(int(config.max_output_tokens), GEMINI_MIN_SCHEMA_OUTPUT_TOKENS)
     applied_controls = {
-        "max_output_tokens": config.max_output_tokens,
+        "max_output_tokens": max_output_tokens,
         "temperature": config.temperature,
         "seed": config.seed,
         "openai_reasoning_effort": None,
+        "response_schema": True,
+        "thinking_level": GEMINI_PRIMARY_THINKING_LEVEL,
     }
     metadata = _real_provider_metadata(
         provider=PROVIDER_GEMINI,
@@ -310,6 +384,8 @@ def _call_gemini_provider(
         prompt_mode=prompt_mode,
     )
     response = None
+    client = None
+    generation_config = None
     last_error = None
     started_at = time.monotonic()
     try:
@@ -321,9 +397,11 @@ def _call_gemini_provider(
     if last_error is None:
         generation_config = types.GenerateContentConfig(
             temperature=config.temperature,
-            max_output_tokens=config.max_output_tokens,
+            max_output_tokens=max_output_tokens,
             seed=config.seed,
             response_mime_type="application/json",
+            response_schema=gemini_response_schema(),
+            thinking_config=types.ThinkingConfig(thinking_level=GEMINI_PRIMARY_THINKING_LEVEL),
         )
         http_options = _gemini_http_options(config, types)
         client = genai.Client(api_key=settings.api_key, http_options=http_options)
@@ -353,10 +431,48 @@ def _call_gemini_provider(
 
     parsed_payload = getattr(response, "parsed", None)
     response_text = str(getattr(response, "text", "") or "")
+    _record_gemini_response_metadata(metadata, response)
     metadata["parsed_payload_type"] = type(parsed_payload).__name__ if parsed_payload is not None else None
     metadata["response_text_length"] = len(response_text)
     review = parsed_payload if isinstance(parsed_payload, dict) else _parse_json_object(response_text)
     metadata["parsed_json_object"] = isinstance(review, dict)
+    should_retry = review is None or _gemini_finished_max_tokens(metadata)
+    if should_retry and client is not None and generation_config is not None:
+        retry_generation_config = types.GenerateContentConfig(
+            temperature=config.temperature,
+            max_output_tokens=max(GEMINI_RETRY_OUTPUT_TOKENS, max_output_tokens),
+            seed=config.seed,
+            response_mime_type="application/json",
+            response_schema=gemini_response_schema(),
+            thinking_config=types.ThinkingConfig(thinking_level=GEMINI_RETRY_THINKING_LEVEL),
+        )
+        metadata["malformed_json_retry_controls"] = {
+            "max_output_tokens": max(GEMINI_RETRY_OUTPUT_TOKENS, max_output_tokens),
+            "thinking_level": GEMINI_RETRY_THINKING_LEVEL,
+        }
+        for retry_attempt in range(1, GEMINI_MALFORMED_JSON_RETRY_ATTEMPTS + 1):
+            retry_started_at = time.monotonic()
+            try:
+                response = client.models.generate_content(
+                    model=settings.model,
+                    contents=prompt,
+                    config=retry_generation_config,
+                )
+            except Exception as exc:
+                metadata["malformed_json_retry_error_type"] = exc.__class__.__name__
+                break
+            metadata["malformed_json_retry_attempts"] = retry_attempt
+            metadata["malformed_json_retry_latency_ms"] = int(round((time.monotonic() - retry_started_at) * 1000))
+            parsed_payload = getattr(response, "parsed", None)
+            response_text = str(getattr(response, "text", "") or "")
+            _record_gemini_response_metadata(metadata, response)
+            metadata["parsed_payload_type"] = type(parsed_payload).__name__ if parsed_payload is not None else None
+            metadata["response_text_length"] = len(response_text)
+            review = parsed_payload if isinstance(parsed_payload, dict) else _parse_json_object(response_text)
+            metadata["parsed_json_object"] = isinstance(review, dict)
+            metadata["latency_ms"] = int(round((time.monotonic() - started_at) * 1000))
+            if review is not None:
+                break
     if review is None:
         return _failure_result(
             packet,

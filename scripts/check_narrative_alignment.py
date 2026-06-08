@@ -49,6 +49,26 @@ def main() -> int:
     if _issue_ids(placebo_packet) != {"placebo_text_structured_mismatch"}:
         errors.append("placebo mismatch should require placebo_text_structured_mismatch")
 
+    placebo_added_text_packet = {
+        **endpoint_packet,
+        "structured_features": {"has_placebo_ml": "0"},
+        "structured_feature_display_values": {"has_placebo_ml": "No"},
+        "text_context": {"summary_ui": "The participant added a placebo-control design to improve comparison."},
+        "clarification_context": {"user_clarifications": []},
+    }
+    if _issue_ids(placebo_added_text_packet) != {"placebo_text_structured_mismatch"}:
+        errors.append("placebo-control text with structured No should require placebo_text_structured_mismatch")
+
+    no_placebo_control_packet = {
+        **endpoint_packet,
+        "structured_features": {"has_placebo_ml": "0"},
+        "structured_feature_display_values": {"has_placebo_ml": "No"},
+        "text_context": {"summary_ui": "The participant clarified that there is no placebo-control design."},
+        "clarification_context": {"user_clarifications": []},
+    }
+    if _issue_ids(no_placebo_control_packet):
+        errors.append("no placebo-control text with structured No should not require clarification")
+
     endpoint_rigor_packet = {
         **endpoint_packet,
         "structured_features": {"endpoint_rigor_ml": "HARD_CLINICAL"},

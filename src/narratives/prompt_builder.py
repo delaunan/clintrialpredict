@@ -79,6 +79,131 @@ def provider_response_contract() -> dict[str, Any]:
     }
 
 
+def gemini_response_schema() -> dict[str, Any]:
+    """Return Gemini SDK response schema for the Quality Review contract."""
+    domain_properties = {}
+    for domain_name in REQUIRED_DOMAIN_NAMES:
+        domain_properties[domain_name] = {
+            "type": "OBJECT",
+            "properties": {
+                "rating": {
+                    "type": "STRING",
+                    "enum": sorted(DOMAIN_RATING_POINTS[domain_name]),
+                },
+                "rationale": {"type": "STRING"},
+                "evidence_fields": {
+                    "type": "ARRAY",
+                    "items": {"type": "STRING"},
+                },
+            },
+            "required": ["rating", "rationale", "evidence_fields"],
+        }
+
+    participant_properties = {
+        key: {"type": "STRING"}
+        for key in sorted(PARTICIPANT_REVIEW_KEYS)
+    }
+
+    return {
+        "type": "OBJECT",
+        "properties": {
+            "quality_review_domains": {
+                "type": "OBJECT",
+                "properties": domain_properties,
+                "required": list(REQUIRED_DOMAIN_NAMES),
+            },
+            "participant_review": {
+                "type": "OBJECT",
+                "properties": participant_properties,
+                "required": sorted(PARTICIPANT_REVIEW_KEYS),
+            },
+            "score_movement_review": {
+                "type": "OBJECT",
+                "properties": {
+                    "summary": {"type": "STRING"},
+                    "clinical_design_interpretation": {"type": "STRING"},
+                    "model_supported_reasons": {
+                        "type": "ARRAY",
+                        "items": {"type": "STRING"},
+                    },
+                    "cautions": {
+                        "type": "ARRAY",
+                        "items": {"type": "STRING"},
+                    },
+                },
+                "required": [
+                    "summary",
+                    "clinical_design_interpretation",
+                    "model_supported_reasons",
+                    "cautions",
+                ],
+            },
+            "continuity": {
+                "type": "OBJECT",
+                "properties": {
+                    "prior_concerns_resolved": {
+                        "type": "ARRAY",
+                        "items": {"type": "STRING"},
+                    },
+                    "prior_concerns_worsened": {
+                        "type": "ARRAY",
+                        "items": {"type": "STRING"},
+                    },
+                    "prior_concerns_unchanged": {
+                        "type": "ARRAY",
+                        "items": {"type": "STRING"},
+                    },
+                    "new_concerns": {
+                        "type": "ARRAY",
+                        "items": {"type": "STRING"},
+                    },
+                    "storyline_update": {"type": "STRING"},
+                },
+                "required": [
+                    "prior_concerns_resolved",
+                    "prior_concerns_worsened",
+                    "prior_concerns_unchanged",
+                    "new_concerns",
+                    "storyline_update",
+                ],
+            },
+            "trace": {
+                "type": "OBJECT",
+                "properties": {
+                    "main_features_considered": {
+                        "type": "ARRAY",
+                        "items": {"type": "STRING"},
+                    },
+                    "main_pillars_considered": {
+                        "type": "ARRAY",
+                        "items": {"type": "STRING"},
+                    },
+                    "operational_statuses_considered": {
+                        "type": "ARRAY",
+                        "items": {"type": "STRING"},
+                    },
+                    "compared_against": {"type": "STRING"},
+                    "should_repeat_prior_warning": {"type": "BOOLEAN"},
+                },
+                "required": [
+                    "main_features_considered",
+                    "main_pillars_considered",
+                    "operational_statuses_considered",
+                    "compared_against",
+                    "should_repeat_prior_warning",
+                ],
+            },
+        },
+        "required": [
+            "quality_review_domains",
+            "participant_review",
+            "score_movement_review",
+            "continuity",
+            "trace",
+        ],
+    }
+
+
 def infer_prompt_mode(packet: dict[str, Any]) -> str:
     """Infer whether a packet should be reviewed as hidden baseline or iteration."""
     iteration = packet.get("iteration_context") or {}
