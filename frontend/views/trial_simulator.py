@@ -31,7 +31,6 @@ from src.operational_benchmarks import (
     planned_sites_default_from_operational_benchmark,
 )
 from src.narratives.packet_builder import build_review_packet
-from src.narratives.alignment import unresolved_clarification_issues
 from src.narratives.review_store import (
     compact_storyline_from_trace,
     replay_or_review_with_provider,
@@ -2218,22 +2217,6 @@ def inject_custom_styles():
             }}
 
             .st-key-trial_detail_tabs .stTabs [data-baseweb="tab-border"] {{
-                display: none !important;
-            }}
-
-            html body .st-key-header_check_scenario_wrap {{
-                display: none !important;
-            }}
-
-            html body:has(.st-key-trial_detail_tabs button[role="tab"][aria-selected="true"]:nth-of-type(3)) .st-key-header_check_scenario_wrap {{
-                display: block !important;
-            }}
-
-            html body:has(.st-key-trial_detail_tabs button[role="tab"][aria-selected="true"]:nth-of-type(4)) .st-key-header_check_scenario_wrap {{
-                display: block !important;
-            }}
-
-            html body:has(.st-key-trial_detail_tabs button[role="tab"][aria-selected="true"]:nth-of-type(3):not(:last-child)) .st-key-header_check_scenario_wrap {{
                 display: none !important;
             }}
 
@@ -4992,10 +4975,6 @@ def start_search():
 
 
 def reset_detail_prediction_state():
-    selected_id = st.session_state.get("selected_nct_id")
-    if selected_id:
-        clear_prediction_clarification_state(selected_id)
-
     st.session_state.trigger_prediction = False
     st.session_state.analysis_result = None
     st.session_state.analysis_nct_id = None
@@ -5851,126 +5830,6 @@ def get_hidden_baseline_review_trace_state_key(nct_id):
     return f"narrative_hidden_baseline_review_trace_{str(nct_id or '').strip()}"
 
 
-def get_quality_review_clarifications_state_key(nct_id, snapshot_id):
-    return f"narrative_quality_review_clarifications_{str(nct_id or '').strip()}_{str(snapshot_id or '').strip()}"
-
-
-def get_prediction_clarification_request_state_key(nct_id):
-    return f"narrative_prediction_clarification_request_{str(nct_id or '').strip()}"
-
-
-def get_prediction_clarifications_state_key(nct_id, preflight_hash):
-    return f"narrative_prediction_clarifications_{str(nct_id or '').strip()}_{str(preflight_hash or '').strip()}"
-
-
-def get_user_clarifications_for_snapshot(nct_id, snapshot_id):
-    return st.session_state.get(get_quality_review_clarifications_state_key(nct_id, snapshot_id), [])
-
-
-def get_user_clarifications_for_preflight(nct_id, preflight_hash):
-    return st.session_state.get(get_prediction_clarifications_state_key(nct_id, preflight_hash), [])
-
-
-def clarifications_match_trace(trace, user_clarifications):
-    return (trace or {}).get("user_clarifications") == (user_clarifications or [])
-
-
-def get_prediction_clarification_request(nct_id):
-    return st.session_state.get(get_prediction_clarification_request_state_key(nct_id))
-
-
-def clear_prediction_clarification_request(nct_id):
-    key = get_prediction_clarification_request_state_key(nct_id)
-    if key in st.session_state:
-        del st.session_state[key]
-
-
-def clear_prediction_clarification_state(nct_id):
-    nct_id = str(nct_id or "").strip()
-    if not nct_id:
-        return
-
-    clear_prediction_clarification_request(nct_id)
-    prefix = f"narrative_prediction_clarifications_{nct_id}_"
-    for key in list(st.session_state.keys()):
-        if str(key).startswith(prefix):
-            del st.session_state[key]
-
-
-def build_pre_prediction_review_packet(row, user_clarifications=None):
-    nct_id = str(row.get(ID_COL, st.session_state.get("selected_nct_id", "")))
-    previous_snapshot = get_latest_prediction_snapshot(nct_id)
-    compare_values = get_current_compare_values(row)
-    text_context = build_text_context_for_narrative(row)
-    trial_identity = build_trial_identity_for_narrative(row)
-    operational_assumptions = build_operational_assumptions(
-        row,
-        snapshot_values=compare_values,
-        is_benchmark_stale=False,
-    )
-    current_snapshot = {
-        "snapshot_id": "pre_prediction_current",
-        "nct_id": nct_id,
-        "trial_identity": trial_identity,
-        "text_context": text_context,
-        "structured_features": compare_values,
-        "display_values": {
-            field_id: get_display_value_for_field(field_id, compare_values.get(field_id))
-            for field_id in SIMULATION_FEATURE_IDS
-        },
-        "operational_assumptions": operational_assumptions,
-        "model_interpretation": {
-            "completion_score": (previous_snapshot or {}).get("score"),
-            "previous_completion_score": (previous_snapshot or {}).get("score"),
-            "score_delta": 0,
-        },
-        "changed_fields": get_pending_feature_ids(row),
-        "changed_operational_assumptions": get_pending_operational_assumption_keys(row),
-        "changed_text_context_fields": get_pending_text_context_fields(row),
-    }
-    return build_review_packet(
-        current_snapshot=current_snapshot,
-        previous_snapshot=previous_snapshot,
-        baseline_snapshot=get_baseline_prediction_snapshot(nct_id),
-        trial_identity=trial_identity,
-        text_context=text_context,
-        user_clarifications=user_clarifications or [],
-        compact_storyline_memory="",
-    )
-
-
-def prediction_clarification_preflight(row):
-    nct_id = str(row.get(ID_COL, st.session_state.get("selected_nct_id", "")))
-    if not nct_id:
-        return None
-
-    packet_without_clarifications = build_pre_prediction_review_packet(row, user_clarifications=[])
-    preflight_hash = packet_without_clarifications.get("input_hash")
-    user_clarifications = get_user_clarifications_for_preflight(nct_id, preflight_hash)
-    packet = build_pre_prediction_review_packet(row, user_clarifications=user_clarifications)
-    issues = unresolved_clarification_issues(packet)
-    if not issues:
-        clear_prediction_clarification_request(nct_id)
-        return None
-
-    request = {
-        "nct_id": nct_id,
-        "preflight_hash": preflight_hash,
-        "issues": issues,
-        "user_clarifications": user_clarifications,
-    }
-    st.session_state[get_prediction_clarification_request_state_key(nct_id)] = request
-    return request
-
-
-def get_active_prediction_user_clarifications(row):
-    nct_id = str(row.get(ID_COL, st.session_state.get("selected_nct_id", "")))
-    if not nct_id:
-        return []
-    packet_without_clarifications = build_pre_prediction_review_packet(row, user_clarifications=[])
-    return get_user_clarifications_for_preflight(nct_id, packet_without_clarifications.get("input_hash"))
-
-
 def normalize_hidden_baseline_review_trace(trace):
     if not trace:
         return trace
@@ -6143,14 +6002,10 @@ def get_quality_review_trace_for_snapshot(row, snapshot):
     cached_trace = st.session_state.get(state_key)
     current_snapshot_id = snapshot.get("snapshot_id") or snapshot.get("timestamp")
     runtime = narrative_review_runtime()
-    user_clarifications = (
-        snapshot.get("user_clarifications")
-        or get_user_clarifications_for_snapshot(nct_id, current_snapshot_id)
-    )
+    user_clarifications = snapshot.get("user_clarifications") or []
     if (
         cached_trace
         and get_trace_current_snapshot_id(cached_trace) == current_snapshot_id
-        and clarifications_match_trace(cached_trace, user_clarifications)
         and narrative_trace_matches_runtime(cached_trace, runtime)
     ):
         return attach_narrative_workflow_metadata(cached_trace, {
@@ -6910,14 +6765,6 @@ def handle_predict_trial_completion():
 
         st.session_state.analysis_result = None
         st.session_state.analysis_nct_id = None
-        clarification_request = prediction_clarification_preflight(row)
-        if clarification_request:
-            st.session_state.simulation_open_features_tab = True
-            st.session_state.detail_prediction_notice = False
-            st.session_state.prediction_error_notice = None
-            st.session_state.trigger_prediction = False
-            st.session_state.completion_score_tab_jump_nonce += 1
-            return
         start_prediction_request()
         return
 
@@ -6929,28 +6776,7 @@ def handle_predict_trial_completion():
     start_prediction_request()
 
 
-def handle_check_scenario_alignment():
-    row = get_selected_trial_row()
-    if row is None:
-        return
-
-    st.session_state.simulation_open_features_tab = True
-    st.session_state.trial_features_alignment_check_status = "checked"
-    st.session_state.detail_prediction_notice = False
-    st.session_state.prediction_error_notice = None
-
-    clarification_request = prediction_clarification_preflight(row)
-    if clarification_request:
-        st.session_state.trial_features_alignment_check_status = "needs_clarification"
-    else:
-        st.session_state.trial_features_alignment_check_status = "passed"
-
-
 def queue_simulation_reprediction_if_score_visible():
-    st.session_state.trial_features_alignment_check_status = None
-    selected_id = st.session_state.get("selected_nct_id")
-    if selected_id:
-        clear_prediction_clarification_request(selected_id)
     return
 
 
@@ -6959,9 +6785,7 @@ def reset_trial_editor_state():
     if row is None:
         return
 
-    st.session_state.trial_features_alignment_check_status = None
     trial_key = str(row[ID_COL])
-    clear_prediction_clarification_state(trial_key)
 
     for field_id in sorted(set(TRIAL_EDITOR_FIELD_IDS) | SIMULATION_FEATURE_ID_SET | {"gbd_indication_name_3"}):
         state_key = f"input_{trial_key}_{field_id}"
@@ -7272,7 +7096,7 @@ def render_header(is_landing=True, show_predict_button=False, show_back_button=F
         if show_back_button or show_predict_button or show_global_edit_toggle:
 
             with st.container(key="header_action_buttons"):
-                c_toggle, c_check, c_predict = st.columns([1.55, 1.20, 1.75], gap="small", vertical_alignment="top")
+                c_toggle, c_back, c_predict = st.columns([1.55, 0.95, 1.75], gap="small", vertical_alignment="top")
 
                 with c_toggle:
                     if show_global_edit_toggle:
@@ -7282,47 +7106,30 @@ def render_header(is_landing=True, show_predict_button=False, show_back_button=F
                             on_change=handle_global_edit_toggle
                         )
 
-                with c_check:
-                    if (
-                        show_predict_button
-                        and st.session_state.get("global_edit_mode", False)
-                    ):
-                        selected_row = get_selected_trial_row()
-                        pending = selected_row is not None and has_pending_simulation_changes(selected_row)
-                        check_passed = st.session_state.get("trial_features_alignment_check_status") == "passed"
-                        check_btn_type = "primary" if pending and not check_passed else "secondary"
-                        with st.container(key="header_check_scenario_wrap"):
-                            st.button(
-                                "Check Scenario",
-                                width="stretch",
-                                type=check_btn_type,
-                                key="header_check_scenario_btn",
-                                disabled=not pending,
-                                on_click=handle_check_scenario_alignment,
-                            )
+                with c_back:
+                    pass
 
                 with c_predict:
                     if show_predict_button:
                         if st.session_state.get("global_edit_mode", False):
                             selected_row = get_selected_trial_row()
-                            pending = selected_row is not None and has_pending_simulation_changes(selected_row)
-                            check_passed = st.session_state.get("trial_features_alignment_check_status") == "passed"
-                            predict_btn_type = "primary" if pending and check_passed else "secondary"
-                            predict_disabled = pending and not check_passed
+                            predict_btn_type = (
+                                "primary"
+                                if selected_row is not None and has_pending_simulation_changes(selected_row)
+                                else "secondary"
+                            )
                         else:
                             predict_btn_type = (
                                 "secondary"
                                 if st.session_state.get("detail_completion_tab_visible", False)
                                 else "primary"
                             )
-                            predict_disabled = False
 
                         st.button(
                             "Predict Trial Completion",
                             width="stretch",
                             type=predict_btn_type,
                             key="header_predict_btn",
-                            disabled=predict_disabled,
                             on_click=handle_predict_trial_completion
                         )
 
@@ -9156,171 +8963,11 @@ def _quality_review_diagnostics(trace):
         st.json(diagnostics)
 
 
-def render_quality_review_clarification_gate(row, snapshot, trace):
-    issues = trace.get("clarification_issues") or []
-    nct_id = str(snapshot.get("nct_id") or row.get(ID_COL, st.session_state.get("selected_nct_id", "")))
-    snapshot_id = snapshot.get("snapshot_id") or snapshot.get("timestamp")
-    state_key = get_quality_review_clarifications_state_key(nct_id, snapshot_id)
-    saved = list(st.session_state.get(state_key) or [])
-    saved_by_issue = {str(item.get("issue_id")): item for item in saved if isinstance(item, dict)}
-
-    st.markdown(
-        (
-            "<div class='quality-review-card'>"
-            "<div class='quality-review-title'>Quality Review Needs Clarification</div>"
-            "<div class='quality-review-text'>"
-            "The Completion Score has been calculated from the structured Trial Features. "
-            "Before Quality Review, align the fields or explain why the apparent mismatch is intentional."
-            "</div>"
-            "</div>"
-        ),
-        unsafe_allow_html=True,
-    )
-
-    changed = False
-    for index, issue in enumerate(issues):
-        issue_id = str(issue.get("issue_id") or f"alignment_issue_{index}")
-        field_id = str(issue.get("field_id") or "Trial Feature")
-        structured_value = str(issue.get("structured_value") or "current structured value")
-        text_signal = str(issue.get("text_signal") or "text appears misaligned")
-        existing = str(saved_by_issue.get(issue_id, {}).get("explanation") or "")
-
-        st.markdown(
-            (
-                "<div class='quality-review-card'>"
-                f"<div class='quality-review-title'>{html.escape(field_id)}</div>"
-                f"<div class='quality-review-text'>Structured value used for Completion Score: "
-                f"{html.escape(structured_value)}</div>"
-                f"<div class='quality-review-text'>Text signal: {html.escape(text_signal)}</div>"
-                "</div>"
-            ),
-            unsafe_allow_html=True,
-        )
-        explanation = st.text_area(
-            "Explain why this apparent mismatch is intentional",
-            value=existing,
-            key=f"quality_review_clarification_{nct_id}_{snapshot_id}_{issue_id}",
-            height=88,
-        )
-        if st.button("Use explanation for Quality Review", key=f"quality_review_clarification_save_{nct_id}_{snapshot_id}_{issue_id}"):
-            clean = explanation.strip()
-            if clean:
-                saved_by_issue[issue_id] = {
-                    "issue_id": issue_id,
-                    "field_id": field_id,
-                    "structured_value": structured_value,
-                    "text_signal": text_signal,
-                    "explanation": clean,
-                }
-                changed = True
-
-    if changed:
-        st.session_state[state_key] = list(saved_by_issue.values())
-        st.rerun()
-
-
-def render_prediction_clarification_gate(row, request):
-    issues = request.get("issues") or []
-    nct_id = str(request.get("nct_id") or row.get(ID_COL, st.session_state.get("selected_nct_id", "")))
-    preflight_hash = request.get("preflight_hash")
-    state_key = get_prediction_clarifications_state_key(nct_id, preflight_hash)
-    saved = list(st.session_state.get(state_key) or [])
-    saved_by_issue = {str(item.get("issue_id")): item for item in saved if isinstance(item, dict)}
-
-    st.markdown(
-        (
-            "<div class='quality-review-card'>"
-            "<div class='quality-review-title'>Clarification Needed Before Prediction</div>"
-            "<div class='quality-review-text'>"
-            "Fix the fields or text on this page, or explain why the apparent mismatch is intentional. "
-            "Continue Prediction will use the corrected scenario or the explanations you provide."
-            "</div>"
-            "</div>"
-        ),
-        unsafe_allow_html=True,
-    )
-
-    explanations = {}
-    for index, issue in enumerate(issues):
-        issue_id = str(issue.get("issue_id") or f"alignment_issue_{index}")
-        field_id = str(issue.get("field_id") or "Trial Feature")
-        structured_value = str(issue.get("structured_value") or "current structured value")
-        text_signal = str(issue.get("text_signal") or "text appears misaligned")
-        existing = str(saved_by_issue.get(issue_id, {}).get("explanation") or "")
-
-        st.markdown(
-            (
-                "<div class='quality-review-card'>"
-                f"<div class='quality-review-title'>{html.escape(field_id)}</div>"
-                f"<div class='quality-review-text'>Structured value: {html.escape(structured_value)}</div>"
-                f"<div class='quality-review-text'>Text signal: {html.escape(text_signal)}</div>"
-                "</div>"
-            ),
-            unsafe_allow_html=True,
-        )
-        explanations[issue_id] = {
-            "issue_id": issue_id,
-            "field_id": field_id,
-            "structured_value": structured_value,
-            "text_signal": text_signal,
-            "explanation": st.text_area(
-                "Explain why this apparent mismatch is intentional",
-                value=existing,
-                key=f"prediction_clarification_{nct_id}_{preflight_hash}_{issue_id}",
-                height=88,
-            ),
-        }
-
-    if st.button("Continue Prediction", key=f"prediction_clarification_continue_{nct_id}_{preflight_hash}", type="primary"):
-        clean_clarifications = []
-        for item in explanations.values():
-            explanation = str(item.get("explanation") or "").strip()
-            if explanation:
-                clean = dict(item)
-                clean["explanation"] = explanation
-                clean_clarifications.append(clean)
-
-        current_packet = build_pre_prediction_review_packet(row, user_clarifications=[])
-        current_preflight_hash = current_packet.get("input_hash")
-        current_state_key = get_prediction_clarifications_state_key(nct_id, current_preflight_hash)
-        st.session_state[current_state_key] = clean_clarifications
-        refreshed_request = prediction_clarification_preflight(row)
-        if refreshed_request is None:
-            start_prediction_request()
-            st.rerun()
-            return
-
-        refreshed_issues = refreshed_request.get("issues") or []
-        if len(clean_clarifications) < len(refreshed_issues):
-            st.warning("Add an explanation for each remaining mismatch, or update the fields/text and click Predict again.")
-            return
-
-        clear_prediction_clarification_request(nct_id)
-        start_prediction_request()
-        st.rerun()
-
-
-def render_trial_features_prediction_controls(row):
-    nct_id = str(row.get(ID_COL, st.session_state.get("selected_nct_id", "")))
-    clarification_request = get_prediction_clarification_request(nct_id)
-    check_status = st.session_state.get("trial_features_alignment_check_status")
-
-    if clarification_request:
-        render_prediction_clarification_gate(row, clarification_request)
-    elif check_status == "passed":
-        st.success("Scenario consistency check passed. No obvious structured/text mismatch was detected.")
-
-
 def render_quality_review_panel(row):
     if not st.session_state.get("global_edit_mode", False):
         return
 
     nct_id = str(row.get(ID_COL, st.session_state.get("selected_nct_id", "")))
-    clarification_request = get_prediction_clarification_request(nct_id)
-    if clarification_request:
-        render_prediction_clarification_gate(row, clarification_request)
-        return
-
     snapshot = get_latest_prediction_snapshot(nct_id)
     if not snapshot:
         return
@@ -9355,10 +9002,6 @@ def render_quality_review_panel(row):
         return
 
     status = str(trace.get("status") or "unavailable")
-    if status == "clarification_needed":
-        render_quality_review_clarification_gate(row, snapshot, trace)
-        return
-
     if trace.get("quality_adjustment") is None or trace.get("final_candidate_score") is None:
         reason = trace.get("failure_reason") or "; ".join(trace.get("validation_errors") or [])
         if not reason and status == "no_fixture_match":
@@ -9588,7 +9231,6 @@ def render_trial_detail_tabs_refined(row):
 
         if simulation_mode and tab_features is not None:
             with tab_features:
-                render_trial_features_prediction_controls(row)
                 render_trial_features_tab(row)
                 render_operational_assumption_inputs(row)
 
@@ -9651,11 +9293,6 @@ def get_analysis_result_for_selected_trial(row):
             st.session_state.trigger_prediction = False
             return (snapshot or {}).get("result")
 
-        clarification_request = prediction_clarification_preflight(row)
-        if clarification_request:
-            st.session_state.trigger_prediction = False
-            return (snapshot or {}).get("result")
-
         if (
             (has_pending_operational_assumptions(row) or has_pending_text_context_changes(row))
             and not has_pending_changes(row)
@@ -9687,7 +9324,6 @@ def get_analysis_result_for_selected_trial(row):
                     compare_values=compare_values,
                     operational_assumptions=operational_assumptions,
                     text_context=build_text_context_for_narrative(row),
-                    user_clarifications=get_active_prediction_user_clarifications(row),
                 )
                 st.session_state.analysis_result = updated_snapshot["result"]
                 st.session_state.analysis_nct_id = st.session_state.selected_nct_id
@@ -9770,7 +9406,6 @@ def get_analysis_result_for_selected_trial(row):
                         compare_values=compare_values,
                         operational_assumptions=operational_assumptions,
                         text_context=build_text_context_for_narrative(row),
-                        user_clarifications=get_active_prediction_user_clarifications(row),
                     )
                     st.session_state.analysis_result = snapshot["result"]
 

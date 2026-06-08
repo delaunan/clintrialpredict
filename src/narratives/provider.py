@@ -12,8 +12,6 @@ import time
 from typing import Any
 
 import requests
-
-from src.narratives.alignment import unresolved_clarification_issues
 from src.narratives.mock_reviewer import review_packet_with_mock
 from src.narratives.provider_config import (
     NarrativeProviderConfig,
@@ -43,7 +41,6 @@ FAILURE_PROVIDER_UNAVAILABLE = "provider_unavailable"
 FAILURE_PROVIDER_ERROR = "provider_error"
 FAILURE_INCOMPLETE_RESPONSE = "incomplete_response"
 FAILURE_MALFORMED_RESPONSE = "malformed_response"
-STATUS_CLARIFICATION_NEEDED = "clarification_needed"
 STATUS_REVIEWED = "reviewed"
 
 def _unavailable_scoring(packet: dict[str, Any], message: str) -> dict[str, Any]:
@@ -501,24 +498,6 @@ def review_packet_with_provider(
 ) -> dict[str, Any]:
     """Invoke a narrative provider and return normalized review JSON fields."""
     provider = str(provider or PROVIDER_MOCK).strip().lower()
-    issues = unresolved_clarification_issues(packet)
-    if issues:
-        message = "Quality Review needs user clarification for apparent structured/text mismatch."
-        resolved_model_name = model_name or (MOCK_MODEL_NAME if provider == PROVIDER_MOCK else None)
-        return {
-            "review_needed": True,
-            "reuse_previous_review": False,
-            "provider": provider,
-            "model_name": resolved_model_name,
-            "provider_metadata": {},
-            "status": STATUS_CLARIFICATION_NEEDED,
-            "failure_reason": message,
-            "review": None,
-            "validated_review": None,
-            "clarification_issues": issues,
-            "scoring": _unavailable_scoring(packet, message),
-        }
-
     if provider == PROVIDER_MOCK:
         return _normalize_provider_result(
             review_packet_with_mock(packet, failure_mode=failure_mode),

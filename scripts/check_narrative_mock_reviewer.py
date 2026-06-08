@@ -36,17 +36,6 @@ def _check_fixture(fixture: dict, errors: list[str]) -> None:
         if result.get("review") is not None:
             errors.append(f"{fixture_id}: no-op should not return a fresh review")
         return
-    if expected.get("clarification_needed") is True:
-        if result.get("status") != "clarification_needed":
-            errors.append(f"{fixture_id}: expected clarification_needed status, got {result.get('status')}")
-        expected_issues = set(expected.get("expected_clarification_issues") or [])
-        actual_issues = {str(item.get("issue_id")) for item in result.get("clarification_issues") or []}
-        if expected_issues != actual_issues:
-            errors.append(f"{fixture_id}: clarification issues mismatch")
-        if result.get("review") is not None:
-            errors.append(f"{fixture_id}: clarification-needed fixture should not return review JSON")
-        return
-
     scoring = result.get("scoring") or {}
     if result.get("status") != "reviewed":
         errors.append(f"{fixture_id}: expected reviewed status, got {result.get('status')}")

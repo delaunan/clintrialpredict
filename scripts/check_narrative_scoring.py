@@ -37,7 +37,7 @@ def _review_template() -> tuple[dict, dict]:
 def _check_fixture(fixture: dict, errors: list[str]) -> None:
     fixture_id = fixture["fixture_id"]
     expected = fixture["expected_behavior"]
-    if expected.get("review_needed") is False or expected.get("clarification_needed") is True:
+    if expected.get("review_needed") is False:
         if fixture.get("mock_review") is not None:
             errors.append(f"{fixture_id}: non-reviewed fixture should not define mock_review")
         return
