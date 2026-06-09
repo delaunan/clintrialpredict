@@ -1095,6 +1095,13 @@ Trace robustness staging:
 - Defer until durable storage: database/file persistence, shared trial-level baseline review records, cross-team replay, facilitator export, retention policy, privacy controls, and schema migration strategy.
 - Do not expand the prompt packet just because the trace stores more audit data. Store enough for audit; send only curated current-context fields to the LLM.
 
+Gemini prompt-size guidance:
+
+- Keep each live Gemini narrative input prompt under roughly `10k` to `20k` input tokens where practical.
+- Treat this as an operating target, not a hard validator limit. A larger prompt may be acceptable for an exceptional baseline or offline review, but it should trigger prompt-size diagnostics and a review of what can be summarized.
+- Do not send full raw iteration history, full source documents, raw reference PDFs, raw database tables, or verbose prior narratives. Send compact baseline memory, compact previous-review memory, selected reference-pack summaries, selected local context statistics, current field changes, and material XGBoost movement evidence.
+- If representative visible-iteration prompts drift above this range, reduce prompt volume before increasing provider timeouts or output ceilings.
+
 The goal is to make repeated runs as consistent as possible while acknowledging that exact determinism is not guaranteed for LLM outputs.
 
 Provider abstraction should be thin. The application should own payload construction, validation, Design Confidence calculation, persistence, cache lookup, and UI rendering. Provider-specific code should own only model invocation and response normalization. The V1 provider boundary includes the deterministic mock provider, explicit unsupported-provider failure path, and real OpenAI/Gemini invocation behind the same normalized result shape.
