@@ -2,10 +2,11 @@
 
 ## Source
 
-* Title: ICH E6(R3) Guideline for Good Clinical Practice
-* Organization: International Council for Harmonisation / European Medicines Agency
-* Version/date: Step 5, final adoption by CHMP 12 December 2024, effective 23 July 2025
-* Access type: public/free
+- Title: ICH E6(R3) Guideline for Good Clinical Practice
+- Organization: International Council for Harmonisation / European Medicines Agency
+- URL: https://www.ema.europa.eu/en/ich-e6-good-clinical-practice-scientific-guideline
+- Version/date: Step 5, final adoption by CHMP 12 December 2024, effective 23 July 2025
+- Access type: public/free
 
 ## When To Use
 

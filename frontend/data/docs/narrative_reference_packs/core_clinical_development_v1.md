@@ -2,11 +2,16 @@
 
 ## Source
 
-* Title: Core Clinical Development Principles for CTPredict Narratives
-* Organization: CTPredict internal synthesis
-* Source basis: ICH E8(R1), ICH E6(R3), ICH E9, ICH E9(R1)
-* Version/date: v1
-* Access type: internal summary based on public guidance
+- Title: Core Clinical Development Principles for CTPredict Narratives
+- Organization: CTPredict internal synthesis
+- Source basis: ICH E8(R1), ICH E6(R3), ICH E9, ICH E9(R1)
+- URLs:
+  - https://www.ema.europa.eu/en/ich-e8-general-considerations-clinical-studies-scientific-guideline
+  - https://www.ema.europa.eu/en/ich-e6-good-clinical-practice-scientific-guideline
+  - https://www.ema.europa.eu/en/ich-e9-statistical-principles-clinical-trials-scientific-guideline
+  - https://www.ema.europa.eu/en/documents/scientific-guideline/ich-e9-r1-addendum-estimands-and-sensitivity-analysis-clinical-trials-guideline-statistical-principles-clinical-trials-step-5_en.pdf
+- Version/date: v1
+- Access type: internal summary based on public guidance
 
 ## When To Use
 

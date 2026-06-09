@@ -2,10 +2,11 @@
 
 ## Source
 
-* Title: ICH E8(R1) Guideline on General Considerations for Clinical Studies
-* Organization: International Council for Harmonisation / European Medicines Agency
-* Version/date: Step 5, final adoption by CHMP 14 October 2021, effective 14 April 2022
-* Access type: public/free
+- Title: ICH E8(R1) Guideline on General Considerations for Clinical Studies
+- Organization: International Council for Harmonisation / European Medicines Agency
+- URL: https://www.ema.europa.eu/en/ich-e8-general-considerations-clinical-studies-scientific-guideline
+- Version/date: Step 5, final adoption by CHMP 14 October 2021, effective 14 April 2022
+- Access type: public/free
 
 ## When To Use
 

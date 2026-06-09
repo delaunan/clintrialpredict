@@ -2,10 +2,11 @@
 
 ## Source
 
-* Title: ICH E9(R1) Addendum on Estimands and Sensitivity Analysis in Clinical Trials to the Guideline on Statistical Principles for Clinical Trials
-* Organization: International Council for Harmonisation / European Medicines Agency
-* Version/date: Step 5, final adoption by CHMP 30 January 2020, effective 30 July 2020
-* Access type: public/free
+- Title: ICH E9(R1) Addendum on Estimands and Sensitivity Analysis in Clinical Trials to the Guideline on Statistical Principles for Clinical Trials
+- Organization: International Council for Harmonisation / European Medicines Agency
+- URL: https://www.ema.europa.eu/en/documents/scientific-guideline/ich-e9-r1-addendum-estimands-and-sensitivity-analysis-clinical-trials-guideline-statistical-principles-clinical-trials-step-5_en.pdf
+- Version/date: Step 5, final adoption by CHMP 30 January 2020, effective 30 July 2020
+- Access type: public/free
 
 ## When To Use
 

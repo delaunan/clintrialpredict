@@ -2,10 +2,11 @@
 
 ## Source
 
-* Title: ICH E9 Statistical Principles for Clinical Trials
-* Organization: International Council for Harmonisation / European Medicines Agency
-* Version/date: Step 5, final approval March 1998, effective September 1998
-* Access type: public/free
+- Title: ICH E9 Statistical Principles for Clinical Trials
+- Organization: International Council for Harmonisation / European Medicines Agency
+- URL: https://www.ema.europa.eu/en/ich-e9-statistical-principles-clinical-trials-scientific-guideline
+- Version/date: Step 5, final approval March 1998, effective September 1998
+- Access type: public/free
 
 ## When To Use
 
