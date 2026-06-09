@@ -2,15 +2,15 @@
 
 ## Document Role
 
-This file owns the future serious-game narrative layer: LLM commentary, Quality Review, Quality Adjustment, Final Candidate Score, facilitator/participant outputs, and narrative payload contracts.
+This file owns the future serious-game narrative layer: LLM commentary, Scenario Review, Design Confidence, Total Scenario Score, facilitator/participant outputs, and narrative payload contracts.
 
 It should not own the existing XGBoost Completion Score, SHAP impact mechanics, or simulation UI state; use `docs/architecture_edit.md` for those. It should consume operational benchmark metadata from `docs/architecture_estimation.md` rather than redefining benchmark construction.
 
-Efficient update rule: change this file when narrative inputs/outputs, LLM contracts, Quality Review scoring, or participant/facilitator interpretation rules change. Do not implement or imply changes to XGBoost, SHAP, calibration, or operational benchmark construction here.
+Efficient update rule: change this file when narrative inputs/outputs, LLM contracts, Scenario Review scoring, or participant/facilitator interpretation rules change. Do not implement or imply changes to XGBoost, SHAP, calibration, or operational benchmark construction here.
 
 ## 1. Purpose Of The Narrative Architecture
 
-This document defines the staged design for adding a serious-game narrative layer around single-trial simulation in ClinTrialPredict. Current implementation covers contract fixtures, deterministic packet building, validation/scoring, mock review, session-state storage/replay, minimal Quality Review UI, hidden baseline continuity, provider configuration, real OpenAI/Gemini provider boundaries, Gemini Flash-Lite live settings, prompt-mode scaffolding, and opt-in live-provider UI routing. The simulator still uses the deterministic mock provider by default unless `NARRATIVE_LIVE_REVIEW_ENABLED=1` explicitly enables the live provider chain.
+This document defines the staged design for adding a serious-game narrative layer around single-trial simulation in ClinTrialPredict. Current implementation covers contract fixtures, deterministic packet building, validation/scoring, mock review, session-state storage/replay, minimal Quality Review UI, hidden baseline continuity, provider configuration, real OpenAI/Gemini provider boundaries, Gemini Flash-Lite live settings, prompt-mode scaffolding, and opt-in live-provider UI routing. The simulator still uses the deterministic mock provider by default unless `NARRATIVE_LIVE_REVIEW_ENABLED=1` explicitly enables the live provider chain. The active target architecture supersedes the earlier three-pillar Quality Assessment model with a four-pillar Design Confidence model aligned to the existing Completion Outlook pillars.
 
 The current edit/simulation workflow remains the foundation. A facilitator selects an existing trial, participants adjust structured Trial Features, and the application calls the existing prediction flow to produce a completion score with SHAP-derived impact decomposition.
 
@@ -23,49 +23,51 @@ The narrative layer should help participants reason about this trade-off without
 The LLM layer is separate from the existing prediction system. The serious-game score stack has three layers:
 
 1. `Completion Score`: the existing XGBoost, SHAP, therapeutic-area calibrated score from `/predict`, shown in points from 0 to 100.
-2. `Quality Review`: a constrained LLM structured reviewer that evaluates coherence, scientific rigor, operational feasibility, text consistency, and change integrity.
-3. `Final Candidate Score`: a deterministic application calculation: `Completion Score + Quality Adjustment`.
+2. `Scenario Review`: a constrained LLM structured reviewer that explains Completion Outlook movement and evaluates Design Confidence without calculating final score values.
+3. `Total Scenario Score`: a deterministic application calculation: `Completion Score + Design Confidence`.
 
 The LLM must not generate the final score. The LLM returns structured ratings, evidence fields, narrative, and continuity fields. The application then performs two deterministic calculations:
 
-1. Convert validated Quality Review ratings into a reconciled `Quality Adjustment`.
-2. Add the Quality Adjustment to the XGBoost `Completion Score` to calculate `Final Candidate Score`.
+1. Convert validated Design Confidence subcategory ratings into app-owned point adjustments.
+2. Add the Design Confidence adjustment to the XGBoost `Completion Score` to calculate `Total Scenario Score` when the combined view is enabled.
 
 ```text
-quality_adjustment = sum(app_mapped_quality_pillar_points)
+design_confidence = sum(app_mapped_design_subcategory_points)
 
-final_candidate_score = clamp(
-    completion_score + quality_adjustment,
+total_scenario_score = clamp(
+    completion_score + design_confidence,
     0,
     100
 )
 ```
 
-The V1 scoring display should reconcile exactly: domain/subcategory contributions add up to their Quality Assessment pillar, and Quality Assessment pillars add up to the Quality Adjustment. There is no separate pillar cap and no separate total Quality Adjustment cap. The final candidate score is still clamped to the 0-100 display range.
+The V1 scoring display should reconcile exactly: Design Confidence subcategory contributions add up bottom-up into their associated participant-facing pillar, and the four design subcategories add up to total Design Confidence. There is no hidden subcategory, pillar, or total Design Confidence cap. The display score is still clamped to the 0-100 range only at the final Total Scenario Score layer.
 
 Example:
 
 - Completion Score: `72`
-- Quality Adjustment: `+4`
-- Final Candidate Score: `76`
+- Design Confidence: `+4`
+- Total Scenario Score: `76`
 
 Interpretation:
 
 - The Completion Score remains the modelled likelihood of completion.
-- The Quality Adjustment is a small serious-game modifier for design defensibility and quality of choices.
-- The Final Candidate Score can recognize a risky but well-strengthened design without replacing or rewriting XGBoost.
-- A trial below `50` on Completion Score can improve modestly if the design choices meaningfully mitigate risk, but the adjustment must remain bounded.
+- Design Confidence is a serious-game modifier for design defensibility, decision usefulness, patient relevance, and proportionate execution choices.
+- The Total Scenario Score can recognize a risky but well-strengthened design without replacing or rewriting XGBoost.
+- A trial below `50` on Completion Score can improve if the design choices meaningfully explain why some completion risk reflects rigor, ambition, patient relevance, or prudent governance rather than poor design.
+- A high Completion Score should not automatically receive positive Design Confidence. Positive adjustment requires specific evidence of design confidence, not model-favorable simplicity.
 
 Terminology:
 
 - `Completion Score` = modelled likelihood of completion.
-- `Quality Review` = participant-facing narrative explanation and structured LLM review of design coherence, rigor, operational fit, text consistency, and change integrity.
-- `Quality Adjustment` = application-calculated point bonus or penalty derived from reconciled Quality Assessment pillars.
-- `Final Candidate Score` = Completion Score plus Quality Adjustment.
+- `Completion Outlook` = explanation of model-derived score movement using feature, subcategory, pillar, and score movement evidence.
+- `Scenario Review` = participant-facing narrative explanation of Completion Outlook movement, Design Confidence evidence, trade-offs, and two expert questions.
+- `Design Confidence` = application-calculated point adjustment derived from validated design subcategories with supported evidence.
+- `Total Scenario Score` = Completion Score plus Design Confidence, when the combined view is enabled.
 
-In plain scoring terms, `Final Candidate Score = Completion Score + Quality Adjustment`, with application-level bounds applied.
+In plain scoring terms, `Total Scenario Score = Completion Score + Design Confidence`, with application-level bounds applied only to the final display score.
 
-The application, not the LLM, calculates the Quality Adjustment and Final Candidate Score. The LLM must never modify the XGBoost completion score, SHAP values, pillar impacts, therapeutic-area calibration, prediction pipeline, or audit/demo parity behavior.
+The application, not the LLM, calculates Design Confidence points and Total Scenario Score. The LLM must never modify the XGBoost completion score, SHAP values, pillar impacts, therapeutic-area calibration, prediction pipeline, or audit/demo parity behavior.
 
 Core boundary:
 
@@ -73,8 +75,8 @@ Core boundary:
 - The LLM never modifies SHAP values.
 - The LLM never modifies therapeutic-area calibration.
 - The LLM never rewrites the prediction score.
-- The LLM returns structured Quality Review ratings, evidence fields, explanation, and continuity fields.
-- The application maps validated review ratings into Quality Adjustment and Final Candidate Score.
+- The LLM returns structured Scenario Review ratings, evidence fields, explanation, and continuity fields.
+- The application maps validated design review ratings into Design Confidence and Total Scenario Score.
 
 ## 3. Current Technical Foundation
 
@@ -103,9 +105,9 @@ Intended flow:
 5. Participants change structured dropdown fields and editable short text fields.
 6. Participants click `Predict Trial Completion`.
 7. XGBoost returns the new completion score, pillar impacts, and impact decomposition through the existing prediction path.
-8. The narrative layer receives baseline context, previous prediction, current prediction, changed fields, score deltas, SHAP/pillar movement, operational benchmark metadata, text context, clarification context, and prior storyline memory.
-9. The application validates the structured Quality Review, calculates Quality Adjustment and Final Candidate Score, and stores a compact storyline update.
-10. The UI displays the Quality Review below or near the score and charts.
+8. The narrative layer receives baseline context, previous prediction, current prediction, changed fields, score deltas, feature/subcategory/pillar movement, operational benchmark metadata, text context, clarification context, and prior storyline memory.
+9. The application validates the structured Scenario Review, calculates Design Confidence and Total Scenario Score when enabled, and stores a compact storyline update.
+10. The UI displays the Scenario Review below or near the score and charts.
 11. Participants iterate.
 
 The visible narrative should usually compare the current prediction against the previous prediction. Internally, the LLM should also receive enough baseline and path memory to avoid contradicting prior feedback.
@@ -116,9 +118,9 @@ For existing-study mode, generate a baseline review once per selected study/vers
 
 The current prototype initializes the baseline review when Simulation Mode opens, not delayed until the first participant prediction. It remains hidden from participants at the start of the exercise, but it should be passed into later review calls so the LLM can evaluate how the design path evolved from the original trial. The exact production timing remains open pending latency calibration.
 
-The baseline review context passed to later LLM calls is qualitative-only. It may include baseline strengths, concerns, consistency flags, participant-review text, continuity fields, and compact memory. It must not expose hidden baseline `Quality Adjustment`, `Final Candidate Score`, or a hidden numeric quality score to later prompt logic as a prior visible score.
+The baseline review context passed to later LLM calls is qualitative-only. It may include baseline strengths, concerns, consistency flags, participant-review text, continuity fields, and compact memory. It must not expose hidden baseline `Design Confidence`, `Total Scenario Score`, or a hidden numeric quality score to later prompt logic as a prior visible score.
 
-The hidden baseline review should include two qualitative analyses. First, it should interpret the prerecorded Completion Score when baseline decomposition is available. The provider should use the baseline structured features, text context, Completion Score, pillar impacts, and feature/subcategory impacts to summarize why the original trial appears completion-like or risky in clinical trial / pharma development language. This is baseline reasoning context, not a visible participant score and not a new XGBoost calculation. If only a registry score is available without pillar or feature decomposition, the baseline review should explicitly treat the score interpretation as lower-detail and avoid inventing missing driver analysis. Second, it should produce a hidden baseline Quality Review analysis using the same quality rubric as later visible reviews: design coherence, scientific rigor, population/strategy fit, operational plausibility, text consistency, and baseline concerns. This hidden quality analysis should create baseline strengths, baseline concerns, consistency flags, and compact memory, but it must not expose a visible baseline Quality Adjustment, Final Candidate Score, or hidden numeric quality score to the participant.
+The hidden baseline review should include two qualitative analyses. First, it should interpret the prerecorded Completion Score when baseline decomposition is available. The provider should use the baseline structured features, text context, Completion Score, pillar impacts, and feature/subcategory impacts to summarize why the original trial appears completion-like or risky in clinical trial / pharma development language. This is baseline reasoning context, not a visible participant score and not a new XGBoost calculation. If only a registry score is available without pillar or feature decomposition, the baseline review should explicitly treat the score interpretation as lower-detail and avoid inventing missing driver analysis. Second, it should produce a hidden baseline Scenario Review analysis using the same Design Confidence rubric as later visible reviews: phase and intent alignment, endpoint and evidence strength, target population alignment, operational burden balance, text consistency, and baseline concerns. This hidden design analysis should create baseline strengths, baseline concerns, consistency flags, and compact memory, but it must not expose a visible baseline Design Confidence adjustment, Total Scenario Score, or hidden numeric quality score to the participant.
 
 The stored baseline review should include:
 
@@ -132,7 +134,7 @@ The stored baseline review should include:
 - Baseline text/structured consistency flags.
 - Baseline compact memory summary.
 
-Participant-facing rule: do not show the baseline Quality Review, Quality Adjustment, Final Candidate Score, or baseline narrative comments by default. Participants may see the original XGBoost Completion Score and model drivers if that is part of the trial-opening experience. The hidden baseline review exists to enrich the first and later visible reviews, not to expose a quality score before teams make their first scenario choice. If hidden baseline review initialization fails, Simulation Mode should still open; later visible Quality Review calls can proceed without baseline review context or retry when a durable provider/store exists.
+Participant-facing rule: do not show the baseline Scenario Review, Design Confidence, Total Scenario Score, or baseline narrative comments by default. Participants may see the original XGBoost Completion Score and model drivers if that is part of the trial-opening experience. The hidden baseline review exists to enrich the first and later visible reviews, not to expose a design score before teams make their first scenario choice. If hidden baseline review initialization fails, Simulation Mode should still open; later visible Scenario Review calls can proceed without baseline review context or retry when a durable provider/store exists.
 
 Later prediction reviews should receive:
 
@@ -142,7 +144,7 @@ Later prediction reviews should receive:
 - Current delta packet.
 - Current snapshot.
 
-For the first visible review after a team edit, the narrative may compare qualitatively against the original trial baseline, but it must not refer to hidden baseline quality numbers as if participants had already seen them. For example, it may say that the model Completion Score decreased while the current design appears less penalized on coherence than the original baseline context. It should not say that the team "improved the score" when the visible Completion Score or visible Final Candidate Score declined.
+For the first visible review after a team edit, the narrative may compare qualitatively against the original trial baseline, but it must not refer to hidden baseline design numbers as if participants had already seen them. For example, it may say that the model Completion Score decreased while the current design appears more defensible than the original baseline context. It should not say that the team "improved the score" when the visible Completion Score or visible Total Scenario Score declined.
 
 ## 5. Scratch Mode User Experience, Future Version
 
@@ -161,11 +163,11 @@ Scratch mode may require additional field completeness rules because there is no
 
 After each prediction, the participant view should display:
 
-- `Final Candidate Score`, shown in the main gauge when adjusted view is enabled.
+- `Total Scenario Score`, shown in the main gauge when combined view is enabled.
 - `Completion Score` as a component score.
-- `Quality Adjustment` as a component value.
+- `Design Confidence` as a component value.
 - A short `Operational Assumptions` note.
-- Concise `Quality Review`.
+- Concise `Scenario Review`.
 
 Participant narrative sections:
 
@@ -174,7 +176,7 @@ Participant narrative sections:
 - `What the design may have gained`
 - `What the design may have sacrificed`
 - `Operational coherence note`
-- `One question for the team to debate`
+- `Two questions for the team to debate`: one medical/development question and one clinops/execution question.
 
 Suggested participant UI wording:
 
@@ -231,147 +233,122 @@ Potential facilitator fields:
 
 The facilitator view may be more direct, but it must still not override the model score or present itself as clinical truth. It should support discussion facilitation, not adjudicate trial validity.
 
-## 8. Quality Review Rubric
+## 8. Scenario Review And Design Confidence Rubric
 
-The LLM should apply an internal rubric across at least these dimensions:
+The Scenario Review has two analytical jobs:
 
-- Development-question fit: whether phase, regulatory intent, population, intervention model, comparator, and endpoints appear aligned to the implied development question.
-- Population relevance: whether the population remains clinically and strategically relevant rather than merely easier to enroll or complete.
-- Endpoint and estimand coherence: whether endpoint rigor, endpoint structure, duration, comparator, and trial architecture appear mutually consistent.
-- Scientific rigor: whether the design preserves interpretability, biological plausibility, and evidentiary value.
-- Operational feasibility: whether the design appears proportionate and executable without becoming trivially easy at the expense of value.
-- Change integrity: whether participants genuinely improved the design or mainly gamed completion likelihood.
-- Text consistency: whether editable text fields such as study summary and primary endpoint description remain consistent with the structured design.
-- Cross-pillar coherence: whether choices that are reasonable in isolation remain coherent in combination across therapeutic context, scientific challenge, patient profile, execution framework, operational assumptions, and text.
+1. Explain `Completion Outlook`: why the XGBoost Completion Score moved, using changed fields, feature movements, subcategory movements, pillar movements, baseline context, previous iteration context, and cross-pillar interaction hypotheses.
+2. Evaluate `Design Confidence`: whether the scenario is strategically defensible, evidence-generating, patient-relevant, and proportionate to execute.
 
-The Quality Review should reflect both current design coherence and change integrity:
+The active participant-facing hierarchy keeps the existing four Completion Outlook pillars and adds one Design Confidence subcategory under each pillar:
 
-- Current design coherence: whether the revised design is coherent and defensible now.
-- Change integrity: whether the path from baseline to current design appears like meaningful improvement, acceptable simplification, or score-seeking shortcut behavior.
+```text
+Therapeutic Context
+├── Therapeutic Area Profile
+├── Development Phase and Goal
+└── Phase & Intent Alignment
 
-For V1, do not make a numeric `Coherence Score` or `Quality Score` the primary user-facing concept. These can sound falsely precise and may be mistaken for competing prediction models. The user-facing concepts should be `Quality Review`, `Quality Adjustment`, and `Final Candidate Score`.
+Scientific Challenge
+├── Biological Profile
+├── Protocol Architecture
+└── Endpoint & Evidence Strength
 
-The Quality Review is bidirectional. It should recognize:
+Patient Profile
+├── Clinical Severity
+├── Population Scope
+└── Target Population Alignment
+
+Execution Framework
+├── Methodological Setup
+├── Trial Complexity Footprint
+└── Operational Burden Balance
+```
+
+`Completion Outlook` remains the model-derived Completion Score and its existing pillar/subcategory movements. `Design Confidence` is an app-owned review adjustment derived bottom-up from:
+
+- `Phase & Intent Alignment`: whether phase, purpose, development ambition, modality, endpoint posture, comparator support, and text rationale align with the implied decision.
+- `Endpoint & Evidence Strength`: whether endpoints, comparator/control choices, masking/allocation, duration, adaptive design, biomarker use, and text description support interpretable evidence.
+- `Target Population Alignment`: whether severity, line of therapy, rare-disease context, age/sex scope, biomarker strategy, conditions text, and summary text support the intended patient and indication question.
+- `Operational Burden Balance`: whether enrollment, sites, duration, arms, administration complexity, oversight, intervention model, modality, and benchmark metadata are proportionate to the evidence ambition and patient context.
+
+These design subcategories are not restricted to the same feature list as their parent Completion Outlook pillar. A design subcategory may use any packet field, XGBoost movement, text change, operational assumption, benchmark signal, baseline context, prior iteration context, curated reference summary, or local dataset statistic that is relevant and explicitly present. The parent pillar is a participant-facing location, not a hard evidence silo.
+
+The Scenario Review should reflect both current design defensibility and change integrity:
+
+- Current design defensibility: whether the revised design is coherent, interpretable, patient-relevant, and executable now.
+- Change integrity: whether the path from baseline to current design appears like meaningful strengthening, acceptable simplification, or score-seeking shortcut behavior.
+- Collateral impact: whether a move that improves one pillar plausibly weakens or strengthens another pillar.
+- Model boundary: whether a Completion Score movement is model-supported, clinically plausible, or only a hypothesis.
+
+For V1, do not make a numeric `Coherence Score` or `Quality Score` the primary user-facing concept. Use:
+
+- `Completion Outlook` for model-derived score movement.
+- `Scenario Review` for the narrative panel.
+- `Design Confidence` for the app-owned design adjustment.
+- `Total Scenario Score` only if the combined score view is activated.
+
+The review is bidirectional. It should recognize:
 
 - Strong endpoint and comparator logic.
-- Coherent population definition.
-- Proportional safety oversight.
-- Appropriate biomarker strategy.
-- Enrollment assumptions supported by the design.
-- Operational choices that mitigate risk without trivializing the trial.
+- Coherent phase, purpose, and development intent.
+- Coherent population definition and patient relevance.
+- Proportional safety oversight and risk governance.
+- Operational assumptions supported by the evidence ambition and patient context.
 - Difficult but strategically defensible designs.
 
-It should penalize:
+It should challenge:
 
 - Score-seeking simplification.
-- Weakened endpoint rigor.
-- Weakened comparator logic.
-- Population narrowing that reduces relevance.
-- Unsupported enrollment assumptions.
-- Design changes that make completion easier but reduce evidence value.
+- Weakened endpoint rigor, comparator logic, or interpretability.
+- Population narrowing that reduces relevance without clear rationale.
+- Unsupported enrollment, site, or duration assumptions.
+- Operational burden that is disproportionate to the evidence generated.
+- Design changes that make completion easier but reduce clinical-development usefulness.
 
 Principle:
 
 ```text
 One weak feature creates a discussion point.
-Several weak or conflicting features create a Quality Adjustment penalty.
-A difficult design can receive a positive Quality Adjustment if the participant strengthens it in a coherent and defensible way.
+Several weak or conflicting signals can create a Design Confidence penalty.
+A difficult design can receive a positive Design Confidence adjustment when evidence shows that the risk reflects rigor, patient relevance, scientific ambition, or prudent governance rather than bad design.
 ```
 
-Recommended V1 review ratings:
+Recommended review ratings:
 
 - `strong`: coherent, rigorous, and strategically defensible in the current context.
 - `supportive`: positive and defensible, but not enough to deserve the top positive rating.
-- `acceptable`: balanced, with strengths outweighing trade-offs.
+- `balanced`: mixed or neutral; trade-offs are understandable and not clearly score-moving.
 - `weak`: unresolved weakness or simplification that needs discussion.
 - `conflicting`: meaningful evidence, feasibility, text-consistency, or change-integrity concern.
 
-For change integrity, use:
+The application should map validated ratings to Design Confidence only when the review provides supported `evidence_fields`. Unsupported concerns or strengths may appear in the narrative, but they have zero scoring effect.
 
-- `improved`: the path appears to strengthen the design.
-- `partly_improved`: the path appears directionally positive, but with limited or mixed support.
-- `neutral`: the change appears broadly neutral for quality.
-- `simplified`: the change simplifies execution but may reduce evidence value.
-- `potential_shortcut`: the change appears score-seeking or weakens defensibility.
-
-For text consistency, use:
-
-- `consistent`.
-- `minor_tension`.
-- `material_tension`.
-- `contradiction`.
-
-The application should map these validated ratings to a reconciled Quality Adjustment. A concern should affect the Quality Adjustment only when the LLM provides supporting `evidence_fields`; otherwise it can appear in the narrative but should not move the score.
-
-### Quality Assessment Pillars For Visuals
-
-The internal Quality Review rubric can be more detailed than the user-facing plot structure. For visual display, V1 should use three Quality Assessment pillars. These pillars are organized around the narrative jobs the review must perform:
-
-1. `Evidence Coherence`: does the revised design still produce interpretable, decision-useful evidence?
-2. `Population & Strategy Fit`: does the selected population and strategic intent still match the disease setting and study purpose?
-3. `Execution Plausibility`: are the operational assumptions and implementation choices credible for this design, and does the change path look defensible rather than shortcut-driven?
-
-Recommended V1 Quality Assessment hierarchy:
+Recommended scoring discipline:
 
 ```text
-Quality Assessment
-├── Evidence Coherence
-│   ├── Endpoint & Comparator Fit
-│   └── Scientific Rigor
-├── Population & Strategy Fit
-│   ├── Population Relevance
-│   └── Development Fit
-└── Execution Plausibility
-    ├── Operational Scale Fit
-    └── Change Integrity
+Default design adjustment = 0.0
+Non-zero adjustment requires supported packet evidence
+Each design subcategory = -4.0 to +4.0 in 0.5 increments
+Typical subcategory movement = -2.5 to +2.5
+Total Design Confidence = sum of four design subcategories
+No hidden total cap
 ```
 
-Internal rubric-to-visual mapping:
+The adjustment must not be fake balancing:
 
-```text
-Evidence Coherence =
-    endpoint_and_comparator_logic
-  + scientific_rigor
-  + endpoint-related text consistency
+- If a Completion Outlook pillar is already strongly positive, positive Design Confidence for that same pillar should usually remain `0.0` or `+0.5` unless the packet shows a specific unresolved baseline concern was improved.
+- If a Completion Outlook pillar is neutral or negative, positive Design Confidence can be larger only when supported evidence shows the risk is caused by rigor, patient relevance, scientific ambition, or prudent governance.
+- If Completion Outlook rises sharply, negative Design Confidence can moderate the increase only when supported evidence suggests shortcut behavior or weakened design confidence.
+- If Completion Outlook falls sharply, positive Design Confidence can moderate the decrease only when supported evidence suggests the added risk comes from better evidence, broader patient relevance, or proportionate governance.
 
-Population & Strategy Fit =
-    development_question_fit
-  + population_relevance
-  + study-summary / criteria consistency
+Text consistency should not be a standalone visual pillar in V1. It should be routed to the affected Design Confidence subcategory:
 
-Execution Plausibility =
-    operational_scale_fit
-  + change_integrity
-  + operational / intervention consistency
-```
+- Endpoint text conflict -> `Endpoint & Evidence Strength`.
+- Study-summary, phase, or strategic-intent conflict -> `Phase & Intent Alignment`.
+- Population or indication conflict -> `Target Population Alignment`.
+- Intervention complexity or operational text conflict -> `Operational Burden Balance` or `Endpoint & Evidence Strength`, depending on the evidence fields.
 
-`Text consistency` should not be a standalone visual pillar in V1. It should be routed to the Quality Assessment pillar affected by the inconsistency:
-
-- Endpoint text conflict -> `Evidence Coherence`.
-- Study-summary or strategic-intent conflict -> `Population & Strategy Fit`.
-- Intervention complexity or operational text conflict -> `Execution Plausibility` or `Evidence Coherence`, depending on the evidence fields.
-
-Operational assumptions should remain outside the XGBoost `Execution Framework` contribution. They may appear in the Simulation Mode editing area near Execution Framework for workflow reasons, but in adjusted-score plots they belong under:
-
-```text
-Quality Assessment -> Execution Plausibility -> Operational Scale Fit
-```
-
-This keeps model-facing `Execution Framework` impacts distinct from non-XGBoost operational quality review.
-
-For reproducibility, the application should derive these three plotted Quality Assessment pillars from validated `quality_review_domains`. The LLM may provide suggested grouping language, but the app owns the final pillar/subcategory point mapping used in charts and score math.
-
-Recommended V1 point mapping:
-
-```text
-Each Quality Assessment subcategory: normally -3 to +2 points.
-Ratings may map to whole-point or half-point values.
-Each Quality Assessment pillar: sum of its subcategories.
-Total Quality Adjustment: sum of Quality Assessment pillars.
-```
-
-This keeps the displayed Quality Assessment internally reconciled. If later playtesting shows that Quality Adjustment is too strong, adjust domain rating weights rather than adding hidden pillar or total caps that make rows fail to add up.
-With the current V1 mapping, the maximum Quality Adjustment is `+12` because six non-text quality domains can each contribute `+2`; `text_consistency` is neutral at best. The minimum Quality Adjustment is `-21` because seven domains can each contribute `-3`.
+Operational assumptions remain outside XGBoost. They may appear near Execution Framework for workflow reasons, but in combined Scenario Review plots they contribute through `Operational Burden Balance`, not through the model-derived `Execution Framework` Completion Outlook value.
 
 ## 9. Shortcut Detection Concept
 
@@ -399,7 +376,7 @@ Operational assumptions are deterministic scenario stress tests.
 They help the narrative judge whether selected enrollment, site count, and total duration assumptions are coherent with the trial profile.
 They do not enter the XGBoost model.
 They do not directly change the Completion Score.
-They feed the Quality Review only.
+They feed Scenario Review and Design Confidence only.
 ```
 
 Active fields:
@@ -412,15 +389,15 @@ operational_assumptions.planned_duration_months
 
 Source priorities, cohort hierarchy, defaulting logic, and benchmark status calculation are owned by `docs/architecture_estimation.md`. The narrative layer consumes that metadata; it does not rebuild or reinterpret benchmark construction.
 
-The user does not write a free-text justification for planned enrollment, planned sites, or planned duration in the platform. Instead, the Quality Review assesses whether the operational assumptions are coherent with the current structured design, text context, and benchmark metadata.
+The user does not write a free-text justification for planned enrollment, planned sites, or planned duration in the platform. Instead, the Scenario Review assesses whether the operational assumptions are coherent with the current structured design, text context, benchmark metadata, and evidence ambition.
 
-System-filled benchmark/default values are neutral. They should not create a positive Quality Adjustment simply because they sit inside a benchmark range. They become evaluated scenario assumptions when the user keeps them as the current assumption for a prediction snapshot or actively edits them.
+System-filled benchmark/default values are neutral. They should not create a positive Design Confidence adjustment simply because they sit inside a benchmark range. They become evaluated scenario assumptions when the user keeps them as the current assumption for a prediction snapshot or actively edits them.
 
 Generic operational interpretation rule for enrollment, sites, and duration:
 
 ```text
 Operational benchmark status alone is context, not a penalty.
-Operational benchmark status plus conflicting design context can affect Execution Plausibility.
+Operational benchmark status plus conflicting design context can affect Operational Burden Balance.
 System-filled benchmark/default values are neutral unless retained as the current scenario or edited by the participant.
 Participant-edited values are scenario choices and can be evaluated against both benchmark metadata and the current structured design.
 ```
@@ -442,26 +419,26 @@ Short duration + short-term endpoint:
 potentially coherent.
 
 Short duration + endpoint text implying long-term clinical outcome:
-possible Evidence Coherence concern.
+possible Endpoint & Evidence Strength concern.
 ```
 
-Explicit support/conflict signals are optional future derived fields. If implemented later, their methodology belongs in `docs/architecture_estimation.md` or a future calibration note, and the signals must be deterministic, auditable, and not invented by the LLM. Until then, benchmark metadata plus structured design context is sufficient for V1 Quality Review.
+Explicit support/conflict signals are optional future derived fields. If implemented later, their methodology belongs in `docs/architecture_estimation.md` or a future calibration note, and the signals must be deterministic, auditable, and not invented by the LLM. Until then, benchmark metadata plus structured design context is sufficient for Scenario Review.
 
 ### Bounded Operational Effect
 
-Operational assumptions should not dominate the Quality Adjustment. Planned Enrollment, Planned Sites, and Planned Duration together should normally affect only:
+Operational assumptions should not dominate Design Confidence. Planned Enrollment, Planned Sites, and Planned Duration together should normally affect only:
 
 ```text
-Quality Assessment -> Execution Plausibility -> Operational Scale Fit
+Execution Framework -> Operational Burden Balance
 ```
 
-They remain controlled by the Quality Assessment subcategory/domain mapping. Operational benchmark status alone is context, not a penalty; it becomes score-relevant only when combined with coherent supporting or conflicting design evidence.
+They remain controlled by the Design Confidence subcategory mapping. Operational benchmark status alone is context, not a penalty; it becomes score-relevant only when combined with coherent supporting or conflicting design evidence.
 
 ## 11. Input Payload Architecture
 
 The LLM input object is assembled after the existing prediction response has been received and after the application has created the latest prediction snapshot.
 
-The payload must preserve the separation between the existing prediction system and the LLM narrative layer. XGBoost/TreeSHAP outputs explain completion-score movement; structured serious-game fields, operational assumptions, and text context define the broader design-reasoning space for the Quality Review.
+The payload must preserve the separation between the existing prediction system and the LLM narrative layer. XGBoost/TreeSHAP outputs explain completion-score movement; structured serious-game fields, operational assumptions, and text context define the broader design-reasoning space for the Scenario Review.
 
 This is conceptual JSON for planning only, not an implementation contract yet:
 
@@ -597,17 +574,17 @@ This is conceptual JSON for planning only, not an implementation contract yet:
       "input_hash": "...",
       "iteration_id": 0,
       "status": "reviewed",
-      "quality_adjustment": null,
-      "final_candidate_score": null,
-      "quality_numeric_context": "hidden_baseline_qualitative_only",
+      "design_confidence": null,
+      "total_scenario_score": null,
+      "design_numeric_context": "hidden_baseline_qualitative_only",
       "compact_storyline_memory": "..."
     },
     "previous_review": {
       "input_hash": "...",
       "iteration_id": 1,
       "status": "reviewed",
-      "quality_adjustment": -2,
-      "final_candidate_score": 70,
+      "design_confidence": -2,
+      "total_scenario_score": 70,
       "compact_storyline_memory": "..."
     }
   },
@@ -646,7 +623,7 @@ This is conceptual JSON for planning only, not an implementation contract yet:
 }
 ```
 
-The payload should include all active operational assumptions: `planned_enrollment`, `planned_sites`, and `planned_duration_months`. These assumptions remain outside XGBoost and Completion Score; they feed narrative / Quality Review only.
+The payload should include all active operational assumptions: `planned_enrollment`, `planned_sites`, and `planned_duration_months`. These assumptions remain outside XGBoost and Completion Score; they feed narrative / Scenario Review only.
 
 Operational-assumption values are assembled after the latest prediction snapshot. If the user changes fields that define an operational benchmark cohort, the affected benchmark becomes stale until the next `Predict Trial Completion` action. Enrollment and sites react to the implemented benchmark cohort fields, including strategic intent / Regulatory Intent when it affects the selected enrollment or patients-per-site benchmark. Duration reacts only to phase, indication, therapeutic area, rare-disease status, and primary endpoint duration bin. Duration does not use therapeutic modality or strategic intent in v1.
 
@@ -669,7 +646,7 @@ The active simulator does not run a pre-prediction structured/text consistency c
 
 ## 12. Output JSON Contract
 
-The LLM should return structured JSON. The application should validate the response, reject or downgrade malformed scoring fields, and calculate the Quality Adjustment and Final Candidate Score deterministically.
+The LLM should return structured JSON. The application should validate the response, reject or downgrade malformed scoring fields, and calculate Design Confidence and Total Scenario Score deterministically.
 
 The LLM should not return the final score as an authority. It should return review ratings, evidence fields, narrative, and continuity fields.
 
@@ -677,61 +654,73 @@ Proposed contract:
 
 ```json
 {
-  "score_movement_review": {
-    "summary": "short explanation of the observed Completion Score movement",
-    "clinical_design_interpretation": "participant-facing explanation in clinical trial / pharma development language",
-    "model_supported_reasons": [],
-    "cautions": []
+  "completion_outlook_review": {
+    "score_delta_summary": "short explanation of the observed Completion Score movement",
+    "pillar_movement_summary": [],
+    "model_supported_drivers": [],
+    "cross_pillar_interaction_hypotheses": [],
+    "model_limits": []
   },
-  "quality_review_domains": {
-    "development_question_fit": {
-      "rating": "strong | supportive | acceptable | weak | conflicting",
+  "design_confidence_subcategories": {
+    "phase_intent_alignment": {
+      "rating": "strong | supportive | balanced | weak | conflicting",
       "rationale": "...",
       "evidence_fields": []
     },
-    "scientific_rigor": {
-      "rating": "strong | supportive | acceptable | weak | conflicting",
+    "endpoint_evidence_strength": {
+      "rating": "strong | supportive | balanced | weak | conflicting",
       "rationale": "...",
       "evidence_fields": []
     },
-    "population_relevance": {
-      "rating": "strong | supportive | acceptable | weak | conflicting",
+    "target_population_alignment": {
+      "rating": "strong | supportive | balanced | weak | conflicting",
       "rationale": "...",
       "evidence_fields": []
     },
-    "endpoint_and_comparator_logic": {
-      "rating": "strong | supportive | acceptable | weak | conflicting",
-      "rationale": "...",
-      "evidence_fields": []
-    },
-    "operational_scale_fit": {
-      "rating": "strong | supportive | acceptable | weak | conflicting",
-      "rationale": "...",
-      "evidence_fields": []
-    },
-    "change_integrity": {
-      "rating": "improved | partly_improved | neutral | simplified | potential_shortcut",
-      "rationale": "...",
-      "evidence_fields": []
-    },
-    "text_consistency": {
-      "rating": "consistent | minor_tension | material_tension | contradiction",
+    "operational_burden_balance": {
+      "rating": "strong | supportive | balanced | weak | conflicting",
       "rationale": "...",
       "evidence_fields": []
     }
   },
+  "pillar_reviews": {
+    "therapeutic_context": {
+      "completion_interpretation": "...",
+      "design_adjustment_interpretation": "...",
+      "collateral_impacts": []
+    },
+    "scientific_challenge": {
+      "completion_interpretation": "...",
+      "design_adjustment_interpretation": "...",
+      "collateral_impacts": []
+    },
+    "patient_profile": {
+      "completion_interpretation": "...",
+      "design_adjustment_interpretation": "...",
+      "collateral_impacts": []
+    },
+    "execution_framework": {
+      "completion_interpretation": "...",
+      "design_adjustment_interpretation": "...",
+      "collateral_impacts": []
+    }
+  },
+  "tradeoff_review": {
+    "what_completion_gained": "...",
+    "what_design_confidence_gained": "...",
+    "what_may_have_been_sacrificed": "...",
+    "main_uncertainty": "..."
+  },
   "participant_review": {
     "what_changed": "...",
-    "why_completion_score_may_have_moved": "...",
-    "what_the_design_gained": "...",
-    "what_the_design_may_have_sacrificed": "...",
-    "operational_feasibility_note": "...",
-    "text_consistency_note": "...",
-    "challenge_question": "..."
+    "why_completion_outlook_moved": "...",
+    "main_design_signal": "...",
+    "tradeoff_summary": "...",
+    "medical_development_question": "...",
+    "clinops_execution_question": "..."
   },
   "facilitator_view_optional": {
     "shortcut_risk": "low | moderate | high",
-    "change_integrity": "improved | partly_improved | neutral | simplified | potential_shortcut | unclear",
     "main_tradeoff": "...",
     "coherence_concern": "...",
     "suggested_facilitator_probe": "...",
@@ -746,69 +735,58 @@ Proposed contract:
   },
   "trace": {
     "main_features_considered": [],
-    "main_pillars_considered": [],
+    "main_completion_drivers_considered": [],
+    "main_design_subcategories_considered": [],
     "operational_statuses_considered": [],
+    "reference_pack_ids_used": [],
     "compared_against": "previous_prediction",
     "should_repeat_prior_warning": false
   }
 }
 ```
 
-`facilitator_view_optional` may be omitted in the first V1 implementation. The minimum provider contract is the participant review, quality review domains, continuity fields, and trace fields needed for validation and replay.
+`facilitator_view_optional` may be omitted in the first implementation. The minimum provider contract is the Completion Outlook review, Design Confidence subcategories, participant review, continuity fields, and trace fields needed for validation and replay.
 
-The provider prompt should also include qualitative `rating_guidance_by_domain` for the allowed rating labels. This guidance explains labels such as `supportive` and `partly_improved` in clinical terms so the LLM can choose the right category. It is not model-owned scoring, and it should not expose or ask the provider to calculate point values.
+The provider prompt should also include qualitative `rating_guidance_by_subcategory` for the allowed rating labels. This guidance explains labels such as `supportive`, `balanced`, `weak`, and `conflicting` in clinical-development terms so the LLM can choose the right category. It is not model-owned scoring, and it should not expose or ask the provider to calculate point values.
 
 Participant-facing narrative should translate model evidence into clinical trial / pharma development language. The provider may use `field_changes`, `xgboost_impact_changes`, `score_delta`, and pillar/subcategory movement internally, but visible explanations should avoid technical model terms such as SHAP, feature impact, XGBoost movement, or pillar delta unless the facilitator view explicitly asks for model diagnostics. Preferred language should discuss endpoint maturity, evidence strength, comparator credibility, blinding/control implications, recruitment burden, trial duration, patient population fit, operational complexity, execution feasibility, development strategy, design shortcut risk, and regulatory persuasiveness.
 
-The LLM does not return `Quality Adjustment`, `Final Candidate Score`, or final Quality Assessment pillar/subcategory point contributions. The application derives them from validated `quality_review_domains`, evidence fields, and the documented deterministic mapping. If a provider returns app-owned score fields, validation should mark them as ignored and the application should still calculate its own values. This keeps plotted Quality Assessment contributions reproducible.
+The LLM does not return `Design Confidence`, `Total Scenario Score`, or final Design Confidence subcategory point contributions. The application derives them from validated `design_confidence_subcategories`, evidence fields, and the documented deterministic mapping. If a provider returns app-owned score fields, validation should mark them as ignored and the application should still calculate its own values. This keeps plotted Design Confidence contributions reproducible.
 
 The application calculates:
 
 ```text
-evidence_coherence_points = deterministic_map(validated_evidence_coherence_ratings)
-population_strategy_points = deterministic_map(validated_population_strategy_ratings)
-execution_plausibility_points = deterministic_map(validated_execution_plausibility_ratings)
+phase_intent_alignment_points = deterministic_map(validated_phase_intent_alignment_rating)
+endpoint_evidence_strength_points = deterministic_map(validated_endpoint_evidence_strength_rating)
+target_population_alignment_points = deterministic_map(validated_target_population_alignment_rating)
+operational_burden_balance_points = deterministic_map(validated_operational_burden_balance_rating)
 
-rating_points =
-    evidence_coherence_points
-  + population_strategy_points
-  + execution_plausibility_points
+design_confidence =
+    phase_intent_alignment_points
+  + endpoint_evidence_strength_points
+  + target_population_alignment_points
+  + operational_burden_balance_points
 
-quality_adjustment = rating_points
-
-final_candidate_score = clamp(
-    completion_score + quality_adjustment,
+total_scenario_score = clamp(
+    completion_score + design_confidence,
     0,
     100
 )
 ```
 
-Suggested initial V1 mapping:
+Suggested initial mapping envelope:
 
 ```text
-strong = +2
-supportive = +1
-acceptable = 0
-weak = -1.5
-conflicting = -3
-
-change_integrity:
-improved = +2
-partly_improved = +1
-neutral = 0
-simplified = -1.5
-potential_shortcut = -3
-
-text_consistency:
-consistent = 0
-minor_tension = -0.5
-material_tension = -1.5
-contradiction = -3
+Each Design Confidence subcategory = -4.0 to +4.0
+Allowed increments = 0.5
+Default = 0.0
+Typical movement = -2.5 to +2.5
+Strong movement = requires multiple explicit, supported signals
 ```
 
-The middle positive ratings, `supportive` and `partly_improved`, allow the review to recognize directionally favorable design quality without forcing every positive observation into the top rating. The maximum Quality Adjustment remains `+12`; the middle ratings add nuance rather than increasing the ceiling.
+The middle rating, `supportive`, allows the review to recognize directionally favorable design quality without forcing every positive observation into the top rating. `balanced` should usually map to `0.0` unless a deterministic evidence rule says otherwise.
 
-The final score should preserve half-point values when they occur and display one decimal only when needed. A domain rating should affect the Quality Adjustment only when the LLM provides supporting `evidence_fields`; otherwise the point effect should be zero and the issue can remain narrative-only. Evidence fields must also reference evidence available in the review packet. Unsupported evidence references are preserved for auditability but do not move the Quality Adjustment.
+The final score should preserve half-point values when they occur and display one decimal only when needed. A design subcategory rating should affect Design Confidence only when the LLM provides supporting `evidence_fields`; otherwise the point effect should be zero and the issue can remain narrative-only. Evidence fields must also reference evidence available in the review packet. Unsupported evidence references are preserved for auditability but do not move Design Confidence.
 
 Allowed evidence references may cite:
 
@@ -820,10 +798,10 @@ Allowed evidence references may cite:
 
 Guardrails:
 
-- If all validated Quality Review domains are `acceptable`, `neutral`, or otherwise non-concerning, `Quality Adjustment = 0`.
-- A positive Quality Adjustment requires evidence that the participant strengthened design quality, not merely that the design avoided obvious concerns.
+- If all validated Design Confidence subcategories are `balanced`, neutral, or otherwise non-concerning, `Design Confidence = 0`.
+- A positive Design Confidence adjustment requires evidence that the participant strengthened design confidence, not merely that the design avoided obvious concerns.
 - Unsupported `evidence_fields` have zero scoring effect even when the rating is non-neutral.
-- Benchmark-typical operational assumptions are neutral by default; they do not create a positive Quality Adjustment unless supported by broader design improvements.
+- Benchmark-typical operational assumptions are neutral by default; they do not create a positive Design Confidence adjustment unless supported by broader design improvements.
 - Low-confidence operational benchmark metadata should be narrative-first. It should affect points only when multiple conflict signals agree.
 
 ## 13. Plot Integration Guidance
@@ -834,7 +812,7 @@ Use a toggle:
 
 ```text
 Completion Score View
-Final Candidate Score View
+Total Scenario Score View
 ```
 
 ### Completion Score View
@@ -846,68 +824,69 @@ This is the existing model-first view:
 - Treemap: existing XGBoost / SHAP-derived completion hierarchy.
 - Labels should remain tied to Completion Score drivers.
 
-### Final Candidate Score View
+### Total Scenario Score View
 
 This is the adjusted serious-game view:
 
-- Gauge: `Final Candidate Score`.
+- Gauge: `Total Scenario Score`.
 - Component cards:
   - `Completion Score`.
-  - `Quality Adjustment`.
-  - `Final Candidate Score`.
-- Bar chart may show seven bars:
-  - Four Completion Score pillars:
-    - `Therapeutic Context`.
-    - `Scientific Challenge`.
-    - `Patient Profile`.
-    - `Execution Framework`.
-  - Three Quality Assessment pillars:
-    - `Evidence Coherence`.
-    - `Population & Strategy Fit`.
-    - `Execution Plausibility`.
-- Use visual separation or a distinct color family so users can see that the first four bars are XGBoost / SHAP-derived and the last three are structured Quality Review contributions.
+  - `Design Confidence`.
+  - `Total Scenario Score`.
+- Bar chart should keep the four familiar participant-facing pillars:
+  - `Therapeutic Context`.
+  - `Scientific Challenge`.
+  - `Patient Profile`.
+  - `Execution Framework`.
+- Each pillar can include its existing Completion Outlook subcategories plus one Design Confidence subcategory:
+  - `Therapeutic Context -> Phase & Intent Alignment`.
+  - `Scientific Challenge -> Endpoint & Evidence Strength`.
+  - `Patient Profile -> Target Population Alignment`.
+  - `Execution Framework -> Operational Burden Balance`.
+- Use clear provenance labels or visual encoding so users can see which subcategory is model-derived Completion Outlook and which subcategory is app-scored Design Confidence.
 
 Recommended adjusted treemap structure:
 
 ```text
-Final Candidate Score
-├── Completion Score
-│   ├── Therapeutic Context
-│   ├── Scientific Challenge
-│   ├── Patient Profile
-│   └── Execution Framework
-└── Quality Assessment
-    ├── Evidence Coherence
-    │   ├── Endpoint & Comparator Fit
-    │   └── Scientific Rigor
-    ├── Population & Strategy Fit
-    │   ├── Population Relevance
-    │   └── Development Fit
-    └── Execution Plausibility
-        ├── Operational Scale Fit
-        └── Change Integrity
+Total Scenario Score
+├── Therapeutic Context
+│   ├── Therapeutic Area Profile
+│   ├── Development Phase and Goal
+│   └── Phase & Intent Alignment
+├── Scientific Challenge
+│   ├── Biological Profile
+│   ├── Protocol Architecture
+│   └── Endpoint & Evidence Strength
+├── Patient Profile
+│   ├── Clinical Severity
+│   ├── Population Scope
+│   └── Target Population Alignment
+└── Execution Framework
+    ├── Methodological Setup
+    ├── Trial Complexity Footprint
+    └── Operational Burden Balance
 ```
 
-The treemap should make source boundaries explicit:
+The treemap should make source boundaries explicit even when the participant-facing chart is integrated:
 
 ```text
-Completion Score = XGBoost / SHAP-derived
-Quality Assessment = structured LLM review, app-scored
+Completion Outlook subcategories = XGBoost / SHAP-derived
+Design Confidence subcategories = structured Scenario Review, app-scored
 ```
 
-Do not create fake SHAP attribution. Quality Assessment values are not SHAP values and should not be described as model drivers. Use terms such as `Quality Review Contributions` or `Quality Assessment` rather than `SHAP drivers`.
+Do not create fake SHAP attribution. Design Confidence values are not SHAP values and should not be described as model drivers. Use terms such as `Design Confidence adjustment` or `Scenario Review adjustment` rather than `SHAP drivers`.
 
-Operational assumptions should not be redistributed into the XGBoost `Execution Framework` branch. In adjusted view, Planned Enrollment, Planned Sites, and Planned Duration should contribute only through `Quality Assessment -> Execution Plausibility -> Operational Scale Fit`.
+Operational assumptions should not be redistributed into the XGBoost `Execution Framework` Completion Outlook value. In adjusted view, Planned Enrollment, Planned Sites, and Planned Duration can contribute only through `Operational Burden Balance`.
 
-The minimal participant panel does not need to expose all validation/debug fields. It should show Completion Score, Quality Adjustment, Final Candidate Score, the three Quality Assessment pillars, signed domain contribution direction, and concise participant-review narrative. It should not expose raw LLM rating labels such as `supportive`, `weak`, or `partly_improved` in the participant panel; those categories are consumed by the application to calculate and audit the score. Future facilitator or debug views should consider exposing packet-supported versus unsupported `evidence_fields` and raw domain ratings from `quality_assessment` so facilitators can audit whether a review rating was grounded in packet evidence. Future real-provider UI work should also decide whether `score_movement_review.clinical_design_interpretation` becomes visible in the participant panel, since it is intended to translate model movement into clinical trial / pharma development language.
+The minimal participant panel does not need to expose all validation/debug fields. It should show Completion Score, Design Confidence, Total Scenario Score when enabled, the four familiar pillars, signed subcategory contribution direction, concise participant-review narrative, and two expert questions. It should not expose raw LLM rating labels such as `supportive`, `weak`, or `conflicting` in the participant panel; those categories are consumed by the application to calculate and audit the score. Future facilitator or debug views should consider exposing packet-supported versus unsupported `evidence_fields` and raw subcategory ratings from `design_confidence_subcategories` so facilitators can audit whether a review rating was grounded in packet evidence.
 
 Treemap signed-value rule:
 
 - Tile labels show signed point contribution.
 - Color indicates positive versus negative contribution.
 - Tile size should use absolute magnitude or a fixed group sizing rule, because treemap area cannot directly represent negative values.
-- The root label should show the Final Candidate Score, but the chart should not imply that negative tile areas add arithmetically as positive area.
-- Completion Score and Quality Assessment branches should be visually separated so users do not confuse app-scored quality contributions with SHAP-derived model impacts.
+- The root label should show the Total Scenario Score when combined view is enabled, but the chart should not imply that negative tile areas add arithmetically as positive area.
+- Completion Outlook and Design Confidence provenance should remain inspectable so users do not confuse app-scored design contributions with SHAP-derived model impacts.
 
 ## 14. Narrative Tone Rules
 
@@ -942,9 +921,9 @@ Recommended stored state per serious-game session:
 - Support level per iteration.
 - Supporting signals per iteration.
 - Conflicting signals per iteration.
-- Quality Review ratings per iteration.
-- Quality Adjustment per iteration.
-- Final Candidate Score per iteration.
+- Scenario Review ratings per iteration.
+- Design Confidence per iteration.
+- Total Scenario Score per iteration.
 - Pillar impacts and pillar deltas.
 - Feature drivers and deltas.
 - Participant review.
@@ -957,7 +936,7 @@ The storyline should be application-owned, not implicit LLM memory. After each r
 - Changed fields.
 - Changed operational assumptions.
 - Score movement.
-- Quality Adjustment.
+- Design Confidence.
 - Main gain.
 - Main trade-off.
 - Resolved concerns.
@@ -969,7 +948,7 @@ For the next prediction, pass baseline review, previous review, compact storylin
 
 ### Review Regeneration And No-Op Policy
 
-The application should decide whether a new Quality Review is needed before calling the LLM. This prevents the narrative from changing when the user has not materially changed the scenario.
+The application should decide whether a new Scenario Review is needed before calling the LLM. This prevents the narrative from changing when the user has not materially changed the scenario.
 
 Do not call the LLM and do not create a new storyline step when:
 
@@ -978,7 +957,7 @@ Do not call the LLM and do not create a new storyline step when:
 - No editable text fields changed materially.
 - Completion Score and operational metadata are unchanged.
 
-For no-op predictions, reuse the latest validated review and leave Quality Adjustment, Final Candidate Score, and storyline memory unchanged.
+For no-op predictions, reuse the latest validated review and leave Design Confidence, Total Scenario Score, and storyline memory unchanged.
 
 For minor text-only edits, use a materiality gate before triggering a full review. The first implemented gate normalizes case, whitespace, and punctuation before comparing text snapshots; richer semantic materiality can be added later:
 
@@ -990,11 +969,11 @@ Examples:
 
 - Typo, punctuation, casing, whitespace, or a single wording cleanup = no new review.
 - A short clarification that does not alter endpoint, population, intervention, or operational meaning = no full review; optionally update displayed text only.
-- A text edit that changes endpoint intent, population scope, intervention description, rationale, or creates a structured-field contradiction = material text change and may trigger a new Quality Review.
+- A text edit that changes endpoint intent, population scope, intervention description, rationale, or creates a structured-field contradiction = material text change and may trigger a new Scenario Review.
 
 If a text-only material change triggers review, the narrative should state that the design variables did not change and the review changed only because the textual rationale/context changed. The application should avoid presenting this as a new model-score movement.
 
-Do not run a clarification gate before prediction for structured/text mismatches. If text changes are material, submit the scenario through the normal `Predict Trial Completion` flow and let Quality Review interpret the submitted structured fields, operational assumptions, and text context after scoring.
+Do not run a clarification gate before prediction for structured/text mismatches. If text changes are material, submit the scenario through the normal `Predict Trial Completion` flow and let Scenario Review interpret the submitted structured fields, operational assumptions, and text context after scoring.
 
 ## 16. Reproducibility And Provider Fallback
 
@@ -1021,7 +1000,7 @@ Provider selection and secret handling:
   - `NARRATIVE_LLM_TIMEOUT_SECONDS`
   - `NARRATIVE_LLM_MAX_RETRIES`
 - Current setup status: local `.env` can hold these values, and `src/narratives/provider_config.py` reads and validates them without making any LLM API call. `scripts/check_narrative_openai_smoke.py` and `scripts/check_narrative_gemini_smoke.py` can run opt-in API smoke tests when `RUN_NARRATIVE_OPENAI_SMOKE=1` or `RUN_NARRATIVE_GEMINI_SMOKE=1` is set; they skip by default to avoid accidental network calls or API spend. `src/narratives/provider.py` contains real OpenAI and Gemini invocation helpers behind the same normalized provider result shape. `frontend/views/trial_simulator.py` uses the deterministic mock provider by default and routes both hidden baseline and visible Quality Review calls through the live provider chain only when `NARRATIVE_LIVE_REVIEW_ENABLED=1`. Live wrapper checks have validated one full fixture review with OpenAI and one full fixture review with Gemini using the normalized provider boundary.
-- Provider config, prompt/schema fixtures, opt-in OpenAI/Gemini smoke testing, and opt-in simulator UI routing are implemented. If live routing is enabled and all configured providers fail or validation does not produce a complete Quality Review, the participant panel shows Completion Score only and marks Quality Review unavailable for the current scenario, with a narrow retry action for live-provider failures. It does not reuse a stale Quality Adjustment. The next planning step is revisiting Quality Assessment display/pillars.
+- Provider config, prompt/schema fixtures, opt-in OpenAI/Gemini smoke testing, and opt-in simulator UI routing are implemented against the older Quality Review contract. The active implementation task is to migrate that contract to `completion_outlook_review` and `design_confidence_subcategories`. If live routing is enabled and all configured providers fail or validation does not produce a complete Scenario Review, the participant panel shows Completion Score only and marks Scenario Review unavailable for the current scenario, with a narrow retry action for live-provider failures. It does not reuse stale Design Confidence for a new packet.
 - Any OpenAI model used in later validation should be pinned to an explicit snapshot rather than a floating alias. OpenAI Pro/high-reasoning profiles can be considered for slower, high-quality hidden baseline generation or offline review, but they are not the default live interactive path after the June 2026 Gemini Flash-Lite decision.
 - Any Gemini model used in production or fallback should be configured with an explicit model ID rather than hard-coded in product logic. The current live interactive candidate is `gemini-3.1-flash-lite`; a Pro-class Gemini model can be evaluated later for slower offline or fallback review quality.
 - Future provider-chain mode should try the configured primary provider first, then the configured fallback only for provider/network/rate-limit/unavailable failure. Do not fallback when the primary provider returns valid but unfavorable clinical reasoning, or when the provider returns malformed/invalid review JSON; that would create provider-shopping behavior and hide prompt/contract problems that should be fixed.
@@ -1030,7 +1009,7 @@ Provider selection and secret handling:
 - Keep the implementation deliberately small: one provider config reader, one prompt/schema builder, and one normalized provider result shape shared by mock, OpenAI, and Gemini. Avoid separate scoring, packet-building, cache, or UI code paths per provider.
 - In future provider-chain mode, provider fallback should be bounded and auditable. Try at most the configured primary and one configured fallback for a given packet. Store which provider failed, why it failed, and which provider generated the accepted review. Do not silently retry multiple times or cascade across many models.
 - Provider identity should remain transparent to participants. The participant panel should not say whether OpenAI, Gemini, or another live provider produced a review. Provider and model names belong in trace/debug/facilitator metadata only.
-- If all configured live providers fail, return an unavailable Quality Review state and show Completion Score only. Do not reuse a stale Quality Adjustment for the new packet.
+- If all configured live providers fail, return an unavailable Scenario Review state and show Completion Score only. Do not reuse stale Design Confidence for the new packet.
 - If a future fallback provider succeeds, cache the fallback result under its own provider/model namespace. Do not overwrite or pretend it is the primary provider result.
 - Full narrative reviews need enough output budget for reasoning plus seven domain ratings and participant-facing review lines. Treat incomplete provider responses caused by output-token limits as provider failures, not as valid reviews.
 - Runtime controls such as temperature, seed, reasoning effort, and JSON-output controls are provider/model-specific. Config may read them, but real provider code should send only parameters supported by the selected model. For the pinned GPT-5.5 OpenAI snapshot, use `reasoning.effort` from `OPENAI_REASONING_EFFORT`, request JSON output through the Responses API text format, and do not send temperature or seed unless a future model-specific capability check proves they are accepted. For Gemini, send temperature and seed only through Gemini's supported generation config and request JSON through Gemini's response MIME/config path. Store configured versus applied generation controls in provider metadata for every real provider result.
@@ -1047,7 +1026,7 @@ Live-provider latency experiments run during the June 2026 implementation sessio
 - Earlier interpretation from the first provider benchmark: OpenAI was the more reliable full-contract provider in those tests; Gemini was faster when it returned valid JSON, but needed schema and generation-control hardening before it could be treated as the live interactive default.
 - Historical OpenAI-only live-playtesting recommendation was `OPENAI_REASONING_EFFORT=medium`, `NARRATIVE_LLM_MAX_OUTPUT_TOKENS=3500`, `NARRATIVE_LLM_TIMEOUT_SECONDS=60`, and `NARRATIVE_LLM_MAX_RETRIES=0`. The current validated interactive recommendation is the Gemini-only Flash-Lite profile described below; OpenAI high-reasoning profiles remain candidates for slower offline validation, not the default live interactive path.
 - The main artificial slowdown drivers are primary-provider timeout, retry count, reasoning effort, output budget, and hidden-baseline generation timing. With timeout 60 seconds, one retry, primary plus fallback, the worst-case provider wait can approach 240 seconds before normal generation overhead.
-- Cache behavior should be interpreted carefully: validated successful reviews can be replayed for the same packet and same generation-control namespace; malformed, incomplete, provider-error, or validation-failed reviews should not be treated as reusable Quality Reviews.
+- Cache behavior should be interpreted carefully: validated successful reviews can be replayed for the same packet and same generation-control namespace; malformed, incomplete, provider-error, or validation-failed reviews should not be treated as reusable Scenario Reviews.
 - Local Completion Score prediction API latency was not measured in these provider benchmarks because the local `/health` endpoint was unavailable during the shell check. The observed multi-minute UI delay was dominated by live LLM generation and provider fallback, not by known XGBoost scoring work.
 
 Implementation-time cost-control decision after the first billing check:
@@ -1064,16 +1043,16 @@ Open live-play calibration items before rollout:
 - Measure the local `/predict` API separately once the API is running, so model scoring time is separated from provider time in latency budgets.
 - Repeat timing tests with representative real trial scenarios, not only contract fixtures, before setting production timeout/retry defaults.
 - Make a first qualitative assessment of live participant-review text across several representative real scenarios before deciding whether the prompt should become shorter, more structured, or model-specific.
-- Update the participant UI so Quality Adjustment is clearly integrated with Completion Score into the Final Candidate Score, while still preserving the distinction between XGBoost Completion Score drivers and app-owned Quality Review contributions.
-- During live testing, expose compact timing diagnostics for successful and failed Quality Reviews. The diagnostics should separate hidden-baseline lookup/generation time, visible-review provider/store time, total visible workflow time, provider latency, attempts, cache hits, configured timeout, applied provider timeout, response length, and validation status. These diagnostics belong in an expander for calibration/debugging, not in the main participant narrative.
+- Update the participant UI so Design Confidence can be integrated with Completion Score into the Total Scenario Score, while still preserving the distinction between XGBoost Completion Outlook drivers and app-owned Scenario Review contributions.
+- During live testing, expose compact timing diagnostics for successful and failed Scenario Reviews. The diagnostics should separate hidden-baseline lookup/generation time, visible-review provider/store time, total visible workflow time, provider latency, attempts, cache hits, configured timeout, applied provider timeout, response length, and validation status. These diagnostics belong in an expander for calibration/debugging, not in the main participant narrative.
 
 Current mid-way development sanity check:
 
-This review does not replace the V1 roadmap or change the original implementation direction. It is a calibration checkpoint before the next implementation steps, intended to verify that the LLM input packet, prompt volume, output contract, Quality Adjustment concept, and participant display remain coherent now that live-provider plumbing and the first Quality Review UI exist.
+This review has been superseded by the four-pillar Design Confidence plan. It remains useful as historical context for why prompt size, provider reliability, and participant display need explicit calibration.
 
 1. Prompt, token, output, and cost audit. First inspect exactly what the application sends to the LLM for `hidden_baseline` and `visible_iteration` prompts: prompt instructions, response contract, packet JSON, field-change evidence, XGBoost movement evidence, text context, baseline/previous review context, operational assumptions, and clarification context. For each representative packet, record prompt character count, approximate input tokens, configured output budget, actual response length, parser/validation result, cache behavior, and estimated cost for the selected model. Then compare observed wall-clock time against this input/output volume and provider limitations. The audit should make the LLM input readable as if a facilitator had written the prompt manually, while keeping secrets and raw provider outputs out of participant UI.
-2. Quality Adjustment and participant display review. Reassess whether the Quality Assessment pillars, domain labels, rating-to-point mapping, and participant wording are coherent, legitimate, and easy to explain. The review should test whether participants can understand how Completion Score features, Quality Review evidence, and Quality Adjustment differ, and whether the current grouped contribution chart is enough or whether a separate gauge, separate contribution panel, or two-branch treemap is clearer.
-3. Implementation plan for prompt/UI changes. Only after the first two reviews decide what to change in code: which packet fields should be removed, summarized, or added; whether hidden baseline generation should be deferred or cached durably; which provider/model profile should be used for interactive play; and how the Final Candidate Score, Completion Score drivers, and Quality Adjustment contributions should be rendered in the simulator.
+2. Design Confidence and participant display review. Reassess whether the four design subcategories, rating-to-point mapping, and participant wording are coherent, legitimate, and easy to explain. The review should test whether participants can understand how Completion Score features, Scenario Review evidence, and Design Confidence differ.
+3. Implementation plan for prompt/UI changes. Only after the first two reviews decide what to change in code: which packet fields should be removed, summarized, or added; whether hidden baseline generation should be deferred or cached durably; which provider/model profile should be used for interactive play; and how the Total Scenario Score, Completion Outlook drivers, and Design Confidence contributions should be rendered in the simulator.
 
 Gemini JSON reliability finding from the NCT02741128 live audit:
 
@@ -1089,7 +1068,7 @@ Current structured/text consistency-check status:
 - Removed from the active simulator.
 - `Predict Trial Completion` proceeds directly with edited structured fields, text fields, and operational assumptions.
 - The deterministic alignment module and checker are not part of the active workflow.
-- The active Quality Review path should not return `clarification_needed` before scoring.
+- The active Scenario Review path should not return `clarification_needed` before scoring.
 
 Recommended trace fields to store for each narrative pass:
 
@@ -1110,36 +1089,36 @@ Recommended trace fields to store for each narrative pass:
 
 Trace robustness staging:
 
-- Current prototype trace should remain simple and session-state compatible. It should store `input_packet`, provider/mock `output_json`, `validated_review`, validation status/errors, app-owned Quality Adjustment, Final Candidate Score, Quality Assessment, clarification issues, user clarifications, changed fields, score movement, provider/model identity, and compact storyline memory.
-- Current real-provider traces store prompt template version, response schema version, configured/applied generation controls, attempts, latency, parse status, response text length, token usage when available, finish metadata when available, malformed-JSON retry metadata, and fallback-after metadata in provider metadata. The UI may expose these fields in a compact technical diagnostics expander when live Quality Review is unavailable, without showing API keys, raw prompts, or raw provider output. Add prompt template hashes only if prompt version strings are not enough for audit. Add a compact evidence-audit summary only if unsupported evidence fields become hard to inspect from `quality_assessment`.
+- Current prototype trace should remain simple and session-state compatible. It should store `input_packet`, provider/mock `output_json`, `validated_review`, validation status/errors, app-owned Design Confidence, Total Scenario Score, Design Confidence subcategory contributions, clarification issues, user clarifications, changed fields, score movement, provider/model identity, and compact storyline memory.
+- Current real-provider traces store prompt template version, response schema version, configured/applied generation controls, attempts, latency, parse status, response text length, token usage when available, finish metadata when available, malformed-JSON retry metadata, and fallback-after metadata in provider metadata. The UI may expose these fields in a compact technical diagnostics expander when live Scenario Review is unavailable, without showing API keys, raw prompts, or raw provider output. Add prompt template hashes only if prompt version strings are not enough for audit. Add a compact evidence-audit summary only if unsupported evidence fields become hard to inspect from `design_confidence_subcategories`.
 - Defer until durable provider tracing: raw provider response, parsed JSON response, provider response ID, system fingerprint, and provider-specific safety/refusal metadata beyond compact finish/safety counts. These fields are not meaningful for the deterministic mock reviewer and are not required for the current mock-default simulator path.
 - Defer until durable storage: database/file persistence, shared trial-level baseline review records, cross-team replay, facilitator export, retention policy, privacy controls, and schema migration strategy.
 - Do not expand the prompt packet just because the trace stores more audit data. Store enough for audit; send only curated current-context fields to the LLM.
 
 The goal is to make repeated runs as consistent as possible while acknowledging that exact determinism is not guaranteed for LLM outputs.
 
-Provider abstraction should be thin. The application should own payload construction, validation, Quality Adjustment calculation, persistence, cache lookup, and UI rendering. Provider-specific code should own only model invocation and response normalization. The V1 provider boundary includes the deterministic mock provider, explicit unsupported-provider failure path, and real OpenAI/Gemini invocation behind the same normalized result shape.
+Provider abstraction should be thin. The application should own payload construction, validation, Design Confidence calculation, persistence, cache lookup, and UI rendering. Provider-specific code should own only model invocation and response normalization. The V1 provider boundary includes the deterministic mock provider, explicit unsupported-provider failure path, and real OpenAI/Gemini invocation behind the same normalized result shape.
 
 Real-provider prompts use a funnel instruction, currently implemented in `src/narratives/prompt_builder.py` and validated by `scripts/check_narrative_prompt_builder.py`:
 
-- Use prompt mode `hidden_baseline` for the original trial before participant changes. This mode creates hidden baseline context, qualitative baseline score interpretation, baseline strengths/concerns, consistency flags, and compact memory. It must not write as if the participant changed the scenario and must not expose participant-facing baseline Quality Adjustment, Final Candidate Score, or hidden numeric quality score.
-- Use prompt mode `visible_iteration` for participant-modified scenarios. This mode explains the participant change, Completion Score movement, design gains, possible sacrifices, and continuity with baseline/previous iteration context for the visible Quality Review panel.
+- Use prompt mode `hidden_baseline` for the original trial before participant changes. This mode creates hidden baseline context, qualitative baseline score interpretation, baseline strengths/concerns, consistency flags, and compact memory. It must not write as if the participant changed the scenario and must not expose participant-facing baseline Design Confidence, Total Scenario Score, or hidden numeric quality score.
+- Use prompt mode `visible_iteration` for participant-modified scenarios. This mode explains the participant change, Completion Score movement, design gains, possible sacrifices, and continuity with baseline/previous iteration context for the visible Scenario Review panel.
 - In `visible_iteration` mode, use `iteration_context.field_changes` to identify what the participant changed.
 - Use `model_interpretation.xgboost_impact_changes` to understand model movement and materiality. In `hidden_baseline` mode, do not invent participant edits when `field_changes` is empty.
 - Treat XGBoost/SHAP movement as model explanation evidence, not proof of clinical causality.
 - Translate model evidence into clinical trial / pharma development language for participant-facing text. Explain why the revised scenario may look more or less completion-like, robust, feasible, governed, strategically aligned, risk-reduced, simplified, or less evidence-generating in terms of endpoint timing, comparator choice, population scope, oversight, operational burden, trial duration, scientific challenge, or development strategy rather than exposing raw model vocabulary. Do not equate a higher Completion Score with simplification by default, but do flag simplification or value loss when the evidence points that way.
-- Produce domain ratings, rationale, evidence fields, participant-facing narrative, continuity, and trace fields.
-- Do not calculate or return `Quality Adjustment`, `Final Candidate Score`, or Quality Assessment point values. The application calculates those from the validated domain ratings.
+- Produce design subcategory ratings, rationale, evidence fields, participant-facing narrative, continuity, and trace fields.
+- Do not calculate or return `Design Confidence`, `Total Scenario Score`, or Design Confidence point values. The application calculates those from the validated subcategory ratings.
 
 Use a deterministic input hash based on prompt version, rubric version, baseline snapshot, current snapshot, storyline memory, and text context. If the same input hash is reviewed again with the same provider/model cache namespace, reuse the stored validated review instead of calling the provider again. Generate the baseline review once per selected study and store it for the session. Hashable review context should avoid session-specific trace IDs; use stable input hashes and iteration IDs instead.
 
 Validation and failure behavior:
 
-- If the LLM provider call fails, show Completion Score only and mark Quality Adjustment as unavailable for the current snapshot.
-- Do not reuse a stale Quality Adjustment for a new snapshot.
+- If the LLM provider call fails, show Completion Score only and mark Design Confidence as unavailable for the current snapshot.
+- Do not reuse stale Design Confidence for a new snapshot.
 - If JSON is malformed or fails schema validation, discard scoring fields and either show no narrative or show only validated narrative fields.
-- If a domain rating is valid but lacks required `evidence_fields`, set its point contribution to zero and keep the issue narrative-only.
-- If partial JSON validates, the application may render validated narrative sections, but Final Candidate Score should be calculated only from validated scoring fields.
+- If a design subcategory rating is valid but lacks required `evidence_fields`, set its point contribution to zero and keep the issue narrative-only.
+- If partial JSON validates, the application may render validated narrative sections, but Total Scenario Score should be calculated only from validated scoring fields.
 - Store validation status and failure reason with the review trace.
 
 ## 17. Fields And Source-Of-Truth Principle
@@ -1148,18 +1127,18 @@ The structured feature registry remains the primary design source of truth for t
 
 The LLM narrative layer should treat structured dropdown and numeric fields as the primary source of truth. Short text fields are secondary. They should help detect contradiction, missing rationale, or narrative inconsistency. Missing or brief free-text fields should not be heavily penalized unless they directly contradict structured trial features.
 
-If structured fields and text fields conflict, the LLM should flag the inconsistency rather than silently penalize the Quality Adjustment. For example, if the structured fields say `adult_ml` is adult-only but the summary says the intended treatment population includes elderly patients with high disease burden, the LLM may flag a population-relevance concern.
+If structured fields and text fields conflict, the LLM should flag the inconsistency rather than silently penalize Design Confidence. For example, if the structured fields say `adult_ml` is adult-only but the summary says the intended treatment population includes elderly patients with high disease burden, the LLM may flag a target-population concern.
 
 User-editable text is untrusted context. The provider prompt must instruct the model to ignore any instructions, scoring requests, or role changes embedded inside study summary, endpoint, intervention, eligibility, or other trial text fields. Text can provide rationale, context, or contradiction evidence, but it must not override structured fields unless a future UI explicitly marks it as participant rationale.
 
 Text conflict handling:
 
 - For obvious material mismatches, pause the prediction workflow before new scoring and ask the participant to correct the scenario or add an explanation.
-- For softer tensions, continue Quality Review and flag the inconsistency in narrative context.
-- Route it to the affected Quality Assessment pillar.
-- Require `evidence_fields` before it can affect Quality Adjustment.
+- For softer tensions, continue Scenario Review and flag the inconsistency in narrative context.
+- Route it to the affected Design Confidence subcategory.
+- Require `evidence_fields` before it can affect Design Confidence.
 - Treat missing, brief, or noisy text as low-confidence context rather than a direct penalty.
-- Do not let the LLM silently choose whether structured fields or text fields are true. For Completion Score, structured Trial Features are authoritative. For Quality Review, structured fields remain primary context, while text and user explanations provide clarification, contradiction evidence, or scenario rationale.
+- Do not let the LLM silently choose whether structured fields or text fields are true. For Completion Score, structured Trial Features are authoritative. For Scenario Review, structured fields remain primary context, while text and user explanations provide clarification, contradiction evidence, or scenario rationale.
 
 ### Field Selection for LLM Narrative Layer
 
@@ -1324,7 +1303,7 @@ This list should help the LLM interpret why the Completion Score moved. It shoul
 
 #### Non-Direct Fields That Still Matter
 
-The following four fields are essential for the Quality Review even if they are not direct transformed XGBoost/SHAP fields:
+The following four fields are essential for Scenario Review even if they are not direct transformed XGBoost/SHAP fields:
 
 - `therapeutic_area_ml`: essential for disease-setting context and therapeutic-area calibration.
 - `strategic_ambition_ml`: essential for development-question fit.
@@ -1437,15 +1416,15 @@ Do not rely heavily on:
 - Long eligibility text
 - Long protocol-style descriptions
 
-#### Role In The Quality Review
+#### Role In The Scenario Review
 
-The field set should support the Quality Review rubric by evaluating:
+The field set should support the Scenario Review and Design Confidence rubric by evaluating:
 
-- Development-question fit.
-- Population relevance.
-- Endpoint and estimand coherence.
-- Scientific rigor.
-- Operational feasibility.
+- Phase and intent alignment.
+- Target population alignment.
+- Endpoint and evidence strength.
+- Operational burden balance.
+- Cross-pillar collateral impacts.
 - Change integrity.
 
 Examples:
@@ -1482,10 +1461,10 @@ The stored serious-game snapshot should include:
 - Benchmark percentiles.
 - Benchmark status labels.
 - Support/conflict signals, when implemented.
-- Quality Review ratings.
-- Quality Assessment pillar/subcategory contributions.
-- Quality Adjustment.
-- Final Candidate Score.
+- Scenario Review ratings.
+- Design Confidence subcategory contributions.
+- Design Confidence.
+- Total Scenario Score.
 - Input hash.
 - Prompt version.
 - Rubric version.
@@ -1493,7 +1472,7 @@ The stored serious-game snapshot should include:
 - Failure reason, if any.
 - Compact storyline memory.
 
-Storage should keep `Quality Review` ratings, `Quality Adjustment`, and `Final Candidate Score` as explicit fields rather than storing only a derived narrative explanation.
+Storage should keep Scenario Review ratings, Design Confidence subcategory contributions, Design Confidence, and Total Scenario Score as explicit fields rather than storing only a derived narrative explanation.
 
 ## 19. Non-Goals And Boundaries
 
@@ -1515,7 +1494,7 @@ The earliest contract-fixture phase intentionally had no production LLM implemen
 - No market layer in v1.
 - No full operational scale engine in v1.
 - No full operational-estimation engine in v1.
-- No redistribution of Quality Adjustment into XGBoost / SHAP Completion Score pillars.
+- No redistribution of Design Confidence into XGBoost / SHAP Completion Score pillars.
 - No feature-level LLM pseudo-SHAP in v1.
 - No LLM-generated final score.
 - No nearest-neighbor / similarity cohorts in v1.
@@ -1528,31 +1507,31 @@ V1 serious-game narrative layer:
 - Keep XGBoost unchanged.
 - Use Planned Enrollment, Planned Sites, and Planned Duration as deterministic operational assumptions.
 - Classify operational assumptions against similar-trial benchmarks.
-- Use operational assumptions as structured inputs into the future Quality Review.
-- Make Quality Review bidirectional.
-- Map Quality Review into three user-facing Quality Assessment pillars: Evidence Coherence, Population & Strategy Fit, and Execution Plausibility.
-- Calculate a reconciled Quality Adjustment in application logic.
-- Calculate Final Candidate Score additively.
+- Use operational assumptions as structured inputs into Scenario Review.
+- Make Scenario Review bidirectional.
+- Map Design Confidence into four participant-facing subcategories aligned to the existing Completion Outlook pillars: Phase & Intent Alignment, Endpoint & Evidence Strength, Target Population Alignment, and Operational Burden Balance.
+- Calculate reconciled Design Confidence in application logic.
+- Calculate Total Scenario Score additively when the combined view is enabled.
 - Keep Completion Score View XGBoost-first.
-- In Final Candidate Score View, show Completion Score and Quality Assessment as separate branches or grouped contributions.
+- In Total Scenario Score View, show the four familiar pillars with clear provenance for Completion Outlook subcategories versus Design Confidence subcategories.
 - Show a narrative panel explaining design trade-offs.
 - Store compact storyline memory so later predictions build on earlier changes.
 
 Implementation staging:
 
-1. Contract fixtures: define a small set of static example scenarios before implementation. Include at least baseline, model-facing edit, operational-only edit, material text-only edit, structured/text context review, and no-op/minor text edit. For each fixture, record expected review ratings, Quality Adjustment, Final Candidate Score behavior, context behavior, and storyline behavior. Current implementation artifact: `src/narratives/contract_fixtures.py`, validated by `scripts/check_narrative_contract_fixtures.py`.
+1. Contract fixtures: replace or extend the current fixtures with scenarios that test the four Design Confidence subcategories. Include at least baseline, model-facing edit, operational-only edit, material text-only edit, structured/text context review, no-op/minor text edit, score improves but evidence value weakens, score improves and Design Confidence remains neutral, score declines but Design Confidence improves, endpoint text contradiction, biomarker/population mismatch, phase/intent ambition versus weak endpoint or comparator support, modality/risk-governance mismatch, and no-adjustment despite large Completion Outlook movement. Current artifact to migrate: `src/narratives/contract_fixtures.py`, validated by `scripts/check_narrative_contract_fixtures.py`.
 2. Deterministic review packet builder: assemble baseline/current/previous snapshots, changed fields, explicit field-change deltas, operational metadata, score deltas, XGBoost impact movements, text context, user clarification context, field dictionary version, canonical taxonomy option-key values, display labels, and compact storyline memory without calling an LLM. Current implementation artifact: `src/narratives/packet_builder.py`, validated by `scripts/check_narrative_packet_builder.py`.
-3. Validation and scoring engine: validate review JSON, enforce packet-supported `evidence_fields`, derive Quality Assessment pillars/subcategories, apply subcategory/domain caps, apply zero/positive-adjustment guardrails, require domain totals to equal pillar totals and pillar totals to equal Quality Adjustment, and calculate Final Candidate Score. Current implementation artifact: `src/narratives/scoring.py`, validated by `scripts/check_narrative_scoring.py`.
+3. Validation and scoring engine: validate review JSON, enforce packet-supported `evidence_fields`, derive Design Confidence subcategory points, enforce default-zero and supported-evidence gates, preserve 0.5 increments, avoid fake balancing, require subcategory totals to reconcile to Design Confidence, and calculate Total Scenario Score when enabled. Current artifact to migrate: `src/narratives/scoring.py`, validated by `scripts/check_narrative_scoring.py`.
 4. Mock reviewer: use deterministic fake JSON responses based on the fixtures to test validation, scoring math, no-op behavior, text-materiality behavior, and failure handling. Current implementation artifact: `src/narratives/mock_reviewer.py`, validated by `scripts/check_narrative_mock_reviewer.py`.
-5. Storage and replay: persist validated review traces in session state first, including input hash, validation status, Quality Adjustment, Final Candidate Score, and compact storyline memory. Reuse cached reviews for identical input hashes. Current implementation artifact: `src/narratives/review_store.py`, validated by `scripts/check_narrative_review_store.py`. It supports direct mock replay now and an optional provider-chain path for future live-provider activation without reusing mock cache entries as real-provider reviews. This is prototype storage only and does not yet satisfy the durable cross-team baseline requirement.
+5. Storage and replay: persist validated review traces in session state first, including input hash, validation status, Design Confidence, Total Scenario Score, design subcategory contributions, and compact storyline memory. Reuse cached reviews for identical input hashes. Current artifact to migrate: `src/narratives/review_store.py`, validated by `scripts/check_narrative_review_store.py`. It supports direct mock replay now and an optional provider-chain path for future live-provider activation without reusing mock cache entries as real-provider reviews. This is prototype storage only and does not yet satisfy the durable cross-team baseline requirement.
 6. Pre-prediction consistency check: removed from the active simulator. Do not reintroduce `Check Scenario`, deterministic structured/text gates, or a lightweight LLM consistency pass without a new explicit product decision.
-7. Minimal UI panel: render Completion Score, Quality Adjustment, Final Candidate Score, Quality Review, and compact Quality Assessment rows. Do not build adjusted treemap yet. Do not expose supported/unsupported evidence fields in the participant panel by default; reserve them for future facilitator/debug views. Revisit whether `score_movement_review.clinical_design_interpretation` should be displayed when real-provider output is implemented. Current implementation artifact: `frontend/views/trial_simulator.py`, using the provider-free packet builder, mock reviewer, and session-state review store.
+7. Minimal UI panel: render Completion Score, Design Confidence, Total Scenario Score when enabled, Scenario Review, and compact four-pillar Design Confidence rows. Do not overexpose supported/unsupported evidence fields in the participant panel by default; reserve them for future facilitator/debug views. Current artifact to migrate: `frontend/views/trial_simulator.py`, using the provider-free packet builder, mock reviewer, and session-state review store.
 8. Hidden baseline continuity: generate/store the hidden baseline review and verify that later iteration reviews use baseline review, previous review, compact non-numeric baseline quality summary, and compact storyline memory consistently. Current implementation is session-level only; it does not yet provide cross-team durable baseline reuse. Current implementation artifacts: `src/narratives/packet_builder.py`, `frontend/views/trial_simulator.py`, and `scripts/check_narrative_packet_builder.py`.
 9. Thin LLM provider wrapper: add provider config first, then opt-in config-path API smoke tests, then provider-chain invocation through the same normalized result shape for mock, OpenAI, and Gemini, then an explicit simulator UI activation flag. Provider config reads API keys from environment variables or secret managers; it never stores keys in code. Current implementation artifacts: `src/narratives/provider.py`, `src/narratives/provider_config.py`, `src/narratives/prompt_builder.py`, `src/narratives/review_store.py`, and the opt-in routing in `frontend/views/trial_simulator.py`, validated by `scripts/check_narrative_provider.py`, `scripts/check_narrative_provider_config.py`, `scripts/check_narrative_prompt_builder.py`, `scripts/check_narrative_review_store.py`, and the skipped-by-default `scripts/check_narrative_openai_smoke.py` / `scripts/check_narrative_gemini_smoke.py`; the simulator still uses the deterministic mock provider by default unless `NARRATIVE_LIVE_REVIEW_ENABLED=1`. Provider code invokes the model and normalizes JSON only; the application owns scoring. Live-provider UI routing is available, but durable provider tracing and live-play calibration remain future work.
-10. First adjusted-score visual: add Final Candidate Score View with component cards and the seven-bar grouped chart. Current implementation artifact: `frontend/views/trial_simulator.py` renders Completion Score, Quality Adjustment, Final Candidate Score, and a seven-domain contribution chart grouped under the three Quality Assessment pillars inside the Quality Review panel. The displayed domain-row contributions use the same app-owned scoring values as the pillar totals, so rows add up to pillars and pillars add up to the Quality Adjustment. This is intentionally simpler than an adjusted treemap and does not change XGBoost charts.
+10. First adjusted-score visual: replace the current Final Candidate Score / seven-domain grouped chart with the Total Scenario Score view when implementation reaches UI migration. The active target keeps the four familiar pillars and adds one Design Confidence subcategory under each pillar; Completion Outlook and Design Confidence provenance must remain visible in trace/facilitator output.
 11. Durable baseline store: add a database-backed baseline review repository keyed by trial/version and input hash. It should use create-if-missing semantics so the first team creates the hidden baseline and later teams reuse it.
 12. Two-branch adjusted treemap: add only after the simpler adjusted view is stable and understandable; defer to V1.1 if it slows the first implementation.
-13. Calibration/playtesting: review examples and tune rating-to-point mapping if the resulting Quality Adjustment is too strong or too weak.
+13. Calibration/playtesting: review examples and tune rating-to-point mapping if Design Confidence is too strong or too weak.
 
 ## 21. Open Questions
 
@@ -1560,6 +1539,6 @@ Implementation staging:
 - Exact storage mechanism.
 - Exact participant versus facilitator UI placement.
 - Exact number of previous iterations to keep raw before summarization.
-- Exact Quality Adjustment calibration examples after v1 playtesting.
+- Exact Design Confidence calibration examples after v1 playtesting.
 - Whether facilitator view is hidden behind an expander or separate mode.
 - Whether final governance recommendation is generated by participants, LLM, or both.

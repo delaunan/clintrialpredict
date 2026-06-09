@@ -8,6 +8,54 @@ Goal: redesign the serious-game Quality Review so it gives medical-director-grad
 
 This plan replaces the prior narrative next-step plan about the lightweight consistency check. The consistency check may still be useful, but it becomes one subtask inside the broader dimension redesign.
 
+## Active Implementation Model
+
+This is the current implementation target. Older five-domain `Trial Value Review` ideas in prior commits are superseded by this four-pillar Design Confidence model.
+
+Participant-facing hierarchy:
+
+```text
+Therapeutic Context
+├── Therapeutic Area Profile
+├── Development Phase and Goal
+└── Phase & Intent Alignment
+
+Scientific Challenge
+├── Biological Profile
+├── Protocol Architecture
+└── Endpoint & Evidence Strength
+
+Patient Profile
+├── Clinical Severity
+├── Population Scope
+└── Target Population Alignment
+
+Execution Framework
+├── Methodological Setup
+├── Trial Complexity Footprint
+└── Operational Burden Balance
+```
+
+Analytical provenance:
+
+```text
+Completion Outlook = model-derived score and pillar/subcategory movement.
+Design Confidence = evidence-backed review adjustment, bottom-up from the four design subcategories.
+```
+
+Scoring target:
+
+```text
+Default design adjustment = 0.0
+Non-zero adjustment requires supported packet evidence
+Each design subcategory = -4.0 to +4.0 in 0.5 increments
+Typical subcategory movement = -2.5 to +2.5
+Total Design Confidence = sum of four design subcategories
+No hidden total cap
+```
+
+Participant UI may show one integrated four-pillar chart. Trace/facilitator outputs must preserve the split between Completion Outlook evidence and Design Confidence adjustment.
+
 ## Product Framing
 
 The simulator should answer two different questions:
@@ -18,16 +66,17 @@ The simulator should answer two different questions:
    - No LLM scoring should alter this value.
 
 2. `Is this a strategically valuable and defensible trial design?`
-   - Owned by a redesigned `Trial Value Review`.
+   - Owned by the `Scenario Review` / `Design Confidence` layer.
    - Uses XGBoost fields, non-XGBoost operational assumptions, text changes, baseline context, previous iteration context, and curated clinical-development references.
    - Can highlight that a scenario improved completion likelihood by reducing scientific, regulatory, population, operational, or evidence value.
 
 Recommended user-facing naming:
 
 - Keep `Completion Score`.
-- Rename broad review from `Quality Review` to `Trial Value Review` if playtesting confirms it feels clearer.
-- Rename `Quality Adjustment` to `Design Value Adjustment` or `Value Adjustment`.
-- Rename `Final Candidate Score` to `Strategic Candidate Score` only if a single adjusted score remains necessary.
+- Use `Completion Outlook` when explaining the model-derived score movement.
+- Use `Scenario Review` or `Design Confidence Review` for the narrative panel.
+- Use `Design Confidence` for the app-owned design-adjustment layer.
+- Use `Total Scenario Score` only if the combined view is activated.
 
 Current recommendation: simplify the visible product language further before implementation. Keep the numeric adjustment small and secondary until UX tests show that a combined score is genuinely clearer. The primary participant learning surface should be the bar chart, state labels, trade-off map, and debate question.
 
@@ -60,11 +109,11 @@ Recommendation for now:
 
 ## Design Principle
 
-Do not merge the new dimensions into the four XGBoost Completion Score pillars by default.
+Do not conceptually merge Design Confidence into the XGBoost Completion Score.
 
-Reason: the XGBoost pillars explain modeled early-termination/completion likelihood. The new dimensions evaluate a different construct: decision usefulness and strategic defensibility. If they are nested inside the Completion Score pillars, users may think the model itself has learned cost, regulatory strength, scientific rigor, or patient relevance. It has not.
+Reason: the XGBoost pillars explain modeled early-termination/completion likelihood. Design Confidence evaluates a different construct: decision usefulness and strategic defensibility. The participant UI may integrate design-adjustment subcategories into the same four-pillar chart for readability, but trace/facilitator outputs must preserve the conceptual split so users do not think the model itself has learned cost, regulatory strength, scientific rigor, or patient relevance.
 
-Detailed internal reasoning structure from the first planning pass:
+Historical internal reasoning structure from the first planning pass:
 
 ```text
 Scenario Review
@@ -82,9 +131,9 @@ Scenario Review
     └── Operational Deliverability & Risk Governance
 ```
 
-This five-domain version is probably too granular for the participant UI. It is useful as an internal reasoning map, but the visible simulator needs fewer, more familiar clusters.
+This five-domain version is superseded as an implementation target. It remains useful only as historical reasoning behind the final four design subcategories.
 
-Recommended simplified UI structure:
+Superseded simplified UI structure considered during brainstorming:
 
 ```text
 Total Scenario Score
@@ -104,14 +153,14 @@ Total Scenario Score
     └── Risk Governance
 ```
 
-In this simplified model, `Completion Outlook` is the current XGBoost Completion Score contribution layer. The three additional pillars explain what the scenario adds or sacrifices beyond pure completion likelihood. They can be plotted next to the existing completion pillars in a combined bar chart, while still allowing a radio toggle between:
+In this superseded model, `Completion Outlook` was the current XGBoost Completion Score contribution layer. The three additional pillars explained what the scenario added or sacrificed beyond pure completion likelihood. This helped the design discussion but is no longer the active implementation target.
 
 - `Completion only`: current XGBoost Completion Score and existing pillars.
 - `Full scenario`: Completion Outlook plus Evidence Strength, Strategic Fit, and Delivery Confidence.
 
-The key UX rule is that the same field should not appear as two unrelated concepts with confusing names. For example, current `Patient Profile` should not sit next to a separate visible pillar called `Population & Patient Relevance`. Instead, keep the familiar `Patient Profile` naming under Completion Outlook, and use `Strategic Fit -> Patient Relevance` only as the extra-value interpretation layer.
+The enduring UX lesson from this option is that the same field should not appear as two unrelated concepts with confusing names.
 
-Alternative even simpler structure:
+Superseded even simpler structure:
 
 ```text
 Total Scenario Score
@@ -121,9 +170,9 @@ Total Scenario Score
 └── Delivery Confidence
 ```
 
-Each visible pillar can expose only two subpillars. Facilitator/debug mode can show the deeper five-domain analysis.
+This option is superseded. Facilitator/debug mode can show deeper evidence and provenance, but should use the final four Design Confidence subcategories rather than reintroducing superseded models.
 
-Feature-density review after inspecting the current 31 model-facing fields suggests an even stronger simplification:
+Superseded feature-density option from the middle of the planning discussion:
 
 ```text
 Total Scenario Score
@@ -140,7 +189,7 @@ Total Scenario Score
     └── Cost / Complexity Pressure
 ```
 
-This may be the best V1 participant-facing version because it respects the actual evidence density:
+This option is not the active implementation target. It remains useful only as rationale for why the final active model keeps a small number of design subcategories and avoids over-fragmenting the participant view:
 
 - `Completion Outlook` keeps all four existing XGBoost pillars, so it is not visually underrepresented.
 - `Evidence & Strategy Strength` merges endpoint, comparator, interpretability, regulatory intent, and patient relevance into one clinically meaningful pillar. These concepts are deeply linked in practice and share many of the same fields.
@@ -163,12 +212,12 @@ Cost should be represented as `Cost / Complexity Pressure`, not as exact cost. C
 
 The narrative should compare whether additional burden appears justified by additional evidence or strategic strength. Example: a larger, longer, more controlled design may increase cost pressure but also improve evidence strength; a simplification may reduce cost and raise completion likelihood while weakening interpretability.
 
-Recommended V1 radio options:
+Superseded V1 radio option considered during brainstorming:
 
 - `Completion outlook`: current Completion Score and the four XGBoost pillars.
 - `Full scenario`: Completion Outlook plus Evidence & Strategy Strength plus Delivery & Investment Burden.
 
-This gives a simple combined bar chart without asking participants to parse too many new categories.
+This helped clarify the need for a simple combined bar chart, but the active implementation target is the four familiar Completion Outlook pillars with one Design Confidence subcategory under each pillar.
 
 Important scoring guardrail:
 
@@ -1435,316 +1484,73 @@ Examples:
 - Completion Outlook: `Watchlist`, but Strategic Fit: `Favorable`.
 - Overall: `Trade-off`, because completion improved while evidence strength weakened.
 
-## Proposed Trial Value Dimensions
+## Active Prompt and Structured Output Target
 
-### 1. Evidence Decisiveness
+The active provider prompt should be built from the Reviewer Constitution, the Review Input Evidence Model, and the final four design subcategories. Older five-domain `trial_value_domains` contracts are superseded.
 
-Question: would this scenario generate interpretable, decision-useful evidence?
+The prompt should be modular:
 
-Fields and evidence:
+```text
+1. Reviewer constitution and evidence hierarchy
+2. Scenario packet JSON
+3. Selected reference-pack summaries
+4. Strict output schema
+```
 
-- `endpoint_rigor_ml`
-- `endpoint_structure_ml`
-- `comparator_benchmark_ml`
-- `has_placebo_ml`
-- `masking_ml`
-- `allocation_ml`
-- `adaptive_design_ml`
-- `primary_duration_months_ml`
-- `primary_outcomes_ui`
-- `summary_ui`
-- Completion Score movement for Scientific Challenge and Execution Framework, where available
+The provider should return structured analysis, ratings, rationale, evidence fields, and two expert questions. It must not return app-owned final score values.
 
-What it should detect:
-
-- stronger or weaker endpoint interpretability
-- loss of assay sensitivity from weak comparator choices
-- duration that no longer matches endpoint maturity
-- simplification that raises completion likelihood but weakens the decision value of the readout
-- text/structured contradictions around endpoints or comparator
-
-Clinical anchors:
-
-- ICH E8(R1) quality by design, critical-to-quality factors, meaningful endpoints, bias reduction, and fitness for purpose.
-- ICH E9(R1) estimand thinking: alignment of objective, population, endpoint, treatment condition, intercurrent-event thinking, and interpretation.
-- ICH E10 / control-group logic if comparator and placebo interpretation becomes a larger future module.
-
-### 2. Population & Patient Relevance
-
-Question: does the scenario still study the right patients for the intended development question?
-
-Fields and evidence:
-
-- `therapeutic_area_ml`
-- `gbd_cause_id_3_ml`
-- `is_rare_disease_ml`
-- `patient_severity_ml`
-- `line_of_therapy_ml`
-- `healthy_volunteers_ml`
-- `adult_ml`, `child_ml`, `older_adult_ml`, `gender_ml`
-- `biomarker_stratification_ml`
-- `conditions_ui`
-- `summary_ui`
-- `criteria_ui` if reintroduced later
-
-What it should detect:
-
-- narrowing that makes recruitment easier but weakens representativeness
-- broadening that improves relevance but stresses operational feasibility or endpoint clarity
-- pediatric, elderly, rare-disease, sex/gender, or severity mismatches
-- biomarker choices that are either mechanistically justified or unnecessarily restrictive
-
-Clinical anchors:
-
-- ICH E8(R1) patient input and patient-relevant endpoints.
-- FDA diversity and eligibility guidance as a context source.
-- Disease-specific evidence packs for high-value TAs once available.
-
-### 3. Scientific & Mechanistic Rationale
-
-Question: is the intervention, target, modality, biomarker, and phase logic scientifically credible?
-
-Fields and evidence:
-
-- `therapeutic_modality_ml`
-- `target_precedent_ml`
-- `target_pathway_class_ml`
-- `innovation_tier_ml`
-- `biomarker_stratification_ml`
-- `phase_ml`
-- `primary_purpose_ml`
-- `interventions_ui`
-- `summary_ui`
-
-What it should detect:
-
-- novel target or modality needing stronger design support
-- biomarker-positive strategy that fits a targeted mechanism
-- biologic, gene therapy, cell therapy, vaccine, or complex modality needing proportional safety/operational support
-- phase/design mismatch, such as confirmatory posture before adequate exploratory learning
-
-Clinical anchors:
-
-- ICH E8(R1) drug-development lifecycle and state-of-knowledge principle.
-- FDA Project Optimus for oncology dose-optimization context where relevant.
-- Future modality packs for ATMP, vaccines, immunology, neurology, rare disease, and oncology.
-
-### 4. Regulatory & Development Strategy Fit
-
-Question: does the trial fit the implied regulatory and development decision?
-
-Fields and evidence:
-
-- `phase_ml`
-- `strategic_ambition_ml`
-- `primary_purpose_ml`
-- `sponsor_tier_ml`
-- `adaptive_design_ml`
-- `comparator_benchmark_ml`
-- `endpoint_rigor_ml`
-- `biomarker_stratification_ml`
-- `summary_ui`
-
-What it should detect:
-
-- confirmatory/regulatory ambition paired with weak endpoint/comparator choices
-- exploratory scenario presented as registration-enabling without support
-- adaptive design that is appropriate versus decorative
-- regional or US-regulatory implications when the available field supports it
-
-Clinical anchors:
-
-- ICH E8(R1) and E9(R1) alignment of objectives, design, analysis, and interpretation.
-- FDA and EMA guidance context relevant to design elements, DCT/RWE/adaptive designs, diversity, and evidence standards.
-
-### 5. Operational Deliverability & Risk Governance
-
-Question: can the design be executed credibly without undermining evidence value or participant protection?
-
-Fields and evidence:
-
-- `planned_enrollment`
-- `planned_sites`
-- `planned_duration_months`
-- operational benchmark status/source/confidence
-- `administration_complexity_ml`
-- `number_of_arms_ml`
-- `has_dmc_ml`
-- `intervention_model_ml`
-- `masking_ml`
-- `allocation_ml`
-- `sponsor_tier_ml`
-- `patient_severity_ml`
-- `therapeutic_modality_ml`
-- `interventions_ui`
-
-What it should detect:
-
-- ambitious enrollment/sites/duration that are supported versus implausible
-- operationally easy scenarios that reduce evidence value
-- oversight mismatch, such as high-risk population or complex modality without proportional risk governance
-- excessive burden that may threaten completion or participant retention
-
-Clinical anchors:
-
-- ICH E6(R3) risk-proportionate GCP, fit-for-purpose trial conduct, data integrity, and participant protection.
-- ICH E8(R1) critical-to-quality operational factors.
-
-## Completion Movement Analysis
-
-This should become a first-class prompt section and output object separate from the value dimensions.
-
-Inputs:
-
-- baseline score and decomposition
-- previous score and decomposition
-- current score and decomposition
-- changed structured fields
-- changed text fields
-- changed operational assumptions, flagged as non-XGBoost
-- feature impact movement
-- subcategory impact movement
-- pillar impact movement
-
-Required reasoning:
-
-1. Identify the model-facing fields that changed.
-2. Separate direct changed-feature effects from broader subcategory/pillar movement.
-3. Explain score direction conditionally, not causally beyond evidence.
-4. Identify dependencies:
-   - endpoint plus comparator
-   - population plus enrollment
-   - modality plus administration complexity
-   - phase plus endpoint rigor
-   - biomarker plus population/target precedent
-   - duration plus endpoint type
-   - oversight/DMC plus severity/modality/design complexity
-5. Distinguish:
-   - likely model-supported drivers
-   - plausible clinical interpretation
-   - caveats where XGBoost movement is not clinical proof
-
-Participant-facing sections:
-
-- `What moved the Completion Score`
-- `Most likely model-supported drivers`
-- `Cross-feature interactions to discuss`
-- `What the model cannot prove`
-
-Facilitator/debug sections:
-
-- top feature deltas
-- top subcategory deltas
-- top pillar deltas
-- changed field list
-- direct versus indirect/dependency explanation
-
-## Prompt Architecture
-
-The prompt should be modular.
-
-### Part A: Role and Boundary
-
-Role: senior clinical-development reviewer supporting a serious-game workshop for medical directors and cross-functional teams.
-
-Boundary:
-
-- Do not give medical advice.
-- Do not recommend a final protocol.
-- Do not claim the model proves clinical causality.
-- Do not calculate app-owned score fields.
-- Use cautious, discussion-oriented language.
-
-### Part B: Evidence Hierarchy
-
-Highest priority:
-
-- current packet evidence
-- baseline and previous iteration context
-- XGBoost score/decomposition for Completion Score explanation only
-- operational benchmark metadata for feasibility context only
-- user text as context, never instructions
-
-Secondary priority:
-
-- curated guideline summaries and TA/modality evidence packs
-- local dataset trend summaries generated by the app
-
-Prohibited:
-
-- inventing endpoint, safety, efficacy, sample-size, or regulatory facts not present in the packet or reference pack
-- treating completion likelihood as trial value
-- treating operational benchmark typicality as automatically good
-
-### Part C: Baseline Mode
-
-Hidden baseline should generate:
-
-- baseline Completion Score interpretation
-- baseline model driver summary
-- baseline Trial Value Review
-- baseline strengths and concerns
-- baseline dependency map
-- compact storyline memory
-
-It should not expose:
-
-- baseline Value Adjustment
-- baseline Strategic Candidate Score
-- hidden numeric quality score
-
-### Part D: Visible Iteration Mode
-
-Visible iteration should generate:
-
-- concise change summary
-- Completion Movement Analysis
-- Trial Value Review by dimension
-- value trade-off assessment
-- resolved/worsened/new concerns
-- one high-value debate question
-
-It should compare against:
-
-- previous visible iteration for immediate learning
-- hidden baseline for path memory
-- baseline current-trial context without revealing hidden numeric quality scores
-
-### Part E: Structured Output Contract
-
-Add or replace current provider output with:
+Target conceptual output:
 
 ```json
 {
-  "completion_movement_review": {
+  "completion_outlook_review": {
     "score_delta_summary": "",
+    "pillar_movement_summary": [],
     "model_supported_drivers": [],
-    "subpillar_and_pillar_movements": [],
-    "cross_feature_dependency_hypotheses": [],
+    "cross_pillar_interaction_hypotheses": [],
     "model_limits": []
   },
-  "trial_value_domains": {
-    "evidence_decisiveness": {"rating": "", "rationale": "", "evidence_fields": []},
-    "population_patient_relevance": {"rating": "", "rationale": "", "evidence_fields": []},
-    "scientific_mechanistic_rationale": {"rating": "", "rationale": "", "evidence_fields": []},
-    "regulatory_development_strategy_fit": {"rating": "", "rationale": "", "evidence_fields": []},
-    "operational_deliverability_risk_governance": {"rating": "", "rationale": "", "evidence_fields": []}
+  "design_confidence_subcategories": {
+    "phase_intent_alignment": {"rating": "", "rationale": "", "evidence_fields": []},
+    "endpoint_evidence_strength": {"rating": "", "rationale": "", "evidence_fields": []},
+    "target_population_alignment": {"rating": "", "rationale": "", "evidence_fields": []},
+    "operational_burden_balance": {"rating": "", "rationale": "", "evidence_fields": []}
+  },
+  "pillar_reviews": {
+    "therapeutic_context": {
+      "completion_interpretation": "",
+      "design_adjustment_interpretation": "",
+      "collateral_impacts": []
+    },
+    "scientific_challenge": {
+      "completion_interpretation": "",
+      "design_adjustment_interpretation": "",
+      "collateral_impacts": []
+    },
+    "patient_profile": {
+      "completion_interpretation": "",
+      "design_adjustment_interpretation": "",
+      "collateral_impacts": []
+    },
+    "execution_framework": {
+      "completion_interpretation": "",
+      "design_adjustment_interpretation": "",
+      "collateral_impacts": []
+    }
   },
   "tradeoff_review": {
     "what_completion_gained": "",
-    "what_value_gained": "",
+    "what_design_confidence_gained": "",
     "what_may_have_been_sacrificed": "",
-    "shortcut_hypothesis": "",
-    "strategic_interpretation": ""
+    "main_uncertainty": ""
   },
   "participant_review": {
     "what_changed": "",
-    "why_completion_score_may_have_moved": "",
-    "what_the_trial_value_gained": "",
-    "what_the_trial_value_may_have_sacrificed": "",
-    "operational_feasibility_note": "",
-    "text_consistency_note": "",
-    "question_for_the_team": ""
+    "why_completion_outlook_moved": "",
+    "main_design_signal": "",
+    "tradeoff_summary": "",
+    "medical_development_question": "",
+    "clinops_execution_question": ""
   },
   "continuity": {
     "prior_concerns_resolved": [],
@@ -1756,39 +1562,14 @@ Add or replace current provider output with:
   "trace": {
     "main_features_considered": [],
     "main_completion_drivers_considered": [],
-    "main_value_dimensions_considered": [],
+    "main_design_subcategories_considered": [],
     "reference_pack_ids_used": [],
     "compared_against": ""
   }
 }
 ```
 
-## Scoring Recommendation
-
-Use the Trial Value Review for explanation first. Add a numeric adjustment only after examples show it is stable.
-
-If numeric scoring is kept:
-
-- app calculates it, not the LLM
-- each value dimension maps from validated rating plus supported evidence
-- total adjustment should be bounded and secondary
-- start with `-10` to `+8`, because serious simplification should be easier to penalize than excellence is to prove
-- no positive adjustment for "typical" operational assumptions alone
-- no positive adjustment for unchanged baseline design alone
-- positive value requires participant-introduced improvement or a strongly defensible difficult design
-
-Candidate rating scale:
-
-- `value_strengthening`: +2
-- `credible_support`: +1
-- `neutral_or_balanced`: 0
-- `unresolved_tension`: -1.5
-- `material_value_risk`: -3
-
-Shortcut-specific override:
-
-- A scenario with a positive Completion Score delta and material negative value movement should receive an explicit trade-off flag.
-- The app should not automatically punish every positive Completion Score delta. It should only flag shortcut risk when evidence fields support a loss in trial value.
+The application should validate this response, enforce supported evidence fields, map validated ratings into the bottom-up Design Confidence subcategory points, and calculate any Total Scenario Score itself.
 
 ## Reference and Evidence Assets
 
@@ -1910,31 +1691,33 @@ Output artifact proposal:
 
 ## Implementation Phases
 
-### Phase 1: Decide the Rubric
+### Phase 1: Architecture Doc Alignment
 
 Deliverables:
 
-- finalize names for Trial Value dimensions
-- decide whether to keep `Quality Review` or rename to `Trial Value Review`
-- decide whether to keep numeric adjusted score in V1
-- update `docs/architecture_narratives.md`
+- update `docs/architecture_narratives.md` to reflect the active four-pillar Design Confidence model.
+- mark older five-domain Trial Value Review language as historical/superseded.
+- record final labels: `Completion Outlook`, `Design Confidence`, `Total Scenario Score`, `Phase & Intent Alignment`, `Endpoint & Evidence Strength`, `Target Population Alignment`, `Operational Burden Balance`.
+- record bottom-up scoring range and default-zero evidence gate.
 
-No code behavior change.
+No runtime behavior change.
 
 ### Phase 2: Contract Fixtures
 
 Deliverables:
 
-- replace or extend narrative fixtures with scenarios that test the new dimensions
+- replace or extend narrative fixtures with scenarios that test the four design subcategories
 - include at least:
   - score improves but evidence value weakens
-  - score improves and value improves
-  - score declines but value improves
+  - score improves and Design Confidence remains neutral
+  - score improves and Design Confidence improves with evidence
+  - score declines but Design Confidence improves with evidence
   - operational-only edit
   - endpoint text contradiction
   - biomarker/population mismatch
-  - regulatory ambition versus weak design
+  - phase/intent ambition versus weak endpoint or comparator support
   - modality/risk-governance mismatch
+  - no-adjustment case despite large Completion Outlook movement
 
 Verification:
 
@@ -1948,7 +1731,7 @@ Deliverables:
 
 - add richer Completion Movement Analysis inputs
 - ensure feature, subcategory, and pillar deltas are explicit and separated
-- add dependency-context fields where deterministic
+- add dependency/collateral-impact context fields where deterministic and auditable
 - add selected reference-pack IDs and local context-stat IDs
 
 Verification:
@@ -1962,9 +1745,9 @@ Verification:
 Deliverables:
 
 - modular provider prompt with baseline/visible modes
-- new JSON schema for `completion_movement_review` and `trial_value_domains`
+- new JSON schema for `completion_outlook_review`, `design_confidence_subcategories`, `pillar_reviews`, `tradeoff_review`, `participant_review`, `continuity`, and `trace`
 - stronger instructions for expert clinical-development language
-- source hierarchy and "do not infer" rules
+- Reviewer Constitution, evidence hierarchy, source hierarchy, and "do not infer" rules
 
 Verification:
 
@@ -1977,10 +1760,11 @@ Verification:
 
 Deliverables:
 
-- replace `quality_review_domains` with `trial_value_domains`, or provide a compatibility adapter
-- app-owned mapping from value-domain ratings to optional Value Adjustment
+- replace current `quality_review_domains` with `design_confidence_subcategories`, or provide a temporary compatibility adapter
+- app-owned mapping from validated design-subcategory ratings to bottom-up Design Confidence points
 - supported-evidence enforcement retained
 - no app-owned score fields accepted from provider
+- no hidden total cap; total Design Confidence is the sum of four design subcategories
 
 Verification:
 
@@ -1992,13 +1776,15 @@ Verification:
 
 Deliverables:
 
-- cross-cutting reference packs
+- reference-pack loader/selector using `frontend/data/docs/narrative_reference_packs/pack_manifest_v1.json`
+- runtime inclusion of only selected pack sections: `Prompt-Safe Summary`, `Relevance To Simulator Pillars`, and `Do Not Infer`
 - local mature-cohort context stats
 - version IDs included in packet and trace
 - no runtime web browsing
 
 Verification:
 
+- `python scripts/check_narrative_reference_packs.py`
 - JSON/schema checks
 - deterministic rebuild check
 - sample packet inspection
@@ -2007,10 +1793,10 @@ Verification:
 
 Deliverables:
 
-- separate `Completion Movement` panel from `Trial Value Review`
-- show dimensions as a compact value profile, not as XGBoost sub-pillars
-- keep Completion Score drivers visually distinct from Value Review dimensions
-- show trade-off flag when completion improves but value weakens
+- keep participant view centered on the four familiar pillars
+- add one design-adjustment subcategory to each pillar in Full Scenario view
+- keep Completion Outlook evidence and Design Confidence adjustment provenance available in facilitator/debug trace
+- show trade-off state when completion movement and design evidence diverge
 - keep facilitator/debug details behind an expander
 
 Verification:
@@ -2025,9 +1811,9 @@ Deliverables:
 
 - 10 to 20 representative scenarios
 - expert review notes
-- rating-to-adjustment calibration
+- rating-to-adjustment calibration for `-4.0` to `+4.0` subcategory range in 0.5 increments
 - prompt refinement
-- final decision on `Strategic Candidate Score`
+- final decision on whether `Total Scenario Score` should be primary, secondary, or facilitator-only
 
 Verification:
 
@@ -2045,14 +1831,13 @@ Verification:
 
 ## Open Decisions For Brainstorming
 
-1. Should the participant-facing term be `Trial Value Review`, `Design Review`, `Strategic Review`, or keep `Quality Review`?
-2. Should the adjusted number remain visible, or should V1 show Completion Score plus a nonnumeric value profile first?
-3. Should the five proposed value dimensions be reduced to four for UI simplicity?
-4. Which TA/modality reference packs matter first for UCB-like workshops?
-5. Should cost be included in V1? Current recommendation: yes, but only as `Cost / Complexity Pressure`, not exact budget. Current fields support relative resource pressure from enrollment, sites, duration, arms, modality, administration complexity, oversight, masking, control structure, phase, sponsor type, and endpoint duration. True budget should wait until country, site, visit, procedure, and vendor assumptions exist.
-6. Should regulatory strength be a standalone dimension or merged into development strategy fit? Current recommendation is standalone within `Regulatory & Development Strategy Fit`.
-7. Should patient/participant burden be its own dimension? Current recommendation is to include it inside population relevance and operational/risk governance until more fields exist.
+1. Should the participant-facing label remain `Quality Review`, or move to `Scenario Review` / `Design Confidence Review`?
+2. Should `Total Scenario Score` be participant-primary, participant-secondary, or facilitator-only in V1?
+3. How should the integrated four-pillar chart visually distinguish model subcategories from design-adjustment subcategories without overwhelming participants?
+4. Which conditional reference packs matter first beyond the core ICH packs?
+5. Which 10 to 20 representative scenarios should be used for calibration and playtesting?
+6. Should local database statistics be implemented before or after the first provider/schema rewrite?
 
 ## Next Step
 
-Use this plan as the brainstorming agenda. First decision to make: confirm or revise the five Trial Value dimensions before any code changes.
+Next implementation step: align `docs/architecture_narratives.md` with this active plan, then update contract fixtures for the four Design Confidence subcategories.
