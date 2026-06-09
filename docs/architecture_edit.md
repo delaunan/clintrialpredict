@@ -77,7 +77,7 @@ Simulation Mode now uses a single operational benchmark system for Planned Enrol
   - `python scripts/check_operational_benchmarks.py`
 - Historical enrollment-only and site-only benchmark builders, checkers, runtime utilities, artifacts, reports, and notebooks were removed.
 - The builder writes the CSV runtime artifact, JSON build report, and Excel inspection export.
-- The checker covers schema, fallback behavior, modality/non-vaccine rules, registry-wide coverage, defaulting safety, and model-boundary safeguards.
+- The checker covers schema, fallback behavior, modality/non-vaccine/strategic-intent rules, registry-wide coverage, defaulting safety, and model-boundary safeguards.
 
 Operational benchmark rules:
 
@@ -94,6 +94,7 @@ Operational benchmark rules:
 - Same-level modality refinement applies only to enrollment and patients-per-site, requires `n >= 50`, and never applies to raw site count.
 - For Infections trials with modality not equal to `VACCINE`, non-vaccine Infections fallback can apply to enrollment and patients-per-site when same-level modality refinement is unavailable and `n >= 50`.
 - Vaccine Infections trials can use vaccine refinement when supported and never use non-vaccine fallback.
+- Strategic intent / Regulatory Intent may be tried after existing modality and non-vaccine Infections refinements fail, applies only to enrollment and patients-per-site, requires `n >= 50`, and does not create default `modality + strategic_intent` combined rows.
 - Clinical fallback rows with `30 <= n < 50` are usable but low confidence; `n < 30` falls back when possible.
 
 Operational defaulting rules:
@@ -160,7 +161,7 @@ Duration benchmark contract to preserve:
 - Runtime selects the first/best duration cohort with `duration_months_n >= 50`.
 - Primary-completion timing preserves trusted direct date-derived values first. Same-cohort primary-readout benchmark is fallback/context only and requires `primary_completion_months_n >= 50` on the same selected duration row.
 - Duration uses endpoint-duration-bin plus clinical fallback, then clinical-only fallback.
-- Duration does not use modality refinement or non-vaccine Infections fallback.
+- Duration does not use modality refinement, non-vaccine Infections fallback, or strategic-intent refinement.
 - Duration remains outside `/predict`, XGBoost, SHAP, Completion Score, impact bar, treemap, TA calibration, model artifacts, taxonomy artifacts, and API contracts.
 
 Verification completed for the duration UI step:

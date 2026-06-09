@@ -40,6 +40,12 @@ NON_VACCINE_INFECTIONS_LEVELS = {
     "phase_ta": "phase_ta_non_vaccine_infections",
 }
 
+STRATEGIC_INTENT_REFINEMENT_LEVELS = {
+    "phase_indication_rare": "phase_indication_rare_strategic_intent",
+    "phase_ta_rare": "phase_ta_rare_strategic_intent",
+    "phase_ta": "phase_ta_strategic_intent",
+}
+
 MODALITY_REFINED_METRICS = {"enrollment", "patients_per_site"}
 DURATION_METRICS = {"primary_completion_months", "duration_months"}
 
@@ -48,9 +54,11 @@ MIN_USABLE_METRIC_N = 30
 MIN_DURATION_METRIC_N = 50
 MIN_MODALITY_REFINEMENT_N = 50
 MIN_NON_VACCINE_INFECTIONS_N = 50
+MIN_STRATEGIC_INTENT_REFINEMENT_N = 50
 
 INVALID_THERAPEUTIC_AREAS = {"", "OTHER", "OTHER/UNCLASSIFIED", "UNKNOWN", "UNCLASSIFIED"}
 INVALID_MODALITIES = {"", "UNKNOWN", "UNCLASSIFIED"}
+INVALID_STRATEGIC_INTENTS = {"", "UNKNOWN", "UNCLASSIFIED", "UNKNOWN INTENT"}
 STOPPED_OR_INTERRUPTED_STATUSES = {"TERMINATED", "WITHDRAWN", "SUSPENDED"}
 
 REQUIRED_ARTIFACT_COLUMNS = {
@@ -62,6 +70,7 @@ REQUIRED_ARTIFACT_COLUMNS = {
     "therapeutic_area",
     "rare_disease_flag",
     "therapeutic_modality",
+    "strategic_intent",
     "endpoint_duration_bin",
     "benchmark_level_used",
     "created_at",
@@ -120,6 +129,29 @@ def _clean_modality(value: Any) -> str | None:
     return text.upper() if text else None
 
 
+def _clean_strategic_intent(value: Any) -> str | None:
+    if _is_missing(value):
+        return None
+    numeric_intent_map = {
+        "1": "SIGNAL_SEARCH",
+        "2": "PIVOTAL_INTENT",
+        "3": "SAFETY_DOSING",
+    }
+    label_intent_map = {
+        "EFFICACY / SIGNAL DETECTION": "SIGNAL_SEARCH",
+        "CONFIRMATORY / REGISTRATION": "PIVOTAL_INTENT",
+        "DOSE CHARACTERIZATION": "SAFETY_DOSING",
+        "UNKNOWN INTENT": "UNKNOWN",
+    }
+    text = str(value).strip()
+    if text in numeric_intent_map:
+        return numeric_intent_map[text]
+    upper = text.upper()
+    if upper in label_intent_map:
+        return label_intent_map[upper]
+    return upper if upper else None
+
+
 def endpoint_duration_bin(value: Any) -> str | None:
     numeric = pd.to_numeric(value, errors="coerce")
     if pd.isna(numeric) or float(numeric) <= 0:
@@ -155,6 +187,11 @@ def _is_valid_ta(value: Any) -> bool:
 def _is_valid_modality(value: Any) -> bool:
     modality = _clean_modality(value)
     return modality is not None and modality not in INVALID_MODALITIES
+
+
+def _is_valid_strategic_intent(value: Any) -> bool:
+    strategic_intent = _clean_strategic_intent(value)
+    return strategic_intent is not None and strategic_intent not in INVALID_STRATEGIC_INTENTS
 
 
 def _clean_int(value: Any) -> int | None:
@@ -209,6 +246,7 @@ def load_operational_benchmarks(path: str | Path = DEFAULT_ARTIFACT_PATH) -> pd.
     artifact["phase"] = artifact["phase"].map(_clean_phase)
     artifact["therapeutic_area"] = artifact["therapeutic_area"].map(_clean_ta)
     artifact["therapeutic_modality"] = artifact["therapeutic_modality"].map(_clean_modality)
+    artifact["strategic_intent"] = artifact["strategic_intent"].map(_clean_strategic_intent)
     artifact["endpoint_duration_bin"] = artifact["endpoint_duration_bin"].map(lambda value: None if _is_missing(value) else str(value).strip())
     artifact["gbd_cause_id_3_ml"] = pd.to_numeric(artifact["gbd_cause_id_3_ml"], errors="coerce")
     artifact["rare_disease_flag"] = pd.to_numeric(artifact["rare_disease_flag"], errors="coerce")
@@ -287,6 +325,17 @@ def _snapshot_modality(snapshot: dict[str, Any]) -> str | None:
     )
 
 
+def _snapshot_strategic_intent(snapshot: dict[str, Any]) -> str | None:
+    return _clean_strategic_intent(
+        _first_present(
+            snapshot.get("strategic_intent"),
+            snapshot.get("strategic_ambition"),
+            snapshot.get("strategic_ambition_ui"),
+            snapshot.get("strategic_ambition_ml"),
+        )
+    )
+
+
 def _same_level_modality_refinement(
     snapshot: dict[str, Any],
     benchmarks: pd.DataFrame,
@@ -312,6 +361,42 @@ def _same_level_modality_refinement(
         mask &= benchmarks["therapeutic_area"].eq(base_row.get("therapeutic_area"))
     mask &= benchmarks["therapeutic_modality"].eq(modality)
     mask &= pd.to_numeric(benchmarks[f"{metric_prefix}_n"], errors="coerce").fillna(0).ge(MIN_MODALITY_REFINEMENT_N)
+
+    refined = benchmarks[mask].copy()
+    if refined.empty:
+        return base_row
+    return refined.sort_values(f"{metric_prefix}_n", ascending=False).iloc[0]
+
+
+def _same_level_strategic_intent_refinement(
+    snapshot: dict[str, Any],
+    benchmarks: pd.DataFrame,
+    base_row: pd.Series,
+    metric_prefix: str | None,
+) -> pd.Series:
+    if metric_prefix not in MODALITY_REFINED_METRICS:
+        return base_row
+    if _is_non_vaccine_infections_snapshot(snapshot):
+        return base_row
+
+    base_level = str(base_row.get("benchmark_level_used") or "")
+    refined_level = STRATEGIC_INTENT_REFINEMENT_LEVELS.get(base_level)
+    strategic_intent = _snapshot_strategic_intent(snapshot)
+    if not refined_level or not _is_valid_strategic_intent(strategic_intent):
+        return base_row
+
+    mask = benchmarks["benchmark_level_used"].eq(refined_level)
+    mask &= benchmarks["phase"].eq(base_row.get("phase"))
+    if base_level in {"phase_indication_rare", "phase_ta_rare"}:
+        mask &= benchmarks["rare_disease_flag"].eq(base_row.get("rare_disease_flag"))
+    if base_level == "phase_indication_rare":
+        mask &= benchmarks["gbd_cause_id_3_ml"].eq(base_row.get("gbd_cause_id_3_ml"))
+    if base_level in {"phase_ta_rare", "phase_ta"}:
+        mask &= benchmarks["therapeutic_area"].eq(base_row.get("therapeutic_area"))
+    mask &= benchmarks["strategic_intent"].eq(strategic_intent)
+    mask &= pd.to_numeric(benchmarks[f"{metric_prefix}_n"], errors="coerce").fillna(0).ge(
+        MIN_STRATEGIC_INTENT_REFINEMENT_N
+    )
 
     refined = benchmarks[mask].copy()
     if refined.empty:
@@ -380,7 +465,10 @@ def _refine_operational_row(
     modality_row = _same_level_modality_refinement(snapshot, benchmarks, base_row, metric_prefix)
     if modality_row.get("benchmark_key") != base_row.get("benchmark_key"):
         return modality_row
-    return _infection_non_vaccine_fallback(snapshot, benchmarks, base_row, metric_prefix)
+    non_vaccine_row = _infection_non_vaccine_fallback(snapshot, benchmarks, base_row, metric_prefix)
+    if non_vaccine_row.get("benchmark_key") != base_row.get("benchmark_key"):
+        return non_vaccine_row
+    return _same_level_strategic_intent_refinement(snapshot, benchmarks, base_row, metric_prefix)
 
 
 def lookup_operational_benchmark(

@@ -1,11 +1,12 @@
 {
-  "artifact_rows": 7406,
+  "artifact_rows": 9267,
   "benchmark_rows_by_level": {
     "phase_endpoint_bin": 32,
     "phase_indication_rare": 656,
     "phase_indication_rare_endpoint_bin": 2232,
     "phase_indication_rare_modality": 1948,
     "phase_indication_rare_non_vaccine_infections": 81,
+    "phase_indication_rare_strategic_intent": 1304,
     "phase_only": 4,
     "phase_ta": 72,
     "phase_ta_endpoint_bin": 438,
@@ -14,9 +15,11 @@
     "phase_ta_rare": 133,
     "phase_ta_rare_endpoint_bin": 698,
     "phase_ta_rare_modality": 660,
-    "phase_ta_rare_non_vaccine_infections": 8
+    "phase_ta_rare_non_vaccine_infections": 8,
+    "phase_ta_rare_strategic_intent": 347,
+    "phase_ta_strategic_intent": 210
   },
-  "calibration_notes": "Deterministic combined operational benchmark for planned enrollment, site-count proxy, enrollment-coherent patients-per-site defaults, and duration defaults; same-level therapeutic modality refinement is used for enrollment and patients-per-site only; duration uses endpoint-duration-bin clinical fallback; no operational ML model.",
+  "calibration_notes": "Deterministic combined operational benchmark for planned enrollment, site-count proxy, enrollment-coherent patients-per-site defaults, and duration defaults; same-level therapeutic modality and strategic-intent fallback refinement are used for enrollment and patients-per-site only; duration uses endpoint-duration-bin clinical fallback; no operational ML model.",
   "completed_actual_enrollment_targets": 20526,
   "completed_actual_primary_completion_targets": 20681,
   "completed_actual_total_duration_targets": 20476,
@@ -82,12 +85,12 @@
       "not_available": 0
     }
   },
-  "created_at": "2026-06-03T18:03:58+00:00",
+  "created_at": "2026-06-09T08:36:11+00:00",
   "duplicate_benchmark_keys": 0,
   "low_confidence_rows_by_metric": {
     "duration_months": 3748,
-    "enrollment": 3530,
-    "patients_per_site": 3520,
+    "enrollment": 5137,
+    "patients_per_site": 5121,
     "primary_completion_months": 3755,
     "site_count": 656
   },

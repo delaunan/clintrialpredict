@@ -29,6 +29,12 @@ These assumptions are active in Simulation Mode and remain outside `/predict`, X
 - `frontend/data/operational_benchmarks_v1_report.json`: build report.
 - `frontend/data/operational_benchmarks_v1.xlsx`: analyst inspection export.
 
+## Implemented Strategic-Intent Fallback
+
+Strategic intent / Regulatory Intent (`strategic_ambition_ml`) is implemented as a fallback refinement for Planned Enrollment and patients-per-site only. It is tried after the existing modality and non-vaccine Infections rules are unavailable or too sparse, requires metric-specific `n >= 50`, and does not create default `modality + strategic_intent` combined rows.
+
+The current compact artifact includes same-level strategic-intent rows for enrollment and patients-per-site only. Raw site-count and duration benchmarks do not use strategic intent. `docs/architecture_estimation.md` is the source of truth for the detailed rule and validation rationale.
+
 ## Endpoint-Duration Precision
 
 The existing model-facing maximum primary endpoint duration feature, `primary_duration_months_ml`, is rounded to one decimal before model training/scoring inputs are built.

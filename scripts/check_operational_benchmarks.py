@@ -126,6 +126,10 @@ def main() -> None:
         artifact["benchmark_level_used"].eq("phase_only_modality").sum() == 0,
         "Artifact should not include phase-only modality rows",
     )
+    _assert(
+        artifact["benchmark_level_used"].eq("phase_only_strategic_intent").sum() == 0,
+        "Artifact should not include phase-only strategic-intent rows",
+    )
     indication_levels = artifact["benchmark_level_used"].str.startswith("phase_indication_rare")
     _assert(
         pd.to_numeric(artifact.loc[indication_levels, "gbd_cause_id_3_ml"], errors="coerce").fillna(0).gt(0).all(),
@@ -145,13 +149,28 @@ def main() -> None:
         ~artifact_modalities.isin(invalid_modalities).any(),
         "Modality benchmark rows should not use unknown/unclassified modality placeholders",
     )
+    strategic_intent_levels = artifact["benchmark_level_used"].str.endswith("_strategic_intent")
+    invalid_strategic_intents = {"", "UNKNOWN", "UNCLASSIFIED", "UNKNOWN INTENT"}
+    artifact_strategic_intents = artifact.loc[strategic_intent_levels, "strategic_intent"].fillna("").astype(str).str.upper()
+    _assert(
+        ~artifact_strategic_intents.isin(invalid_strategic_intents).any(),
+        "Strategic-intent benchmark rows should not use unknown/unclassified intent placeholders",
+    )
     _assert(
         artifact.loc[artifact["benchmark_level_used"].str.endswith("_modality"), "site_count_n"].fillna(0).eq(0).all(),
         "Raw site-count benchmarks should not use modality refinement rows",
     )
     _assert(
+        artifact.loc[strategic_intent_levels, "site_count_n"].fillna(0).eq(0).all(),
+        "Raw site-count benchmarks should not use strategic-intent refinement rows",
+    )
+    _assert(
         artifact.loc[artifact["benchmark_level_used"].str.endswith("_modality"), "duration_months_n"].fillna(0).eq(0).all(),
         "Duration benchmarks should not use modality refinement rows",
+    )
+    _assert(
+        artifact.loc[strategic_intent_levels, "duration_months_n"].fillna(0).eq(0).all(),
+        "Duration benchmarks should not use strategic-intent refinement rows",
     )
     _assert(
         artifact.loc[artifact["benchmark_level_used"].str.endswith("_non_vaccine_infections"), "duration_months_n"]
@@ -244,6 +263,41 @@ def main() -> None:
     _assert(
         not str(modality_duration["benchmark_level_used"]).endswith("_modality"),
         "Duration lookup should not use modality refinement",
+    )
+    _assert(
+        not str(modality_duration["benchmark_level_used"]).endswith("_strategic_intent"),
+        "Duration lookup should not use strategic-intent refinement",
+    )
+
+    strategic_row = artifact[
+        strategic_intent_levels
+        & artifact["enrollment_low_confidence_flag"].eq(False)
+        & artifact["enrollment_n"].gt(0)
+    ].iloc[0]
+    strategic_snapshot = {
+        "phase": strategic_row["phase"],
+        "therapeutic_area": strategic_row.get("therapeutic_area"),
+        "strategic_ambition": strategic_row["strategic_intent"],
+    }
+    if pd.notna(strategic_row.get("gbd_cause_id_3_ml")):
+        strategic_snapshot["gbd_cause_id_3_ml"] = int(strategic_row["gbd_cause_id_3_ml"])
+    if pd.notna(strategic_row.get("rare_disease_flag")):
+        strategic_snapshot["is_rare_disease_ml"] = int(strategic_row["rare_disease_flag"])
+    strategic_enrollment = lookup_operational_benchmark(strategic_snapshot, artifact, metric_prefix="enrollment")
+    _assert(strategic_enrollment is not None, "Strategic-intent enrollment lookup failed")
+    _assert(
+        strategic_enrollment["benchmark_key"] == strategic_row["benchmark_key"],
+        "Enrollment should use same-level strategic-intent refinement when modality is unavailable and intent is confident",
+    )
+    _assert(
+        int(strategic_enrollment["enrollment_n"]) >= 50,
+        "Confident enrollment strategic-intent refinement should have n >= 50",
+    )
+    strategic_site = lookup_operational_benchmark(strategic_snapshot, artifact, metric_prefix="site_count")
+    _assert(strategic_site is not None, "Strategic-intent site-count lookup failed")
+    _assert(
+        not str(strategic_site["benchmark_level_used"]).endswith("_strategic_intent"),
+        "Raw site-count lookup should remain clinical, not strategic-intent refinement",
     )
 
     registry = pd.read_csv("frontend/data/search_registry.csv", low_memory=False)

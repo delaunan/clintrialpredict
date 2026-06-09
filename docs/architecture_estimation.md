@@ -257,6 +257,7 @@ For the active Planned Enrollment runtime, benchmark stale-state should be trigg
 - `therapeutic_area_ml`
 - `is_rare_disease_ml`
 - `therapeutic_modality_ml`
+- `strategic_ambition_ml`
 
 If the participant changes one of those cohort fields, the old operational benchmark becomes stale. The benchmark should refresh only after the user clicks `Predict Trial Completion`, consistent with the existing simulation snapshot workflow.
 
@@ -296,7 +297,7 @@ If n is too small, relax one level.
 If all levels are sparse, return a low-confidence benchmark and avoid overinterpreting the enrollment status.
 ```
 
-Therapeutic modality, sponsor tier, administration complexity, line of therapy, patient subtype, endpoint rigor, and endpoint duration should not define the primary benchmark cohort in v1. They can be evaluated later as support/conflict signals for narrative / Coherence reasoning. This avoids excessive stratification and unstable percentiles.
+The four-level clinical hierarchy remains the primary benchmark cohort backbone. Therapeutic modality acts as a same-level refinement for enrollment and patients-per-site only when `n >= 50`; it does not replace clinical context. Strategic intent (`strategic_ambition_ml`, UI label `Regulatory Intent`) acts as a fallback refinement after modality when the same-level modality refinement is unavailable or too sparse and the strategic-intent row has `n >= 50`. Sponsor tier, administration complexity, line of therapy, patient subtype, endpoint rigor, and endpoint duration should not define the primary benchmark cohort in v1; they can be evaluated later as support/conflict signals for narrative / Coherence reasoning. This avoids excessive stratification and unstable percentiles.
 
 ## Enrollment Benchmark Calibration Gate
 
@@ -321,6 +322,7 @@ Candidate benchmark or support-signal fields:
 - Therapeutic area.
 - Rare disease flag.
 - Therapeutic modality.
+- Strategic intent / Regulatory Intent (`strategic_ambition_ml`).
 - Sponsor tier.
 - Administration complexity.
 - Line of therapy.
@@ -338,7 +340,7 @@ Candidate benchmark or support-signal fields:
 
 Primary benchmark fields define the historical comparison cohort. Future support/conflict signals can help narrative / Coherence logic interpret whether the selected enrollment is supported by the current design.
 
-Fields such as therapeutic modality, sponsor tier, administration complexity, line of therapy, patient subtype, endpoint rigor, endpoint duration, comparator, and number of arms may influence enrollment feasibility, but in v1 they should normally remain support/conflict signals unless the calibration gate proves they are stable enough for primary cohort matching.
+Fields such as therapeutic modality, strategic intent, sponsor tier, administration complexity, line of therapy, patient subtype, endpoint rigor, endpoint duration, comparator, and number of arms may influence enrollment feasibility. Therapeutic modality has passed calibration as a same-level refinement for enrollment and patients-per-site only. Strategic intent is implemented as a fallback refinement after modality, not a replacement for modality and not a combined `modality + strategic_intent` split by default. Other fields should normally remain support/conflict signals unless the calibration gate proves they are stable enough for primary cohort matching.
 
 A field can enter the primary benchmark hierarchy only if it has:
 
@@ -448,7 +450,7 @@ Interpretation:
 - Exact primary duration is a continuous/high-cardinality value and fragments the data too heavily. It should not be used as an exact primary cohort key in v1. Future calibration may test duration bins, but adding duration bins to indication-level matching may still create sparse cohorts.
 - Sponsor tier clearly shifts enrollment distributions, but adding it to the primary hierarchy would over-stratify already sparse indication groups. It should be a Phase 2 support/conflict signal.
 - Biomarker stratification is stable as a binary field and should be explicitly included in future support/conflict-signal calibration, but it is not a v1 primary benchmark key.
-- Therapeutic modality and other design features may have meaningful signal, but they remain support/conflict candidates unless a future calibration proves they improve relevance without harming coverage and label stability.
+- Therapeutic modality later passed calibration as a same-level refinement for enrollment and patients-per-site only. Strategic intent is implemented as a fallback refinement after modality. Other design features may have meaningful signal, but they remain support/conflict candidates unless future calibration proves they improve relevance without harming coverage and label stability.
 
 Outlier finding:
 
@@ -662,7 +664,12 @@ Current roadmap:
    - Implemented same-level `therapeutic_modality_ui` refinement for Planned Enrollment and patients-per-site only.
    - Current four-level clinical fallback remains the backbone; modality can refine a selected clinical level but cannot replace it.
 
-10. Completed: D0 `planned_duration_months` duration-definition validation and data audit.
+10. Implemented: strategic intent fallback for Planned Enrollment and patients-per-site.
+   - Planning analysis showed `strategic_ambition_ml` / Regulatory Intent has meaningful but secondary enrollment signal.
+   - It is tried only after existing same-level modality and non-vaccine Infections rules fail.
+   - It should not replace modality, should not override the non-vaccine Infections rule, and should not create a default `modality + strategic_intent` combined split in v1.
+
+11. Completed: D0 `planned_duration_months` duration-definition validation and data audit.
    - Validated duration definitions and source quality before artifact/runtime work.
    - Confirmed rebuilt `data/data_clinpred.csv` carries the required date-type qualifiers.
 
@@ -987,11 +994,11 @@ Combined artifact summary:
 - Completed patients-per-site targets: 19,689.
 - Completed ACTUAL primary-completion timing targets: 20,681.
 - Completed ACTUAL total-duration targets: 20,476.
-- Artifact rows: 7,406.
+- Artifact rows: 9,267.
 - Duplicate benchmark keys: 0.
 - Source data version: `41bcafd6226cd999`.
-- Rows by benchmark level: `phase_indication_rare_endpoint_bin` 2,232, `phase_indication_rare_modality` 1,948, `phase_ta_rare_endpoint_bin` 698, `phase_ta_rare_modality` 660, `phase_indication_rare` 656, `phase_ta_modality` 440, `phase_ta_endpoint_bin` 438, `phase_ta_rare` 133, `phase_indication_rare_non_vaccine_infections` 81, `phase_ta` 72, `phase_endpoint_bin` 32, `phase_ta_rare_non_vaccine_infections` 8, `phase_only` 4, `phase_ta_non_vaccine_infections` 4.
-- Low-confidence rows by metric: enrollment 3,530, site_count 656, patients_per_site 3,520, duration_months 3,748, primary_completion_months 3,755.
+- Rows by benchmark level: `phase_indication_rare_endpoint_bin` 2,232, `phase_indication_rare_modality` 1,948, `phase_indication_rare_strategic_intent` 1,304, `phase_ta_rare_endpoint_bin` 698, `phase_ta_rare_modality` 660, `phase_indication_rare` 656, `phase_ta_modality` 440, `phase_ta_endpoint_bin` 438, `phase_ta_rare_strategic_intent` 347, `phase_ta_strategic_intent` 210, `phase_ta_rare` 133, `phase_indication_rare_non_vaccine_infections` 81, `phase_ta` 72, `phase_endpoint_bin` 32, `phase_ta_rare_non_vaccine_infections` 8, `phase_only` 4, `phase_ta_non_vaccine_infections` 4.
+- Low-confidence rows by metric: enrollment 5,137, site_count 656, patients_per_site 5,121, duration_months 3,748, primary_completion_months 3,755.
 - Coverage QA not available: enrollment 0, site_count 0, patients_per_site 0, duration_months 0, primary_completion_months 0.
 - Coverage QA low-confidence matches: enrollment 0, site_count 0, patients_per_site 0, duration_months 0, primary_completion_months 0.
 
@@ -1006,6 +1013,7 @@ Single-artifact runtime rule:
 - Metrics with `n < 30` are considered too sparse and fall back when needed.
 - Same-level therapeutic modality refinement can override enrollment and patients-per-site percentiles when the matching refined metric has `n >= 50`.
 - Non-vaccine Infections fallback can override vaccine-heavy clinical fallback rows for enrollment and patients-per-site when the non-vaccine Infections row has `n >= 50`.
+- Same-level strategic intent / Regulatory Intent refinement can override enrollment and patients-per-site percentiles only after the existing modality and non-vaccine Infections rules are unavailable or too sparse, and only when the matching strategic-intent metric has `n >= 50`.
 - Raw site-count benchmark rows do not use modality refinement.
 - There are no `phase_only_modality` rows in the active artifact.
 - Placeholder cohort values are not allowed to become specific benchmark identities: unclassified indication id `0` is skipped for indication-level rows, unclassified/unknown therapeutic areas are skipped for TA-level rows, and unknown/unclassified modality is skipped for modality-refinement rows.
@@ -1054,7 +1062,7 @@ Implemented decision:
 - Do not use `phase_only_modality`.
 - Do not let modality replace clinical context.
 
-Implemented same-level refinement sequence:
+Implemented same-level modality refinement sequence:
 
 ```text
 1. Select the current clinical benchmark exactly as before:
@@ -1091,6 +1099,58 @@ For trials where therapeutic area is Infections and therapeutic modality is not 
 5. Use a non-vaccine Infections row only if n >= 50.
 6. If no non-vaccine Infections row is usable, keep the original all-modality clinical fallback.
 ```
+
+### Strategic-Intent Fallback Refinement Plan
+
+Status: implemented in the current `operational_benchmarks_v1.csv` artifact and runtime.
+
+Field mapping:
+
+```text
+UI label: Regulatory Intent
+Source field: strategic_ambition / strategic_ambition_ml / strategic_ambition_ui
+Values: PIVOTAL_INTENT, SIGNAL_SEARCH, SAFETY_DOSING
+```
+
+Planning analysis on completed trials with positive `ACTUAL` enrollment showed:
+
+- Overall median enrollment differs by strategic intent: Confirmatory / Registration `192`, Efficacy / Signal Detection `159`, Dose Characterization `57`.
+- One-way effect size on `log1p(enrollment)` was about `eta^2 = 0.0765`, smaller than phase and indication but similar in practical scale to rare-disease status and therapeutic modality.
+- Adding strategic intent to phase + indication + rare improved 5-fold CV R2 on `log1p(enrollment)` from about `0.3651` to `0.3843`.
+- Adding strategic intent on top of phase + indication + rare + modality improved 5-fold CV R2 from about `0.3892` to `0.4087`, but combined `modality + strategic_intent` cells were sparse.
+- Within the same phase + indication + rare + modality, strategic intent usually made only small median shifts: at `n >= 50`, 10.0% of eligible cells shifted P50 by more than 25%; at `n >= 100`, none did.
+- At broader phase + TA + rare + modality levels, strategic intent was more useful: at `n >= 50`, 26.0% of eligible cells shifted P50 by more than 25%.
+
+Implemented v1 refinement rule:
+
+```text
+1. Select the current clinical benchmark exactly as before:
+   phase + indication + rare disease
+   phase + therapeutic area + rare disease
+   phase + therapeutic area
+   phase only
+
+2. For enrollment and patients-per-site only, apply the existing modality and non-vaccine Infections rules first.
+
+3. If those earlier refinements are unavailable or too sparse, try same-level strategic intent:
+   phase + indication + rare disease + strategic intent, if the selected clinical level is indication + rare disease
+   phase + therapeutic area + rare disease + strategic intent, if the selected clinical level is TA + rare disease
+   phase + therapeutic area + strategic intent, if the selected clinical level is TA
+
+4. Use strategic-intent refinement only if the metric-specific `n >= 50`.
+
+5. If strategic intent is also unavailable or too sparse, keep the selected base clinical cohort.
+```
+
+Strategic-intent boundaries:
+
+- Strategic intent does not replace therapeutic modality.
+- Strategic intent does not override the non-vaccine Infections rule.
+- For non-vaccine Infections trials, any future non-vaccine strategic-intent row must still exclude vaccine trials.
+- Do not create default `phase + modality + strategic_intent` or `phase + indication + rare + modality + strategic_intent` rows in v1.
+- Do not create `phase_only_strategic_intent` rows in v1.
+- Apply strategic-intent refinement only to Planned Enrollment and patients-per-site, not raw site count or duration.
+- Keep strategic intent outside XGBoost, `/predict`, SHAP, Completion Score, therapeutic-area calibration, model artifacts, taxonomy artifacts, and prediction payloads.
 
 Placeholder fallback safeguards:
 
@@ -1176,10 +1236,13 @@ Current cohort and refinement rules:
 - For non-vaccine Infections trials only, if same-level modality refinement is unavailable, the runtime tries non-vaccine Infections fallback rows up the clinical hierarchy.
 - Non-vaccine Infections fallback applies only to enrollment and patients-per-site and requires `n >= 50`.
 - If no non-vaccine Infections row is usable, the runtime keeps the original all-modality clinical fallback.
+- If the existing modality and non-vaccine Infections refinements are unavailable or too sparse, try same-level strategic intent / Regulatory Intent for enrollment and patients-per-site only, requiring `n >= 50`.
+- Strategic intent is a fallback refinement after modality, not a modality replacement and not a default combined `modality + strategic_intent` split.
+- Raw site count and duration must not use strategic-intent refinement in v1.
 
 Current artifact and audit values:
 
-- Artifact rows: 7,406.
+- Artifact rows: 9,267.
 - Duplicate benchmark keys: 0.
 - Source data version: `41bcafd6226cd999`.
 - Source records loaded: 34,066.
@@ -1188,8 +1251,9 @@ Current artifact and audit values:
 - Completed patients-per-site targets: 19,689.
 - Completed ACTUAL primary-completion timing targets: 20,681.
 - Completed ACTUAL total-duration targets: 20,476.
-- Rows by level: `phase_indication_rare_endpoint_bin` 2,232, `phase_indication_rare_modality` 1,948, `phase_ta_rare_endpoint_bin` 698, `phase_ta_rare_modality` 660, `phase_indication_rare` 656, `phase_ta_modality` 440, `phase_ta_endpoint_bin` 438, `phase_ta_rare` 133, `phase_indication_rare_non_vaccine_infections` 81, `phase_ta` 72, `phase_endpoint_bin` 32, `phase_ta_rare_non_vaccine_infections` 8, `phase_only` 4, `phase_ta_non_vaccine_infections` 4.
+- Rows by level: `phase_indication_rare_endpoint_bin` 2,232, `phase_indication_rare_modality` 1,948, `phase_indication_rare_strategic_intent` 1,304, `phase_ta_rare_endpoint_bin` 698, `phase_ta_rare_modality` 660, `phase_indication_rare` 656, `phase_ta_modality` 440, `phase_ta_endpoint_bin` 438, `phase_ta_rare_strategic_intent` 347, `phase_ta_strategic_intent` 210, `phase_ta_rare` 133, `phase_indication_rare_non_vaccine_infections` 81, `phase_ta` 72, `phase_endpoint_bin` 32, `phase_ta_rare_non_vaccine_infections` 8, `phase_only` 4, `phase_ta_non_vaccine_infections` 4.
 - `search_registry` modality assignment: 4,423 assigned, 0 not assigned.
+- Strategic-intent refinement rows are included for enrollment and patients-per-site only. They carry no raw site-count or duration evidence.
 - Audit lookup coverage: enrollment `not_available=0`, patients-per-site `not_available=0`, site-count `not_available=0`, duration `not_available=0`, primary-completion context `not_available=0`.
 - Audit modality/non-vaccine coverage: enrollment modality-refined 2,542 and non-vaccine Infections fallback 140; patients-per-site modality-refined 2,421 and non-vaccine Infections fallback 163; site-count modality-refined 0 and non-vaccine Infections fallback 0.
 - Audit defaulting safety: site defaults below current proxy 0; completed site proxy not used 0.
@@ -1870,7 +1934,7 @@ planned_sites_default_from_operational_benchmark(...)
 The active artifact contains one row per benchmark cohort and fallback level with metric-specific evidence:
 
 ```text
-phase / indication / therapeutic area / rare disease / therapeutic modality where applicable
+phase / indication / therapeutic area / rare disease / therapeutic modality where applicable / strategic intent where applicable
 enrollment_n / enrollment_p25 / enrollment_p50 / enrollment_p75 / enrollment_p90
 site_count_n / site_count_p25 / site_count_p50 / site_count_p75 / site_count_p90
 patients_per_site_n / patients_per_site_p25 / patients_per_site_p50 / patients_per_site_p75 / patients_per_site_p90
@@ -1878,6 +1942,7 @@ patients_per_site_n / patients_per_site_p25 / patients_per_site_p50 / patients_p
 
 The runtime must keep metric-specific counts and confidence flags. It must not collapse them into one shared `benchmark_n`.
 Same-level modality rows are available only for enrollment and patients-per-site refinement. Raw site-count evidence remains clinical-only.
+Same-level strategic-intent rows are available only for enrollment and patients-per-site refinement. Raw site-count and duration evidence remain clinical-only / duration-specific and must not use strategic-intent rows.
 
 Historical standalone enrollment-only and site-only benchmark artifacts have been removed. Current benchmark documentation and examples should use only the combined operational benchmark artifact and runtime:
 
@@ -1992,6 +2057,7 @@ Future versions may also explore model-based enrollment calibration, including f
 - Treat the post-S3 planned-sites defaulting revision as implemented.
 - Treat the `planned_duration_months` artifact/runtime/checker/UI foundation as implemented.
 - Treat the one-decimal `primary_duration_months_ml` model-facing precision rule as implemented in data generation and preprocessing.
+- Treat strategic intent / Regulatory Intent (`strategic_ambition_ml`) as implemented: fallback refinement for enrollment and patients-per-site after existing modality and non-vaccine Infections rules are unavailable or too sparse, metric-specific `n >= 50`, no default `modality + strategic_intent` split, and no raw site-count or duration use.
 - For non-completed trials, do not initialize the editable `planned_sites` assumption directly from `number_of_facilities`.
 - Treat non-completed `number_of_facilities` as `current_registry_facility_count_proxy` context and a lower-bound candidate.
 - Add deterministic patients-per-site benchmark support from completed trials with positive enrollment and positive registry facility-count proxy values.

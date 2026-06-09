@@ -25,14 +25,15 @@ OUTLIER_POLICY = (
 CALIBRATION_NOTES = (
     "Deterministic combined operational benchmark for planned enrollment, site-count proxy, "
     "enrollment-coherent patients-per-site defaults, and duration defaults; same-level therapeutic modality "
-    "refinement is used for enrollment and patients-per-site only; duration uses endpoint-duration-bin "
-    "clinical fallback; no operational ML model."
+    "and strategic-intent fallback refinement are used for enrollment and patients-per-site only; "
+    "duration uses endpoint-duration-bin clinical fallback; no operational ML model."
 )
 
 MIN_N_DEFAULT = 50
 
 INVALID_THERAPEUTIC_AREAS = {"", "OTHER", "OTHER/UNCLASSIFIED", "UNKNOWN", "UNCLASSIFIED"}
 INVALID_MODALITIES = {"", "UNKNOWN", "UNCLASSIFIED"}
+INVALID_STRATEGIC_INTENTS = {"", "UNKNOWN", "UNCLASSIFIED", "UNKNOWN INTENT"}
 
 REQUIRED_COLUMNS = [
     "nct_id",
@@ -54,6 +55,7 @@ REQUIRED_COLUMNS = [
     "is_rare_disease_ml",
     "is_rare_disease",
     "therapeutic_modality_ui",
+    "strategic_ambition",
 ]
 
 GENERAL_LEVELS = [
@@ -109,6 +111,21 @@ MODALITY_REFINEMENT_LEVELS = [
     },
 ]
 
+STRATEGIC_INTENT_REFINEMENT_LEVELS = [
+    {
+        "name": "phase_indication_rare_strategic_intent",
+        "group_cols": ["phase", "gbd_cause_id_3_ml", "is_rare_disease_ml", "strategic_intent"],
+    },
+    {
+        "name": "phase_ta_rare_strategic_intent",
+        "group_cols": ["phase", "therapeutic_area", "is_rare_disease_ml", "strategic_intent"],
+    },
+    {
+        "name": "phase_ta_strategic_intent",
+        "group_cols": ["phase", "therapeutic_area", "strategic_intent"],
+    },
+]
+
 NON_VACCINE_INFECTIONS_LEVELS = [
     {
         "name": "phase_indication_rare_non_vaccine_infections",
@@ -124,7 +141,13 @@ NON_VACCINE_INFECTIONS_LEVELS = [
     },
 ]
 
-LEVELS = GENERAL_LEVELS + MODALITY_REFINEMENT_LEVELS + NON_VACCINE_INFECTIONS_LEVELS + DURATION_BIN_LEVELS
+LEVELS = (
+    GENERAL_LEVELS
+    + MODALITY_REFINEMENT_LEVELS
+    + NON_VACCINE_INFECTIONS_LEVELS
+    + STRATEGIC_INTENT_REFINEMENT_LEVELS
+    + DURATION_BIN_LEVELS
+)
 
 PERCENTILES = [0.25, 0.5, 0.75, 0.9]
 PERCENTILE_SUFFIXES = {
@@ -169,6 +192,10 @@ def _is_valid_modality(value: object) -> bool:
     return _clean_text(value) not in INVALID_MODALITIES
 
 
+def _is_valid_strategic_intent(value: object) -> bool:
+    return _clean_text(value) not in INVALID_STRATEGIC_INTENTS
+
+
 def _is_valid_endpoint_bin(value: object) -> bool:
     return not pd.isna(value) and str(value).strip() not in {"", "nan", "None"}
 
@@ -202,6 +229,8 @@ def _is_valid_level_key(level_name: str, key_data: dict[str, object]) -> bool:
         return False
     if level_name.endswith("_modality") and not _is_valid_modality(key_data.get("therapeutic_modality")):
         return False
+    if level_name.endswith("_strategic_intent") and not _is_valid_strategic_intent(key_data.get("strategic_intent")):
+        return False
     if "endpoint_bin" in level_name and not _is_valid_endpoint_bin(key_data.get("endpoint_duration_bin")):
         return False
     return True
@@ -231,6 +260,11 @@ def _benchmark_key(level: str, row: pd.Series) -> str:
             f"{level}|phase={row['phase']}|indication={_as_int(row['gbd_cause_id_3_ml'])}"
             f"|rare={_as_int(row['rare_disease_flag'])}|modality=NON_VACCINE"
         )
+    if level == "phase_indication_rare_strategic_intent":
+        return (
+            f"{level}|phase={row['phase']}|indication={_as_int(row['gbd_cause_id_3_ml'])}"
+            f"|rare={_as_int(row['rare_disease_flag'])}|intent={row['strategic_intent']}"
+        )
     if level in {"phase_ta_rare", "phase_ta_rare_endpoint_bin"}:
         return f"{level}|phase={row['phase']}|ta={row['therapeutic_area']}|rare={_as_int(row['rare_disease_flag'])}{endpoint_suffix}"
     if level == "phase_ta_rare_modality":
@@ -243,12 +277,19 @@ def _benchmark_key(level: str, row: pd.Series) -> str:
             f"{level}|phase={row['phase']}|ta={row['therapeutic_area']}"
             f"|rare={_as_int(row['rare_disease_flag'])}|modality=NON_VACCINE"
         )
+    if level == "phase_ta_rare_strategic_intent":
+        return (
+            f"{level}|phase={row['phase']}|ta={row['therapeutic_area']}"
+            f"|rare={_as_int(row['rare_disease_flag'])}|intent={row['strategic_intent']}"
+        )
     if level in {"phase_ta", "phase_ta_endpoint_bin"}:
         return f"{level}|phase={row['phase']}|ta={row['therapeutic_area']}{endpoint_suffix}"
     if level == "phase_ta_modality":
         return f"{level}|phase={row['phase']}|ta={row['therapeutic_area']}|modality={row['therapeutic_modality']}"
     if level == "phase_ta_non_vaccine_infections":
         return f"{level}|phase={row['phase']}|ta={row['therapeutic_area']}|modality=NON_VACCINE"
+    if level == "phase_ta_strategic_intent":
+        return f"{level}|phase={row['phase']}|ta={row['therapeutic_area']}|intent={row['strategic_intent']}"
     if level == "phase_endpoint_bin":
         return f"{level}|phase={row['phase']}{endpoint_suffix}"
     return f"{level}|phase={row['phase']}"
@@ -288,6 +329,10 @@ def load_source(path: Path = DATA_CLINPRED_PATH) -> pd.DataFrame:
         df["therapeutic_modality"] = df["therapeutic_modality_ui"].map(_clean_text)
     else:
         df["therapeutic_modality"] = "UNKNOWN"
+    if "strategic_ambition" in df.columns:
+        df["strategic_intent"] = df["strategic_ambition"].map(_clean_text)
+    else:
+        df["strategic_intent"] = "UNKNOWN"
     df["gbd_cause_id_3_ml"] = pd.to_numeric(df["gbd_cause_id_3_ml"], errors="coerce").fillna(0).astype(int)
     df["is_rare_disease_ml"] = pd.to_numeric(df["is_rare_disease_ml"], errors="coerce").fillna(0).astype(int)
     return df
@@ -364,6 +409,7 @@ def _summaries_by_level(
                 "therapeutic_area": key_data.get("therapeutic_area", ""),
                 "rare_disease_flag": key_data.get("is_rare_disease_ml", ""),
                 "therapeutic_modality": key_data.get("therapeutic_modality", ""),
+                "strategic_intent": key_data.get("strategic_intent", ""),
                 "endpoint_duration_bin": key_data.get("endpoint_duration_bin", ""),
             }
             benchmark_key = _benchmark_key(level["name"], pd.Series(base))
@@ -389,9 +435,21 @@ def build_benchmarks(
         df["therapeutic_area"].eq("INFECTIONS") & ~df["therapeutic_modality"].eq("VACCINE")
     )
 
-    enrollment = _summaries_by_level(enrollment_target, "enrollment", "enrollment", min_n, GENERAL_LEVELS + MODALITY_REFINEMENT_LEVELS)
+    enrollment = _summaries_by_level(
+        enrollment_target,
+        "enrollment",
+        "enrollment",
+        min_n,
+        GENERAL_LEVELS + MODALITY_REFINEMENT_LEVELS + STRATEGIC_INTENT_REFINEMENT_LEVELS,
+    )
     site_count = _summaries_by_level(site_target, "number_of_facilities", "site_count", min_n, GENERAL_LEVELS)
-    patients_per_site = _summaries_by_level(pps_target, "patients_per_site", "patients_per_site", min_n, GENERAL_LEVELS + MODALITY_REFINEMENT_LEVELS)
+    patients_per_site = _summaries_by_level(
+        pps_target,
+        "patients_per_site",
+        "patients_per_site",
+        min_n,
+        GENERAL_LEVELS + MODALITY_REFINEMENT_LEVELS + STRATEGIC_INTENT_REFINEMENT_LEVELS,
+    )
     primary_completion = _summaries_by_level(
         primary_completion_target,
         "primary_completion_duration_months",
@@ -445,6 +503,7 @@ def build_benchmarks(
                 "therapeutic_area": parts.get("ta", ""),
                 "rare_disease_flag": _as_int(parts["rare"]) if "rare" in parts else "",
                 "therapeutic_modality": parts.get("modality", ""),
+                "strategic_intent": parts.get("intent", ""),
                 "endpoint_duration_bin": parts.get("endpoint_bin", ""),
                 "benchmark_level_used": level["name"],
                 "created_at": created_at,
@@ -471,6 +530,7 @@ def build_benchmarks(
         "therapeutic_area",
         "rare_disease_flag",
         "therapeutic_modality",
+        "strategic_intent",
         "endpoint_duration_bin",
         "benchmark_level_used",
         "enrollment_n",
@@ -514,6 +574,7 @@ def build_benchmarks(
             "gbd_cause_id_3_ml",
             "therapeutic_area",
             "rare_disease_flag",
+            "strategic_intent",
             "endpoint_duration_bin",
         ]
     )

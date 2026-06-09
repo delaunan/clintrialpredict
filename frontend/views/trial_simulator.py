@@ -5445,6 +5445,7 @@ def get_enrollment_benchmark_stale_fields():
         "therapeutic_area_ml",
         "is_rare_disease_ml",
         "therapeutic_modality_ml",
+        "strategic_ambition_ml",
     }
 
 
