@@ -11,34 +11,41 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
-PROMPT_VERSION = "narratives_v1"
-RUBRIC_VERSION = "design_coherence_v1"
+PROMPT_VERSION = "narratives_v2"
+RUBRIC_VERSION = "design_confidence_v1"
 
 REQUIRED_SCENARIO_TYPES = {
     "baseline",
-    "model_facing_edit",
+    "score_improves_evidence_weakens",
+    "score_improves_design_neutral",
+    "score_improves_design_improves",
+    "score_declines_design_improves",
     "operational_only_edit",
     "material_text_only_edit",
-    "structured_text_context_review",
+    "endpoint_text_contradiction",
+    "biomarker_population_mismatch",
+    "phase_intent_weak_evidence",
+    "modality_governance_mismatch",
+    "no_adjustment_large_completion_movement",
     "no_op_minor_text_edit",
 }
 
-REQUIRED_REVIEW_DOMAINS = {
-    "development_question_fit",
-    "scientific_rigor",
-    "population_relevance",
-    "endpoint_and_comparator_logic",
-    "operational_scale_fit",
-    "change_integrity",
-    "text_consistency",
+REQUIRED_DESIGN_SUBCATEGORIES = {
+    "phase_intent_alignment",
+    "endpoint_evidence_strength",
+    "target_population_alignment",
+    "operational_burden_balance",
 }
 
-QUALITY_PILLAR_KEYS = {
-    "evidence_coherence",
-    "population_strategy_fit",
-    "execution_plausibility",
-}
+# Temporary compatibility alias for old callers during the schema migration.
+REQUIRED_REVIEW_DOMAINS = REQUIRED_DESIGN_SUBCATEGORIES
 
+DESIGN_PILLAR_KEYS = {
+    "therapeutic_context",
+    "scientific_challenge",
+    "patient_profile",
+    "execution_framework",
+}
 BASELINE_STRUCTURED_FEATURES: dict[str, Any] = {
     "therapeutic_area_ml": "ONCOLOGY",
     "gbd_cause_id_3_ml": 429,
@@ -216,39 +223,69 @@ def _domain(rating: str, rationale: str, evidence_fields: list[str]) -> dict[str
 def _participant_review(
     what_changed: str,
     moved: str,
-    gained: str,
-    sacrificed: str,
-    operational_note: str,
-    text_note: str,
-    question: str,
+    signal: str,
+    tradeoff: str,
+    medical_question: str,
+    clinops_question: str,
 ) -> dict[str, str]:
     return {
         "what_changed": what_changed,
-        "why_completion_score_may_have_moved": moved,
-        "what_the_design_gained": gained,
-        "what_the_design_may_have_sacrificed": sacrificed,
-        "operational_feasibility_note": operational_note,
-        "text_consistency_note": text_note,
-        "challenge_question": question,
+        "why_completion_outlook_moved": moved,
+        "main_design_signal": signal,
+        "tradeoff_summary": tradeoff,
+        "medical_development_question": medical_question,
+        "clinops_execution_question": clinops_question,
     }
 
 
 def _review(
     *,
     movement_summary: str,
-    domains: dict[str, dict[str, Any]],
+    design_subcategories: dict[str, dict[str, Any]],
     participant_review: dict[str, str],
     storyline_update: str,
     new_concerns: list[str] | None = None,
     operational_statuses: list[str] | None = None,
+    design_gain: str = "",
+    design_sacrifice: str = "",
 ) -> dict[str, Any]:
     return {
-        "score_movement_review": {
-            "summary": movement_summary,
-            "model_supported_reasons": [],
-            "cautions": [],
+        "completion_outlook_review": {
+            "score_delta_summary": movement_summary,
+            "pillar_movement_summary": [],
+            "model_supported_drivers": [],
+            "cross_pillar_interaction_hypotheses": [],
+            "model_limits": [],
         },
-        "quality_review_domains": domains,
+        "design_confidence_subcategories": design_subcategories,
+        "pillar_reviews": {
+            "therapeutic_context": {
+                "completion_interpretation": "",
+                "design_adjustment_interpretation": "",
+                "collateral_impacts": [],
+            },
+            "scientific_challenge": {
+                "completion_interpretation": "",
+                "design_adjustment_interpretation": "",
+                "collateral_impacts": [],
+            },
+            "patient_profile": {
+                "completion_interpretation": "",
+                "design_adjustment_interpretation": "",
+                "collateral_impacts": [],
+            },
+            "execution_framework": {
+                "completion_interpretation": "",
+                "design_adjustment_interpretation": "",
+                "collateral_impacts": [],
+            },
+        },
+        "tradeoff_review": {
+            "what_completion_gained": movement_summary,
+            "what_design_confidence_gained": design_gain,
+            "what_may_have_been_sacrificed": design_sacrifice,
+            "main_uncertainty": "",
+        },
         "participant_review": participant_review,
         "continuity": {
             "prior_concerns_resolved": [],
@@ -261,139 +298,337 @@ def _review(
             "main_features_considered": sorted(
                 {
                     field
-                    for domain in domains.values()
-                    for field in domain.get("evidence_fields", [])
+                    for subcategory in design_subcategories.values()
+                    for field in subcategory.get("evidence_fields", [])
                     if "." not in field
                 }
             ),
-            "main_pillars_considered": [],
+            "main_completion_drivers_considered": [],
+            "main_design_subcategories_considered": sorted(design_subcategories),
             "operational_statuses_considered": operational_statuses or [],
+            "reference_pack_ids_used": [],
             "compared_against": "previous_prediction",
             "should_repeat_prior_warning": False,
         },
     }
 
 
+def _expected(
+    *,
+    design_confidence: float,
+    total_scenario_score: float,
+    subcategories: dict[str, float],
+    review_needed: bool = True,
+    visible_to_participant_initially: bool = True,
+    storyline_behavior: str,
+    reuse_previous_review: bool = False,
+) -> dict[str, Any]:
+    return {
+        "review_needed": review_needed,
+        "visible_to_participant_initially": visible_to_participant_initially,
+        "reuse_previous_review": reuse_previous_review,
+        "expected_design_confidence": design_confidence,
+        "expected_total_scenario_score": total_scenario_score,
+        "expected_design_subcategories": subcategories,
+        "score_rule": "completion_score + design_confidence, clamped to 0..100",
+        "storyline_behavior": storyline_behavior,
+    }
+
+
+def _packet(
+    *,
+    completion_score: float = 68,
+    previous_completion_score: float | None = 68,
+    score_delta: float = 0,
+    changed_fields: list[str] | None = None,
+    structured_updates: dict[str, Any] | None = None,
+    display_updates: dict[str, Any] | None = None,
+    text_updates: dict[str, str] | None = None,
+    operational_updates: dict[str, Any] | None = None,
+    pillar_deltas: dict[str, float] | None = None,
+    top_feature_impact_changes: list[str] | None = None,
+) -> dict[str, Any]:
+    base = _base_packet()
+    base["structured_features"].update(structured_updates or {})
+    base["structured_feature_display_values"].update(display_updates or {})
+    base["text_context"].update(text_updates or {})
+    for key, value in (operational_updates or {}).items():
+        base["operational_assumptions"][key] = value
+    base["model_interpretation"].update(
+        {
+            "completion_score": completion_score,
+            "previous_completion_score": previous_completion_score,
+            "score_delta": score_delta,
+            "pillar_deltas": pillar_deltas or {},
+            "top_feature_impact_changes": top_feature_impact_changes or [],
+        }
+    )
+    base["iteration_context"].update(
+        {
+            "previous_snapshot_id": "fixture-baseline" if previous_completion_score is not None else None,
+            "current_snapshot_id": "fixture-current",
+            "iteration_number": 1 if previous_completion_score is not None else 0,
+            "changed_fields": changed_fields or [],
+            "compact_storyline_memory": "Baseline was balanced; no prior participant concern.",
+        }
+    )
+    return base
+
+
+def _neutral_design() -> dict[str, dict[str, Any]]:
+    return {
+        "phase_intent_alignment": _domain("balanced", "Phase and intent are coherent for the scenario.", ["phase_ml", "strategic_ambition_ml"]),
+        "endpoint_evidence_strength": _domain("balanced", "Endpoint and comparator evidence are not materially changed.", ["endpoint_rigor_ml", "comparator_benchmark_ml"]),
+        "target_population_alignment": _domain("balanced", "Population scope remains aligned with the indication.", ["adult_ml", "older_adult_ml", "line_of_therapy_ml"]),
+        "operational_burden_balance": _domain("balanced", "Operational assumptions are proportionate to the design.", ["operational_assumptions.planned_enrollment.enrollment_status"]),
+    }
+
+
+def _fixture(
+    *,
+    fixture_id: str,
+    scenario_type: str,
+    description: str,
+    packet: dict[str, Any],
+    design_subcategories: dict[str, dict[str, Any]] | None,
+    participant_review: dict[str, str] | None,
+    expected: dict[str, Any],
+    movement_summary: str,
+    storyline_update: str = "",
+    new_concerns: list[str] | None = None,
+    operational_statuses: list[str] | None = None,
+) -> dict[str, Any]:
+    review = None
+    if design_subcategories is not None and participant_review is not None:
+        review = _review(
+            movement_summary=movement_summary,
+            design_subcategories=design_subcategories,
+            participant_review=participant_review,
+            storyline_update=storyline_update,
+            new_concerns=new_concerns,
+            operational_statuses=operational_statuses,
+        )
+    return {
+        "fixture_id": fixture_id,
+        "scenario_type": scenario_type,
+        "description": description,
+        "input_packet": packet,
+        "mock_review": review,
+        "expected_behavior": expected,
+    }
+
+
 CONTRACT_FIXTURES: list[dict[str, Any]] = [
-    {
-        "fixture_id": "baseline_hidden_review_v1",
-        "scenario_type": "baseline",
-        "description": "Hidden existing-study baseline review generated once from the original selected trial.",
-        "input_packet": _base_packet(),
-        "mock_review": _review(
-            movement_summary="Baseline review anchors later comparisons; no participant change has occurred.",
-            domains={
-                "development_question_fit": _domain("acceptable", "Phase, purpose, and intent are aligned.", ["phase_ml", "primary_purpose_ml", "strategic_ambition_ml"]),
-                "scientific_rigor": _domain("acceptable", "Design preserves conventional confirmatory rigor.", ["endpoint_rigor_ml", "allocation_ml", "masking_ml"]),
-                "population_relevance": _domain("acceptable", "Population appears relevant to the stated setting.", ["adult_ml", "older_adult_ml", "line_of_therapy_ml"]),
-                "endpoint_and_comparator_logic": _domain("acceptable", "Endpoint and comparator are broadly coherent.", ["endpoint_rigor_ml", "comparator_benchmark_ml"]),
-                "operational_scale_fit": _domain("acceptable", "Operational assumptions are typical for the cohort.", ["operational_assumptions.planned_enrollment.enrollment_status", "operational_assumptions.planned_sites.site_count_status", "operational_assumptions.planned_duration_months.duration_status"]),
-                "change_integrity": _domain("neutral", "No participant change has occurred.", []),
-                "text_consistency": _domain("consistent", "Text and structured fields are aligned.", ["summary_ui", "primary_outcomes_ui"]),
-            },
-            participant_review=_participant_review(
-                "This is the original selected-trial baseline.",
-                "No model-score movement is reviewed at baseline.",
-                "The baseline preserves the original evidence and operational profile.",
-                "No participant trade-off has been introduced yet.",
-                "Operational assumptions are typical versus similar trials.",
-                "The available text is consistent with the structured design.",
-                "Which baseline concern should the team watch as the scenario evolves?",
-            ),
-            storyline_update="Baseline anchored with acceptable design coherence and no participant-introduced concern.",
-            operational_statuses=["typical"],
+    _fixture(
+        fixture_id="baseline_hidden_review_v2",
+        scenario_type="baseline",
+        description="Hidden existing-study baseline review generated once from the original selected trial.",
+        packet=_packet(previous_completion_score=None, changed_fields=[]),
+        design_subcategories=_neutral_design(),
+        participant_review=_participant_review(
+            "This is the original selected-trial baseline.",
+            "No model-score movement is reviewed at baseline.",
+            "The baseline is balanced and creates qualitative memory only.",
+            "No participant trade-off has been introduced yet.",
+            "Which baseline design concern should the team watch as the scenario evolves?",
+            "Which operational assumption would be most fragile if the team increases design ambition?",
         ),
-        "expected_behavior": {
-            "review_needed": True,
-            "visible_to_participant_initially": False,
-            "expected_quality_adjustment": 0,
-            "expected_final_candidate_score": 68,
-            "final_score_rule": "completion_score + quality_adjustment, clamped to 0..100",
-            "storyline_behavior": "create_hidden_baseline_memory_only",
-        },
-    },
-    {
-        "fixture_id": "model_facing_endpoint_shortcut_v1",
-        "scenario_type": "model_facing_edit",
-        "description": "Participant edit raises Completion Score while weakening endpoint rigor and comparator logic.",
-        "input_packet": {
-            **_base_packet(),
-            "structured_features": {
-                **BASELINE_STRUCTURED_FEATURES,
+        expected=_expected(
+            design_confidence=0,
+            total_scenario_score=68,
+            subcategories={
+                "phase_intent_alignment": 0,
+                "endpoint_evidence_strength": 0,
+                "target_population_alignment": 0,
+                "operational_burden_balance": 0,
+            },
+            visible_to_participant_initially=False,
+            storyline_behavior="create_hidden_baseline_memory_only",
+        ),
+        movement_summary="Baseline review anchors later comparisons; no participant change has occurred.",
+        storyline_update="Baseline anchored with balanced Design Confidence and no participant-introduced concern.",
+        operational_statuses=["typical"],
+    ),
+    _fixture(
+        fixture_id="score_improves_evidence_weakens_v2",
+        scenario_type="score_improves_evidence_weakens",
+        description="Completion improves while endpoint rigor, comparator strength, and duration weaken.",
+        packet=_packet(
+            completion_score=74,
+            score_delta=6,
+            changed_fields=["endpoint_rigor_ml", "has_placebo_ml", "comparator_benchmark_ml", "primary_duration_months_ml"],
+            structured_updates={
                 "endpoint_rigor_ml": "SURROGATE",
                 "has_placebo_ml": 1,
                 "comparator_benchmark_ml": "PLACEBO",
                 "primary_duration_months_ml": 9.0,
             },
-            "structured_feature_display_values": {
-                **BASELINE_STRUCTURED_FEATURE_DISPLAY_VALUES,
+            display_updates={
                 "endpoint_rigor_ml": "Surrogate / Biomarker",
                 "has_placebo_ml": "Yes",
                 "comparator_benchmark_ml": "Placebo Control",
                 "primary_duration_months_ml": "9.0",
             },
-            "model_interpretation": {
-                **_base_packet()["model_interpretation"],
-                "completion_score": 74,
-                "previous_completion_score": 68,
-                "score_delta": 6,
-                "pillar_deltas": {"Scientific Challenge": 3.2, "Execution Framework": 1.4},
-                "top_feature_impact_changes": ["endpoint_rigor_ml", "comparator_benchmark_ml", "primary_duration_months_ml"],
-            },
-            "iteration_context": {
-                **_base_packet()["iteration_context"],
-                "previous_snapshot_id": "fixture-baseline",
-                "current_snapshot_id": "fixture-model-facing-edit",
-                "iteration_number": 1,
-                "changed_fields": ["endpoint_rigor_ml", "has_placebo_ml", "comparator_benchmark_ml", "primary_duration_months_ml"],
-                "compact_storyline_memory": "Baseline was acceptable; no prior participant concern.",
-            },
-        },
-        "mock_review": _review(
-            movement_summary="The Completion Score may have improved because the revised design appears easier to execute.",
-            domains={
-                "development_question_fit": _domain("weak", "Confirmatory intent is less well matched to weakened evidence choices.", ["strategic_ambition_ml", "endpoint_rigor_ml"]),
-                "scientific_rigor": _domain("conflicting", "Endpoint rigor and comparator strength appear reduced together.", ["endpoint_rigor_ml", "comparator_benchmark_ml", "has_placebo_ml"]),
-                "population_relevance": _domain("acceptable", "Population scope did not materially change.", ["adult_ml", "older_adult_ml"]),
-                "endpoint_and_comparator_logic": _domain("conflicting", "Shorter endpoint timing and weaker comparator may reduce interpretability.", ["primary_duration_months_ml", "endpoint_rigor_ml", "comparator_benchmark_ml"]),
-                "operational_scale_fit": _domain("acceptable", "Operational assumptions did not introduce a new scale concern.", ["operational_assumptions.planned_enrollment.enrollment_status"]),
-                "change_integrity": _domain("potential_shortcut", "The path increases completion likelihood while reducing evidence value.", ["endpoint_rigor_ml", "comparator_benchmark_ml", "primary_duration_months_ml"]),
-                "text_consistency": _domain("minor_tension", "The summary still reads like a confirmatory evidence trial.", ["summary_ui", "endpoint_rigor_ml"]),
-            },
-            participant_review=_participant_review(
-                "Endpoint rigor, comparator framing, and primary endpoint duration changed.",
-                "The score could have moved upward because the design may be simpler and shorter.",
-                "The design may have gained execution feasibility.",
-                "It may have sacrificed evidentiary strength and endpoint interpretability.",
-                "Operational assumptions remain typical, so the main concern is not scale.",
-                "The written summary still sounds confirmatory, creating some tension with the revised endpoint choices.",
-                "Does the easier design still answer the same confirmatory question?",
-            ),
-            storyline_update="Raised potential shortcut concern: easier execution came with weaker endpoint/comparator evidence.",
-            new_concerns=["endpoint_comparator_shortcut"],
-            operational_statuses=["typical"],
+            pillar_deltas={"Scientific Challenge": 3.2, "Execution Framework": 1.4},
+            top_feature_impact_changes=["endpoint_rigor_ml", "comparator_benchmark_ml", "primary_duration_months_ml"],
         ),
-        "expected_behavior": {
-            "review_needed": True,
-            "visible_to_participant_initially": True,
-            "expected_quality_adjustment": -11.0,
-            "expected_final_candidate_score": 63,
-            "expected_quality_pillars": {
-                "evidence_coherence": "negative",
-                "population_strategy_fit": "negative_or_neutral",
-                "execution_plausibility": "negative",
-            },
-            "storyline_behavior": "append_new_iteration_with_shortcut_concern",
+        design_subcategories={
+            **_neutral_design(),
+            "phase_intent_alignment": _domain("weak", "Confirmatory intent is less well matched to weakened evidence choices.", ["strategic_ambition_ml", "endpoint_rigor_ml"]),
+            "endpoint_evidence_strength": _domain("conflicting", "Endpoint rigor, comparator strength, and endpoint timing weaken together.", ["endpoint_rigor_ml", "comparator_benchmark_ml", "primary_duration_months_ml"]),
         },
-    },
-    {
-        "fixture_id": "operational_only_ambitious_enrollment_v1",
-        "scenario_type": "operational_only_edit",
-        "description": "Participant keeps model fields fixed but sets enrollment and sites above benchmark for the current design.",
-        "input_packet": {
-            **_base_packet(),
-            "operational_assumptions": {
-                **BASELINE_OPERATIONAL_ASSUMPTIONS,
+        participant_review=_participant_review(
+            "Endpoint rigor, comparator framing, and primary endpoint duration changed.",
+            "The score could have moved upward because the design may be simpler and shorter.",
+            "Design Confidence is challenged by weaker endpoint and comparator evidence.",
+            "Completion improved, but evidence interpretability may have been sacrificed.",
+            "Does the easier design still answer the same confirmatory question?",
+            "Would the shorter, simpler design still justify the same operational commitment?",
+        ),
+        expected=_expected(
+            design_confidence=-5.5,
+            total_scenario_score=68.5,
+            subcategories={
+                "phase_intent_alignment": -1.5,
+                "endpoint_evidence_strength": -4.0,
+                "target_population_alignment": 0,
+                "operational_burden_balance": 0,
+            },
+            storyline_behavior="append_new_iteration_with_shortcut_concern",
+        ),
+        movement_summary="The Completion Score may have improved because the revised design appears easier and shorter.",
+        storyline_update="Raised shortcut concern: completion improved while evidence strength weakened.",
+        new_concerns=["endpoint_comparator_shortcut"],
+        operational_statuses=["typical"],
+    ),
+    _fixture(
+        fixture_id="score_improves_design_neutral_v2",
+        scenario_type="score_improves_design_neutral",
+        description="Completion improves through an operationally easier pattern, but no supported Design Confidence change exists.",
+        packet=_packet(
+            completion_score=73,
+            score_delta=5,
+            changed_fields=["number_of_arms_ml"],
+            structured_updates={"number_of_arms_ml": 1},
+            display_updates={"number_of_arms_ml": "1"},
+            pillar_deltas={"Execution Framework": 4.0},
+            top_feature_impact_changes=["number_of_arms_ml"],
+        ),
+        design_subcategories=_neutral_design(),
+        participant_review=_participant_review(
+            "The number of arms changed.",
+            "The score may have improved because the execution footprint is simpler.",
+            "No supported Design Confidence adjustment is triggered by simplicity alone.",
+            "A simpler footprint is not automatically better or worse without evidence of design impact.",
+            "What decision would the simplified arm structure still support?",
+            "Does the simpler footprint preserve the minimum operational information the team needs?",
+        ),
+        expected=_expected(
+            design_confidence=0,
+            total_scenario_score=73,
+            subcategories={
+                "phase_intent_alignment": 0,
+                "endpoint_evidence_strength": 0,
+                "target_population_alignment": 0,
+                "operational_burden_balance": 0,
+            },
+            storyline_behavior="append_iteration_with_neutral_design_adjustment",
+        ),
+        movement_summary="Completion Outlook improves, but no supported design-strengthening or design-weakening evidence is present.",
+    ),
+    _fixture(
+        fixture_id="score_improves_design_improves_v2",
+        scenario_type="score_improves_design_improves",
+        description="Completion improves while comparator, masking, and oversight become more coherent.",
+        packet=_packet(
+            completion_score=72,
+            score_delta=4,
+            changed_fields=["comparator_benchmark_ml", "masking_ml", "has_dmc_ml"],
+            structured_updates={
+                "comparator_benchmark_ml": "ACTIVE_MODERN_STANDARD",
+                "masking_ml": "DOUBLE",
+                "has_dmc_ml": 1,
+            },
+            pillar_deltas={"Scientific Challenge": 1.5, "Execution Framework": 2.0},
+            top_feature_impact_changes=["comparator_benchmark_ml", "masking_ml", "has_dmc_ml"],
+        ),
+        design_subcategories={
+            **_neutral_design(),
+            "endpoint_evidence_strength": _domain("supportive", "Comparator and masking support interpretability.", ["comparator_benchmark_ml", "masking_ml"]),
+            "operational_burden_balance": _domain("supportive", "Oversight is proportionate to the confirmatory setting.", ["has_dmc_ml", "patient_severity_ml"]),
+        },
+        participant_review=_participant_review(
+            "Comparator, masking, and oversight changed.",
+            "The score may have improved through a more coherent execution and evidence pattern.",
+            "Design Confidence improves modestly because evidence controls and governance align.",
+            "The gain is not large because the baseline was already relatively coherent.",
+            "Which evidence risk is most reduced by the revised comparator and masking?",
+            "Is the oversight level proportionate without adding avoidable burden?",
+        ),
+        expected=_expected(
+            design_confidence=1.0,
+            total_scenario_score=73,
+            subcategories={
+                "phase_intent_alignment": 0,
+                "endpoint_evidence_strength": 0.5,
+                "target_population_alignment": 0,
+                "operational_burden_balance": 0.5,
+            },
+            storyline_behavior="append_iteration_with_modest_supported_design_gain",
+        ),
+        movement_summary="Completion Outlook improves while evidence controls and governance also strengthen.",
+    ),
+    _fixture(
+        fixture_id="score_declines_design_improves_v2",
+        scenario_type="score_declines_design_improves",
+        description="Completion declines because the trial becomes harder, but Design Confidence improves through rigor and patient relevance.",
+        packet=_packet(
+            completion_score=62,
+            score_delta=-6,
+            changed_fields=["biomarker_stratification_ml", "older_adult_ml", "has_dmc_ml", "primary_duration_months_ml"],
+            structured_updates={
+                "biomarker_stratification_ml": "1",
+                "older_adult_ml": "1",
+                "has_dmc_ml": 1,
+                "primary_duration_months_ml": 24.0,
+            },
+            pillar_deltas={"Patient Profile": -2.2, "Execution Framework": -2.6, "Scientific Challenge": -1.2},
+            top_feature_impact_changes=["biomarker_stratification_ml", "older_adult_ml", "primary_duration_months_ml"],
+        ),
+        design_subcategories={
+            **_neutral_design(),
+            "endpoint_evidence_strength": _domain("supportive", "Longer endpoint timing supports the stated clinical outcome.", ["primary_duration_months_ml", "primary_outcomes_ui"]),
+            "target_population_alignment": _domain("supportive", "Older adults and biomarker strategy improve relevance to the intended population.", ["older_adult_ml", "biomarker_stratification_ml"]),
+            "operational_burden_balance": _domain("supportive", "Oversight is proportionate to added population and duration complexity.", ["has_dmc_ml", "patient_severity_ml"]),
+        },
+        participant_review=_participant_review(
+            "Population, biomarker, oversight, and duration choices became more demanding.",
+            "The score may have declined because the design is harder to execute.",
+            "Design Confidence improves because the added difficulty is tied to relevance, endpoint maturity, and governance.",
+            "The scenario trades completion ease for a more defensible clinical-development question.",
+            "Does the harder design produce evidence that is meaningfully more decision-useful?",
+            "Which execution controls would be needed to make the added burden credible?",
+        ),
+        expected=_expected(
+            design_confidence=4.5,
+            total_scenario_score=66.5,
+            subcategories={
+                "phase_intent_alignment": 0,
+                "endpoint_evidence_strength": 1.5,
+                "target_population_alignment": 1.5,
+                "operational_burden_balance": 1.5,
+            },
+            storyline_behavior="append_iteration_where_design_confidence_moderates_score_decline",
+        ),
+        movement_summary="Completion Outlook declines, but the added risk is plausibly linked to rigor and patient relevance.",
+    ),
+    _fixture(
+        fixture_id="operational_only_ambitious_enrollment_v2",
+        scenario_type="operational_only_edit",
+        description="Model fields stay fixed, but enrollment and sites are above benchmark for the current design.",
+        packet=_packet(
+            changed_fields=["operational_assumptions.planned_enrollment", "operational_assumptions.planned_sites"],
+            operational_updates={
                 "planned_enrollment": {
                     **BASELINE_OPERATIONAL_ASSUMPTIONS["planned_enrollment"],
                     "value": 1400,
@@ -401,7 +636,6 @@ CONTRACT_FIXTURES: list[dict[str, Any]] = [
                     "enrollment_status": "above_benchmark_high",
                     "support_level": "partly_supported_by_current_design",
                     "conflicting_signals": ["large_sample_for_biomarker_subset"],
-                    "interpretation_hint": "Enrollment is high versus similar trials and only partly supported by the current design.",
                 },
                 "planned_sites": {
                     **BASELINE_OPERATIONAL_ASSUMPTIONS["planned_sites"],
@@ -410,234 +644,294 @@ CONTRACT_FIXTURES: list[dict[str, Any]] = [
                     "site_count_status": "ambitious",
                 },
             },
-            "model_interpretation": {
-                **_base_packet()["model_interpretation"],
-                "previous_completion_score": 68,
-                "score_delta": 0,
-                "pillar_deltas": {},
-                "top_feature_impact_changes": [],
-            },
-            "iteration_context": {
-                **_base_packet()["iteration_context"],
-                "previous_snapshot_id": "fixture-baseline",
-                "current_snapshot_id": "fixture-operational-only",
-                "iteration_number": 1,
-                "changed_fields": ["operational_assumptions.planned_enrollment", "operational_assumptions.planned_sites"],
-                "compact_storyline_memory": "Baseline was acceptable; no prior participant concern.",
-            },
-        },
-        "mock_review": _review(
-            movement_summary="The Completion Score did not move because model-facing fields did not change.",
-            domains={
-                "development_question_fit": _domain("acceptable", "The development question remains unchanged.", ["phase_ml", "strategic_ambition_ml"]),
-                "scientific_rigor": _domain("acceptable", "Evidence-generating fields remain intact.", ["endpoint_rigor_ml", "allocation_ml"]),
-                "population_relevance": _domain("acceptable", "Population fields remain unchanged.", ["adult_ml", "older_adult_ml"]),
-                "endpoint_and_comparator_logic": _domain("acceptable", "Endpoint and comparator fields remain unchanged.", ["endpoint_rigor_ml", "comparator_benchmark_ml"]),
-                "operational_scale_fit": _domain("weak", "Enrollment is above benchmark high and only partly supported by the current biomarker-defined design.", ["operational_assumptions.planned_enrollment.enrollment_status", "operational_assumptions.planned_enrollment.support_level"]),
-                "change_integrity": _domain("neutral", "The change stress-tests feasibility without weakening evidence fields.", ["operational_assumptions.planned_enrollment", "operational_assumptions.planned_sites"]),
-                "text_consistency": _domain("consistent", "No text contradiction is introduced.", ["summary_ui"]),
-            },
-            participant_review=_participant_review(
-                "Only enrollment and site assumptions changed.",
-                "The model score did not move because operational assumptions are outside XGBoost.",
-                "The scenario may test whether a larger study footprint is feasible.",
-                "It may have sacrificed operational credibility if the biomarker-defined population is hard to recruit.",
-                "Enrollment is above benchmark high and only partly supported by the current design.",
-                "Text remains consistent with the structured design.",
-                "What evidence would make this larger enrollment assumption credible?",
-            ),
-            storyline_update="Operational-scale concern added without changing Completion Score.",
-            new_concerns=["ambitious_enrollment_support"],
-            operational_statuses=["above_benchmark_high", "ambitious"],
         ),
-        "expected_behavior": {
-            "review_needed": True,
-            "visible_to_participant_initially": True,
-            "expected_quality_adjustment": -1.5,
-            "expected_final_candidate_score": 66.5,
-            "expected_quality_pillars": {
-                "evidence_coherence": "neutral",
-                "population_strategy_fit": "neutral",
-                "execution_plausibility": "negative",
-            },
-            "storyline_behavior": "append_iteration_without_model_score_delta",
+        design_subcategories={
+            **_neutral_design(),
+            "operational_burden_balance": _domain("weak", "Enrollment is above benchmark high and only partly supported by the biomarker-defined design.", ["operational_assumptions.planned_enrollment.enrollment_status", "operational_assumptions.planned_enrollment.support_level"]),
         },
-    },
-    {
-        "fixture_id": "material_text_only_endpoint_conflict_v1",
-        "scenario_type": "material_text_only_edit",
-        "description": "Participant changes endpoint text materially while structured model fields and Completion Score stay fixed.",
-        "input_packet": {
-            **_base_packet(),
-            "text_context": {
-                **_base_packet()["text_context"],
+        participant_review=_participant_review(
+            "Only enrollment and site assumptions changed.",
+            "The model score did not move because operational assumptions are outside XGBoost.",
+            "Design Confidence decreases because the operational footprint is only partly supported.",
+            "The scenario stress-tests feasibility without changing model-facing evidence fields.",
+            "What clinical rationale makes this enrollment target necessary?",
+            "What site activation or recruitment evidence would make this footprint credible?",
+        ),
+        expected=_expected(
+            design_confidence=-2.0,
+            total_scenario_score=66,
+            subcategories={
+                "phase_intent_alignment": 0,
+                "endpoint_evidence_strength": 0,
+                "target_population_alignment": 0,
+                "operational_burden_balance": -2.0,
+            },
+            storyline_behavior="append_iteration_without_model_score_delta",
+        ),
+        movement_summary="The Completion Score did not move because model-facing fields did not change.",
+        new_concerns=["ambitious_enrollment_support"],
+        operational_statuses=["above_benchmark_high", "ambitious"],
+    ),
+    _fixture(
+        fixture_id="material_text_only_endpoint_conflict_v2",
+        scenario_type="material_text_only_edit",
+        description="Endpoint text changes materially while structured model fields and Completion Score stay fixed.",
+        packet=_packet(
+            changed_fields=["text_context.primary_outcomes_ui"],
+            text_updates={
                 "primary_outcomes_ui": "Short-term symptom response at 4 weeks.",
                 "summary_ui": "Confirmatory registration study intended to establish durable disease control.",
             },
-            "model_interpretation": {
-                **_base_packet()["model_interpretation"],
-                "previous_completion_score": 68,
-                "score_delta": 0,
-            },
-            "iteration_context": {
-                **_base_packet()["iteration_context"],
-                "previous_snapshot_id": "fixture-baseline",
-                "current_snapshot_id": "fixture-material-text-only",
-                "iteration_number": 1,
-                "changed_fields": ["text_context.primary_outcomes_ui"],
-                "compact_storyline_memory": "Baseline was acceptable; no prior participant concern.",
-            },
-        },
-        "mock_review": _review(
-            movement_summary="The Completion Score did not move because structured model fields did not change.",
-            domains={
-                "development_question_fit": _domain("weak", "Confirmatory durable-control intent may conflict with short-term symptom endpoint text.", ["summary_ui", "primary_outcomes_ui", "strategic_ambition_ml"]),
-                "scientific_rigor": _domain("weak", "Endpoint text may weaken decision usefulness for the stated intent.", ["primary_outcomes_ui", "endpoint_rigor_ml"]),
-                "population_relevance": _domain("acceptable", "Population scope did not change.", ["adult_ml", "older_adult_ml"]),
-                "endpoint_and_comparator_logic": _domain("weak", "Endpoint text and structured endpoint duration appear misaligned.", ["primary_outcomes_ui", "primary_duration_months_ml"]),
-                "operational_scale_fit": _domain("acceptable", "Operational assumptions remain typical.", ["operational_assumptions.planned_duration_months.duration_status"]),
-                "change_integrity": _domain("neutral", "Only text changed; the path needs interpretation rather than shortcut attribution.", ["text_context.primary_outcomes_ui"]),
-                "text_consistency": _domain("material_tension", "Text creates a material endpoint-intent tension.", ["summary_ui", "primary_outcomes_ui", "primary_duration_months_ml"]),
-            },
-            participant_review=_participant_review(
-                "The endpoint text changed while structured Trial Features stayed the same.",
-                "The Completion Score did not move because the XGBoost input fields did not change.",
-                "The edit may clarify the endpoint being discussed.",
-                "It may create tension between short-term response and durable confirmatory intent.",
-                "Operational assumptions remain typical, but duration interpretation may need discussion.",
-                "The text now materially differs from the structured endpoint-duration context.",
-                "Is the endpoint text intended to replace or only clarify the original endpoint strategy?",
-            ),
-            storyline_update="Material text-only endpoint concern added; no model-score movement.",
-            new_concerns=["endpoint_text_material_tension"],
-            operational_statuses=["typical"],
         ),
-        "expected_behavior": {
-            "review_needed": True,
-            "visible_to_participant_initially": True,
-            "expected_quality_adjustment": -6.0,
-            "expected_final_candidate_score": 62,
-            "expected_quality_pillars": {
-                "evidence_coherence": "negative",
-                "population_strategy_fit": "negative",
-                "execution_plausibility": "neutral",
-            },
-            "storyline_behavior": "append_text_only_iteration_without_model_score_delta",
+        design_subcategories={
+            **_neutral_design(),
+            "phase_intent_alignment": _domain("weak", "Confirmatory durable-control intent conflicts with short-term endpoint text.", ["summary_ui", "primary_outcomes_ui", "strategic_ambition_ml"]),
+            "endpoint_evidence_strength": _domain("weak", "Endpoint text and structured endpoint duration are misaligned.", ["primary_outcomes_ui", "primary_duration_months_ml"]),
         },
-    },
-    {
-        "fixture_id": "endpoint_structure_text_context_v1",
-        "scenario_type": "structured_text_context_review",
-        "description": "Structured endpoint setting is reviewed directly while editable endpoint text remains supporting context.",
-        "input_packet": {
-            **_base_packet(),
-            "structured_features": {
-                **BASELINE_STRUCTURED_FEATURES,
-                "endpoint_structure_ml": "MULTI_COMPOSITE",
-            },
-            "structured_feature_display_values": {
-                **BASELINE_STRUCTURED_FEATURE_DISPLAY_VALUES,
-                "endpoint_structure_ml": "Multi/Composite",
-            },
-            "text_context": {
-                **_base_packet()["text_context"],
-                "primary_outcomes_ui": "The study has a single primary endpoint: progression-free survival.",
-            },
-            "model_interpretation": {
-                **_base_packet()["model_interpretation"],
-                "completion_score": 70,
-                "previous_completion_score": 68,
-                "score_delta": 2,
-                "top_feature_impact_changes": ["endpoint_structure_ml"],
-            },
-            "iteration_context": {
-                **_base_packet()["iteration_context"],
-                "previous_snapshot_id": "fixture-baseline",
-                "current_snapshot_id": "fixture-structured-text-context",
-                "iteration_number": 1,
-                "changed_fields": ["endpoint_structure_ml", "text_context.primary_outcomes_ui"],
-                "compact_storyline_memory": "Baseline was acceptable; no prior participant concern.",
-            },
-        },
-        "mock_review": _review(
-            movement_summary="The Completion Score may have changed because endpoint structure changed.",
-            domains={
-                "development_question_fit": _domain("acceptable", "The structured endpoint setting keeps the confirmatory intent interpretable.", ["strategic_ambition_ml", "endpoint_structure_ml"]),
-                "scientific_rigor": _domain("acceptable", "The co-primary structure can remain defensible if both endpoints are prospectively specified.", ["endpoint_structure_ml", "primary_outcomes_ui"]),
-                "population_relevance": _domain("acceptable", "Population scope did not materially change.", ["adult_ml", "older_adult_ml"]),
-                "endpoint_and_comparator_logic": _domain("weak", "The endpoint text names only one endpoint, so endpoint hierarchy should be clearer.", ["endpoint_structure_ml", "primary_outcomes_ui"]),
-                "operational_scale_fit": _domain("acceptable", "Operational assumptions remain typical.", ["operational_assumptions.planned_duration_months.duration_status"]),
-                "change_integrity": _domain("neutral", "The scenario is interpreted from the submitted structured endpoint setting.", ["endpoint_structure_ml"]),
-                "text_consistency": _domain("minor_tension", "The endpoint text is less complete than the structured endpoint setting.", ["endpoint_structure_ml", "primary_outcomes_ui"]),
-            },
-            participant_review=_participant_review(
-                "Endpoint structure is interpreted from the structured Trial Feature setting.",
-                "The Completion Score may have moved because the structured endpoint setting changed.",
-                "The co-primary endpoint strategy can remain defensible.",
-                "The design may still sacrifice clarity if the endpoint text names only one endpoint.",
-                "Operational assumptions remain typical.",
-                "The endpoint text remains useful context but should not block prediction.",
-                "Is the endpoint hierarchy clear enough for another team to understand the scenario?",
-            ),
-            storyline_update="Structured endpoint setting was reviewed; minor text clarity concern remains.",
-            new_concerns=["endpoint_text_clarity"],
-            operational_statuses=["typical"],
+        participant_review=_participant_review(
+            "The endpoint text changed while structured Trial Features stayed the same.",
+            "The Completion Score did not move because XGBoost input fields did not change.",
+            "Design Confidence decreases because text now weakens endpoint and intent coherence.",
+            "The trade-off is narrative clarity versus contradiction with the structured scenario.",
+            "Is the endpoint text intended to replace or only clarify the endpoint strategy?",
+            "Should the operational duration still be interpreted against the original endpoint maturity?",
         ),
-        "expected_behavior": {
-            "review_needed": True,
-            "visible_to_participant_initially": True,
-            "expected_quality_adjustment": -2.0,
-            "expected_final_candidate_score": 68,
-            "expected_quality_pillars": {
-                "evidence_coherence": "negative",
-                "population_strategy_fit": "neutral",
-                "execution_plausibility": "neutral",
+        expected=_expected(
+            design_confidence=-3.0,
+            total_scenario_score=65,
+            subcategories={
+                "phase_intent_alignment": -1.5,
+                "endpoint_evidence_strength": -1.5,
+                "target_population_alignment": 0,
+                "operational_burden_balance": 0,
             },
-            "storyline_behavior": "append_structured_text_context_iteration",
+            storyline_behavior="append_text_only_iteration_without_model_score_delta",
+        ),
+        movement_summary="The Completion Score did not move because structured model fields did not change.",
+        new_concerns=["endpoint_text_material_tension"],
+        operational_statuses=["typical"],
+    ),
+    _fixture(
+        fixture_id="endpoint_text_contradiction_v2",
+        scenario_type="endpoint_text_contradiction",
+        description="Structured endpoint says multi/composite, but text says single endpoint only.",
+        packet=_packet(
+            completion_score=70,
+            score_delta=2,
+            changed_fields=["endpoint_structure_ml", "text_context.primary_outcomes_ui"],
+            structured_updates={"endpoint_structure_ml": "MULTI_COMPOSITE"},
+            display_updates={"endpoint_structure_ml": "Multi/Composite"},
+            text_updates={"primary_outcomes_ui": "The study has a single primary endpoint: progression-free survival."},
+            top_feature_impact_changes=["endpoint_structure_ml"],
+        ),
+        design_subcategories={
+            **_neutral_design(),
+            "endpoint_evidence_strength": _domain("weak", "Structured endpoint complexity and endpoint text disagree.", ["endpoint_structure_ml", "primary_outcomes_ui"]),
         },
-    },
-    {
-        "fixture_id": "noop_minor_text_cleanup_v1",
-        "scenario_type": "no_op_minor_text_edit",
-        "description": "Participant makes only casing/punctuation cleanup; review should be reused.",
-        "input_packet": {
-            **_base_packet(),
-            "text_context": {
-                **_base_packet()["text_context"],
+        participant_review=_participant_review(
+            "Endpoint structure and endpoint text changed together.",
+            "The score may have moved because the structured endpoint setting changed.",
+            "Design Confidence decreases because the evidence hierarchy is unclear.",
+            "The design may be technically richer but harder to interpret from the submitted text.",
+            "Which endpoint hierarchy should reviewers believe?",
+            "Would operational planning change if the endpoint structure is composite rather than single?",
+        ),
+        expected=_expected(
+            design_confidence=-1.5,
+            total_scenario_score=68.5,
+            subcategories={
+                "phase_intent_alignment": 0,
+                "endpoint_evidence_strength": -1.5,
+                "target_population_alignment": 0,
+                "operational_burden_balance": 0,
+            },
+            storyline_behavior="append_structured_text_context_iteration",
+        ),
+        movement_summary="The Completion Score may have changed because endpoint structure changed.",
+    ),
+    _fixture(
+        fixture_id="biomarker_population_mismatch_v2",
+        scenario_type="biomarker_population_mismatch",
+        description="Biomarker restriction is added while conditions text remains broad.",
+        packet=_packet(
+            completion_score=65,
+            score_delta=-3,
+            changed_fields=["biomarker_stratification_ml", "text_context.conditions_ui"],
+            structured_updates={"biomarker_stratification_ml": "1"},
+            text_updates={"conditions_ui": "All-comer advanced breast cancer without biomarker restriction."},
+            top_feature_impact_changes=["biomarker_stratification_ml"],
+        ),
+        design_subcategories={
+            **_neutral_design(),
+            "target_population_alignment": _domain("conflicting", "Structured biomarker restriction conflicts with all-comer conditions text.", ["biomarker_stratification_ml", "conditions_ui"]),
+        },
+        participant_review=_participant_review(
+            "Biomarker strategy and indication text no longer match.",
+            "The score may have declined because the population is more selective.",
+            "Design Confidence decreases because the intended population is ambiguous.",
+            "A targeted design can be defensible, but the scenario must state the same population consistently.",
+            "Is the intended population biomarker-positive or all-comer?",
+            "How would recruitment assumptions change if the biomarker restriction is real?",
+        ),
+        expected=_expected(
+            design_confidence=-3.0,
+            total_scenario_score=62,
+            subcategories={
+                "phase_intent_alignment": 0,
+                "endpoint_evidence_strength": 0,
+                "target_population_alignment": -3.0,
+                "operational_burden_balance": 0,
+            },
+            storyline_behavior="append_population_text_mismatch_concern",
+        ),
+        movement_summary="Completion Outlook declines as population selectivity increases.",
+        new_concerns=["biomarker_population_mismatch"],
+    ),
+    _fixture(
+        fixture_id="phase_intent_weak_evidence_v2",
+        scenario_type="phase_intent_weak_evidence",
+        description="Registration intent is paired with exploratory endpoint and weak comparator choices.",
+        packet=_packet(
+            completion_score=71,
+            score_delta=3,
+            changed_fields=["strategic_ambition_ml", "endpoint_rigor_ml", "comparator_benchmark_ml"],
+            structured_updates={
+                "strategic_ambition_ml": "PIVOTAL_INTENT",
+                "endpoint_rigor_ml": "EXPLORATORY",
+                "comparator_benchmark_ml": "NO_CONTROL",
+            },
+            top_feature_impact_changes=["strategic_ambition_ml", "endpoint_rigor_ml", "comparator_benchmark_ml"],
+        ),
+        design_subcategories={
+            **_neutral_design(),
+            "phase_intent_alignment": _domain("conflicting", "Pivotal ambition is not supported by exploratory endpoint and weak comparator choices.", ["strategic_ambition_ml", "endpoint_rigor_ml", "comparator_benchmark_ml"]),
+            "endpoint_evidence_strength": _domain("conflicting", "Endpoint and comparator choices weaken decision strength.", ["endpoint_rigor_ml", "comparator_benchmark_ml"]),
+        },
+        participant_review=_participant_review(
+            "Development intent, endpoint rigor, and comparator choices changed.",
+            "The score may have improved despite a weaker evidence posture.",
+            "Design Confidence decreases because ambition and evidence support diverge.",
+            "The scenario may be easier to complete but less defensible for the stated decision.",
+            "What decision can this evidence package credibly support?",
+            "Would the team run the same operational plan for an exploratory rather than pivotal question?",
+        ),
+        expected=_expected(
+            design_confidence=-6.0,
+            total_scenario_score=65,
+            subcategories={
+                "phase_intent_alignment": -3.0,
+                "endpoint_evidence_strength": -3.0,
+                "target_population_alignment": 0,
+                "operational_burden_balance": 0,
+            },
+            storyline_behavior="append_phase_intent_evidence_mismatch",
+        ),
+        movement_summary="Completion Outlook improves, but pivotal intent is less supported by the evidence design.",
+    ),
+    _fixture(
+        fixture_id="modality_governance_mismatch_v2",
+        scenario_type="modality_governance_mismatch",
+        description="Complex modality is introduced without proportional oversight.",
+        packet=_packet(
+            completion_score=64,
+            score_delta=-4,
+            changed_fields=["therapeutic_modality_ml", "administration_complexity_ml", "has_dmc_ml"],
+            structured_updates={
+                "therapeutic_modality_ml": "GENE_THERAPY",
+                "administration_complexity_ml": "COMPLEX_PROCEDURAL",
+                "has_dmc_ml": 0,
+            },
+            top_feature_impact_changes=["therapeutic_modality_ml", "administration_complexity_ml", "has_dmc_ml"],
+        ),
+        design_subcategories={
+            **_neutral_design(),
+            "phase_intent_alignment": _domain("weak", "Complex modality increases the need for explicit development rationale.", ["therapeutic_modality_ml", "phase_ml"]),
+            "operational_burden_balance": _domain("conflicting", "Complex administration without DMC creates a governance mismatch.", ["therapeutic_modality_ml", "administration_complexity_ml", "has_dmc_ml"]),
+        },
+        participant_review=_participant_review(
+            "Modality, administration complexity, and DMC status changed.",
+            "The score may have declined because modality and execution complexity increased.",
+            "Design Confidence decreases because governance is not proportionate to the complexity.",
+            "The trial may be scientifically ambitious but under-governed operationally.",
+            "What safety or modality-specific uncertainty should this design explicitly manage?",
+            "What governance structure would make the operational burden proportionate?",
+        ),
+        expected=_expected(
+            design_confidence=-4.5,
+            total_scenario_score=59.5,
+            subcategories={
+                "phase_intent_alignment": -1.5,
+                "endpoint_evidence_strength": 0,
+                "target_population_alignment": 0,
+                "operational_burden_balance": -3.0,
+            },
+            storyline_behavior="append_modality_governance_mismatch",
+        ),
+        movement_summary="Completion Outlook declines as modality and execution complexity increase.",
+    ),
+    _fixture(
+        fixture_id="no_adjustment_large_completion_movement_v2",
+        scenario_type="no_adjustment_large_completion_movement",
+        description="Completion moves materially, but packet evidence does not justify any Design Confidence points.",
+        packet=_packet(
+            completion_score=80,
+            score_delta=12,
+            changed_fields=["sponsor_tier_ml"],
+            structured_updates={"sponsor_tier_ml": "TIER 1"},
+            top_feature_impact_changes=["sponsor_tier_ml"],
+        ),
+        design_subcategories=_neutral_design(),
+        participant_review=_participant_review(
+            "Sponsor tier changed and Completion Outlook moved materially.",
+            "The model may associate the revised sponsor tier with stronger completion patterns.",
+            "Design Confidence remains neutral because sponsor tier alone is not a design-strengthening action.",
+            "A large model movement does not automatically justify a design adjustment.",
+            "What design feature, separate from sponsor capability, actually changes the evidence value?",
+            "What execution assumption changed, if any, beyond organizational capability?",
+        ),
+        expected=_expected(
+            design_confidence=0,
+            total_scenario_score=80,
+            subcategories={
+                "phase_intent_alignment": 0,
+                "endpoint_evidence_strength": 0,
+                "target_population_alignment": 0,
+                "operational_burden_balance": 0,
+            },
+            storyline_behavior="append_large_completion_movement_without_design_adjustment",
+        ),
+        movement_summary="Completion Outlook moved materially, but no supported design adjustment is present.",
+    ),
+    _fixture(
+        fixture_id="noop_minor_text_cleanup_v2",
+        scenario_type="no_op_minor_text_edit",
+        description="Participant makes only casing/punctuation cleanup; review should be reused.",
+        packet=_packet(
+            changed_fields=["text_context.summary_ui"],
+            text_updates={
                 "summary_ui": (
                     "Confirmatory study evaluating targeted therapy plus standard care "
                     "in adults with advanced biomarker-positive breast cancer"
-                ),
+                )
             },
-            "model_interpretation": {
-                **_base_packet()["model_interpretation"],
-                "previous_completion_score": 68,
-                "score_delta": 0,
+        ),
+        design_subcategories=None,
+        participant_review=None,
+        expected=_expected(
+            design_confidence=0,
+            total_scenario_score=68,
+            subcategories={
+                "phase_intent_alignment": 0,
+                "endpoint_evidence_strength": 0,
+                "target_population_alignment": 0,
+                "operational_burden_balance": 0,
             },
-            "iteration_context": {
-                **_base_packet()["iteration_context"],
-                "previous_snapshot_id": "fixture-baseline",
-                "current_snapshot_id": "fixture-noop-minor-text",
-                "iteration_number": 1,
-                "changed_fields": ["text_context.summary_ui"],
-                "compact_storyline_memory": "Baseline was acceptable; no prior participant concern.",
-            },
-        },
-        "mock_review": None,
-        "expected_behavior": {
-            "review_needed": False,
-            "visible_to_participant_initially": True,
-            "reuse_previous_review": True,
-            "expected_quality_adjustment": 0,
-            "expected_final_candidate_score": 68,
-            "expected_quality_pillars": {
-                "evidence_coherence": "unchanged",
-                "population_strategy_fit": "unchanged",
-                "execution_plausibility": "unchanged",
-            },
-            "storyline_behavior": "reuse_latest_validated_review_no_new_storyline_step",
-        },
-    },
+            review_needed=False,
+            reuse_previous_review=True,
+            storyline_behavior="reuse_latest_validated_review_no_new_storyline_step",
+        ),
+        movement_summary="No review should be generated for a minor text cleanup.",
+    ),
 ]
 
 
@@ -697,31 +991,57 @@ def validate_contract_fixtures(fixtures: list[dict[str, Any]] | None = None) -> 
             errors.append(f"{fixture_id}: expected_behavior must be a dict")
             continue
 
-        if "expected_quality_adjustment" not in expected:
-            errors.append(f"{fixture_id}: missing expected_quality_adjustment")
+        if "expected_design_confidence" not in expected:
+            errors.append(f"{fixture_id}: missing expected_design_confidence")
         else:
-            adjustment = expected["expected_quality_adjustment"]
+            adjustment = expected["expected_design_confidence"]
             if not isinstance(adjustment, (int, float)):
-                errors.append(f"{fixture_id}: expected_quality_adjustment must be numeric")
+                errors.append(f"{fixture_id}: expected_design_confidence must be numeric")
+            elif adjustment * 2 != int(adjustment * 2):
+                errors.append(f"{fixture_id}: expected_design_confidence must use 0.5 increments")
 
-        if "expected_final_candidate_score" not in expected:
-            errors.append(f"{fixture_id}: missing expected_final_candidate_score")
+        subcategory_points = expected.get("expected_design_subcategories")
+        if not isinstance(subcategory_points, dict):
+            errors.append(f"{fixture_id}: missing expected_design_subcategories")
         else:
-            final_score = expected["expected_final_candidate_score"]
+            missing_subpoints = REQUIRED_DESIGN_SUBCATEGORIES.difference(subcategory_points)
+            extra_subpoints = set(subcategory_points).difference(REQUIRED_DESIGN_SUBCATEGORIES)
+            if missing_subpoints:
+                errors.append(f"{fixture_id}: missing expected design subcategories {sorted(missing_subpoints)}")
+            if extra_subpoints:
+                errors.append(f"{fixture_id}: unexpected expected design subcategories {sorted(extra_subpoints)}")
+            for subcategory_name, points in subcategory_points.items():
+                if not isinstance(points, (int, float)):
+                    errors.append(f"{fixture_id}: {subcategory_name} expected points must be numeric")
+                elif points < -4 or points > 4:
+                    errors.append(f"{fixture_id}: {subcategory_name} expected points must be between -4 and +4")
+                elif points * 2 != int(points * 2):
+                    errors.append(f"{fixture_id}: {subcategory_name} expected points must use 0.5 increments")
+            if isinstance(expected.get("expected_design_confidence"), (int, float)):
+                total = sum(value for value in subcategory_points.values() if isinstance(value, (int, float)))
+                if total != expected["expected_design_confidence"]:
+                    errors.append(
+                        f"{fixture_id}: expected_design_confidence should equal sum of expected_design_subcategories"
+                    )
+
+        if "expected_total_scenario_score" not in expected:
+            errors.append(f"{fixture_id}: missing expected_total_scenario_score")
+        else:
+            final_score = expected["expected_total_scenario_score"]
             if not isinstance(final_score, (int, float)) or final_score < 0 or final_score > 100:
-                errors.append(f"{fixture_id}: expected_final_candidate_score must be numeric between 0 and 100")
+                errors.append(f"{fixture_id}: expected_total_scenario_score must be numeric between 0 and 100")
 
         if (
-            "expected_quality_adjustment" in expected
-            and "expected_final_candidate_score" in expected
+            "expected_design_confidence" in expected
+            and "expected_total_scenario_score" in expected
         ):
             completion_score = packet.get("model_interpretation", {}).get("completion_score")
             if isinstance(completion_score, (int, float)):
-                calculated = max(0, min(100, completion_score + expected["expected_quality_adjustment"]))
-                if calculated != expected["expected_final_candidate_score"]:
+                calculated = max(0, min(100, completion_score + expected["expected_design_confidence"]))
+                if calculated != expected["expected_total_scenario_score"]:
                     errors.append(
-                        f"{fixture_id}: expected_final_candidate_score should be {calculated} "
-                        "from completion_score + expected_quality_adjustment"
+                        f"{fixture_id}: expected_total_scenario_score should be {calculated} "
+                        "from completion_score + expected_design_confidence"
                     )
             else:
                 errors.append(f"{fixture_id}: model_interpretation.completion_score must be numeric")
@@ -739,28 +1059,36 @@ def validate_contract_fixtures(fixtures: list[dict[str, Any]] | None = None) -> 
             errors.append(f"{fixture_id}: review-needed fixture must define mock_review")
             continue
 
-        domains = review.get("quality_review_domains")
-        if not isinstance(domains, dict):
-            errors.append(f"{fixture_id}: missing quality_review_domains")
+        subcategories = review.get("design_confidence_subcategories")
+        if not isinstance(subcategories, dict):
+            errors.append(f"{fixture_id}: missing design_confidence_subcategories")
             continue
 
-        missing_domains = REQUIRED_REVIEW_DOMAINS.difference(domains)
-        extra_domains = set(domains).difference(REQUIRED_REVIEW_DOMAINS)
-        if missing_domains:
-            errors.append(f"{fixture_id}: missing domains {sorted(missing_domains)}")
-        if extra_domains:
-            errors.append(f"{fixture_id}: unexpected domains {sorted(extra_domains)}")
+        missing_subcategories = REQUIRED_DESIGN_SUBCATEGORIES.difference(subcategories)
+        extra_subcategories = set(subcategories).difference(REQUIRED_DESIGN_SUBCATEGORIES)
+        if missing_subcategories:
+            errors.append(f"{fixture_id}: missing design subcategories {sorted(missing_subcategories)}")
+        if extra_subcategories:
+            errors.append(f"{fixture_id}: unexpected design subcategories {sorted(extra_subcategories)}")
 
-        for domain_name, domain in domains.items():
-            if "rating" not in domain:
-                errors.append(f"{fixture_id}: {domain_name} missing rating")
-            if "rationale" not in domain:
-                errors.append(f"{fixture_id}: {domain_name} missing rationale")
-            evidence_fields = domain.get("evidence_fields")
+        for subcategory_name, subcategory in subcategories.items():
+            if "rating" not in subcategory:
+                errors.append(f"{fixture_id}: {subcategory_name} missing rating")
+            if "rationale" not in subcategory:
+                errors.append(f"{fixture_id}: {subcategory_name} missing rationale")
+            evidence_fields = subcategory.get("evidence_fields")
             if not isinstance(evidence_fields, list):
-                errors.append(f"{fixture_id}: {domain_name} evidence_fields must be a list")
+                errors.append(f"{fixture_id}: {subcategory_name} evidence_fields must be a list")
 
-        for key in ("score_movement_review", "participant_review", "continuity", "trace"):
+        for key in (
+            "completion_outlook_review",
+            "design_confidence_subcategories",
+            "pillar_reviews",
+            "tradeoff_review",
+            "participant_review",
+            "continuity",
+            "trace",
+        ):
             if key not in review:
                 errors.append(f"{fixture_id}: missing mock_review.{key}")
 
