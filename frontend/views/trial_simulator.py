@@ -19,7 +19,7 @@ import requests
 
 
 # IMPORT PLOTTING UTILS
-from frontend.utils.plot import plot_success_gauge, plot_impact_bar, plot_treemap
+from frontend.utils.plot import plot_success_gauge, plot_adjustment_gauge, plot_impact_bar, plot_treemap
 from frontend.utils.audit_decomposition import build_prerecorded_audit_decomposition_result
 from src.operational_benchmarks import (
     load_operational_benchmarks,
@@ -40,6 +40,7 @@ from src.narratives.provider_config import (
     load_narrative_provider_config,
     provider_config_cache_namespace,
 )
+from src.narratives.scoring import DESIGN_SUBCATEGORY_LABELS
 
 # Load environment variables
 load_dotenv()
@@ -285,7 +286,17 @@ def audit_view_transition(current_view: str):
 DETAIL_TAB_INFO = "Trial Information"
 DETAIL_TAB_POPULATION = "Population Details"
 DETAIL_TAB_FEATURES = "Trial Features"
-DETAIL_TAB_SCORE = "Completion Score"
+DETAIL_TAB_SCORE = "Trial Score"
+
+SCORE_VIEW_COMPLETION = "Completion Outlook"
+SCORE_VIEW_DESIGN = "Design Confidence"
+SCORE_VIEW_TOTAL = "Total Scenario Score"
+SCORE_VIEW_OPTIONS = (
+    SCORE_VIEW_COMPLETION,
+    SCORE_VIEW_DESIGN,
+    SCORE_VIEW_TOTAL,
+)
+SCORE_VIEW_STATE_KEY = "trial_score_view"
 
 
 REQUIRED_DATA_COLUMNS = [
@@ -338,8 +349,8 @@ TEXTAREA_HEIGHTS = {
     "interventions": 140,
     "primary_outcomes": 140,
     "eligibility_criteria": 330,
-    "completion_prediction_left": 265,
-    "completion_prediction_right": 560,
+    "completion_prediction_left": 250,
+    "completion_prediction_right": 510,
 }
 
 SIMULATION_CONDITIONS_TEXTAREA_HEIGHT = 325
@@ -610,11 +621,7 @@ def inject_custom_styles():
                 --ui-treemap-toggle-right: 30px;
                 --ui-treemap-hint-left: 25px;
 
-                /* Treemap hint only.
-                   Increase = move hint DOWN.
-                   Decrease = move hint UP.
-                   The toggle itself is not modified. */
-                --ui-treemap-hint-y-shift: 17px;
+                --ui-treemap-hint-y-shift: 0px;
 
                 --ui-shell-shadow: {shell_shadow};
                 --ui-textarea-shadow: {textarea_shadow};
@@ -776,33 +783,25 @@ def inject_custom_styles():
                 }}
             }}
 
-            /* Treemap hint vertical calibration by resolution.
-               These values affect only the "Click a block..." label.
-               They do not touch the Detailed View Mode toggle geometry. */
-
-            /* 1440 x 900 and smaller desktop baseline */
             :root {{
-                --ui-treemap-hint-y-shift: 13px;
+                --ui-treemap-hint-y-shift: 0px;
             }}
 
-            /* Around 1920 x 1080 */
             @media (min-width: 1800px) and (min-height: 950px) {{
                 :root {{
-                    --ui-treemap-hint-y-shift: 2px;
+                    --ui-treemap-hint-y-shift: 0px;
                 }}
             }}
 
-            /* Around 2400 / 2560 wide screens */
             @media (min-width: 2400px) and (min-height: 1200px) {{
                 :root {{
-                    --ui-treemap-hint-y-shift: 40px;
+                    --ui-treemap-hint-y-shift: 0px;
                 }}
             }}
 
-            /* Around 2880 wide screens */
             @media (min-width: 2700px) and (min-height: 1250px) {{
                 :root {{
-                    --ui-treemap-hint-y-shift: 40px;
+                    --ui-treemap-hint-y-shift: 0px;
                 }}
             }}
 
@@ -1466,6 +1465,14 @@ def inject_custom_styles():
                 letter-spacing: inherit !important;
             }}
 
+            .st-key-header_predict_btn button,
+            .st-key-header_predict_btn button * {{
+                font-size: var(--ui-button-font-size) !important;
+                font-weight: 400 !important;
+                line-height: 1 !important;
+                letter-spacing: 0 !important;
+            }}
+
             /* Blue-state button shine only */
             .stButton > button[kind="primary"] > * {{
                 position: relative !important;
@@ -1580,6 +1587,65 @@ def inject_custom_styles():
 
             .st-key-summary_side_shell_completion_prediction_left_top_block {{
                 position: relative !important;
+            }}
+
+            .st-key-summary_side_shell_completion_prediction_left_top_block .st-key-trial_score_mode_selector {{
+                display: flex !important;
+                justify-content: center !important;
+                align-items: center !important;
+                width: 100% !important;
+                margin: 0 0 0 0 !important;
+                padding: 18px 0 0 0 !important;
+            }}
+
+            .st-key-summary_side_shell_completion_prediction_left_top_block .st-key-trial_score_view {{
+                margin: 0 auto !important;
+            }}
+
+            .st-key-summary_side_shell_completion_prediction_left_top_block .st-key-trial_score_mode_selector [data-testid="stWidgetLabel"] {{
+                display: none !important;
+            }}
+
+            .st-key-summary_side_shell_completion_prediction_left_top_block .st-key-trial_score_mode_selector [role="radiogroup"] {{
+                display: inline-flex !important;
+                justify-content: center !important;
+                align-items: center !important;
+                flex-wrap: wrap !important;
+                column-gap: 22px !important;
+                row-gap: 8px !important;
+                width: 100% !important;
+                padding: 0 !important;
+                margin: 0 !important;
+                border: 0 !important;
+                background: transparent !important;
+                box-shadow: none !important;
+            }}
+
+            .st-key-summary_side_shell_completion_prediction_left_top_block .st-key-trial_score_mode_selector label {{
+                display: inline-flex !important;
+                align-items: center !important;
+                justify-content: center !important;
+                gap: 8px !important;
+                margin: 0 !important;
+                padding: 0 4px !important;
+                min-height: 0 !important;
+            }}
+
+            .st-key-summary_side_shell_completion_prediction_left_top_block .st-key-trial_score_mode_selector label p,
+            .st-key-summary_side_shell_completion_prediction_left_top_block .st-key-trial_score_mode_selector label span {{
+                color: #334155 !important;
+                font-size: 1.05rem !important;
+                font-weight: 800 !important;
+                line-height: 1.05 !important;
+                text-align: center !important;
+                white-space: normal !important;
+            }}
+
+            .st-key-summary_side_shell_completion_prediction_left_top_block .st-key-trial_score_mode_selector [data-baseweb="radio"] {{
+                display: inline-flex !important;
+                align-items: center !important;
+                justify-content: center !important;
+                margin: 0 !important;
             }}
 
             .st-key-summary_side_shell_completion_prediction_left_top_block .completion-gauge-help-wrap {{
@@ -1795,7 +1861,7 @@ def inject_custom_styles():
                     var(--ui-meta-shell-pad-left) !important;
             }}
 
-            [class*="st-key-summary_side_inner_"] > div > [data-testid="stVerticalBlock"] {{
+            [class*="st-key-summary_side_inner_"] > div > [data-testid="stVerticalBlock"]:not(.st-key-trial_score_mode_selector) {{
                 margin: 0 !important;
                 padding: 0 !important;
                 gap: 0 !important;
@@ -1803,78 +1869,6 @@ def inject_custom_styles():
 
             .st-key-summary_side_inner_completion_prediction_right_block > div {{
                 padding: 0 10px 0 10px !important;
-            }}
-            /* Completion Score — gauge vertical alignment
-               Single manual control for the gauge chart + score + tier label.
-
-               Increase --ui-completion-gauge-up-shift = move the whole gauge group UP.
-               Decrease --ui-completion-gauge-up-shift = move the whole gauge group DOWN.
-
-               This is intentionally applied to the Plotly chart and tier label directly,
-               because spacer-only controls can be overridden by Streamlit layout wrappers.
-            */
-            :root {{
-                --ui-completion-gauge-up-shift: 22px;
-            }}
-
-            .st-key-summary_side_shell_completion_prediction_left_top_block .trial-meta-top-gap {{
-                height: 0px !important;
-            }}
-
-            .st-key-summary_side_shell_completion_prediction_left_top_block .trial-meta-bottom-gap {{
-                height: 0px !important;
-            }}
-
-            .st-key-summary_side_inner_completion_prediction_left_top_block [data-testid="stPlotlyChart"],
-            .st-key-summary_side_shell_completion_prediction_left_top_block .completion-tier-row {{
-                transform: translateY(calc(-1 * var(--ui-completion-gauge-up-shift))) !important;
-            }}
-
-            @media (min-width: 1800px) and (min-height: 950px) {{
-                :root {{
-                    --ui-completion-gauge-up-shift: 15px;
-                }}
-            }}
-
-            @media (min-width: 2400px) and (min-height: 1200px) {{
-                :root {{
-                    --ui-completion-gauge-up-shift: 10px;
-                }}
-            }}
-
-            @media (min-width: 2700px) and (min-height: 1250px) {{
-                :root {{
-                    --ui-completion-gauge-up-shift: 5px;
-                }}
-            }}
-
-            /* Completion Score — treemap vertical alignment
-               1440: preserve compact alignment.
-               1920 / 2560 / 2880: progressively move treemap down. */
-            .st-key-summary_side_shell_completion_prediction_right_block .trial-meta-top-gap {{
-                height: 6px !important;
-            }}
-
-            .st-key-summary_side_shell_completion_prediction_right_block .trial-meta-bottom-gap {{
-                height: 0px !important;
-            }}
-
-            @media (min-width: 1800px) and (min-height: 950px) {{
-                .st-key-summary_side_shell_completion_prediction_right_block .trial-meta-top-gap {{
-                    height: 30px !important;
-                }}
-            }}
-
-            @media (min-width: 2400px) and (min-height: 1200px) {{
-                .st-key-summary_side_shell_completion_prediction_right_block .trial-meta-top-gap {{
-                    height: 40px !important;
-                }}
-            }}
-
-            @media (min-width: 2700px) and (min-height: 1250px) {{
-                .st-key-summary_side_shell_completion_prediction_right_block .trial-meta-top-gap {{
-                    height: 50px !important;
-                }}
             }}
 
             /* TREEMAP TOGGLE — FLOATING ABOVE TREEMAP BOX, INSIDE TAB 3 ONLY */
@@ -3316,50 +3310,6 @@ def inject_custom_styles():
                - modestly larger at 2560 / 2880 without infinite width
                ========================================================= */
 
-            /* Completion Score — gauge vertical alignment
-               Single manual control for the gauge chart + score + tier label.
-
-               Increase --ui-completion-gauge-up-shift = move the whole gauge group UP.
-               Decrease --ui-completion-gauge-up-shift = move the whole gauge group DOWN.
-
-               This is intentionally applied to the Plotly chart and tier label directly,
-               because spacer-only controls can be overridden by Streamlit layout wrappers.
-            */
-            :root {{
-                --ui-completion-gauge-up-shift: 18px;
-            }}
-
-            .st-key-summary_side_shell_completion_prediction_left_top_block .trial-meta-top-gap {{
-                height: 0px !important;
-            }}
-
-            .st-key-summary_side_shell_completion_prediction_left_top_block .trial-meta-bottom-gap {{
-                height: 0px !important;
-            }}
-
-            .st-key-summary_side_inner_completion_prediction_left_top_block [data-testid="stPlotlyChart"],
-            .st-key-summary_side_shell_completion_prediction_left_top_block .completion-tier-row {{
-                transform: translateY(calc(-1 * var(--ui-completion-gauge-up-shift))) !important;
-            }}
-
-            @media (min-width: 1800px) and (min-height: 950px) {{
-                :root {{
-                    --ui-completion-gauge-up-shift: 10px;
-                }}
-            }}
-
-            @media (min-width: 2400px) and (min-height: 1200px) {{
-                :root {{
-                    --ui-completion-gauge-up-shift: 4px;
-                }}
-            }}
-
-            @media (min-width: 2700px) and (min-height: 1250px) {{
-                :root {{
-                    --ui-completion-gauge-up-shift: 0px;
-                }}
-            }}
-
             :root {{
                 --ui-results-grid-h: 645px;
 
@@ -3376,10 +3326,13 @@ def inject_custom_styles():
                 --ui-population-card-h: var(--ui-detail-side-min-h);
                 --ui-population-eligibility-text-h: calc(var(--ui-detail-side-min-h) - 40px);
 
-                --ui-completion-left-card-h: 265px;
-                --ui-completion-right-card-h: 535px;
+                --ui-score-card-gap: 14px;
+                --ui-scenario-review-card-gap: -2px;
+                --ui-completion-left-card-h: 250px;
+                --ui-completion-right-card-h: 558px;
                 --ui-completion-tier-font-size: 1.5rem;
-                --ui-completion-tier-overlap: -35px;
+                --ui-completion-tier-overlap: -32px;
+                --ui-trial-score-gauge-body-shift: -38px;
             }}
 
             @media (min-width: 1800px) and (min-height: 950px) {{
@@ -3397,9 +3350,10 @@ def inject_custom_styles():
                     --ui-population-eligibility-text-h: calc(var(--ui-detail-side-min-h) - 50px);
 
                     --ui-completion-left-card-h: 275px;
-                    --ui-completion-right-card-h: 565px;
+                    --ui-completion-right-card-h: 569px;
                     --ui-completion-tier-font-size: 1.6rem;
-                    --ui-completion-tier-overlap: -37px;
+                    --ui-completion-tier-overlap: -34px;
+                    --ui-trial-score-gauge-body-shift: -36px;
                 }}
             }}
 
@@ -3418,9 +3372,10 @@ def inject_custom_styles():
                     --ui-population-eligibility-text-h: calc(var(--ui-detail-side-min-h) - 50px);
 
                     --ui-completion-left-card-h: 285px;
-                    --ui-completion-right-card-h: 585px;
+                    --ui-completion-right-card-h: 584px;
                     --ui-completion-tier-font-size: 1.70rem;
                     --ui-completion-tier-overlap: -35px;
+                    --ui-trial-score-gauge-body-shift: -30px;
                 }}
             }}
 
@@ -3439,9 +3394,26 @@ def inject_custom_styles():
                     --ui-population-eligibility-text-h: calc(var(--ui-detail-side-min-h) - 55px);
 
                     --ui-completion-left-card-h: 290px;
-                    --ui-completion-right-card-h: 595px;
+                    --ui-completion-right-card-h: 594px;
                     --ui-completion-tier-font-size: 1.66rem;
-                    --ui-completion-tier-overlap: -40px;
+                    --ui-completion-tier-overlap: -35px;
+                    --ui-trial-score-gauge-body-shift: -28px;
+                }}
+            }}
+
+            @media (max-width: 1600px) {{
+                :root {{
+                    --ui-completion-right-card-h: 578px;
+                    --ui-scenario-review-card-gap: -8px;
+                    --ui-treemap-hint-y-shift: 12px;
+                }}
+            }}
+
+            @media (min-width: 1700px) and (max-width: 1799px) and (min-height: 900px) {{
+                :root {{
+                    --ui-detail-side-min-h: 436px;
+                    --ui-population-card-h: 456px;
+                    --ui-population-eligibility-text-h: 410px;
                 }}
             }}
 
@@ -3738,13 +3710,17 @@ def inject_custom_styles():
                 height: 100% !important;
             }}
 
-            .st-key-summary_side_inner_completion_prediction_left_top_block > div > [data-testid="stVerticalBlock"] {{
+            .st-key-summary_side_inner_completion_prediction_left_top_block > div > [data-testid="stVerticalBlock"]:not(.st-key-trial_score_mode_selector):not(.st-key-trial_score_gauge_body) {{
                 min-height: 100% !important;
                 height: 100% !important;
                 display: flex !important;
                 flex-direction: column !important;
                 justify-content: center !important;
-                transform: translateY(var(--ui-completion-gauge-y-shift)) !important;
+                transform: none !important;
+            }}
+
+            .st-key-trial_score_gauge_body {{
+                transform: translateY(var(--ui-trial-score-gauge-body-shift)) !important;
             }}
 
             .st-key-summary_side_inner_completion_prediction_right_block > div {{
@@ -3758,8 +3734,11 @@ def inject_custom_styles():
                 display: block !important;
             }}
 
-            .st-key-summary_side_inner_completion_prediction_left_top_block [data-testid="stPlotlyChart"],
             .st-key-summary_side_inner_completion_prediction_right_block [data-testid="stPlotlyChart"] {{
+                margin: 0 !important;
+            }}
+
+            .st-key-summary_side_inner_completion_prediction_left_top_block [data-testid="stPlotlyChart"] {{
                 margin: 0 !important;
             }}
 
@@ -4300,7 +4279,7 @@ def inject_custom_styles():
                 border-radius: 12px !important;
                 background: #fbfcfe !important;
                 padding: 11px 12px !important;
-                margin-top: 8px !important;
+                margin-top: var(--ui-scenario-review-card-gap) !important;
                 font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
                 color: #334155 !important;
             }}
@@ -4356,6 +4335,16 @@ def inject_custom_styles():
                 font-size: 0.74rem !important;
                 line-height: 1.25 !important;
                 font-weight: 650 !important;
+            }}
+
+            html body .quality-review-section-title {{
+                color: #334155 !important;
+                font-size: 0.72rem !important;
+                font-weight: 850 !important;
+                line-height: 1.12 !important;
+                text-transform: uppercase !important;
+                letter-spacing: 0 !important;
+                margin: 9px 0 3px 0 !important;
             }}
 
             html body .quality-review-points {{
@@ -4534,11 +4523,18 @@ def inject_custom_styles():
             html body .simulation-score-delta {{
                 position: absolute !important;
                 top: 54px !important;
-                right: 34px !important;
+                right: 18px !important;
                 z-index: 8 !important;
+                min-width: 178px !important;
+                padding: 14px 17px !important;
+                border: 1px solid #d8dee8 !important;
+                border-radius: 8px !important;
+                background: rgba(255, 255, 255, 0.96) !important;
+                box-shadow: 0 4px 12px rgba(51, 65, 85, 0.10) !important;
+                color: #334155 !important;
                 font-size: 1.12rem !important;
                 font-weight: 800 !important;
-                line-height: 1 !important;
+                line-height: 1.18 !important;
                 letter-spacing: 0 !important;
                 white-space: nowrap !important;
                 text-align: right !important;
@@ -4551,7 +4547,7 @@ def inject_custom_styles():
 
             html body .simulation-score-delta .score-delta-triangle {{
                 display: inline-block !important;
-                margin: 0 4px 0 8px !important;
+                margin: 0 3px 0 7px !important;
                 font-size: 0.86em !important;
                 transform: translateY(-1px) !important;
             }}
@@ -4559,16 +4555,18 @@ def inject_custom_styles():
             html body .simulation-stale-notice {{
                 position: absolute !important;
                 top: 54px !important;
-                left: 34px !important;
+                left: 18px !important;
                 z-index: 8 !important;
-                padding: 5px 9px !important;
-                border-radius: 999px !important;
-                border: 1px solid rgba(137, 167, 201, 0.32) !important;
-                background: rgba(232, 240, 251, 0.72) !important;
-                color: #3f6f9f !important;
-                font-size: 0.78rem !important;
+                min-width: 178px !important;
+                padding: 14px 17px !important;
+                border-radius: 8px !important;
+                border: 1px solid #d8dee8 !important;
+                background: rgba(241, 245, 249, 0.96) !important;
+                box-shadow: 0 4px 12px rgba(51, 65, 85, 0.10) !important;
+                color: #334155 !important;
+                font-size: 1.12rem !important;
                 font-weight: 800 !important;
-                line-height: 1 !important;
+                line-height: 1.18 !important;
                 white-space: nowrap !important;
                 pointer-events: none !important;
             }}
@@ -4589,15 +4587,19 @@ def inject_custom_styles():
                 }}
 
                 html body .simulation-score-delta {{
-                    top: 46px !important;
-                    right: 24px !important;
-                    font-size: 0.98rem !important;
+                    top: 50px !important;
+                    right: 12px !important;
+                    min-width: 144px !important;
+                    padding: 11px 13px !important;
+                    font-size: 0.94rem !important;
                 }}
 
                 html body .simulation-stale-notice {{
-                    top: 46px !important;
-                    left: 24px !important;
-                    font-size: 0.72rem !important;
+                    top: 50px !important;
+                    left: 12px !important;
+                    min-width: 144px !important;
+                    padding: 11px 13px !important;
+                    font-size: 0.94rem !important;
                 }}
             }}
 
@@ -5904,12 +5906,12 @@ def attach_narrative_workflow_metadata(trace, metadata):
 
 def narrative_trace_provider_note(trace):
     if not trace:
-        return "Quality Review provider unavailable."
+        return "Scenario Review provider unavailable."
     if trace.get("cached"):
         return "Replayed from review cache."
     if trace.get("provider") == PROVIDER_MOCK:
         return "Generated by deterministic mock reviewer."
-    return "Generated by Quality Review engine."
+    return "Generated by Scenario Review engine."
 
 
 def get_hidden_baseline_review_trace(row, baseline_snapshot):
@@ -5983,7 +5985,7 @@ def ensure_hidden_baseline_review_initialized(row):
     try:
         return get_hidden_baseline_review_trace(row, baseline_snapshot)
     except Exception:
-        logger.exception("Hidden baseline Quality Review initialization failed")
+        logger.exception("Hidden baseline Scenario Review initialization failed")
         return None
 
 
@@ -6976,7 +6978,7 @@ def render_transition_overlay_hook():
             function getOverlayConfig(text) {
                 if (text === "Search Trials") return ["Loading trials...", 1600];
                 if (text === "Reset Filters") return ["Resetting filters...", 1600];
-                if (text === "Predict Trial Completion") return ["Generating completion score...", 3330];
+                if (text === "Review Scenario") return ["Reviewing scenario...", 3330];
                 return null;
             }
 
@@ -7127,7 +7129,7 @@ def render_header(is_landing=True, show_predict_button=False, show_back_button=F
                             )
 
                         st.button(
-                            "Predict Trial Completion",
+                            "Review Scenario",
                             width="stretch",
                             type=predict_btn_type,
                             key="header_predict_btn",
@@ -8488,14 +8490,14 @@ def render_enrollment_assumption_card(row):
         body_lines = [
             f"<div class='enrollment-assumption-line'><strong>Current:</strong> {html.escape(current_text)}</div>",
             source_line,
-            "<div class='enrollment-assumption-line'>Enrollment benchmark will refresh after prediction.</div>",
+            "<div class='enrollment-assumption-line'>Enrollment benchmark will refresh after Review Scenario.</div>",
         ]
         muted = "Benchmark cohort refresh is limited to phase, indication, therapeutic area, rare-disease flag, and modality."
     elif enrollment_pending:
         body_lines = [
             f"<div class='enrollment-assumption-line'><strong>Current:</strong> {html.escape(current_text)}</div>",
             source_line,
-            "<div class='enrollment-assumption-line'>Click Predict to update enrollment assumption.</div>",
+            "<div class='enrollment-assumption-line'>Click Review Scenario to update enrollment assumption.</div>",
         ]
         muted = "Completion Score and XGBoost charts remain unchanged until model-facing Trial Features are predicted."
     elif metadata.get("enrollment_status") == "not_available" or not metadata:
@@ -8569,14 +8571,14 @@ def render_site_assumption_card(row):
         body_lines = [
             f"<div class='enrollment-assumption-line'><strong>Current:</strong> {html.escape(current_text)}</div>",
             source_line,
-            "<div class='enrollment-assumption-line'>Site-count benchmark position will refresh after prediction.</div>",
+            "<div class='enrollment-assumption-line'>Site-count benchmark position will refresh after Review Scenario.</div>",
         ]
         muted = "Benchmark cohort refresh is limited to phase, indication, therapeutic area, rare-disease flag, and modality."
     elif site_pending:
         body_lines = [
             f"<div class='enrollment-assumption-line'><strong>Current:</strong> {html.escape(current_text)}</div>",
             source_line,
-            "<div class='enrollment-assumption-line'>Click Predict to update site-count benchmark position.</div>",
+            "<div class='enrollment-assumption-line'>Click Review Scenario to update site-count benchmark position.</div>",
         ]
         muted = "Completion Score and XGBoost charts remain unchanged until model-facing Trial Features are predicted."
     elif metadata.get("site_count_status") == "not_available" or not metadata:
@@ -8672,14 +8674,14 @@ def render_duration_assumption_card(row):
         body_lines = [
             f"<div class='enrollment-assumption-line'><strong>Current:</strong> {html.escape(current_text)}</div>",
             source_line,
-            "<div class='enrollment-assumption-line'>Duration benchmark position will refresh after prediction.</div>",
+            "<div class='enrollment-assumption-line'>Duration benchmark position will refresh after Review Scenario.</div>",
         ]
         muted = "Duration benchmark cohort refresh is limited to phase, indication, therapeutic area, rare-disease flag, and endpoint-duration bin."
     elif duration_pending:
         body_lines = [
             f"<div class='enrollment-assumption-line'><strong>Current:</strong> {html.escape(current_text)}</div>",
             source_line,
-            "<div class='enrollment-assumption-line'>Click Predict to update duration benchmark position.</div>",
+            "<div class='enrollment-assumption-line'>Click Review Scenario to update duration benchmark position.</div>",
         ]
         muted = "Completion Score and XGBoost charts remain unchanged until model-facing Trial Features are predicted."
     elif metadata.get("duration_status") == "not_available" or not metadata:
@@ -8817,25 +8819,14 @@ def _quality_review_metric(label, value, color="#1f2937"):
     )
 
 
-QUALITY_REVIEW_DOMAIN_LABELS = {
-    "development_question_fit": "Development Question",
-    "scientific_rigor": "Scientific Rigor",
-    "population_relevance": "Population Relevance",
-    "endpoint_and_comparator_logic": "Endpoint & Comparator",
-    "operational_scale_fit": "Operational Scale",
-    "change_integrity": "Change Integrity",
-    "text_consistency": "Text Consistency",
-}
-
-
-def _quality_domain_contribution_html(domain_name, domain, display_points=None):
-    points = pd.to_numeric(display_points if display_points is not None else (domain or {}).get("points"), errors="coerce")
+def _design_subcategory_contribution_html(subcategory_name, subcategory, display_points=None):
+    points = pd.to_numeric(display_points if display_points is not None else (subcategory or {}).get("points"), errors="coerce")
     if pd.isna(points):
         points = 0
     points = float(points)
     width_pct = min(50.0, abs(points) / 4.0 * 50.0)
     side_class = "positive" if points > 0 else "negative" if points < 0 else "neutral"
-    label = QUALITY_REVIEW_DOMAIN_LABELS.get(str(domain_name), str(domain_name).replace("_", " ").title())
+    label = DESIGN_SUBCATEGORY_LABELS.get(str(subcategory_name), str(subcategory_name).replace("_", " ").title())
     return (
         "<div class='quality-contribution-row'>"
         f"<div class='quality-contribution-label'>{html.escape(label)}</div>"
@@ -8849,31 +8840,31 @@ def _quality_domain_contribution_html(domain_name, domain, display_points=None):
     )
 
 
-def _quality_adjusted_visual_html(assessment):
+def _design_confidence_visual_html(assessment):
     pillars = (assessment or {}).get("pillars") or {}
     if not pillars:
         return ""
 
     sections = []
     for pillar in pillars.values():
-        domains = pillar.get("domains") or {}
-        if not domains:
+        subcategories = pillar.get("design_subcategories") or {}
+        if not subcategories:
             continue
-        pillar_points = pillar.get("points")
+        pillar_points = pillar.get("design_points")
         rows = "".join(
-            _quality_domain_contribution_html(
-                domain_name,
-                domains[domain_name],
+            _design_subcategory_contribution_html(
+                subcategory_name,
+                subcategories[subcategory_name],
             )
-            for domain_name in QUALITY_REVIEW_DOMAIN_LABELS
-            if domain_name in domains
+            for subcategory_name in DESIGN_SUBCATEGORY_LABELS
+            if subcategory_name in subcategories
         )
         if not rows:
             continue
         sections.append(
             "<div class='quality-contribution-group'>"
             "<div class='quality-contribution-group-head'>"
-            f"<span>{html.escape(str(pillar.get('label') or 'Quality Assessment'))}</span>"
+            f"<span>{html.escape(str(pillar.get('label') or 'Design Confidence'))}</span>"
             f"<span style='color:{_quality_points_color(pillar_points)};'>"
             f"{html.escape(_format_quality_points(pillar_points))}</span>"
             "</div>"
@@ -8886,9 +8877,19 @@ def _quality_adjusted_visual_html(assessment):
 
     return (
         "<div class='quality-contribution-chart'>"
-        "<div class='quality-contribution-title'>Quality Review Contributions</div>"
+        "<div class='quality-contribution-title'>Design Confidence Contributions</div>"
         f"{''.join(sections)}"
         "</div>"
+    )
+
+
+def _scenario_review_text_block(title, text):
+    if not isinstance(text, str) or not text.strip():
+        return ""
+    return (
+        "<div class='quality-review-section-title'>"
+        f"{html.escape(title)}</div>"
+        f"<div class='quality-review-text'>{html.escape(text.strip())}</div>"
     )
 
 
@@ -8903,6 +8904,80 @@ def _quality_review_unavailable_card(title, message, muted):
         ),
         unsafe_allow_html=True,
     )
+
+
+def _clean_plot_pillar_label(value):
+    return re.sub(r"^\d+\.\s*", "", str(value or "").strip())
+
+
+def _design_pillar_impacts(trace):
+    assessment = (trace or {}).get("design_confidence_assessment") or {}
+    rows = []
+    for pillar in (assessment.get("pillars") or {}).values():
+        label = str(pillar.get("label") or "Design Confidence")
+        impact = pd.to_numeric(pillar.get("design_points"), errors="coerce")
+        if pd.notna(impact):
+            rows.append({"Pillar": label, "Impact": float(impact)})
+    return rows
+
+
+def _design_subcategory_impacts(trace):
+    assessment = (trace or {}).get("design_confidence_assessment") or {}
+    rows = []
+    for pillar in (assessment.get("pillars") or {}).values():
+        pillar_label = str(pillar.get("label") or "Design Confidence")
+        for subcategory_name, subcategory in (pillar.get("design_subcategories") or {}).items():
+            impact = pd.to_numeric(subcategory.get("points"), errors="coerce")
+            if pd.isna(impact):
+                continue
+            rows.append({
+                "Pillar": pillar_label,
+                "Subcategory": DESIGN_SUBCATEGORY_LABELS.get(
+                    str(subcategory_name),
+                    str(subcategory_name).replace("_", " ").title(),
+                ),
+                "Impact": float(impact),
+                "FeatureDetails": [
+                    f"Rating: {str(subcategory.get('rating') or 'not available').replace('_', ' ').title()}",
+                ],
+            })
+    return rows
+
+
+def _combined_pillar_impacts(completion_pillars, design_pillars):
+    combined = {}
+    order = []
+    for row in completion_pillars or []:
+        label = _clean_plot_pillar_label(row.get("Pillar"))
+        if not label:
+            continue
+        if label not in combined:
+            combined[label] = 0.0
+            order.append(label)
+        impact = pd.to_numeric(row.get("Impact"), errors="coerce")
+        if pd.notna(impact):
+            combined[label] += float(impact)
+    for row in design_pillars or []:
+        label = _clean_plot_pillar_label(row.get("Pillar"))
+        if not label:
+            continue
+        if label not in combined:
+            combined[label] = 0.0
+            order.append(label)
+        impact = pd.to_numeric(row.get("Impact"), errors="coerce")
+        if pd.notna(impact):
+            combined[label] += float(impact)
+    return [{"Pillar": label, "Impact": round(combined[label], 1)} for label in order]
+
+
+def _combined_subcategory_impacts(completion_subcats, design_subcats):
+    rows = [dict(item) for item in (completion_subcats or [])]
+    for item in design_subcats or []:
+        rows.append({
+            **dict(item),
+            "Subcategory": f"Design: {item.get('Subcategory')}",
+        })
+    return rows
 
 
 def _quality_review_diagnostics(trace):
@@ -8960,24 +9035,24 @@ def _quality_review_diagnostics(trace):
             for key, value in diagnostics["workflow_timing"].items()
             if value not in (None, "", [], {})
         }
-    with st.expander("Quality Review timing and diagnostics", expanded=False):
+    with st.expander("Scenario Review timing and diagnostics", expanded=False):
         st.json(diagnostics)
 
 
-def render_quality_review_panel(row):
+def render_scenario_review_report(row, trace=None, snapshot=None):
     if not st.session_state.get("global_edit_mode", False):
         return
 
     nct_id = str(row.get(ID_COL, st.session_state.get("selected_nct_id", "")))
-    snapshot = get_latest_prediction_snapshot(nct_id)
+    snapshot = snapshot or get_latest_prediction_snapshot(nct_id)
     if not snapshot:
         return
     current_snapshot_id = snapshot.get("snapshot_id") or snapshot.get("timestamp")
 
     if snapshot.get("source") == "prerecorded_baseline":
         _quality_review_unavailable_card(
-            "Quality Review",
-            "Quality Review appears after the first scenario prediction.",
+            "Scenario Review",
+            "Scenario Review appears after the first scenario prediction.",
             "The baseline review remains hidden so participants start from the original trial context.",
         )
         return
@@ -8989,64 +9064,65 @@ def render_quality_review_panel(row):
             "pending_operational_assumptions": get_pending_operational_assumption_keys(row),
         }
         _quality_review_unavailable_card(
-            "Quality Review",
-            "Click Predict to update the Quality Review for the current scenario.",
+            "Scenario Review",
+            "Click Review Scenario to update the Scenario Review for the current scenario.",
             "The displayed Completion Score and previous review still reflect the last submitted prediction.",
         )
         with st.expander("Pending scenario diagnostics", expanded=False):
             st.json(pending_diagnostics)
         return
 
-    with st.spinner("Generating Quality Review..."):
-        trace = get_quality_review_trace_for_snapshot(row, snapshot)
+    if trace is None:
+        with st.spinner("Generating Scenario Review..."):
+            trace = get_quality_review_trace_for_snapshot(row, snapshot)
     if not trace:
         return
 
     status = str(trace.get("status") or "unavailable")
-    if trace.get("quality_adjustment") is None or trace.get("final_candidate_score") is None:
+    if trace.get("design_confidence") is None or trace.get("total_scenario_score") is None:
         reason = trace.get("failure_reason") or "; ".join(trace.get("validation_errors") or [])
         if not reason and status == "no_fixture_match":
-            reason = "No mock Quality Review fixture matched this live scenario."
+            reason = "No mock Scenario Review fixture matched this live scenario."
         message = (
-            "Quality Review is not available for this scenario in the current mock-review phase."
+            "Scenario Review is not available for this scenario in the current mock-review phase."
             if trace.get("provider") == PROVIDER_MOCK
-            else "Quality Review is not available for this scenario."
+            else "Scenario Review is not available for this scenario."
         )
         _quality_review_unavailable_card(
-            "Quality Review",
+            "Scenario Review",
             message,
-            reason or "Validation did not produce an adjusted score.",
+            reason or "Validation did not produce Design Confidence and Total Scenario Score.",
         )
         _quality_review_diagnostics(trace)
         if trace.get("provider") != PROVIDER_MOCK:
-            if st.button("Retry Quality Review", key=f"quality_review_retry_{nct_id}_{current_snapshot_id}", type="secondary"):
+            if st.button("Retry Scenario Review", key=f"scenario_review_retry_{nct_id}_{current_snapshot_id}", type="secondary"):
                 st.session_state.pop(get_quality_review_trace_state_key(nct_id), None)
                 st.session_state.pop(get_hidden_baseline_review_trace_state_key(nct_id), None)
                 st.rerun()
         return
 
     completion_score = snapshot.get("score")
-    quality_adjustment = trace.get("quality_adjustment")
-    final_candidate_score = trace.get("final_candidate_score")
+    design_confidence = trace.get("design_confidence")
+    total_scenario_score = trace.get("total_scenario_score")
     participant = (trace.get("validated_review") or {}).get("participant_review") or {}
-    assessment = trace.get("quality_assessment") or {}
+    assessment = trace.get("design_confidence_assessment") or {}
     pillars = assessment.get("pillars") or {}
-    adjusted_visual_html = _quality_adjusted_visual_html(assessment)
+    adjusted_visual_html = _design_confidence_visual_html(assessment)
 
     metric_html = "".join([
         _quality_review_metric("Completion", f"{float(completion_score):.1f}" if completion_score is not None else "N/A"),
         _quality_review_metric(
-            "Adjustment",
-            _format_quality_points(quality_adjustment),
-            _quality_points_color(quality_adjustment),
+            "Design",
+            _format_quality_points(design_confidence),
+            _quality_points_color(design_confidence),
         ),
-        _quality_review_metric("Final", _format_candidate_score(final_candidate_score)),
+        _quality_review_metric("Total", _format_candidate_score(total_scenario_score)),
     ])
 
     pillar_html = ""
     for pillar in pillars.values():
-        label = str(pillar.get("label") or "Quality Assessment")
-        points = pillar.get("points")
+        label = str(pillar.get("label") or "Design Confidence")
+        points = pillar.get("design_points")
         pillar_html += (
             "<div class='quality-review-row'>"
             f"<span>{html.escape(label)}</span>"
@@ -9055,28 +9131,30 @@ def render_quality_review_panel(row):
             "</div>"
         )
 
-    narrative_lines = [
-        participant.get("what_changed"),
-        participant.get("what_the_design_gained"),
-        participant.get("what_the_design_may_have_sacrificed"),
-        participant.get("operational_feasibility_note"),
-        participant.get("challenge_question"),
-    ]
-    narrative_html = "".join(
-        f"<div class='quality-review-text'>{html.escape(str(line))}</div>"
-        for line in narrative_lines
-        if isinstance(line, str) and line.strip()
-    )
+    central_tension = trace.get("central_tension") or (
+        (trace.get("validated_review") or {}).get("tradeoff_review") or {}
+    ).get("central_tension")
+    report_title = "Scenario Review"
+    narrative_html = "".join([
+        _scenario_review_text_block("Completion Outlook", participant.get("overall_completion_comment")),
+        _scenario_review_text_block("Design Confidence", participant.get("overall_design_comment")),
+        _scenario_review_text_block("Central Tension", central_tension),
+        _scenario_review_text_block("Most Impactful Pillar", participant.get("most_impactful_pillar_1")),
+        _scenario_review_text_block("Second Impactful Pillar", participant.get("most_impactful_pillar_2")),
+        _scenario_review_text_block("Interaction", participant.get("interaction_summary")),
+        _scenario_review_text_block("Medical Development Question", participant.get("medical_development_question")),
+        _scenario_review_text_block("Clinical Operations Question", participant.get("clinops_execution_question")),
+    ])
 
     cached_note = narrative_trace_provider_note(trace)
     st.markdown(
         (
             "<div class='quality-review-card'>"
-            "<div class='quality-review-title'>Quality Review</div>"
+            f"<div class='quality-review-title'>{html.escape(report_title)}</div>"
             f"<div class='quality-review-components'>{metric_html}</div>"
+            f"{narrative_html}"
             f"{adjusted_visual_html}"
             f"{pillar_html}"
-            f"{narrative_html}"
             f"<div class='quality-review-muted'>{html.escape(cached_note)}</div>"
             "</div>"
         ),
@@ -9474,6 +9552,38 @@ def get_analysis_result_for_selected_trial(row):
 
 def render_completion_prediction_tab(row):
     res = get_analysis_result_for_selected_trial(row)
+    score_view = st.session_state.get(SCORE_VIEW_STATE_KEY, SCORE_VIEW_COMPLETION)
+    if score_view not in SCORE_VIEW_OPTIONS:
+        score_view = SCORE_VIEW_COMPLETION
+        st.session_state[SCORE_VIEW_STATE_KEY] = score_view
+
+    nct_id = st.session_state.get("selected_nct_id", "")
+    snapshot = get_latest_prediction_snapshot(nct_id) if st.session_state.get("global_edit_mode", False) else None
+    scenario_trace = None
+    can_generate_scenario_review = (
+        st.session_state.get("global_edit_mode", False)
+        and snapshot
+        and snapshot.get("source") != "prerecorded_baseline"
+        and not has_pending_simulation_changes(row)
+    )
+    if can_generate_scenario_review and score_view in (SCORE_VIEW_DESIGN, SCORE_VIEW_TOTAL):
+        with st.spinner("Generating Scenario Review..."):
+            scenario_trace = get_quality_review_trace_for_snapshot(row, snapshot)
+
+    design_pillar_impacts = _design_pillar_impacts(scenario_trace)
+    design_subcat_impacts = _design_subcategory_impacts(scenario_trace)
+    completion_pillar_impacts = (res or {}).get("pillar_impacts") or []
+    completion_subcat_impacts = (res or {}).get("subcat_impacts") or []
+
+    if score_view == SCORE_VIEW_DESIGN:
+        active_pillar_impacts = design_pillar_impacts
+        active_subcat_impacts = design_subcat_impacts
+    elif score_view == SCORE_VIEW_TOTAL:
+        active_pillar_impacts = _combined_pillar_impacts(completion_pillar_impacts, design_pillar_impacts)
+        active_subcat_impacts = _combined_subcategory_impacts(completion_subcat_impacts, design_subcat_impacts)
+    else:
+        active_pillar_impacts = completion_pillar_impacts
+        active_subcat_impacts = completion_subcat_impacts
 
     # Completion tab visual profile.
     # Keep the gauge visually lighter, give the tier label more room,
@@ -9481,9 +9591,9 @@ def render_completion_prediction_tab(row):
     left_box_h = TEXTAREA_HEIGHTS["completion_prediction_left"]
     right_box_h = TEXTAREA_HEIGHTS["completion_prediction_right"]
 
-    gauge_plot_h = 250
+    gauge_plot_h = 220
     bar_plot_h = 238
-    treemap_plot_h = 530
+    treemap_plot_h = 532
 
     left_col, right_col = st.columns([3.25, 3.75], gap="xsmall")
 
@@ -9491,31 +9601,40 @@ def render_completion_prediction_tab(row):
         with st.container(key="completion_prediction_top_row"):
 
             def _render_gauge_panel():
+                with st.container(key="trial_score_mode_selector"):
+                    st.radio(
+                        "Trial score view",
+                        SCORE_VIEW_OPTIONS,
+                        horizontal=True,
+                        key=SCORE_VIEW_STATE_KEY,
+                        label_visibility="collapsed",
+                    )
+
                 if not res:
                     render_box_spacer(left_box_h)
                     return
 
                 score = res.get("score", 0)
-                tier = get_risk_tier(score)
                 delta_html = ""
                 stale_html = ""
 
                 if st.session_state.get("global_edit_mode", False):
-                    snapshot = get_latest_prediction_snapshot(st.session_state.get("selected_nct_id", "")) or {}
-                    previous_score = pd.to_numeric(snapshot.get("previous_score"), errors="coerce")
-                    delta_pct = pd.to_numeric(snapshot.get("score_delta_percent"), errors="coerce")
+                    display_snapshot = snapshot or {}
+                    previous_score = pd.to_numeric(display_snapshot.get("previous_score"), errors="coerce")
+                    delta_pct = pd.to_numeric(display_snapshot.get("score_delta_percent"), errors="coerce")
 
                     if has_pending_simulation_changes(row):
                         stale_html = (
                             '<div class="simulation-stale-notice">'
-                            'Click Predict to update'
+                            'Score update pending'
                             '</div>'
                         )
 
                     if (
-                        snapshot.get("source") in SIMULATION_SNAPSHOT_SCORE_DELTA_SOURCES
+                        display_snapshot.get("source") in SIMULATION_SNAPSHOT_SCORE_DELTA_SOURCES
                         and pd.notna(previous_score)
                         and pd.notna(delta_pct)
+                        and score_view == SCORE_VIEW_COMPLETION
                     ):
                         previous_color = PLOT_BLUE_DEEP_RGB if float(previous_score) >= 50 else PLOT_RED_DEEP_RGB
                         if abs(float(delta_pct)) < 0.0001:
@@ -9539,66 +9658,82 @@ def render_completion_prediction_tab(row):
                             '</div>'
                         )
 
-                st.markdown(
-                    (
-                        '<div class="completion-gauge-help-wrap">'
-                        '<div class="completion-gauge-help-anchor" '
-                        'aria-label="Completion score help" tabindex="0">?</div>'
-                        '<div class="completion-gauge-help-tooltip">'
-                        f'{COMPLETION_GAUGE_HELP_TOOLTIP}'
-                        '</div>'
-                        '</div>'
-                        f'{stale_html}'
-                        f'{delta_html}'
-                    ),
-                    unsafe_allow_html=True
-                )
+                with st.container(key="trial_score_gauge_body"):
+                    st.markdown(
+                        (
+                            f'{stale_html}'
+                            f'{delta_html}'
+                        ),
+                        unsafe_allow_html=True
+                    )
 
-                st.plotly_chart(
-                    plot_success_gauge(score, height=gauge_plot_h),
-                    width="stretch",
-                    config={"displayModeBar": False}
-                )
+                    if score_view == SCORE_VIEW_DESIGN:
+                        design_confidence = (scenario_trace or {}).get("design_confidence")
+                        if design_confidence is None:
+                            render_box_spacer(gauge_plot_h)
+                            tier = "Design Confidence unavailable"
+                        else:
+                            st.plotly_chart(
+                                plot_adjustment_gauge(design_confidence, height=gauge_plot_h),
+                                width="stretch",
+                                config={"displayModeBar": False}
+                            )
+                            tier = f"Design Confidence {_format_quality_points(design_confidence)} pts"
+                    elif score_view == SCORE_VIEW_TOTAL:
+                        total_score = (scenario_trace or {}).get("total_scenario_score")
+                        if total_score is None:
+                            render_box_spacer(gauge_plot_h)
+                            tier = "Total Scenario Score unavailable"
+                        else:
+                            st.plotly_chart(
+                                plot_success_gauge(float(total_score), height=gauge_plot_h),
+                                width="stretch",
+                                config={"displayModeBar": False}
+                            )
+                            tier = get_risk_tier(float(total_score))
+                    else:
+                        st.plotly_chart(
+                            plot_success_gauge(score, height=gauge_plot_h),
+                            width="stretch",
+                            config={"displayModeBar": False}
+                        )
+                        tier = get_risk_tier(score)
 
-                st.markdown(
-                    (
-                        '<div class="completion-tier-row">'
-                            '<div class="completion-tier-inline-wrap">'
-                                f'<span class="completion-tier-text">{tier}</span>'
-                                '<span class="completion-tier-info-wrap">'
-                                    '<span class="completion-tier-info-anchor" '
-                                    'aria-label="Completion score scale" tabindex="0">i</span>'
-                                    '<span class="completion-tier-info-tooltip">'
-                                        f'{COMPLETION_TIER_SCALE_TOOLTIP}'
+                    st.markdown(
+                        (
+                            '<div class="completion-tier-row">'
+                                '<div class="completion-tier-inline-wrap">'
+                                    f'<span class="completion-tier-text">{tier}</span>'
+                                    '<span class="completion-tier-info-wrap">'
+                                        '<span class="completion-tier-info-anchor" '
+                                        'aria-label="Completion score scale" tabindex="0">i</span>'
+                                        '<span class="completion-tier-info-tooltip">'
+                                            f'{COMPLETION_TIER_SCALE_TOOLTIP}'
+                                        '</span>'
                                     '</span>'
-                                '</span>'
+                                '</div>'
                             '</div>'
-                        '</div>'
-                    ),
-                    unsafe_allow_html=True
-                )
-                render_enrollment_assumption_card(row)
-                render_site_assumption_card(row)
-                render_duration_assumption_card(row)
-                render_quality_review_panel(row)
-
+                        ),
+                        unsafe_allow_html=True
+                    )
             render_summary_plot_shell_panel(
                 panel_suffix="completion_prediction_left_top_block",
                 body_renderer=_render_gauge_panel
             )
 
         def _render_bar_panel():
-            if not res or not res.get("pillar_impacts"):
+            if not active_pillar_impacts:
                 render_box_spacer(left_box_h)
                 return
 
             st.plotly_chart(
                 plot_impact_bar(
-                    pd.DataFrame(res["pillar_impacts"]),
+                    pd.DataFrame(active_pillar_impacts),
                     height=bar_plot_h,
                     delta_by_pillar=(
                         get_simulation_pillar_delta_map()
                         if st.session_state.get("global_edit_mode", False)
+                        and score_view == SCORE_VIEW_COMPLETION
                         else None
                     )
                 ),
@@ -9618,7 +9753,7 @@ def render_completion_prediction_tab(row):
     with right_col:
 
         def _render_treemap_panel():
-            if not res or not res.get("subcat_impacts") or not res.get("pillar_impacts"):
+            if not active_subcat_impacts or not active_pillar_impacts:
                 render_box_spacer(right_box_h)
                 return
 
@@ -9642,8 +9777,8 @@ def render_completion_prediction_tab(row):
 
             st.plotly_chart(
                 plot_treemap(
-                    res["subcat_impacts"],
-                    res["pillar_impacts"],
+                    active_subcat_impacts,
+                    active_pillar_impacts,
                     show_values=show_detailed,
                     height=treemap_plot_h
                 ),
@@ -9655,6 +9790,8 @@ def render_completion_prediction_tab(row):
             panel_suffix="completion_prediction_right_block",
             body_renderer=_render_treemap_panel
         )
+
+    render_scenario_review_report(row, trace=scenario_trace, snapshot=snapshot)
 
 # ==========================
 # 5. PAGE RENDERERS

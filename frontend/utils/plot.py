@@ -161,13 +161,106 @@ def plot_success_gauge(score_val, height=220):
 
     fig.add_annotation(
         x=0.5,
-        y=0.25,
+        y=0.27,
         xref="paper",
         yref="paper",
         text=f"<span style='font-weight:700'>{score_val:.1f}</span>",
         showarrow=False,
         font=dict(
             size=max(38, int(height * 0.13)),
+            color=STYLE_CONFIG["font_color"],
+            family=STYLE_CONFIG["font_family"],
+        ),
+        xanchor="center",
+        yanchor="middle",
+        align="center",
+    )
+
+    fig.update_layout(
+        margin=dict(l=26, r=26, t=30, b=5),
+        height=height,
+        paper_bgcolor="white",
+        hovermode=False,
+    )
+    return fig
+
+
+def plot_adjustment_gauge(adjustment, limit=25, height=220):
+    adjustment = float(adjustment or 0)
+    limit = max(float(limit or 25), 1.0)
+    bounded_adjustment = max(-limit, min(limit, adjustment))
+    gauge_value = 50 + (bounded_adjustment / limit) * 25
+
+    steps = []
+    c = STYLE_CONFIG["colors"]
+    gauge_segment_step = (GAUGE_MAX - GAUGE_MIN) / SEGMENT_COUNT
+    gauge_separator_width = gauge_segment_step
+
+    for start in np.arange(GAUGE_MIN, GAUGE_MAX, gauge_segment_step):
+        end = min(start + gauge_segment_step, GAUGE_MAX)
+        mid = (start + end) / 2
+
+        if mid < 25:
+            color = interpolate_color(c["red_deep"], c["red_soft"], mid / 25.0)
+        elif mid < 50:
+            color = interpolate_color(c["red_soft"], c["grey_warm"], (mid - 25) / 25.0)
+        elif mid < 75:
+            color = interpolate_color(c["grey_warm"], c["blue_soft"], (mid - 50) / 25.0)
+        else:
+            color = interpolate_color(c["blue_soft"], c["blue_deep"], (mid - 75) / 25.0)
+
+        steps.append({"range": [start, end], "color": get_rgb_str(color)})
+
+    for sep in [25, 50, 75]:
+        steps.append({
+            "range": [
+                max(GAUGE_MIN, sep - gauge_separator_width / 2),
+                min(GAUGE_MAX, sep + gauge_separator_width / 2),
+            ],
+            "color": "white",
+        })
+
+    fig = go.Figure(go.Indicator(
+        mode="gauge",
+        value=gauge_value,
+        domain={"x": [0.0, 1], "y": [0.0, 0.78]},
+        gauge={
+            "axis": {
+                "range": [GAUGE_MIN, GAUGE_MAX],
+                "tickmode": "array",
+                "tickvals": [25, 50, 75],
+                "ticktext": [f"-{limit:.0f}", "0", f"+{limit:.0f}"],
+                "tickfont": {
+                    "size": 14,
+                    "color": "#475569",
+                    "family": STYLE_CONFIG["font_family"],
+                    "weight": "bold",
+                },
+            },
+            "bar": {"color": "rgba(0,0,0,0)"},
+            "bgcolor": "white",
+            "borderwidth": 0,
+            "steps": steps,
+            "threshold": {
+                "line": {
+                    "color": STYLE_CONFIG["font_color"],
+                    "width": GAUGE_MARKER_LINE_WIDTH,
+                },
+                "thickness": GAUGE_MARKER_THICKNESS,
+                "value": gauge_value,
+            },
+        },
+    ))
+
+    fig.add_annotation(
+        x=0.5,
+        y=0.27,
+        xref="paper",
+        yref="paper",
+        text=f"<span style='font-weight:700'>{adjustment:+.1f} pts</span>",
+        showarrow=False,
+        font=dict(
+            size=max(34, int(height * 0.12)),
             color=STYLE_CONFIG["font_color"],
             family=STYLE_CONFIG["font_family"],
         ),
@@ -415,7 +508,7 @@ def plot_treemap(subcat_impacts, pillar_impacts, show_values=True, height=600):
     ))
 
     fig.update_layout(
-        margin=dict(t=28, l=8, r=8, b=2),
+        margin=dict(t=24, l=6, r=6, b=0),
         height=height,
         font=dict(family=STYLE_CONFIG["font_family"], color=STYLE_CONFIG["font_color"]),
         paper_bgcolor='white',
