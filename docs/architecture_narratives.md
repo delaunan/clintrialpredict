@@ -498,6 +498,28 @@ This is conceptual JSON for planning only, not an implementation contract yet:
     "phase_ml": "Phase 3",
     "endpoint_rigor_ml": "Clinical outcome"
   },
+  "structured_feature_meanings": {
+    "phase_ml": "Clinical development phase, used to interpret evidence expectations, trial purpose, and operational scale.",
+    "endpoint_rigor_ml": "Type and evidentiary rigor of the primary endpoint, such as hard clinical, subjective/PRO, surrogate, or unknown."
+  },
+  "text_context_field_meanings": {
+    "summary_ui": "Brief study summary used to interpret scenario intent and possible structured/text tensions.",
+    "primary_outcomes_ui": "Primary outcome text used to cross-check endpoint intent and evidence interpretation."
+  },
+  "reference_packs": [
+    {
+      "pack_id": "core_clinical_development_v1",
+      "role": "always_on",
+      "tags": ["clinical_development", "phase_intent"],
+      "prompt_safe_summary": "..."
+    },
+    {
+      "pack_id": "strategic_context_2026_v1",
+      "role": "current_context",
+      "tags": ["current_strategy", "access", "governance"],
+      "prompt_safe_summary": "..."
+    }
+  ],
   "operational_assumptions": {
     "planned_enrollment": {
       "value": 600,
@@ -633,7 +655,9 @@ Structured dropdown fields are the primary source of truth. Short text fields ar
 
 Missing or brief free-text fields should not be heavily penalized unless they directly contradict structured trial features or make an otherwise important design claim impossible to interpret.
 
-For structured Trial Features, narrative packets should use taxonomy option keys as the canonical value where an option key exists, and should include human-readable labels separately in `structured_feature_display_values`. For example, `endpoint_structure_ml = MULTI_COMPOSITE` should be paired with display label `Multi/Composite`. Numeric fields keep numeric values. The packet should include `field_dictionary_version` so prompts and providers know which taxonomy meanings and option definitions apply without repeating the full field dictionary in every packet. Narrative field meanings must be generated from the production taxonomy source path in `src/prep/pipeline.py`, not patched only into `models/taxonomy_01.json`, so rerunning `notebooks/production_01.ipynb` preserves them.
+For structured Trial Features, narrative packets should use taxonomy option keys as the canonical value where an option key exists, and should include human-readable labels separately in `structured_feature_display_values`. For example, `endpoint_structure_ml = MULTI_COMPOSITE` should be paired with display label `Multi/Composite`. Numeric fields keep numeric values. The packet should include `field_dictionary_version`, `structured_feature_meanings`, and `text_context_field_meanings` so prompts and providers know which taxonomy meanings and text fields apply without requiring an external lookup or repeating the full field dictionary in every packet. Narrative field meanings must be generated from the production taxonomy source path in `src/prep/pipeline.py`, not patched only into `models/taxonomy_01.json`, so rerunning `notebooks/production_01.ipynb` preserves them.
+
+Reference-pack routing should be active but compact. The packet should include only selected pack IDs, tags, roles, and `Prompt-Safe Summary` text from `frontend/data/docs/narrative_reference_packs`, not full source documents. Default V1 inclusion is `core_clinical_development_v1`, `strategic_context_2026_v1`, and `ich_e8_quality_by_design_v1`. Operational/governance scenarios may add `ich_e6_r3_gcp_v1`; endpoint/statistical scenarios may add `ich_e9_r1_estimands_v1` and `ich_e9_statistical_principles_v1`. Reference packs are secondary context: the scenario packet remains authoritative, and the provider should record used pack IDs in `trace.reference_pack_ids_used`.
 
 Narrative packets should keep scenario edit facts separate from model explanation facts:
 
@@ -663,24 +687,24 @@ Proposed contract:
   },
   "design_confidence_subcategories": {
     "phase_intent_alignment": {
-      "rating": "strong | supportive | balanced | weak | conflicting",
+      "evidence_fields": [],
       "rationale": "...",
-      "evidence_fields": []
+      "rating": "strong | supportive | balanced | weak | conflicting"
     },
     "endpoint_evidence_strength": {
-      "rating": "strong | supportive | balanced | weak | conflicting",
+      "evidence_fields": [],
       "rationale": "...",
-      "evidence_fields": []
+      "rating": "strong | supportive | balanced | weak | conflicting"
     },
     "target_population_alignment": {
-      "rating": "strong | supportive | balanced | weak | conflicting",
+      "evidence_fields": [],
       "rationale": "...",
-      "evidence_fields": []
+      "rating": "strong | supportive | balanced | weak | conflicting"
     },
     "operational_burden_balance": {
-      "rating": "strong | supportive | balanced | weak | conflicting",
+      "evidence_fields": [],
       "rationale": "...",
-      "evidence_fields": []
+      "rating": "strong | supportive | balanced | weak | conflicting"
     }
   },
   "pillar_reviews": {
@@ -706,16 +730,18 @@ Proposed contract:
     }
   },
   "tradeoff_review": {
+    "central_tension": "...",
     "what_completion_gained": "...",
     "what_design_confidence_gained": "...",
     "what_may_have_been_sacrificed": "...",
     "main_uncertainty": "..."
   },
   "participant_review": {
-    "what_changed": "...",
-    "why_completion_outlook_moved": "...",
-    "main_design_signal": "...",
-    "tradeoff_summary": "...",
+    "overall_completion_comment": "...",
+    "overall_design_comment": "...",
+    "most_impactful_pillar_1": "...",
+    "most_impactful_pillar_2": "...",
+    "interaction_summary": "...",
     "medical_development_question": "...",
     "clinops_execution_question": "..."
   },
@@ -746,6 +772,117 @@ Proposed contract:
 ```
 
 `facilitator_view_optional` may be omitted in the first implementation. The minimum provider contract is the Completion Outlook review, Design Confidence subcategories, participant review, continuity fields, and trace fields needed for validation and replay.
+
+### Output Style And Length Requirements
+
+Phase 4 prompt refinement should keep the Scenario Review detailed enough for serious-game discussion but bounded enough for live play and trace review.
+
+Provider output style:
+
+- Use concise clinical-development prose, not marketing language and not technical model jargon.
+- Use conditional language such as `may`, `could`, `appears`, and `would need support`; avoid absolute clinical claims.
+- Do not recommend exact next edits. End with questions that support discussion.
+- Do not mention SHAP, XGBoost, feature impact, model movement, or pillar delta in participant-facing fields.
+- Do not calculate, mention, or estimate Design Confidence points, Total Scenario Score, or subcategory point values.
+
+Expert analysis requirements:
+
+- The provider should write as a senior clinical-development and medical-strategy reviewer evaluating a scenario for serious-game discussion, not as a trial optimizer.
+- The output should make a clear expert judgment about what the scenario appears to strengthen, weaken, or leave uncertain, while preserving conditional language.
+- Participant-facing prose should usually follow `because / however / therefore` logic: identify the packet-supported signal, name the trade-off or limitation, then state the implication for discussion.
+- The analysis should use relevant expert lenses when supported by packet evidence: evidence interpretability, development intent fit, target-population relevance, operational proportionality, shortcut risk, governance and oversight adequacy, and cross-pillar tension between Completion Outlook and Design Confidence.
+- The provider must not present the Completion Score as clinical truth, infer regulatory acceptability, efficacy, safety, or feasibility beyond packet evidence, imply that a higher Completion Score means a better trial design, or turn the review into a prescription for the next edit.
+
+Compact examples:
+
+```text
+Good Completion Outlook comment:
+The Completion Outlook appears to improve because the edited scenario looks easier to complete on the model-supported dimensions. However, that improvement should be read as operational or structural favorability, not as proof that the revised design would answer the development question better.
+
+Good Design Confidence comment:
+The Design Confidence signal is more cautious because the scenario may have reduced evidentiary rigor relative to the stated development intent. Therefore, the team should be ready to defend whether the completion gain is worth the loss of interpretability.
+
+Weak comment to avoid:
+The score went up and the design is better; change the endpoint and population this way next.
+
+Completion improves but evidence weakens:
+The scenario may look more completion-favorable because it simplifies evidence generation or execution. However, if endpoint rigor, comparator credibility, masking, or duration support weaken, the review should say that the completion gain may come with lower decision interpretability.
+
+Completion declines but design improves:
+The scenario may look harder to complete because it increases burden, duration, endpoint ambition, or population specificity. However, if those changes better match the development question, the review should explain why lower completion outlook may coexist with stronger design confidence.
+
+Operational burden increases without evidence gain:
+The scenario may add enrollment, sites, duration, arms, or oversight burden. However, if the packet does not show a matching evidence or population-fit gain, the review should flag proportionality rather than treating operational ambition as inherently positive.
+```
+
+Required field lengths:
+
+- Each Design Confidence subcategory `rationale`: 1 sentence, usually 18-35 words, maximum 45 words.
+- `completion_outlook_review.score_delta_summary`: 1 sentence, maximum 35 words.
+- Each item in `pillar_movement_summary`, `model_supported_drivers`, `cross_pillar_interaction_hypotheses`, and `model_limits`: maximum 25 words.
+- Each `pillar_reviews.*.completion_interpretation`: 1 sentence, maximum 30 words.
+- Each `pillar_reviews.*.design_adjustment_interpretation`: 1 sentence, maximum 30 words.
+- Each `pillar_reviews.*.collateral_impacts` item: maximum 20 words.
+- Each `tradeoff_review` string field: 1 sentence, maximum 35 words.
+- `participant_review.overall_completion_comment`: 1 short paragraph of 2-3 sentences, maximum 85 words.
+- `participant_review.overall_design_comment`: 1 short paragraph of 2-3 sentences, maximum 85 words.
+- `participant_review.most_impactful_pillar_1` and `participant_review.most_impactful_pillar_2`: each 1 short paragraph of 2 sentences, maximum 70 words, naming the pillar and explaining why it matters.
+- `participant_review.interaction_summary`: 1-2 sentences, maximum 55 words, explaining how Completion Outlook and Design Confidence interact.
+- Each participant debate question: one question, maximum 25 words.
+- `continuity.storyline_update`: 1 sentence, maximum 35 words.
+- Trace arrays should contain short field names or compact labels, not full narrative sentences.
+
+Narrative detail target:
+
+- The participant panel should be readable in roughly 75-120 seconds.
+- The full provider JSON should contain enough rationale for audit, but the main participant review should stay concise.
+- Detailed evidence lives in `evidence_fields`, trace, and validation output; participant text should explain the trade-off rather than list every field.
+- The participant answer should be organized in this order: overall Completion Outlook comment, overall Design Confidence comment, two most impactful pillar/interaction comments, then two debate questions.
+- The two pillar comments should focus on the most material dimensions, not all four pillars. They should surface interactions such as completion improved but evidence weakened, completion declined but design became more defensible, or operational burden increased without clear evidence gain.
+- `tradeoff_review.central_tension` should summarize the single most important Completion Outlook versus Design Confidence trade-off in one sentence. It is mainly for audit/storage and can later feed a facilitator or compact participant heading.
+- The two debate questions should be open-ended, not answerable with yes/no, and should not ask whether a specific field should be changed. They should elevate the discussion by asking what evidence standard, strategic rationale, population trade-off, governance burden, or operational proportionality would make the scenario defensible.
+- The medical/development question should focus on evidence value, development decision, endpoint interpretability, or patient relevance. The clinops/execution question should focus on feasibility, access, oversight, data reliability, participant/site burden, or risk-proportionate conduct.
+- When `strategic_context_2026_v1` is available, questions may raise current strategic themes such as access, representativeness, decentralised or digital data collection, estimand clarity, data reliability, and governance proportionality, but only when supported by packet evidence.
+- The review should be substantial enough to support discussion but must not reveal an optimization recipe or tell participants exactly which field to change next.
+
+### Evidence-First Review Sequence
+
+Phase 4 prompt/schema work must make the provider reason in this order for every Design Confidence subcategory:
+
+1. Select packet-supported `evidence_fields`.
+2. Write the subcategory `rationale` from those evidence fields.
+3. Assign the subcategory `rating` that follows from the evidence and rationale.
+
+The provider should not choose a rating first and then search for a justification. This evidence-first sequence is required for output quality and auditability. It makes the rating inspectable: a facilitator or developer can open the stored trace, see which packet fields were cited, read the rationale, and understand why the rating was valid or why the application gave it zero score effect.
+
+The JSON object may be parsed without relying on key order, but prompt examples and response schemas should present fields in the same conceptual order where possible:
+
+```json
+{
+  "evidence_fields": ["endpoint_rigor_ml", "comparator_benchmark_ml"],
+  "rationale": "The endpoint and comparator choices weaken decision interpretability for the stated intent.",
+  "rating": "weak"
+}
+```
+
+Audit rules:
+
+- `evidence_fields` must cite packet fields or allowed packet evidence references.
+- `rationale` must explain how those fields support the rating in clinical-development terms.
+- `rating` must be one of the allowed labels and must not mention point values.
+- Unsupported evidence references are preserved in trace/debug output but have zero scoring effect.
+- A malformed, missing, or incomplete subcategory should suppress Design Confidence and Total Scenario Score for that review rather than silently counting as neutral.
+- Provider traces should store the original output JSON, normalized validated review, validation errors, supported/unsupported evidence fields, app-calculated subcategory points, Design Confidence, Total Scenario Score, prompt/rubric versions, provider/model namespace, and input hash so score rationale can be audited later.
+
+Malformed or incomplete provider responses should be prevented and handled as follows:
+
+- Phase 4 prompt/schema work should make the provider schema strict enough that all required top-level sections and all four Design Confidence subcategories are always requested.
+- The prompt should explicitly require all four subcategories on every review: `phase_intent_alignment`, `endpoint_evidence_strength`, `target_population_alignment`, and `operational_burden_balance`.
+- The mock, prompt, and provider checkers should assert that all four subcategories are present, valid, and evidence-first.
+- The provider wrapper may make one bounded repair/retry attempt for malformed JSON, missing required fields, or incomplete required subcategories. That retry should use the same packet and a clearly recorded retry reason; it must not ask a different provider to reinterpret a clinically valid but unfavorable review.
+- If the retry still fails validation, the UI should show Completion Score only and mark Scenario Review unavailable for the current scenario, with a narrow retry action where live-provider failure or malformed output can be retried.
+- The application should not show a partial Design Confidence score and should not treat a missing subcategory as neutral.
+- A future response-repair step is allowed only if it is deterministic, auditable, uses the same provider output and packet evidence, and cannot invent missing clinical reasoning.
 
 The provider prompt should also include qualitative `rating_guidance_by_subcategory` for the allowed rating labels. This guidance explains labels such as `supportive`, `balanced`, `weak`, and `conflicting` in clinical-development terms so the LLM can choose the right category. It is not model-owned scoring, and it should not expose or ask the provider to calculate point values.
 

@@ -3318,17 +3318,27 @@ def inject_custom_styles():
                 /* Trial Information tab height contract.
                    Only --ui-detail-side-min-h controls the shared bottom line.
                    The textarea heights below tune the internal white field fill. */
-                --ui-detail-summary-h: 165px;
-                --ui-detail-bottom-h: 165px;
-                --ui-detail-conditions-h: 325px;
-                --ui-detail-side-min-h: 412px;
+                --ui-detail-card-gap-x: 8px;
+                --ui-detail-card-gap-y: 6px;
+                --ui-detail-summary-h: 180px;
+                --ui-detail-bottom-h: 180px;
+                --ui-detail-conditions-h: 351px;
+                --ui-detail-side-min-h: 458px;
+                --sim-space: 20px;
+                --sim-text-card-gap-x: 8px;
+                --sim-text-card-gap-y: 6px;
+                --sim-text-summary-h: 205px;
+                --sim-text-bottom-h: 205px;
+                --sim-text-conditions-h: 452px;
+                --sim-text-shell-h: 508px;
 
                 --ui-population-card-h: var(--ui-detail-side-min-h);
                 --ui-population-eligibility-text-h: calc(var(--ui-detail-side-min-h) - 40px);
 
-                --ui-score-card-gap: 14px;
-                --ui-scenario-review-card-gap: -2px;
-                --ui-completion-left-card-h: 250px;
+                --ui-score-card-gap-x: 8px;
+                --ui-score-card-gap-y: 6px;
+                --ui-scenario-review-card-gap: -10px;
+                --ui-completion-left-card-h: 272px;
                 --ui-completion-right-card-h: 558px;
                 --ui-completion-tier-font-size: 1.5rem;
                 --ui-completion-tier-overlap: -32px;
@@ -3341,15 +3351,24 @@ def inject_custom_styles():
 
                     --ui-landing-form-gap: 0.75rem;
 
-                    --ui-detail-summary-h: 220px;
-                    --ui-detail-bottom-h: 215px;
-                    --ui-detail-conditions-h: 432px;
-                    --ui-detail-side-min-h: 539px;
+                    --ui-detail-card-gap-x: 8px;
+                    --ui-detail-card-gap-y: 6px;
+                    --ui-detail-summary-h: 240px;
+                    --ui-detail-bottom-h: 235px;
+                    --ui-detail-conditions-h: 464px;
+                    --ui-detail-side-min-h: 573px;
+                    --sim-space: 22px;
+                    --sim-text-card-gap-x: 8px;
+                    --sim-text-card-gap-y: 6px;
+                    --sim-text-summary-h: 235px;
+                    --sim-text-bottom-h: 230px;
+                    --sim-text-conditions-h: 505px;
+                    --sim-text-shell-h: 563px;
 
                     --ui-population-card-h: var(--ui-detail-side-min-h);
                     --ui-population-eligibility-text-h: calc(var(--ui-detail-side-min-h) - 50px);
 
-                    --ui-completion-left-card-h: 275px;
+                    --ui-completion-left-card-h: 282px;
                     --ui-completion-right-card-h: 569px;
                     --ui-completion-tier-font-size: 1.6rem;
                     --ui-completion-tier-overlap: -34px;
@@ -3363,15 +3382,24 @@ def inject_custom_styles():
 
                     --ui-landing-form-gap: 0.9rem;
 
-                    --ui-detail-summary-h: 275px;
-                    --ui-detail-bottom-h: 255px;
-                    --ui-detail-conditions-h: 528px;
-                    --ui-detail-side-min-h: 644px;
+                    --ui-detail-card-gap-x: 8px;
+                    --ui-detail-card-gap-y: 6px;
+                    --ui-detail-summary-h: 300px;
+                    --ui-detail-bottom-h: 280px;
+                    --ui-detail-conditions-h: 571px;
+                    --ui-detail-side-min-h: 688px;
+                    --sim-space: 25px;
+                    --sim-text-card-gap-x: 8px;
+                    --sim-text-card-gap-y: 6px;
+                    --sim-text-summary-h: 275px;
+                    --sim-text-bottom-h: 265px;
+                    --sim-text-conditions-h: 583px;
+                    --sim-text-shell-h: 647px;
 
                     --ui-population-card-h: var(--ui-detail-side-min-h);
                     --ui-population-eligibility-text-h: calc(var(--ui-detail-side-min-h) - 50px);
 
-                    --ui-completion-left-card-h: 285px;
+                    --ui-completion-left-card-h: 289px;
                     --ui-completion-right-card-h: 584px;
                     --ui-completion-tier-font-size: 1.70rem;
                     --ui-completion-tier-overlap: -35px;
@@ -3385,15 +3413,24 @@ def inject_custom_styles():
 
                     --ui-landing-form-gap: 1rem;
 
-                    --ui-detail-summary-h: 330px;
-                    --ui-detail-bottom-h: 310px;
-                    --ui-detail-conditions-h: 640px;
-                    --ui-detail-side-min-h: 761px;
+                    --ui-detail-card-gap-x: 8px;
+                    --ui-detail-card-gap-y: 6px;
+                    --ui-detail-summary-h: 360px;
+                    --ui-detail-bottom-h: 340px;
+                    --ui-detail-conditions-h: 678px;
+                    --ui-detail-side-min-h: 815px;
+                    --sim-space: 28px;
+                    --sim-text-card-gap-x: 8px;
+                    --sim-text-card-gap-y: 6px;
+                    --sim-text-summary-h: 315px;
+                    --sim-text-bottom-h: 305px;
+                    --sim-text-conditions-h: 666px;
+                    --sim-text-shell-h: 735px;
 
                     --ui-population-card-h: var(--ui-detail-side-min-h);
                     --ui-population-eligibility-text-h: calc(var(--ui-detail-side-min-h) - 55px);
 
-                    --ui-completion-left-card-h: 290px;
+                    --ui-completion-left-card-h: 294px;
                     --ui-completion-right-card-h: 594px;
                     --ui-completion-tier-font-size: 1.66rem;
                     --ui-completion-tier-overlap: -35px;
@@ -3403,15 +3440,22 @@ def inject_custom_styles():
 
             @media (max-width: 1600px) {{
                 :root {{
+                    --ui-detail-conditions-h: 351px;
+                    --ui-detail-side-min-h: 442px;
+                    --ui-completion-left-card-h: 276px;
+                    --sim-text-conditions-h: 435px;
+                    --sim-text-shell-h: 491px;
                     --ui-completion-right-card-h: 578px;
-                    --ui-scenario-review-card-gap: -8px;
+                    --ui-scenario-review-card-gap: -10px;
                     --ui-treemap-hint-y-shift: 12px;
                 }}
             }}
 
             @media (min-width: 1700px) and (max-width: 1799px) and (min-height: 900px) {{
                 :root {{
-                    --ui-detail-side-min-h: 436px;
+                    --ui-detail-side-min-h: 458px;
+                    --sim-text-conditions-h: 452px;
+                    --sim-text-shell-h: 508px;
                     --ui-population-card-h: 456px;
                     --ui-population-eligibility-text-h: 410px;
                 }}
@@ -3610,6 +3654,21 @@ def inject_custom_styles():
                 min-height: 100% !important;
             }}
 
+            .st-key-trial_detail_tabs .st-key-summary_top_row {{
+                margin-bottom: calc(var(--ui-detail-card-gap-y) - 16px) !important;
+            }}
+
+            html body [data-testid="stHorizontalBlock"]:has(.st-key-summary_side_shell_ta_conditions_block):has(.st-key-summary_side_shell_design_block),
+            html body [data-testid="stHorizontalBlock"]:has(.st-key-summary_side_shell_interventions_block) {{
+                gap: var(--ui-detail-card-gap-x) !important;
+                flex-wrap: nowrap !important;
+            }}
+
+            html body [data-testid="stHorizontalBlock"]:has(.st-key-summary_side_shell_ta_conditions_block):has(.st-key-summary_side_shell_design_block) > [data-testid="stColumn"],
+            html body [data-testid="stHorizontalBlock"]:has(.st-key-summary_side_shell_interventions_block) > [data-testid="stColumn"] {{
+                min-width: 0 !important;
+            }}
+
             .st-key-summary_side_inner_study_summary_block [data-baseweb="textarea"],
             .st-key-summary_side_inner_study_summary_block .stTextArea textarea {{
                 min-height: var(--ui-detail-summary-h) !important;
@@ -3656,6 +3715,19 @@ def inject_custom_styles():
                 min-height: var(--ui-completion-right-card-h) !important;
                 height: var(--ui-completion-right-card-h) !important;
                 box-sizing: border-box !important;
+            }}
+
+            html body [data-testid="stHorizontalBlock"]:has(.st-key-summary_side_shell_completion_prediction_left_top_block):has(.st-key-summary_side_shell_completion_prediction_right_block) {{
+                gap: var(--ui-score-card-gap-x) !important;
+                flex-wrap: nowrap !important;
+            }}
+
+            html body [data-testid="stHorizontalBlock"]:has(.st-key-summary_side_shell_completion_prediction_left_top_block):has(.st-key-summary_side_shell_completion_prediction_right_block) > [data-testid="stColumn"] {{
+                min-width: 0 !important;
+            }}
+
+            .st-key-trial_detail_tabs .st-key-completion_prediction_top_row {{
+                margin-bottom: calc(var(--ui-score-card-gap-y) - 16px) !important;
             }}
 
             .st-key-summary_side_shell_completion_prediction_left_top_block .completion-tier-row {{
@@ -3953,7 +4025,6 @@ def inject_custom_styles():
             html body [class*="st-key-simulation_feature_pillar_"] {{
                 --sim-control-h: var(--ui-top-strip-control-h);
                 --sim-label-font: 0.75rem;
-                --sim-space: 20px;              /* card padding and horizontal field gaps */
                 --sim-title-gap: 34px;
                 --sim-title-extra-gap: 22px;
                 --sim-row-gap-inner: 16px;
@@ -4142,6 +4213,53 @@ def inject_custom_styles():
             html body [data-testid="stHorizontalBlock"]:has(.st-key-summary_side_shell_simulation_interventions_block) > [data-testid="stColumn"] {{
                 width: auto !important;
                 min-width: 0 !important;
+            }}
+
+            .st-key-simulation_text_cards_row [data-testid="stHorizontalBlock"],
+            .st-key-simulation_text_cards_bottom_row [data-testid="stHorizontalBlock"] {{
+                gap: var(--sim-text-card-gap-x) !important;
+                flex-wrap: nowrap !important;
+            }}
+
+            .st-key-simulation_text_cards_row [data-testid="stHorizontalBlock"] > [data-testid="stColumn"],
+            .st-key-simulation_text_cards_bottom_row [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] {{
+                min-width: 0 !important;
+            }}
+
+            .st-key-simulation_text_cards_bottom_row {{
+                margin-top: calc(var(--sim-text-card-gap-y) - 16px) !important;
+            }}
+
+            .st-key-summary_side_shell_simulation_conditions_block,
+            .st-key-summary_side_shell_simulation_study_summary_block,
+            .st-key-summary_side_shell_simulation_interventions_block,
+            .st-key-summary_side_shell_simulation_primary_outcomes_block {{
+                box-sizing: border-box !important;
+            }}
+
+            .st-key-summary_side_shell_simulation_conditions_block {{
+                min-height: var(--sim-text-shell-h) !important;
+                height: var(--sim-text-shell-h) !important;
+            }}
+
+            .st-key-summary_side_inner_simulation_conditions_block [data-baseweb="textarea"],
+            .st-key-summary_side_inner_simulation_conditions_block .stTextArea textarea {{
+                min-height: var(--sim-text-conditions-h) !important;
+                height: var(--sim-text-conditions-h) !important;
+            }}
+
+            .st-key-summary_side_inner_simulation_study_summary_block [data-baseweb="textarea"],
+            .st-key-summary_side_inner_simulation_study_summary_block .stTextArea textarea {{
+                min-height: var(--sim-text-summary-h) !important;
+                height: var(--sim-text-summary-h) !important;
+            }}
+
+            .st-key-summary_side_inner_simulation_interventions_block [data-baseweb="textarea"],
+            .st-key-summary_side_inner_simulation_interventions_block .stTextArea textarea,
+            .st-key-summary_side_inner_simulation_primary_outcomes_block [data-baseweb="textarea"],
+            .st-key-summary_side_inner_simulation_primary_outcomes_block .stTextArea textarea {{
+                min-height: var(--sim-text-bottom-h) !important;
+                height: var(--sim-text-bottom-h) !important;
             }}
 
             /* Per-field wrapper that carries the changed-value flag. */
@@ -4498,7 +4616,7 @@ def inject_custom_styles():
                     --sim-icon: 50px;
                     --sim-icon-svg: 28px;
                     --sim-num-field-w: 108px;
-                    --sim-row1-h: 318px;
+                    --sim-row1-h: 378px;
                     --sim-row2-h: 432px;
                 }}
             }}
@@ -4515,7 +4633,7 @@ def inject_custom_styles():
                     --sim-icon: 54px;
                     --sim-icon-svg: 31px;
                     --sim-num-field-w: 116px;
-                    --sim-row1-h: 354px;
+                    --sim-row1-h: 411px;
                     --sim-row2-h: 480px;
                 }}
             }}
@@ -8105,47 +8223,49 @@ def _render_simulation_text_shell_panel(row, label, value, state_suffix, panel_s
 
 
 def render_trial_features_text_cards(row):
-    left_col, middle_col = st.columns([0.82, 3.70], gap="xsmall")
+    with st.container(key="simulation_text_cards_row"):
+        left_col, middle_col = st.columns([0.82, 3.70], gap="xsmall")
 
-    with left_col:
-        _render_simulation_text_shell_panel(
-            row=row,
-            label="Conditions",
-            value=trial_val(row, "conditions_ui"),
-            state_suffix="conditions",
-            panel_suffix="simulation_conditions_block",
-            height=SIMULATION_CONDITIONS_TEXTAREA_HEIGHT,
-        )
-
-    with middle_col:
-        _render_simulation_text_shell_panel(
-            row=row,
-            label="Study Summary",
-            value=trial_val(row, "summary_ui"),
-            state_suffix="study_summary",
-            panel_suffix="simulation_study_summary_block",
-            height=TEXTAREA_HEIGHTS["study_summary"],
-        )
-
-        bottom_left, bottom_right = st.columns(2, gap="xsmall")
-        with bottom_left:
+        with left_col:
             _render_simulation_text_shell_panel(
                 row=row,
-                label="Interventions",
-                value=trial_val(row, "interventions_ui"),
-                state_suffix="interventions",
-                panel_suffix="simulation_interventions_block",
-                height=TEXTAREA_HEIGHTS["interventions"],
+                label="Conditions",
+                value=trial_val(row, "conditions_ui"),
+                state_suffix="conditions",
+                panel_suffix="simulation_conditions_block",
+                height=SIMULATION_CONDITIONS_TEXTAREA_HEIGHT,
             )
-        with bottom_right:
+
+        with middle_col:
             _render_simulation_text_shell_panel(
                 row=row,
-                label="Primary Outcomes",
-                value=trial_val(row, "primary_outcomes_ui"),
-                state_suffix="primary_outcomes",
-                panel_suffix="simulation_primary_outcomes_block",
-                height=TEXTAREA_HEIGHTS["primary_outcomes"],
+                label="Study Summary",
+                value=trial_val(row, "summary_ui"),
+                state_suffix="study_summary",
+                panel_suffix="simulation_study_summary_block",
+                height=TEXTAREA_HEIGHTS["study_summary"],
             )
+
+            with st.container(key="simulation_text_cards_bottom_row"):
+                bottom_left, bottom_right = st.columns(2, gap="xsmall")
+                with bottom_left:
+                    _render_simulation_text_shell_panel(
+                        row=row,
+                        label="Interventions",
+                        value=trial_val(row, "interventions_ui"),
+                        state_suffix="interventions",
+                        panel_suffix="simulation_interventions_block",
+                        height=TEXTAREA_HEIGHTS["interventions"],
+                    )
+                with bottom_right:
+                    _render_simulation_text_shell_panel(
+                        row=row,
+                        label="Primary Outcomes",
+                        value=trial_val(row, "primary_outcomes_ui"),
+                        state_suffix="primary_outcomes",
+                        panel_suffix="simulation_primary_outcomes_block",
+                        height=TEXTAREA_HEIGHTS["primary_outcomes"],
+                    )
 
 
 def render_trial_features_tab(row):

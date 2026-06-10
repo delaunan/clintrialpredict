@@ -229,10 +229,11 @@ def _participant_review(
     clinops_question: str,
 ) -> dict[str, str]:
     return {
-        "what_changed": what_changed,
-        "why_completion_outlook_moved": moved,
-        "main_design_signal": signal,
-        "tradeoff_summary": tradeoff,
+        "overall_completion_comment": moved,
+        "overall_design_comment": signal,
+        "most_impactful_pillar_1": what_changed,
+        "most_impactful_pillar_2": tradeoff,
+        "interaction_summary": tradeoff,
         "medical_development_question": medical_question,
         "clinops_execution_question": clinops_question,
     }
@@ -281,6 +282,7 @@ def _review(
             },
         },
         "tradeoff_review": {
+            "central_tension": "The main tension is whether completion favorability and design defensibility move in the same direction.",
             "what_completion_gained": movement_summary,
             "what_design_confidence_gained": design_gain,
             "what_may_have_been_sacrificed": design_sacrifice,
@@ -797,8 +799,8 @@ CONTRACT_FIXTURES: list[dict[str, Any]] = [
             changed_fields=["strategic_ambition_ml", "endpoint_rigor_ml", "comparator_benchmark_ml"],
             structured_updates={
                 "strategic_ambition_ml": "PIVOTAL_INTENT",
-                "endpoint_rigor_ml": "EXPLORATORY",
-                "comparator_benchmark_ml": "NO_CONTROL",
+                "endpoint_rigor_ml": "UNKNOWN",
+                "comparator_benchmark_ml": "NO_CONTROL_GROUP",
             },
             top_feature_impact_changes=["strategic_ambition_ml", "endpoint_rigor_ml", "comparator_benchmark_ml"],
         ),
@@ -837,8 +839,8 @@ CONTRACT_FIXTURES: list[dict[str, Any]] = [
             score_delta=-4,
             changed_fields=["therapeutic_modality_ml", "administration_complexity_ml", "has_dmc_ml"],
             structured_updates={
-                "therapeutic_modality_ml": "GENE_THERAPY",
-                "administration_complexity_ml": "COMPLEX_PROCEDURAL",
+                "therapeutic_modality_ml": "CELL_GENE_THERAPY",
+                "administration_complexity_ml": "INTENSIVE_MANAGEMENT",
                 "has_dmc_ml": 0,
             },
             top_feature_impact_changes=["therapeutic_modality_ml", "administration_complexity_ml", "has_dmc_ml"],

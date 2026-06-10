@@ -1,121 +1,85 @@
-"""Validation and deterministic scoring for narrative Quality Reviews."""
+"""Validation and deterministic scoring for narrative Scenario Reviews."""
 
 from __future__ import annotations
 
 from copy import deepcopy
 from typing import Any
 
-from src.narratives.contract_fixtures import REQUIRED_REVIEW_DOMAINS
+from src.narratives.contract_fixtures import REQUIRED_DESIGN_SUBCATEGORIES
 from src.narratives.packet_builder import stable_packet_hash
 
-STANDARD_RATINGS = {
+DESIGN_SUBCATEGORY_LABELS = {
+    "phase_intent_alignment": "Phase & Intent Alignment",
+    "endpoint_evidence_strength": "Endpoint & Evidence Strength",
+    "target_population_alignment": "Target Population Alignment",
+    "operational_burden_balance": "Operational Burden Balance",
+}
+
+DESIGN_SUBCATEGORY_PILLARS = {
+    "phase_intent_alignment": "therapeutic_context",
+    "endpoint_evidence_strength": "scientific_challenge",
+    "target_population_alignment": "patient_profile",
+    "operational_burden_balance": "execution_framework",
+}
+
+DESIGN_PILLAR_LABELS = {
+    "therapeutic_context": "Therapeutic Context",
+    "scientific_challenge": "Scientific Challenge",
+    "patient_profile": "Patient Profile",
+    "execution_framework": "Execution Framework",
+}
+
+DESIGN_RATINGS = {
+    "strong",
+    "supportive",
+    "balanced",
+    "weak",
+    "conflicting",
+}
+
+BASE_RATING_POINTS = {
     "strong": 2.0,
-    "supportive": 1.0,
-    "acceptable": 0.0,
+    "supportive": 0.5,
+    "balanced": 0.0,
     "weak": -1.5,
     "conflicting": -3.0,
 }
 
-CHANGE_INTEGRITY_RATINGS = {
-    "improved": 2.0,
-    "partly_improved": 1.0,
-    "neutral": 0.0,
-    "simplified": -1.5,
-    "potential_shortcut": -3.0,
-}
+SUPPORTIVE_RISK_TRADEOFF_POINTS = 1.5
+OPERATIONAL_BENCHMARK_WEAK_POINTS = -2.0
+MULTI_SIGNAL_ENDPOINT_CONFLICT_POINTS = -4.0
 
-TEXT_CONSISTENCY_RATINGS = {
-    "consistent": 0.0,
-    "minor_tension": -0.5,
-    "material_tension": -1.5,
-    "contradiction": -3.0,
-}
-
+# Temporary compatibility alias for prompt/schema code that migrates in Phase 4.
 DOMAIN_RATING_POINTS = {
-    "development_question_fit": STANDARD_RATINGS,
-    "scientific_rigor": STANDARD_RATINGS,
-    "population_relevance": STANDARD_RATINGS,
-    "endpoint_and_comparator_logic": STANDARD_RATINGS,
-    "operational_scale_fit": STANDARD_RATINGS,
-    "change_integrity": CHANGE_INTEGRITY_RATINGS,
-    "text_consistency": TEXT_CONSISTENCY_RATINGS,
+    subcategory_name: deepcopy(BASE_RATING_POINTS)
+    for subcategory_name in sorted(REQUIRED_DESIGN_SUBCATEGORIES)
 }
 
-DOMAIN_DEFAULT_PILLARS = {
-    "scientific_rigor": "evidence_coherence",
-    "endpoint_and_comparator_logic": "evidence_coherence",
-    "development_question_fit": "population_strategy_fit",
-    "population_relevance": "population_strategy_fit",
-    "operational_scale_fit": "execution_plausibility",
-    "change_integrity": "execution_plausibility",
-}
-
-PILLAR_LABELS = {
-    "evidence_coherence": "Evidence Coherence",
-    "population_strategy_fit": "Population & Strategy Fit",
-    "execution_plausibility": "Execution Plausibility",
-}
-
-SUBCATEGORY_CAP_MIN = -3.0
-SUBCATEGORY_CAP_MAX = 2.0
-FINAL_SCORE_MIN = 0
-FINAL_SCORE_MAX = 100
+DESIGN_SUBCATEGORY_MIN = -4.0
+DESIGN_SUBCATEGORY_MAX = 4.0
+TOTAL_SCORE_MIN = 0
+TOTAL_SCORE_MAX = 100
 
 APP_OWNED_SCORE_FIELDS = {
+    "design_confidence",
+    "total_scenario_score",
+    "design_confidence_assessment",
+    "design_confidence_contributions",
+    # Legacy names stay app-owned during the migration.
     "quality_adjustment",
     "final_candidate_score",
     "quality_assessment",
 }
 
 PARTICIPANT_REVIEW_KEYS = {
-    "what_changed",
-    "why_completion_score_may_have_moved",
-    "what_the_design_gained",
-    "what_the_design_may_have_sacrificed",
-    "operational_feasibility_note",
-    "text_consistency_note",
-    "challenge_question",
+    "overall_completion_comment",
+    "overall_design_comment",
+    "most_impactful_pillar_1",
+    "most_impactful_pillar_2",
+    "interaction_summary",
+    "medical_development_question",
+    "clinops_execution_question",
 }
-
-EVIDENCE_FIELD_TOKENS = (
-    "endpoint",
-    "primary_outcomes",
-    "comparator",
-    "placebo",
-    "masking",
-    "allocation",
-    "biomarker",
-    "scientific",
-    "primary_duration",
-)
-
-POPULATION_FIELD_TOKENS = (
-    "population",
-    "adult",
-    "child",
-    "older_adult",
-    "gender",
-    "healthy_volunteers",
-    "line_of_therapy",
-    "patient_severity",
-    "criteria",
-    "summary",
-    "strategic_ambition",
-    "phase",
-    "primary_purpose",
-)
-
-EXECUTION_FIELD_TOKENS = (
-    "operational",
-    "planned_enrollment",
-    "planned_sites",
-    "planned_duration",
-    "administration",
-    "intervention",
-    "number_of_arms",
-    "sponsor",
-    "has_dmc",
-)
 
 
 def _clean_points(value: int | float) -> int | float:
@@ -125,28 +89,6 @@ def _clean_points(value: int | float) -> int | float:
 
 def clamp(value: int | float, minimum: int | float, maximum: int | float) -> int | float:
     return _clean_points(max(minimum, min(maximum, float(value))))
-
-
-def _field_matches(evidence_fields: list[str], tokens: tuple[str, ...]) -> bool:
-    joined = " ".join(str(field).lower() for field in evidence_fields)
-    return any(token in joined for token in tokens)
-
-
-def route_text_consistency_pillar(evidence_fields: list[str]) -> str:
-    """Route text consistency to the most affected Quality Assessment pillar."""
-    if _field_matches(evidence_fields, EVIDENCE_FIELD_TOKENS):
-        return "evidence_coherence"
-    if _field_matches(evidence_fields, POPULATION_FIELD_TOKENS):
-        return "population_strategy_fit"
-    if _field_matches(evidence_fields, EXECUTION_FIELD_TOKENS):
-        return "execution_plausibility"
-    return "evidence_coherence"
-
-
-def _domain_pillar(domain_name: str, evidence_fields: list[str]) -> str:
-    if domain_name == "text_consistency":
-        return route_text_consistency_pillar(evidence_fields)
-    return DOMAIN_DEFAULT_PILLARS[domain_name]
 
 
 def _add_nested_evidence_refs(refs: set[str], prefix: str, value: Any) -> None:
@@ -190,6 +132,14 @@ def _evidence_reference_set(packet: dict[str, Any]) -> set[str]:
             refs.add(f"model_interpretation.{key}")
             if isinstance(value, dict):
                 _add_nested_evidence_refs(refs, f"model_interpretation.{key}", value)
+        for impact in model.get("xgboost_impact_changes") or []:
+            if not isinstance(impact, dict):
+                continue
+            for key in ("name", "pillar", "subcategory"):
+                value = impact.get(key)
+                if value:
+                    refs.add(str(value))
+                    refs.add(f"xgboost_impact_changes.{value}")
 
     iteration = packet.get("iteration_context") or {}
     if isinstance(iteration, dict):
@@ -203,87 +153,97 @@ def _evidence_reference_set(packet: dict[str, Any]) -> set[str]:
                 refs.add(field)
                 refs.add(f"field_changes.{field}")
 
-    impact_changes = model.get("xgboost_impact_changes") if isinstance(model, dict) else []
-    for impact in impact_changes or []:
-        if not isinstance(impact, dict):
-            continue
-        for key in ("name", "pillar", "subcategory"):
-            value = impact.get(key)
-            if value:
-                refs.add(str(value))
-                refs.add(f"xgboost_impact_changes.{value}")
-
     return refs
 
 
-def _review_with_supported_evidence(packet: dict[str, Any], validated_review: dict[str, Any]) -> dict[str, Any]:
+def _supported_evidence(evidence_fields: list[str], packet: dict[str, Any]) -> tuple[list[str], list[str]]:
     supported_refs = _evidence_reference_set(packet)
-    review = deepcopy(validated_review)
-    for domain in (review.get("quality_review_domains") or {}).values():
-        evidence_fields = [str(field) for field in domain.get("evidence_fields") or []]
-        supported = [field for field in evidence_fields if field in supported_refs]
-        unsupported = [field for field in evidence_fields if field not in supported_refs]
-        domain["supported_evidence_fields"] = supported
-        domain["unsupported_evidence_fields"] = unsupported
-        if domain.get("point_effect") and not supported:
-            domain["point_effect"] = 0
-            notes = list(domain.get("validation_notes") or [])
-            notes.append("rating has no point effect because evidence_fields do not reference packet evidence")
-            domain["validation_notes"] = notes
-    return review
+    supported = [field for field in evidence_fields if field in supported_refs]
+    unsupported = [field for field in evidence_fields if field not in supported_refs]
+    return supported, unsupported
 
 
-def _domain_supported_evidence_fields(domain: dict[str, Any]) -> list[str]:
-    if "supported_evidence_fields" in domain:
-        return deepcopy(domain.get("supported_evidence_fields") or [])
-    return deepcopy(domain.get("evidence_fields") or [])
+def _numeric_score_delta(packet: dict[str, Any]) -> float:
+    score_delta = (packet.get("model_interpretation") or {}).get("score_delta")
+    return float(score_delta) if isinstance(score_delta, (int, float)) else 0.0
 
 
-def _validated_domain(domain_name: str, domain: Any) -> tuple[dict[str, Any], list[str]]:
+def _contains_any(evidence_fields: list[str], tokens: tuple[str, ...]) -> bool:
+    joined = " ".join(str(field).lower() for field in evidence_fields)
+    return any(token in joined for token in tokens)
+
+
+def _raw_design_points(subcategory_name: str, rating: str, evidence_fields: list[str], packet: dict[str, Any]) -> float:
+    """Map validated V2 ratings to deterministic Design Confidence points.
+
+    The rating label supplies the base direction and magnitude. A small set of
+    deterministic packet-context modifiers handles the V1 cases where the same
+    rating should be smaller or larger because it moderates Completion Outlook
+    movement or combines multiple explicit conflict signals.
+    """
+    raw_points = BASE_RATING_POINTS.get(rating, 0.0)
+    score_delta = _numeric_score_delta(packet)
+
+    if rating == "strong" and score_delta < 0:
+        return 3.0
+
+    if rating == "supportive":
+        return SUPPORTIVE_RISK_TRADEOFF_POINTS if score_delta < 0 else raw_points
+
+    if rating == "weak":
+        if subcategory_name == "operational_burden_balance" and _contains_any(evidence_fields, ("operational_assumptions",)):
+            return OPERATIONAL_BENCHMARK_WEAK_POINTS
+        return raw_points
+
+    if rating == "conflicting":
+        if subcategory_name == "endpoint_evidence_strength" and _contains_any(
+            evidence_fields,
+            ("endpoint_rigor", "comparator_benchmark", "primary_duration"),
+        ):
+            has_endpoint = _contains_any(evidence_fields, ("endpoint_rigor",))
+            has_comparator = _contains_any(evidence_fields, ("comparator_benchmark",))
+            has_duration = _contains_any(evidence_fields, ("primary_duration",))
+            if has_endpoint and has_comparator and has_duration:
+                return MULTI_SIGNAL_ENDPOINT_CONFLICT_POINTS
+        return raw_points
+
+    return raw_points
+
+
+def _validated_subcategory(subcategory_name: str, subcategory: Any) -> tuple[dict[str, Any], list[str]]:
     errors: list[str] = []
-    if not isinstance(domain, dict):
+    if not isinstance(subcategory, dict):
         return {
             "rating": None,
             "rationale": "",
             "evidence_fields": [],
             "valid": False,
-            "point_effect": 0,
-            "validation_notes": ["domain is not an object"],
-        }, [f"{domain_name}: domain is not an object"]
+            "validation_notes": ["design subcategory is not an object"],
+        }, [f"{subcategory_name}: design subcategory is not an object"]
 
-    rating = domain.get("rating")
-    rationale = domain.get("rationale")
-    evidence_fields = domain.get("evidence_fields")
-
-    allowed = DOMAIN_RATING_POINTS[domain_name]
+    rating = subcategory.get("rating")
+    rationale = subcategory.get("rationale")
+    evidence_fields = subcategory.get("evidence_fields")
     valid = True
-    if rating not in allowed:
-        errors.append(f"{domain_name}: invalid rating {rating!r}")
+
+    if rating not in DESIGN_RATINGS:
+        errors.append(f"{subcategory_name}: invalid rating {rating!r}")
         valid = False
     if not isinstance(rationale, str):
-        errors.append(f"{domain_name}: rationale must be a string")
+        errors.append(f"{subcategory_name}: rationale must be a string")
         rationale = ""
         valid = False
     if not isinstance(evidence_fields, list):
-        errors.append(f"{domain_name}: evidence_fields must be a list")
+        errors.append(f"{subcategory_name}: evidence_fields must be a list")
         evidence_fields = []
         valid = False
-
-    raw_points = allowed.get(str(rating), 0)
-    evidence_required = raw_points != 0
-    has_evidence = bool(evidence_fields)
-    point_effect = raw_points if valid and (has_evidence or not evidence_required) else 0
-    notes = []
-    if valid and evidence_required and not has_evidence:
-        notes.append("rating has no point effect because evidence_fields is empty")
 
     return {
         "rating": rating,
         "rationale": rationale,
-        "evidence_fields": deepcopy(evidence_fields),
+        "evidence_fields": [str(field) for field in evidence_fields],
         "valid": valid,
-        "point_effect": point_effect,
-        "validation_notes": notes,
+        "validation_notes": [],
     }, errors
 
 
@@ -312,60 +272,88 @@ def _validate_object(value: Any, field_name: str, required: bool = True) -> tupl
     return deepcopy(value), []
 
 
-def _quality_contributions(validated_domains: dict[str, dict[str, Any]]) -> dict[str, Any]:
+def _has_complete_design_subcategories(validated_review: dict[str, Any]) -> bool:
+    subcategories = validated_review.get("design_confidence_subcategories") or {}
+    if set(subcategories) != REQUIRED_DESIGN_SUBCATEGORIES:
+        return False
+    return all(subcategory.get("valid") is True for subcategory in subcategories.values())
+
+
+def _score_subcategory(packet: dict[str, Any], subcategory_name: str, subcategory: dict[str, Any]) -> dict[str, Any]:
+    evidence_fields = list(subcategory.get("evidence_fields") or [])
+    supported, unsupported = _supported_evidence(evidence_fields, packet)
+    raw_points = _raw_design_points(
+        subcategory_name,
+        str(subcategory.get("rating")),
+        evidence_fields,
+        packet,
+    )
+    points = raw_points if supported or raw_points == 0 else 0
+    notes = list(subcategory.get("validation_notes") or [])
+    if raw_points and not supported:
+        notes.append("rating has no point effect because evidence_fields do not reference packet evidence")
+    points = clamp(points, DESIGN_SUBCATEGORY_MIN, DESIGN_SUBCATEGORY_MAX)
+    return {
+        **deepcopy(subcategory),
+        "supported_evidence_fields": supported,
+        "unsupported_evidence_fields": unsupported,
+        "raw_points": _clean_points(raw_points),
+        "points": points,
+        "validation_notes": notes,
+    }
+
+
+def _design_contributions(packet: dict[str, Any], validated_subcategories: dict[str, dict[str, Any]]) -> dict[str, Any]:
     pillars = {
         key: {
             "label": label,
-            "raw_points": 0,
-            "points": 0,
-            "domains": {},
+            "completion_outlook_component": None,
+            "design_subcategories": {},
+            "raw_design_points": 0,
+            "design_points": 0,
         }
-        for key, label in PILLAR_LABELS.items()
+        for key, label in DESIGN_PILLAR_LABELS.items()
     }
 
-    for domain_name, domain in validated_domains.items():
-        evidence_fields = domain.get("evidence_fields") or []
-        pillar_key = _domain_pillar(domain_name, evidence_fields)
-        raw_points = float(domain.get("point_effect", 0))
-        subcategory_points = clamp(raw_points, SUBCATEGORY_CAP_MIN, SUBCATEGORY_CAP_MAX)
-        pillars[pillar_key]["domains"][domain_name] = {
-            "rating": domain.get("rating"),
-            "raw_points": raw_points,
-            "points": subcategory_points,
-            "evidence_fields": deepcopy(evidence_fields),
-            "supported_evidence_fields": _domain_supported_evidence_fields(domain),
-            "unsupported_evidence_fields": deepcopy(domain.get("unsupported_evidence_fields") or []),
+    subcategory_results: dict[str, dict[str, Any]] = {}
+    for subcategory_name, subcategory in validated_subcategories.items():
+        scored = _score_subcategory(packet, subcategory_name, subcategory)
+        subcategory_results[subcategory_name] = scored
+        pillar_key = DESIGN_SUBCATEGORY_PILLARS[subcategory_name]
+        pillars[pillar_key]["design_subcategories"][subcategory_name] = {
+            "label": DESIGN_SUBCATEGORY_LABELS[subcategory_name],
+            "rating": scored.get("rating"),
+            "raw_points": scored.get("raw_points"),
+            "points": scored.get("points"),
+            "evidence_fields": deepcopy(scored.get("evidence_fields") or []),
+            "supported_evidence_fields": deepcopy(scored.get("supported_evidence_fields") or []),
+            "unsupported_evidence_fields": deepcopy(scored.get("unsupported_evidence_fields") or []),
+            "validation_notes": deepcopy(scored.get("validation_notes") or []),
         }
-        pillars[pillar_key]["raw_points"] += subcategory_points
+        pillars[pillar_key]["raw_design_points"] += float(scored.get("points") or 0)
 
     for pillar in pillars.values():
-        pillar["points"] = _clean_points(pillar["raw_points"])
+        pillar["design_points"] = _clean_points(pillar["raw_design_points"])
 
-    rating_points = _clean_points(sum(float(pillar["points"]) for pillar in pillars.values()))
-    quality_adjustment = _clean_points(rating_points)
-
+    design_confidence = _clean_points(sum(float(item.get("points") or 0) for item in subcategory_results.values()))
     return {
+        "subcategories": subcategory_results,
         "pillars": pillars,
-        "rating_points": rating_points,
-        "quality_adjustment": quality_adjustment,
+        "design_confidence": design_confidence,
     }
-
-
-def _has_complete_scoring_domains(validated_review: dict[str, Any]) -> bool:
-    domains = validated_review.get("quality_review_domains") or {}
-    if set(domains) != REQUIRED_REVIEW_DOMAINS:
-        return False
-    return all(domain.get("valid") is True for domain in domains.values())
 
 
 def validate_review_json(review: dict[str, Any]) -> dict[str, Any]:
-    """Validate provider/mock review JSON and return normalized review fields."""
+    """Validate provider/mock Scenario Review JSON and return normalized fields."""
     errors: list[str] = []
     if not isinstance(review, dict):
         return {
             "validation_status": "invalid",
             "validation_errors": ["review must be an object"],
-            "quality_review_domains": {},
+            "completion_outlook_review": {},
+            "design_confidence_subcategories": {},
+            "pillar_reviews": {},
+            "tradeoff_review": {},
             "participant_review": {},
             "continuity": {},
             "trace": {},
@@ -374,35 +362,51 @@ def validate_review_json(review: dict[str, Any]) -> dict[str, Any]:
     for field_name in sorted(APP_OWNED_SCORE_FIELDS.intersection(review)):
         errors.append(f"{field_name} is application-owned and ignored if returned by provider")
 
-    domains = review.get("quality_review_domains")
-    validated_domains: dict[str, dict[str, Any]] = {}
-    if not isinstance(domains, dict):
-        errors.append("quality_review_domains must be an object")
+    subcategories = review.get("design_confidence_subcategories")
+    validated_subcategories: dict[str, dict[str, Any]] = {}
+    if not isinstance(subcategories, dict):
+        errors.append("design_confidence_subcategories must be an object")
     else:
-        missing = REQUIRED_REVIEW_DOMAINS.difference(domains)
-        for domain_name in sorted(missing):
-            errors.append(f"{domain_name}: missing required domain")
-        for domain_name in sorted(REQUIRED_REVIEW_DOMAINS):
-            if domain_name not in domains:
+        missing = REQUIRED_DESIGN_SUBCATEGORIES.difference(subcategories)
+        extra = set(subcategories).difference(REQUIRED_DESIGN_SUBCATEGORIES)
+        for subcategory_name in sorted(missing):
+            errors.append(f"{subcategory_name}: missing required design subcategory")
+        for subcategory_name in sorted(extra):
+            errors.append(f"{subcategory_name}: unexpected design subcategory")
+        for subcategory_name in sorted(REQUIRED_DESIGN_SUBCATEGORIES):
+            if subcategory_name not in subcategories:
                 continue
-            validated, domain_errors = _validated_domain(domain_name, domains[domain_name])
-            validated_domains[domain_name] = validated
-            errors.extend(domain_errors)
+            validated, subcategory_errors = _validated_subcategory(
+                subcategory_name,
+                subcategories[subcategory_name],
+            )
+            validated_subcategories[subcategory_name] = validated
+            errors.extend(subcategory_errors)
 
+    completion_outlook_review, completion_errors = _validate_object(
+        review.get("completion_outlook_review"),
+        "completion_outlook_review",
+    )
+    pillar_reviews, pillar_errors = _validate_object(review.get("pillar_reviews"), "pillar_reviews")
+    tradeoff_review, tradeoff_errors = _validate_object(review.get("tradeoff_review"), "tradeoff_review")
     participant_review, participant_errors = _validate_participant_review(review)
-    errors.extend(participant_errors)
-    score_movement_review, score_errors = _validate_object(review.get("score_movement_review"), "score_movement_review")
     continuity, continuity_errors = _validate_object(review.get("continuity"), "continuity")
     trace, trace_errors = _validate_object(review.get("trace"), "trace")
-    errors.extend(score_errors)
+
+    errors.extend(completion_errors)
+    errors.extend(pillar_errors)
+    errors.extend(tradeoff_errors)
+    errors.extend(participant_errors)
     errors.extend(continuity_errors)
     errors.extend(trace_errors)
 
     return {
         "validation_status": "valid" if not errors else "partial",
         "validation_errors": errors,
-        "score_movement_review": score_movement_review,
-        "quality_review_domains": validated_domains,
+        "completion_outlook_review": completion_outlook_review,
+        "design_confidence_subcategories": validated_subcategories,
+        "pillar_reviews": pillar_reviews,
+        "tradeoff_review": tradeoff_review,
         "participant_review": participant_review,
         "continuity": continuity,
         "trace": trace,
@@ -410,47 +414,48 @@ def validate_review_json(review: dict[str, Any]) -> dict[str, Any]:
 
 
 def score_validated_review(packet: dict[str, Any], validated_review: dict[str, Any]) -> dict[str, Any]:
-    """Calculate app-owned Quality Adjustment and Final Candidate Score."""
+    """Calculate app-owned Design Confidence and Total Scenario Score."""
     completion_score = (packet.get("model_interpretation") or {}).get("completion_score")
+    input_hash = packet.get("input_hash") or stable_packet_hash(packet)
     if not isinstance(completion_score, (int, float)):
         return {
             "validation_status": "invalid",
             "validation_errors": ["model_interpretation.completion_score must be numeric"],
-            "quality_adjustment": None,
-            "final_candidate_score": None,
-            "quality_assessment": {},
+            "design_confidence": None,
+            "total_scenario_score": None,
+            "design_confidence_assessment": {},
+            "input_hash": input_hash,
         }
 
-    if not _has_complete_scoring_domains(validated_review):
+    if not _has_complete_design_subcategories(validated_review):
         return {
             "validation_status": validated_review.get("validation_status", "partial"),
             "validation_errors": list(validated_review.get("validation_errors") or []),
-            "quality_adjustment": None,
-            "final_candidate_score": None,
-            "quality_assessment": {},
-            "input_hash": packet.get("input_hash") or stable_packet_hash(packet),
+            "design_confidence": None,
+            "total_scenario_score": None,
+            "design_confidence_assessment": {},
+            "input_hash": input_hash,
         }
 
-    scoring_review = _review_with_supported_evidence(packet, validated_review)
-    contributions = _quality_contributions(scoring_review.get("quality_review_domains") or {})
-    final_candidate_score = clamp(
-        float(completion_score) + contributions["quality_adjustment"],
-        FINAL_SCORE_MIN,
-        FINAL_SCORE_MAX,
+    contributions = _design_contributions(packet, validated_review.get("design_confidence_subcategories") or {})
+    total_scenario_score = clamp(
+        float(completion_score) + float(contributions["design_confidence"]),
+        TOTAL_SCORE_MIN,
+        TOTAL_SCORE_MAX,
     )
 
     return {
         "validation_status": validated_review.get("validation_status", "partial"),
         "validation_errors": list(validated_review.get("validation_errors") or []),
-        "quality_adjustment": contributions["quality_adjustment"],
-        "final_candidate_score": final_candidate_score,
-        "quality_assessment": contributions,
-        "input_hash": packet.get("input_hash") or stable_packet_hash(packet),
+        "design_confidence": contributions["design_confidence"],
+        "total_scenario_score": total_scenario_score,
+        "design_confidence_assessment": contributions,
+        "input_hash": input_hash,
     }
 
 
 def validate_and_score_review(packet: dict[str, Any], review: dict[str, Any]) -> dict[str, Any]:
-    """Validate review JSON and return validated review plus deterministic score fields."""
+    """Validate Scenario Review JSON and return deterministic score fields."""
     validated_review = validate_review_json(review)
     scoring = score_validated_review(packet, validated_review)
     return {

@@ -39,15 +39,15 @@ def _check_fixture(fixture: dict, errors: list[str]) -> None:
     scoring = result.get("scoring") or {}
     if result.get("status") != "reviewed":
         errors.append(f"{fixture_id}: expected reviewed status, got {result.get('status')}")
-    if scoring.get("quality_adjustment") != expected["expected_quality_adjustment"]:
+    if scoring.get("design_confidence") != expected["expected_design_confidence"]:
         errors.append(
-            f"{fixture_id}: expected quality_adjustment {expected['expected_quality_adjustment']}, "
-            f"got {scoring.get('quality_adjustment')}"
+            f"{fixture_id}: expected design_confidence {expected['expected_design_confidence']}, "
+            f"got {scoring.get('design_confidence')}"
         )
-    if scoring.get("final_candidate_score") != expected["expected_final_candidate_score"]:
+    if scoring.get("total_scenario_score") != expected["expected_total_scenario_score"]:
         errors.append(
-            f"{fixture_id}: expected final_candidate_score {expected['expected_final_candidate_score']}, "
-            f"got {scoring.get('final_candidate_score')}"
+            f"{fixture_id}: expected total_scenario_score {expected['expected_total_scenario_score']}, "
+            f"got {scoring.get('total_scenario_score')}"
         )
 
 
@@ -58,18 +58,18 @@ def _check_failure_paths(errors: list[str]) -> None:
     provider_failure = review_packet_with_mock(packet, failure_mode=FAILURE_PROVIDER_ERROR)
     if provider_failure.get("status") != "provider_error":
         errors.append("provider failure mode did not return provider_error status")
-    if provider_failure.get("scoring", {}).get("quality_adjustment") is not None:
-        errors.append("provider failure should not return a Quality Adjustment")
+    if provider_failure.get("scoring", {}).get("design_confidence") is not None:
+        errors.append("provider failure should not return Design Confidence")
 
     malformed = review_packet_with_mock(packet, failure_mode=FAILURE_MALFORMED_JSON)
     if malformed.get("status") != "malformed_response":
         errors.append("malformed failure mode did not return malformed_response status")
     if malformed.get("scoring", {}).get("validation_status") == "valid":
         errors.append("malformed failure mode should not validate as valid")
-    if malformed.get("scoring", {}).get("quality_adjustment") is not None:
-        errors.append("malformed failure mode should not return a Quality Adjustment")
-    if malformed.get("scoring", {}).get("final_candidate_score") is not None:
-        errors.append("malformed failure mode should not return a Final Candidate Score")
+    if malformed.get("scoring", {}).get("design_confidence") is not None:
+        errors.append("malformed failure mode should not return Design Confidence")
+    if malformed.get("scoring", {}).get("total_scenario_score") is not None:
+        errors.append("malformed failure mode should not return Total Scenario Score")
 
     unmatched_packet = dict(packet)
     unmatched_packet["input_hash"] = "unmatched"

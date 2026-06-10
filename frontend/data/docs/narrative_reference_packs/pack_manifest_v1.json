@@ -4,9 +4,11 @@
 "purpose": "Routing manifest for CTPredict narrative reference packs.",
 "runtime_policy": {
 "default_inclusion": [
-"core_clinical_development_v1"
+"core_clinical_development_v1",
+"strategic_context_2026_v1",
+"ich_e8_quality_by_design_v1"
 ],
-"max_specialist_packs": 2,
+"max_specialist_packs": 3,
 "scenario_packet_precedence": true,
 "recommended_runtime_sections": [
 "Prompt-Safe Summary",
@@ -30,6 +32,26 @@
 ],
 "include_when": [
 "Always include unless the prompt must be extremely short."
+]
+},
+{
+"pack_id": "strategic_context_2026_v1",
+"filename": "strategic_context_2026_v1.md",
+"role": "current_context",
+"priority": 95,
+"tags": [
+"current_strategy",
+"decentralized_elements",
+"diversity",
+"digital_data",
+"access",
+"governance",
+"strategic_questions"
+],
+"include_when": [
+"Always include for simulator sessions in 2026 unless the prompt must be extremely short.",
+"The narrative should raise strategic debate questions grounded in current clinical-trial practice.",
+"The scenario concerns access, representativeness, decentralized elements, digital data collection, governance, or strategic defensibility."
 ]
 },
 {

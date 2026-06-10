@@ -36,6 +36,9 @@ def _check_packet(fixture: dict, errors: list[str]) -> None:
         "text_context",
         "structured_features",
         "structured_feature_display_values",
+        "structured_feature_meanings",
+        "text_context_field_meanings",
+        "reference_packs",
         "operational_assumptions",
         "model_interpretation",
         "review_context",
@@ -104,38 +107,38 @@ def _check_packet(fixture: dict, errors: list[str]) -> None:
 def _check_review_continuity_context(errors: list[str]) -> None:
     fixture = next(
         item for item in get_contract_fixtures()
-        if item["fixture_id"] == "model_facing_endpoint_shortcut_v1"
+        if item["fixture_id"] == "score_improves_evidence_weakens_v2"
     )
     baseline_trace = {
         "input_hash": "baseline-input-hash",
         "iteration_id": 0,
         "status": "reviewed",
         "validation_status": "valid",
-        "quality_adjustment": 0,
-        "final_candidate_score": 68,
+        "design_confidence": 0,
+        "total_scenario_score": 68,
         "changed_fields": [],
-        "score_movement": 0,
+        "score_delta": 0,
+        "central_tension": "Baseline central tension.",
         "validated_review": {
-            "score_movement_review": {
-                "summary": "Baseline score reflects an acceptable original design profile.",
+            "completion_outlook_review": {
+                "score_delta_summary": "Baseline score reflects an acceptable original design profile.",
             },
-            "quality_review_domains": {
-                "scientific_rigor": {
-                    "rating": "acceptable",
+            "design_confidence_subcategories": {
+                "endpoint_evidence_strength": {
+                    "rating": "supportive",
                     "rationale": "Baseline endpoint and allocation preserve conventional rigor.",
                     "evidence_fields": ["endpoint_rigor_ml", "allocation_ml"],
                 },
-                "text_consistency": {
-                    "rating": "consistent",
-                    "rationale": "Baseline text aligns with the structured design.",
-                    "evidence_fields": ["summary_ui"],
-                },
             },
+            "tradeoff_review": {"central_tension": "Baseline central tension."},
             "participant_review": {
-                "what_changed": "Baseline",
-                "what_the_design_gained": "Baseline gain",
-                "what_the_design_may_have_sacrificed": "Baseline trade-off",
-                "challenge_question": "Baseline question",
+                "overall_completion_comment": "Baseline completion comment.",
+                "overall_design_comment": "Baseline design comment.",
+                "most_impactful_pillar_1": "Baseline pillar one.",
+                "most_impactful_pillar_2": "Baseline pillar two.",
+                "interaction_summary": "Baseline interaction.",
+                "medical_development_question": "What evidence standard matters most?",
+                "clinops_execution_question": "What operational burden is proportionate?",
             },
             "continuity": {
                 "new_concerns": [],
@@ -148,10 +151,10 @@ def _check_review_continuity_context(errors: list[str]) -> None:
         **baseline_trace,
         "input_hash": "previous-input-hash",
         "iteration_id": 1,
-        "quality_adjustment": -2,
-        "final_candidate_score": 66,
+        "design_confidence": -2,
+        "total_scenario_score": 66,
         "changed_fields": ["operational_assumptions.planned_enrollment"],
-        "score_movement": 0,
+        "score_delta": 0,
         "compact_storyline_memory": "Previous iteration memory",
     }
     packet = fixture["input_packet"]
@@ -176,29 +179,26 @@ def _check_review_continuity_context(errors: list[str]) -> None:
         errors.append("continuity packet missing baseline review context")
     if context.get("previous_review", {}).get("input_hash") != "previous-input-hash":
         errors.append("continuity packet missing previous review context")
-    if context.get("baseline_review", {}).get("quality_adjustment") is not None:
-        errors.append("hidden baseline review context should not expose quality_adjustment")
-    if context.get("baseline_review", {}).get("final_candidate_score") is not None:
-        errors.append("hidden baseline review context should not expose final_candidate_score")
-    if context.get("baseline_review", {}).get("quality_numeric_context") != "hidden_baseline_qualitative_only":
+    if context.get("baseline_review", {}).get("design_confidence") is not None:
+        errors.append("hidden baseline review context should not expose design_confidence")
+    if context.get("baseline_review", {}).get("total_scenario_score") is not None:
+        errors.append("hidden baseline review context should not expose total_scenario_score")
+    if context.get("baseline_review", {}).get("design_numeric_context") != "hidden_baseline_qualitative_only":
         errors.append("hidden baseline review context should be marked qualitative-only")
     if (
-        context.get("baseline_review", {}).get("baseline_score_movement_summary")
+        context.get("baseline_review", {}).get("baseline_completion_outlook_summary")
         != "Baseline score reflects an acceptable original design profile."
     ):
-        errors.append("hidden baseline review context should preserve score movement summary")
-    baseline_domains = context.get("baseline_review", {}).get("baseline_quality_domain_ratings") or {}
-    if baseline_domains.get("scientific_rigor", {}).get("rating") != "acceptable":
-        errors.append("hidden baseline review context should preserve qualitative domain ratings")
+        errors.append("hidden baseline review context should preserve completion outlook summary")
+    baseline_subcategories = context.get("baseline_review", {}).get("baseline_design_subcategory_ratings") or {}
+    if baseline_subcategories.get("endpoint_evidence_strength", {}).get("rating") != "supportive":
+        errors.append("hidden baseline review context should preserve design subcategory ratings")
     if not context.get("baseline_review", {}).get("baseline_strengths"):
         errors.append("hidden baseline review context should include compact baseline strengths")
-    consistency_flags = context.get("baseline_review", {}).get("baseline_consistency_flags") or {}
-    if consistency_flags.get("text_consistency", {}).get("rating") != "consistent":
-        errors.append("hidden baseline review context should preserve consistency flags")
-    if context.get("previous_review", {}).get("quality_adjustment") != -2:
-        errors.append("previous visible review context should preserve quality_adjustment")
-    if context.get("previous_review", {}).get("final_candidate_score") != 66:
-        errors.append("previous visible review context should preserve final_candidate_score")
+    if context.get("previous_review", {}).get("design_confidence") != -2:
+        errors.append("previous visible review context should preserve design_confidence")
+    if context.get("previous_review", {}).get("total_scenario_score") != 66:
+        errors.append("previous visible review context should preserve total_scenario_score")
     if (
         continuity_packet.get("iteration_context", {}).get("compact_storyline_memory")
         != "Previous iteration memory"
@@ -239,8 +239,28 @@ def _check_canonical_values_prefer_compare_values(errors: list[str]) -> None:
         errors.append("packet should prefer taxonomy option key compare_values over model-facing submitted_values")
     if display.get("endpoint_structure_ml") != "Multi/Composite":
         errors.append("packet should preserve human-readable display values")
+    meanings = packet.get("structured_feature_meanings") or {}
+    if "evidence ambition" not in str(meanings.get("phase_ml")):
+        errors.append("packet should include clinical meanings for structured features")
+    if "decision interpretability" not in str(meanings.get("endpoint_rigor_ml")):
+        errors.append("packet should include endpoint-rigor field meaning")
+    text_meanings = packet.get("text_context_field_meanings") or {}
+    if "summary" not in str(text_meanings.get("summary_ui")).lower():
+        errors.append("packet should include meanings for text-context fields")
     if "criteria_ui" in (packet.get("text_context") or {}):
         errors.append("packet should not include criteria_ui by default")
+
+    reference_packs = packet.get("reference_packs") or []
+    pack_ids = {pack.get("pack_id") for pack in reference_packs if isinstance(pack, dict)}
+    for required_pack in (
+        "core_clinical_development_v1",
+        "strategic_context_2026_v1",
+        "ich_e8_quality_by_design_v1",
+    ):
+        if required_pack not in pack_ids:
+            errors.append(f"packet should include default reference pack {required_pack}")
+    if not all((pack.get("prompt_safe_summary") or "").strip() for pack in reference_packs if isinstance(pack, dict)):
+        errors.append("reference packs should include prompt-safe summaries")
 
 
 def _check_field_and_impact_changes(errors: list[str]) -> None:

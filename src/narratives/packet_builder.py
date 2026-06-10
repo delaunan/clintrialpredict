@@ -7,8 +7,10 @@ output, calculate Quality Adjustment, or mutate Streamlit session state.
 from __future__ import annotations
 
 from copy import deepcopy
+from functools import lru_cache
 from hashlib import sha256
 import json
+from pathlib import Path
 from typing import Any
 
 from src.narratives.contract_fixtures import PROMPT_VERSION, RUBRIC_VERSION
@@ -83,6 +85,38 @@ ACTIVE_OPERATIONAL_ASSUMPTION_KEYS = (
     "planned_duration_months",
 )
 
+REFERENCE_PACK_DIR = Path(__file__).resolve().parents[2] / "frontend" / "data" / "docs" / "narrative_reference_packs"
+REFERENCE_PACK_MANIFEST = REFERENCE_PACK_DIR / "pack_manifest_v1.json"
+DEFAULT_REFERENCE_PACK_IDS = (
+    "core_clinical_development_v1",
+    "strategic_context_2026_v1",
+    "ich_e8_quality_by_design_v1",
+)
+OPERATIONAL_REFERENCE_FIELDS = {
+    "administration_complexity_ml",
+    "has_dmc_ml",
+    "number_of_arms_ml",
+    "sponsor_tier_ml",
+    "primary_duration_months_ml",
+    "operational_assumptions.planned_enrollment",
+    "operational_assumptions.planned_sites",
+    "operational_assumptions.planned_duration_months",
+}
+ENDPOINT_STATISTICAL_REFERENCE_FIELDS = {
+    "adaptive_design_ml",
+    "allocation_ml",
+    "biomarker_stratification_ml",
+    "comparator_benchmark_ml",
+    "endpoint_rigor_ml",
+    "endpoint_structure_ml",
+    "has_placebo_ml",
+    "intervention_model_ml",
+    "masking_ml",
+    "number_of_arms_ml",
+    "primary_duration_months_ml",
+    "text_context.primary_outcomes_ui",
+}
+
 
 def json_safe(value: Any) -> Any:
     """Return a deterministic JSON-serializable copy of common app values."""
@@ -111,6 +145,93 @@ def _first_present(*values: Any) -> Any:
 
 def _select_keys(source: dict[str, Any], keys: tuple[str, ...]) -> dict[str, Any]:
     return {key: json_safe(source.get(key)) for key in keys if _first_present(source.get(key)) is not None}
+
+
+@lru_cache(maxsize=1)
+def _taxonomy_field_meanings() -> dict[str, str]:
+    taxonomy_path = Path(__file__).resolve().parents[2] / "models" / "taxonomy_01.json"
+    try:
+        taxonomy = json.loads(taxonomy_path.read_text())
+    except (OSError, json.JSONDecodeError):
+        return {}
+    fields = taxonomy.get("FIELDS") or {}
+    meanings: dict[str, str] = {}
+    for field_id, field in fields.items():
+        meaning = ((field or {}).get("ui") or {}).get("meaning")
+        if isinstance(meaning, str) and meaning.strip():
+            meanings[str(field_id)] = meaning.strip()
+    return meanings
+
+
+def _select_field_meanings(keys: tuple[str, ...]) -> dict[str, str]:
+    meanings = _taxonomy_field_meanings()
+    return {key: meanings[key] for key in keys if key in meanings}
+
+
+def _extract_prompt_safe_summary(text: str) -> str:
+    marker = "## Prompt-Safe Summary"
+    if marker not in text:
+        return ""
+    summary = text.split(marker, 1)[1].strip()
+    if "\n## " in summary:
+        summary = summary.split("\n## ", 1)[0].strip()
+    return " ".join(summary.split())
+
+
+@lru_cache(maxsize=1)
+def _reference_pack_catalog() -> dict[str, dict[str, Any]]:
+    try:
+        manifest = json.loads(REFERENCE_PACK_MANIFEST.read_text())
+    except (OSError, json.JSONDecodeError):
+        return {}
+    catalog: dict[str, dict[str, Any]] = {}
+    for pack in manifest.get("packs", []):
+        if not isinstance(pack, dict):
+            continue
+        pack_id = str(pack.get("pack_id") or "")
+        filename = str(pack.get("filename") or "")
+        if not pack_id or not filename:
+            continue
+        try:
+            text = (REFERENCE_PACK_DIR / filename).read_text()
+        except OSError:
+            continue
+        summary = _extract_prompt_safe_summary(text)
+        if not summary:
+            continue
+        catalog[pack_id] = {
+            "pack_id": pack_id,
+            "role": pack.get("role"),
+            "priority": pack.get("priority", 0),
+            "tags": json_safe(pack.get("tags") or []),
+            "prompt_safe_summary": summary,
+        }
+    return catalog
+
+
+def _selected_reference_pack_ids(changed_fields: list[str]) -> list[str]:
+    selected = list(DEFAULT_REFERENCE_PACK_IDS)
+    changed = set(changed_fields)
+    if changed.intersection(OPERATIONAL_REFERENCE_FIELDS):
+        selected.append("ich_e6_r3_gcp_v1")
+    if changed.intersection(ENDPOINT_STATISTICAL_REFERENCE_FIELDS):
+        selected.extend(["ich_e9_r1_estimands_v1", "ich_e9_statistical_principles_v1"])
+    seen: set[str] = set()
+    unique = []
+    for pack_id in selected:
+        if pack_id not in seen:
+            unique.append(pack_id)
+            seen.add(pack_id)
+    return unique[:5]
+
+
+def _selected_reference_packs(changed_fields: list[str]) -> list[dict[str, Any]]:
+    catalog = _reference_pack_catalog()
+    return [
+        catalog[pack_id]
+        for pack_id in _selected_reference_pack_ids(changed_fields)
+        if pack_id in catalog
+    ]
 
 
 def _merge_present_dicts(*sources: dict[str, Any]) -> dict[str, Any]:
@@ -492,21 +613,46 @@ def _compact_review_context(
     validated = trace.get("validated_review") or {}
     continuity = validated.get("continuity") or {}
     participant = validated.get("participant_review") or {}
+    completion_outlook = validated.get("completion_outlook_review") or {}
+    design_subcategories = validated.get("design_confidence_subcategories") or {}
+    tradeoff_review = validated.get("tradeoff_review") or {}
+    design_confidence = trace.get("design_confidence", trace.get("quality_adjustment"))
+    total_scenario_score = trace.get("total_scenario_score", trace.get("final_candidate_score"))
+    design_assessment = trace.get("design_confidence_assessment") or trace.get("quality_assessment") or {}
     compact = {
         "input_hash": trace.get("input_hash"),
         "iteration_id": trace.get("iteration_id"),
         "status": trace.get("status"),
         "validation_status": trace.get("validation_status"),
-        "quality_adjustment": trace.get("quality_adjustment") if include_quality_scores else None,
-        "final_candidate_score": trace.get("final_candidate_score") if include_quality_scores else None,
-        "quality_numeric_context": "visible_review" if include_quality_scores else "hidden_baseline_qualitative_only",
+        "design_confidence": design_confidence if include_quality_scores else None,
+        "total_scenario_score": total_scenario_score if include_quality_scores else None,
+        "design_numeric_context": "visible_review" if include_quality_scores else "hidden_baseline_qualitative_only",
         "changed_fields": trace.get("changed_fields") or [],
-        "score_movement": trace.get("score_movement"),
+        "score_delta": trace.get("score_delta", trace.get("score_movement")),
+        "completion_outlook_summary": completion_outlook.get("score_delta_summary"),
+        "central_tension": trace.get("central_tension") or tradeoff_review.get("central_tension"),
+        "design_confidence_subcategory_ratings": {
+            subcategory_name: {
+                "rating": subcategory.get("rating"),
+                "rationale": subcategory.get("rationale"),
+                "evidence_fields": subcategory.get("evidence_fields") or [],
+            }
+            for subcategory_name, subcategory in sorted(design_subcategories.items())
+            if isinstance(subcategory, dict)
+        },
+        "design_confidence_contributions": (
+            deepcopy(design_assessment.get("subcategories") or {})
+            if include_quality_scores
+            else {}
+        ),
         "participant_review": {
-            "what_changed": participant.get("what_changed"),
-            "what_the_design_gained": participant.get("what_the_design_gained"),
-            "what_the_design_may_have_sacrificed": participant.get("what_the_design_may_have_sacrificed"),
-            "challenge_question": participant.get("challenge_question"),
+            "overall_completion_comment": participant.get("overall_completion_comment"),
+            "overall_design_comment": participant.get("overall_design_comment"),
+            "most_impactful_pillar_1": participant.get("most_impactful_pillar_1"),
+            "most_impactful_pillar_2": participant.get("most_impactful_pillar_2"),
+            "interaction_summary": participant.get("interaction_summary"),
+            "medical_development_question": participant.get("medical_development_question"),
+            "clinops_execution_question": participant.get("clinops_execution_question"),
         },
         "continuity": {
             "prior_concerns_resolved": continuity.get("prior_concerns_resolved") or [],
@@ -519,58 +665,28 @@ def _compact_review_context(
     }
 
     if not include_quality_scores:
-        score_movement = validated.get("score_movement_review") or {}
-        if not isinstance(score_movement, dict):
-            score_movement = {}
-        domains = validated.get("quality_review_domains") or {}
-        if not isinstance(domains, dict):
-            domains = {}
-        compact["baseline_score_movement_summary"] = score_movement.get("summary")
-        compact["baseline_quality_domain_ratings"] = {
-            domain_name: {
-                "rating": domain.get("rating"),
-                "rationale": domain.get("rationale"),
-                "evidence_fields": domain.get("evidence_fields") or [],
-            }
-            for domain_name, domain in sorted(domains.items())
-            if isinstance(domain, dict)
-        }
+        compact["baseline_completion_outlook_summary"] = completion_outlook.get("score_delta_summary")
+        compact["baseline_design_subcategory_ratings"] = compact["design_confidence_subcategory_ratings"]
         compact["baseline_strengths"] = [
-            domain.get("rationale")
-            for domain in domains.values()
-            if isinstance(domain, dict)
-            and domain.get("rating")
+            subcategory.get("rationale")
+            for subcategory in design_subcategories.values()
+            if isinstance(subcategory, dict)
+            and subcategory.get("rating")
             in {
                 "strong",
                 "supportive",
-                "acceptable",
-                "improved",
-                "partly_improved",
-                "consistent",
             }
         ]
         compact["baseline_concerns"] = [
-            domain.get("rationale")
-            for domain in domains.values()
-            if isinstance(domain, dict)
-            and domain.get("rating") in {
+            subcategory.get("rationale")
+            for subcategory in design_subcategories.values()
+            if isinstance(subcategory, dict)
+            and subcategory.get("rating") in {
                 "weak",
                 "conflicting",
-                "minor_tension",
-                "material_tension",
-                "contradiction",
-                "potential_shortcut",
-                "simplified",
             }
         ]
-        text_consistency = domains.get("text_consistency") if isinstance(domains, dict) else None
-        compact["baseline_consistency_flags"] = {
-            "text_consistency": {
-                "rating": text_consistency.get("rating"),
-                "rationale": text_consistency.get("rationale"),
-                "evidence_fields": text_consistency.get("evidence_fields") or [],
-            }
-        } if isinstance(text_consistency, dict) else {}
+        compact["baseline_consistency_flags"] = {}
 
     return json_safe(compact)
 
@@ -602,6 +718,7 @@ def build_review_packet(
         _snapshot_trial_identity(current_snapshot),
         trial_identity or {},
     )
+    changed_fields = _changed_fields(current_snapshot)
 
     packet = {
         "prompt_version": PROMPT_VERSION,
@@ -615,6 +732,9 @@ def build_review_packet(
             _snapshot_display_values(current_snapshot),
             STRUCTURED_FEATURE_KEYS,
         ),
+        "structured_feature_meanings": _select_field_meanings(STRUCTURED_FEATURE_KEYS),
+        "text_context_field_meanings": _select_field_meanings(TEXT_CONTEXT_KEYS),
+        "reference_packs": _selected_reference_packs(changed_fields),
         "operational_assumptions": _select_keys(
             current_snapshot.get("operational_assumptions") or {},
             ACTIVE_OPERATIONAL_ASSUMPTION_KEYS,
@@ -646,7 +766,7 @@ def build_review_packet(
             "previous_snapshot_id": _snapshot_id(previous_snapshot),
             "current_snapshot_id": _snapshot_id(current_snapshot),
             "iteration_number": _iteration_number(current_snapshot, previous_snapshot),
-            "changed_fields": _changed_fields(current_snapshot),
+            "changed_fields": changed_fields,
             "field_changes": _field_changes(current_snapshot, previous_snapshot, baseline_snapshot),
             "compact_storyline_memory": compact_storyline_memory,
         },

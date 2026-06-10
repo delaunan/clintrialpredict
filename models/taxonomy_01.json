@@ -27,7 +27,7 @@
           ["RESPIRATORY", "Respiratory"],
           ["UNCLASSIFIED", "Other / Unclassified"]
         ],
-        "meaning": "Broad clinical domain used to contextualize disease area, benchmarks, calibration, and trial design interpretation."
+        "meaning": "Broad clinical domain used to contextualize disease biology, standard-of-care expectations, endpoint norms, operational benchmarks, and calibration limits."
       },
       "encoding": "ordinal",
       "mapping": {
@@ -59,7 +59,7 @@
         "pillar": "Therapeutic Context",
         "subgroup": "Therapeutic Area Profile",
         "priority": 1,
-        "meaning": "Specific GBD Level 3 disease or condition category used to anchor clinical context and similar-trial comparisons."
+        "meaning": "Specific GBD Level 3 disease or condition category used to anchor clinical context, patient relevance, feasibility assumptions, and similar-trial comparisons."
       },
       "encoding": "target"
     },
@@ -81,7 +81,7 @@
           ["1", "Yes"],
           ["0", "Unlikely"]
         ],
-        "meaning": "Whether the selected condition should be treated as rare for design, feasibility, and population-context reasoning."
+        "meaning": "Rare-condition flag used to interpret feasible population size, recruitment difficulty, evidence expectations, endpoint maturity, and tolerance for smaller or more targeted designs."
       },
       "encoding": "ordinal",
       "mapping": {
@@ -108,7 +108,7 @@
           ["PHASE2/PHASE3", "Phase 2/3"],
           ["PHASE3", "Phase 3"]
         ],
-        "meaning": "Clinical development phase, used to interpret evidence expectations, trial purpose, and operational scale."
+        "meaning": "Clinical development phase used to judge whether evidence ambition, endpoint maturity, comparator strength, population scope, and operational scale fit the decision being tested."
       },
       "encoding": "ordinal",
       "mapping": {
@@ -131,7 +131,7 @@
           ["PIVOTAL_INTENT", "Confirmatory / Registration"],
           ["UNKNOWN", "Unknown Intent"]
         ],
-        "meaning": "Implied development objective, such as dose characterization, signal detection, or registration-enabling confirmation."
+        "meaning": "Implied development objective, such as dose characterization, signal detection, or registration-enabling confirmation; sets the evidence standard the scenario should be able to defend."
       },
       "encoding": "ordinal",
       "mapping": {
@@ -153,7 +153,7 @@
           ["PRECEDENT_IN_OTHER", "Established in Other"],
           ["PRECEDENT_IN_INDICATION", "Established in Indication"]
         ],
-        "meaning": "Degree of prior precedent for the therapeutic target in the indication or related settings."
+        "meaning": "Degree of prior target precedent used to interpret biological risk, evidentiary burden, and how much uncertainty a scenario can reasonably carry."
       },
       "encoding": "ordinal",
       "mapping": {
@@ -183,7 +183,7 @@
           ["EPIGENETIC_REGULATOR", "Epigenetic Regulator"],
           ["OTHER_PATHWAY", "Other Pathway / Unknown"]
         ],
-        "meaning": "Biological pathway or mechanism class used to contextualize scientific novelty and plausibility."
+        "meaning": "Biological pathway or mechanism class used to contextualize scientific novelty, plausibility, modality risk, and whether the endpoint can credibly capture mechanism-related benefit."
       },
       "encoding": "ordinal",
       "mapping": {
@@ -220,7 +220,7 @@
           ["PEPTIDE_HORMONES", "Peptide Hormones"],
           ["OTHER_MODALITY", "Other Modality"]
         ],
-        "meaning": "Therapeutic product modality, used to interpret mechanism, delivery, evidence expectations, and operational complexity."
+        "meaning": "Therapeutic product modality used to interpret mechanism, delivery burden, safety oversight, endpoint expectations, site capability, and operational complexity."
       },
       "encoding": "ordinal",
       "mapping": {
@@ -249,7 +249,7 @@
           ["FIRST_IN_CLASS", "First-in-Class (Novel)"],
           ["UNKNOWN", "Not Specified"]
         ],
-        "meaning": "Relative innovation level of the intervention, from established/copy to first-in-class novelty."
+        "meaning": "Relative innovation level used to interpret uncertainty, precedent, evidence burden, and whether a scenario requires stronger safeguards or clearer endpoint logic."
       },
       "encoding": "ordinal",
       "mapping": {
@@ -273,7 +273,7 @@
           ["PARALLEL", "Parallel"],
           ["UNKNOWN", "Not Specified"]
         ],
-        "meaning": "Basic study arm structure, such as single-group, crossover, factorial, sequential, or parallel design."
+        "meaning": "Study arm structure used to interpret comparison credibility, bias risk, treatment-effect interpretability, participant burden, and operational complexity."
       },
       "encoding": "ordinal",
       "mapping": {
@@ -297,7 +297,7 @@
           ["SUPPORTIVE_CARE", "Supportive Care"],
           ["UNKNOWN", "Other Purpose / Unknown"]
         ],
-        "meaning": "Primary purpose of the study, such as treatment, prevention, supportive care, or other purpose."
+        "meaning": "Primary study purpose used to judge whether the scenario is asking a treatment, prevention, supportive-care, or other question and whether the design can answer it."
       },
       "encoding": "ordinal",
       "mapping": {
@@ -324,7 +324,7 @@
           ["ADAPTIVE", "Adaptive Design"],
           ["UNKNOWN", "Not Specified"]
         ],
-        "meaning": "Whether the trial uses a static or adaptive design structure."
+        "meaning": "Adaptive or static design structure used to interpret flexibility, governance burden, operating-characteristic expectations, and whether adaptations strengthen or complicate inference."
       },
       "encoding": "ordinal",
       "mapping": {
@@ -345,7 +345,7 @@
           ["SURROGATE", "Surrogate / Biomarker"],
           ["UNKNOWN", "Not Specified / Unknown"]
         ],
-        "meaning": "Type and evidentiary rigor of the primary endpoint, such as hard clinical, subjective/PRO, surrogate, or unknown."
+        "meaning": "Primary endpoint type and evidentiary rigor used to judge clinical meaningfulness, susceptibility to bias, endpoint maturity, and decision interpretability."
       },
       "encoding": "ordinal",
       "mapping": {
@@ -366,7 +366,7 @@
           ["SINGLE_GOAL", "Single Goal"],
           ["UNKNOWN", "Not Specified"]
         ],
-        "meaning": "Whether the primary endpoint structure is single-goal or multi/composite."
+        "meaning": "Single versus multi/composite primary endpoint structure used to interpret clarity of the primary question, multiplicity, component relevance, and endpoint interpretability."
       },
       "encoding": "ordinal",
       "mapping": {
@@ -385,7 +385,7 @@
           ["0", "No"],
           ["1", "Yes"]
         ],
-        "meaning": "Whether participant selection or stratification is based on biomarker status."
+        "meaning": "Biomarker selection or stratification flag used to interpret enrichment strategy, treatment-effect clarity, external validity, assay burden, and recruitment feasibility."
       },
       "encoding": "ordinal",
       "mapping": {
@@ -412,7 +412,7 @@
           ["BIOTECH", "Biotech and Emerging Pharma"],
           ["UNKNOWN", "Unknown Sponsor Tier"]
         ],
-        "meaning": "Sponsor scale/type category used as execution-capability and trial-footprint context."
+        "meaning": "Sponsor scale/type proxy used only as execution-capability and trial-footprint context; it should not be treated as a direct judgment of scientific quality."
       },
       "encoding": "ordinal",
       "mapping": {
@@ -435,7 +435,7 @@
           ["TRIPLE", "Triple Blind"],
           ["QUADRUPLE", "Quadruple Blind"]
         ],
-        "meaning": "Masking/blinding approach used to control assessment or performance bias."
+        "meaning": "Masking/blinding approach used to interpret bias control, endpoint subjectivity, operational feasibility, and confidence that observed effects are not assessment-driven."
       },
       "encoding": "ordinal",
       "mapping": {
@@ -459,7 +459,7 @@
           ["NON-RANDOMIZED", "Non-Randomized"],
           ["UNKNOWN", "Not Specified / Not Applicable"]
         ],
-        "meaning": "Whether participants are assigned by randomized, non-randomized, or unspecified allocation."
+        "meaning": "Allocation method used to interpret comparison credibility, selection bias risk, treatment-effect interpretability, and whether the design supports causal inference."
       },
       "encoding": "ordinal",
       "mapping": {
@@ -481,7 +481,7 @@
           ["0", "No"],
           ["1", "Yes"]
         ],
-        "meaning": "Whether the trial includes a Data Monitoring Committee or similar oversight structure."
+        "meaning": "Data Monitoring Committee or similar oversight flag used to interpret safety governance, risk proportionality, vulnerable-population protection, and complex-modality oversight."
       },
       "encoding": "ordinal",
       "mapping": {
@@ -506,7 +506,7 @@
           ["0", "No"],
           ["1", "Yes"]
         ],
-        "meaning": "Whether the structured trial scenario includes placebo control exposure."
+        "meaning": "Placebo-control flag used to interpret assay sensitivity, ethical acceptability, comparator credibility, endpoint interpretability, and patient-burden trade-offs."
       },
       "encoding": "ordinal",
       "mapping": {
@@ -533,7 +533,7 @@
           ["ACTIVE_LEGACY_STANDARD", "Active (Legacy Standard)"],
           ["ACTIVE_MODERN_STANDARD", "Active (Modern Standard)"]
         ],
-        "meaning": "Comparator/control strategy used as benchmark context for evidence interpretation."
+        "meaning": "Comparator or control strategy used to interpret whether the treatment effect can be meaningfully judged against current care, placebo, historical context, or no control."
       },
       "encoding": "ordinal",
       "mapping": {
@@ -550,7 +550,7 @@
         "pillar": "Execution Framework",
         "subgroup": "Trial Complexity Footprint",
         "priority": 24.0,
-        "meaning": "Model-facing duration in months for the longest primary endpoint timing horizon."
+        "meaning": "Primary endpoint timing horizon used to interpret endpoint maturity, follow-up burden, attrition risk, operational feasibility, and whether duration fits the outcome being measured."
       },
       "encoding": "numeric"
     },
@@ -560,7 +560,7 @@
         "pillar": "Execution Framework",
         "subgroup": "Trial Complexity Footprint",
         "priority": 22.0,
-        "meaning": "Number of intervention/comparator arms in the structured trial design."
+        "meaning": "Number of intervention or comparator arms used to interpret evidentiary breadth, multiplicity, recruitment burden, site complexity, and whether added arms answer a necessary question."
       },
       "encoding": "numeric"
     },
@@ -576,7 +576,7 @@
           ["INTENSIVE_MANAGEMENT", "Intensive (Hospitalized)"],
           ["UNKNOWN", "Not Specified"]
         ],
-        "meaning": "Administration and delivery complexity of the intervention strategy."
+        "meaning": "Administration and delivery complexity used to interpret site capability, participant burden, safety oversight, adherence risk, and whether operational burden is evidence-justified."
       },
       "encoding": "ordinal",
       "mapping": {
@@ -621,7 +621,7 @@
           ["ACUTE_CRITICAL", "Acute / Critical"],
           ["ADVANCED_METASTATIC", "Advanced / Metastatic"]
         ],
-        "meaning": "Clinical severity or burden of the target patient population."
+        "meaning": "Clinical severity or burden used to interpret acceptable risk, endpoint relevance, ethical threshold, recruitment urgency, and proportionality of trial burden."
       },
       "encoding": "ordinal",
       "mapping": {
@@ -647,7 +647,7 @@
           ["REFRACTORY_RELAPSED", "Refractory / Relapsed"],
           ["UNKNOWN", "Not Applicable or Not Specified"]
         ],
-        "meaning": "Treatment-line setting or disease-course position targeted by the trial."
+        "meaning": "Treatment-line or disease-course setting used to interpret unmet need, comparator expectations, endpoint relevance, prior-treatment heterogeneity, and patient-selection fit."
       },
       "encoding": "ordinal",
       "mapping": {
@@ -672,7 +672,7 @@
           ["MALE", "Male Only"],
           ["UNKNOWN", "Not Specified"]
         ],
-        "meaning": "Gender eligibility scope for trial participation."
+        "meaning": "Gender eligibility scope used to interpret target-population fit, generalizability, exclusion risk, and whether restrictions are clinically justified by the scenario."
       },
       "encoding": "ordinal",
       "mapping": {
@@ -692,7 +692,7 @@
           ["0", "Patients Only"],
           ["1", "Healthy Volunteers Accepted"]
         ],
-        "meaning": "Whether the trial enrolls patients only or allows healthy volunteers."
+        "meaning": "Healthy-volunteer inclusion flag used to interpret phase appropriateness, safety tolerance, endpoint relevance, and whether population choice fits the development question."
       },
       "encoding": "ordinal",
       "mapping": {
@@ -712,7 +712,7 @@
           ["0", "Excluded"],
           ["UNKNOWN", "Not Specified"]
         ],
-        "meaning": "Whether adult participants are included in the structured eligibility profile."
+        "meaning": "Adult eligibility flag used to interpret population fit, generalizability, ethical threshold, and whether excluding or including adults is justified by the indication."
       },
       "encoding": "ordinal",
       "mapping": {
@@ -732,7 +732,7 @@
           ["0", "Excluded"],
           ["UNKNOWN", "Not Specified"]
         ],
-        "meaning": "Whether pediatric participants are included in the structured eligibility profile."
+        "meaning": "Pediatric eligibility flag used to interpret ethical safeguards, dosing uncertainty, endpoint relevance, recruitment feasibility, and whether pediatric inclusion fits the evidence objective."
       },
       "encoding": "ordinal",
       "mapping": {
@@ -752,7 +752,7 @@
           ["0", "Excluded"],
           ["UNKNOWN", "Not Specified"]
         ],
-        "meaning": "Whether older adult participants are included in the structured eligibility profile."
+        "meaning": "Older-adult eligibility flag used to interpret representativeness, frailty or comorbidity relevance, safety monitoring needs, and whether exclusions weaken intended-use evidence."
       },
       "encoding": "ordinal",
       "mapping": {

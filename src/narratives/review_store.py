@@ -91,6 +91,32 @@ def _build_trace(
     iteration_context = packet.get("iteration_context") or {}
     scoring = review_result.get("scoring") or {}
     validated_review = review_result.get("validated_review")
+    design_confidence = scoring.get("design_confidence")
+    total_scenario_score = scoring.get("total_scenario_score")
+    design_confidence_assessment = deepcopy(scoring.get("design_confidence_assessment") or {})
+    provider_trace = (validated_review or {}).get("trace") or {}
+    tradeoff_review = (validated_review or {}).get("tradeoff_review") or {}
+    reference_pack_ids_available = [
+        pack.get("pack_id")
+        for pack in packet.get("reference_packs") or []
+        if isinstance(pack, dict) and pack.get("pack_id")
+    ]
+    available_reference_pack_set = set(reference_pack_ids_available)
+    raw_reference_pack_ids_used = [
+        str(pack_id)
+        for pack_id in provider_trace.get("reference_pack_ids_used") or []
+        if str(pack_id).strip()
+    ]
+    supported_reference_pack_ids_used = [
+        pack_id
+        for pack_id in raw_reference_pack_ids_used
+        if pack_id in available_reference_pack_set
+    ]
+    unsupported_reference_pack_ids_used = [
+        pack_id
+        for pack_id in raw_reference_pack_ids_used
+        if pack_id not in available_reference_pack_set
+    ]
     input_hash = str(packet.get("input_hash") or scoring.get("input_hash") or "")
     iteration_id = iteration_context.get("iteration_number")
     trace = {
@@ -115,13 +141,26 @@ def _build_trace(
         "validated_review": deepcopy(validated_review),
         "validation_status": scoring.get("validation_status"),
         "validation_errors": deepcopy(scoring.get("validation_errors") or []),
-        "quality_adjustment": scoring.get("quality_adjustment"),
-        "final_candidate_score": scoring.get("final_candidate_score"),
-        "quality_assessment": deepcopy(scoring.get("quality_assessment") or {}),
+        "design_confidence": design_confidence,
+        "total_scenario_score": total_scenario_score,
+        "design_confidence_assessment": design_confidence_assessment,
+        "design_confidence_subcategories": deepcopy(
+            (validated_review or {}).get("design_confidence_subcategories") or {}
+        ),
+        "design_confidence_contributions": deepcopy(design_confidence_assessment.get("subcategories") or {}),
+        "central_tension": tradeoff_review.get("central_tension"),
+        "reference_pack_ids_available": reference_pack_ids_available,
+        "reference_pack_ids_used": supported_reference_pack_ids_used,
+        "unsupported_reference_pack_ids_used": unsupported_reference_pack_ids_used,
+        # Temporary aliases for the old simulator panel until Phase 6 migrates UI labels.
+        "quality_adjustment": design_confidence,
+        "final_candidate_score": total_scenario_score,
+        "quality_assessment": design_confidence_assessment,
         "failure_reason": review_result.get("failure_reason"),
         "clarification_issues": deepcopy(review_result.get("clarification_issues") or []),
         "user_clarifications": deepcopy((packet.get("clarification_context") or {}).get("user_clarifications") or []),
         "changed_fields": deepcopy(iteration_context.get("changed_fields") or []),
+        "score_delta": (packet.get("model_interpretation") or {}).get("score_delta"),
         "score_movement": (packet.get("model_interpretation") or {}).get("score_delta"),
         "compact_storyline_memory": compact_storyline_from_trace({"validated_review": validated_review}),
     }
@@ -266,9 +305,11 @@ def replay_or_review_with_provider(
             "scoring": {
                 "validation_status": previous_session_trace.get("validation_status"),
                 "validation_errors": deepcopy(previous_session_trace.get("validation_errors") or []),
-                "quality_adjustment": previous_session_trace.get("quality_adjustment"),
-                "final_candidate_score": previous_session_trace.get("final_candidate_score"),
-                "quality_assessment": deepcopy(previous_session_trace.get("quality_assessment") or {}),
+                "design_confidence": previous_session_trace.get("design_confidence"),
+                "total_scenario_score": previous_session_trace.get("total_scenario_score"),
+                "design_confidence_assessment": deepcopy(
+                    previous_session_trace.get("design_confidence_assessment") or {}
+                ),
                 "input_hash": packet.get("input_hash"),
             },
         }

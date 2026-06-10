@@ -1,4 +1,4 @@
-"""Thin provider boundary for narrative Quality Review calls.
+"""Thin provider boundary for narrative Scenario Review calls.
 
 The application owns packet construction, validation/scoring, caching, storage,
 and UI rendering. This module owns provider invocation and response
@@ -36,6 +36,7 @@ GEMINI_PRIMARY_THINKING_LEVEL = "medium"
 GEMINI_RETRY_THINKING_LEVEL = "low"
 GEMINI_RETRY_OUTPUT_TOKENS = 16000
 GEMINI_MALFORMED_JSON_RETRY_ATTEMPTS = 1
+PROVIDER_VALIDATION_RETRY_ATTEMPTS = 1
 FAILURE_UNSUPPORTED_PROVIDER = "unsupported_provider"
 FAILURE_PROVIDER_UNAVAILABLE = "provider_unavailable"
 FAILURE_PROVIDER_ERROR = "provider_error"
@@ -47,9 +48,9 @@ def _unavailable_scoring(packet: dict[str, Any], message: str) -> dict[str, Any]
     return {
         "validation_status": "unavailable",
         "validation_errors": [message],
-        "quality_adjustment": None,
-        "final_candidate_score": None,
-        "quality_assessment": {},
+        "design_confidence": None,
+        "total_scenario_score": None,
+        "design_confidence_assessment": {},
         "input_hash": packet.get("input_hash"),
     }
 
@@ -225,13 +226,13 @@ def _score_provider_review(
 ) -> dict[str, Any]:
     scored = validate_and_score_review(packet, review)
     scoring = scored["scoring"]
-    is_valid = scoring.get("validation_status") == "valid" and scoring.get("quality_adjustment") is not None
+    is_valid = scoring.get("validation_status") == "valid" and scoring.get("design_confidence") is not None
     if not is_valid:
         scoring = {
             **scoring,
-            "quality_adjustment": None,
-            "final_candidate_score": None,
-            "quality_assessment": {},
+            "design_confidence": None,
+            "total_scenario_score": None,
+            "design_confidence_assessment": {},
         }
     return {
         "review_needed": True,
@@ -240,11 +241,80 @@ def _score_provider_review(
         "model_name": model_name,
         "provider_metadata": provider_metadata,
         "status": STATUS_REVIEWED if is_valid else FAILURE_MALFORMED_RESPONSE,
-        "failure_reason": None if is_valid else "Provider review JSON did not satisfy the Quality Review contract.",
+        "failure_reason": None if is_valid else "Provider review JSON did not satisfy the Scenario Review contract.",
         "review": review,
         "validated_review": scored["validated_review"],
         "scoring": scoring,
     }
+
+
+def _score_openai_review_with_validation_retry(
+    packet: dict[str, Any],
+    *,
+    settings: ProviderSettings,
+    payload: dict[str, Any],
+    config: NarrativeProviderConfig,
+    metadata: dict[str, Any],
+    initial_review: dict[str, Any] | None,
+    retry_reason: str,
+) -> dict[str, Any]:
+    result = None
+    if initial_review is not None:
+        result = _score_provider_review(
+            packet,
+            provider=PROVIDER_OPENAI,
+            model_name=settings.model,
+            review=initial_review,
+            provider_metadata=metadata,
+        )
+        if result.get("status") != FAILURE_MALFORMED_RESPONSE:
+            return result
+
+    metadata["validation_retry_reason"] = result.get("failure_reason") if result else retry_reason
+    for retry_attempt in range(1, PROVIDER_VALIDATION_RETRY_ATTEMPTS + 1):
+        metadata["validation_retry_attempts"] = retry_attempt
+        try:
+            retry_response = requests.post(
+                OPENAI_RESPONSES_URL,
+                headers={
+                    "Authorization": f"Bearer {settings.api_key}",
+                    "Content-Type": "application/json",
+                },
+                json=payload,
+                timeout=config.timeout_seconds,
+            )
+            retry_response.raise_for_status()
+            retry_payload = retry_response.json()
+            retry_text = _openai_response_text(retry_payload)
+            metadata["validation_retry_http_status"] = retry_response.status_code
+            metadata["validation_retry_response_text_length"] = len(retry_text)
+            retry_review = _parse_json_object(retry_text)
+            metadata["validation_retry_parsed_json_object"] = isinstance(retry_review, dict)
+        except Exception as exc:
+            metadata["validation_retry_error_type"] = exc.__class__.__name__
+            break
+        if retry_review is None:
+            continue
+        result = _score_provider_review(
+            packet,
+            provider=PROVIDER_OPENAI,
+            model_name=settings.model,
+            review=retry_review,
+            provider_metadata=metadata,
+        )
+        if result.get("status") != FAILURE_MALFORMED_RESPONSE:
+            return result
+
+    if result is not None:
+        return result
+    return _failure_result(
+        packet,
+        provider=PROVIDER_OPENAI,
+        model_name=settings.model,
+        status=FAILURE_MALFORMED_RESPONSE,
+        message=retry_reason,
+        provider_metadata=metadata,
+    )
 
 
 def _max_attempts(config: NarrativeProviderConfig) -> int:
@@ -339,21 +409,14 @@ def _call_openai_provider(
     metadata["response_text_length"] = len(response_text)
     review = _parse_json_object(response_text)
     metadata["parsed_json_object"] = isinstance(review, dict)
-    if review is None:
-        return _failure_result(
-            packet,
-            provider=PROVIDER_OPENAI,
-            model_name=settings.model,
-            status=FAILURE_MALFORMED_RESPONSE,
-            message="OpenAI provider response was not a JSON object.",
-            provider_metadata=metadata,
-        )
-    return _score_provider_review(
+    return _score_openai_review_with_validation_retry(
         packet,
-        provider=PROVIDER_OPENAI,
-        model_name=settings.model,
-        review=review,
-        provider_metadata=metadata,
+        settings=settings,
+        payload=payload,
+        config=config,
+        metadata=metadata,
+        initial_review=review,
+        retry_reason="OpenAI provider response was not a JSON object.",
     )
 
 
@@ -479,13 +542,62 @@ def _call_gemini_provider(
             message="Gemini provider response was not a JSON object.",
             provider_metadata=metadata,
         )
-    return _score_provider_review(
+    result = _score_provider_review(
         packet,
         provider=PROVIDER_GEMINI,
         model_name=settings.model,
         review=review,
         provider_metadata=metadata,
     )
+    if result.get("status") != FAILURE_MALFORMED_RESPONSE or client is None or generation_config is None:
+        return result
+
+    metadata["validation_retry_reason"] = result.get("failure_reason")
+    retry_generation_config = types.GenerateContentConfig(
+        temperature=config.temperature,
+        max_output_tokens=max(GEMINI_RETRY_OUTPUT_TOKENS, max_output_tokens),
+        seed=config.seed,
+        response_mime_type="application/json",
+        response_schema=gemini_response_schema(),
+        thinking_config=types.ThinkingConfig(thinking_level=GEMINI_RETRY_THINKING_LEVEL),
+    )
+    metadata["validation_retry_controls"] = {
+        "max_output_tokens": max(GEMINI_RETRY_OUTPUT_TOKENS, max_output_tokens),
+        "thinking_level": GEMINI_RETRY_THINKING_LEVEL,
+    }
+    for retry_attempt in range(1, PROVIDER_VALIDATION_RETRY_ATTEMPTS + 1):
+        retry_started_at = time.monotonic()
+        try:
+            response = client.models.generate_content(
+                model=settings.model,
+                contents=prompt,
+                config=retry_generation_config,
+            )
+        except Exception as exc:
+            metadata["validation_retry_error_type"] = exc.__class__.__name__
+            break
+        metadata["validation_retry_attempts"] = retry_attempt
+        metadata["validation_retry_latency_ms"] = int(round((time.monotonic() - retry_started_at) * 1000))
+        parsed_payload = getattr(response, "parsed", None)
+        response_text = str(getattr(response, "text", "") or "")
+        _record_gemini_response_metadata(metadata, response)
+        metadata["validation_retry_parsed_payload_type"] = type(parsed_payload).__name__ if parsed_payload is not None else None
+        metadata["validation_retry_response_text_length"] = len(response_text)
+        retry_review = parsed_payload if isinstance(parsed_payload, dict) else _parse_json_object(response_text)
+        metadata["validation_retry_parsed_json_object"] = isinstance(retry_review, dict)
+        metadata["latency_ms"] = int(round((time.monotonic() - started_at) * 1000))
+        if retry_review is None:
+            continue
+        result = _score_provider_review(
+            packet,
+            provider=PROVIDER_GEMINI,
+            model_name=settings.model,
+            review=retry_review,
+            provider_metadata=metadata,
+        )
+        if result.get("status") != FAILURE_MALFORMED_RESPONSE:
+            return result
+    return result
 
 
 def review_packet_with_provider(

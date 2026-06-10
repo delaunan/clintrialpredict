@@ -1,4 +1,4 @@
-"""Deterministic mock reviewer for narrative V1 development.
+"""Deterministic mock reviewer for narrative V2 development.
 
 This module is a stand-in for a future LLM provider. It returns fixture-backed
 JSON so packet building, validation, scoring, no-op behavior, and failure
@@ -57,9 +57,9 @@ def review_packet_with_mock(
             "scoring": {
                 "validation_status": "unavailable",
                 "validation_errors": ["Simulated mock provider failure."],
-                "quality_adjustment": None,
-                "final_candidate_score": None,
-                "quality_assessment": {},
+                "design_confidence": None,
+                "total_scenario_score": None,
+                "design_confidence_assessment": {},
                 "input_hash": packet.get("input_hash"),
             },
         }
@@ -77,9 +77,9 @@ def review_packet_with_mock(
             "scoring": {
                 "validation_status": "unavailable",
                 "validation_errors": ["No mock fixture matched packet input_hash."],
-                "quality_adjustment": None,
-                "final_candidate_score": None,
-                "quality_assessment": {},
+                "design_confidence": None,
+                "total_scenario_score": None,
+                "design_confidence_assessment": {},
                 "input_hash": packet.get("input_hash"),
             },
         }
@@ -98,16 +98,16 @@ def review_packet_with_mock(
             "scoring": {
                 "validation_status": "reused",
                 "validation_errors": [],
-                "quality_adjustment": expected.get("expected_quality_adjustment"),
-                "final_candidate_score": expected.get("expected_final_candidate_score"),
-                "quality_assessment": {},
+                "design_confidence": expected.get("expected_design_confidence"),
+                "total_scenario_score": expected.get("expected_total_scenario_score"),
+                "design_confidence_assessment": {},
                 "input_hash": packet.get("input_hash"),
             },
         }
 
     review = deepcopy(fixture["mock_review"])
     if failure_mode == FAILURE_MALFORMED_JSON:
-        review = {"quality_review_domains": "malformed"}
+        review = {"design_confidence_subcategories": "malformed"}
 
     scored = validate_and_score_review(packet, review)
     status = "malformed_response" if failure_mode == FAILURE_MALFORMED_JSON else "reviewed"

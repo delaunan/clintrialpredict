@@ -20,6 +20,7 @@ from src.narratives.review_store import (  # noqa: E402
     latest_trace_for_session,
     replay_or_review_with_mock,
     replay_or_review_with_provider,
+    store_review_trace,
 )
 from src.narratives.provider_config import load_narrative_provider_config  # noqa: E402
 
@@ -30,16 +31,28 @@ def main() -> int:
     session_id = "fixture-session"
 
     fixtures = get_contract_fixtures()
-    review_fixture = next(item for item in fixtures if item["fixture_id"] == "operational_only_ambitious_enrollment_v1")
+    review_fixture = next(item for item in fixtures if item["fixture_id"] == "score_improves_evidence_weakens_v2")
     packet = build_review_packet_from_fixture(review_fixture)
 
     first = replay_or_review_with_mock(state, packet=packet, session_id=session_id)
     if first.get("cached") is not False:
         errors.append("first review should not be cached")
-    if first.get("quality_adjustment") != review_fixture["expected_behavior"]["expected_quality_adjustment"]:
-        errors.append("stored trace did not preserve Quality Adjustment")
-    if first.get("final_candidate_score") != review_fixture["expected_behavior"]["expected_final_candidate_score"]:
-        errors.append("stored trace did not preserve Final Candidate Score")
+    if first.get("design_confidence") != review_fixture["expected_behavior"]["expected_design_confidence"]:
+        errors.append("stored trace did not preserve Design Confidence")
+    if first.get("total_scenario_score") != review_fixture["expected_behavior"]["expected_total_scenario_score"]:
+        errors.append("stored trace did not preserve Total Scenario Score")
+    if first.get("quality_adjustment") != first.get("design_confidence"):
+        errors.append("temporary Quality Adjustment alias should mirror Design Confidence until UI migration")
+    if first.get("final_candidate_score") != first.get("total_scenario_score"):
+        errors.append("temporary Final Candidate Score alias should mirror Total Scenario Score until UI migration")
+    if not first.get("design_confidence_assessment", {}).get("subcategories"):
+        errors.append("stored trace should preserve Design Confidence assessment")
+    if not first.get("central_tension"):
+        errors.append("stored trace should preserve central_tension")
+    if "strategic_context_2026_v1" not in set(first.get("reference_pack_ids_available") or []):
+        errors.append("stored trace should preserve available reference pack IDs")
+    if first.get("unsupported_reference_pack_ids_used"):
+        errors.append("fixture-backed review should not report unsupported reference pack IDs")
     if first.get("model_name") != "fixture_hash_mock_v1":
         errors.append("stored trace did not preserve provider model name")
     if first.get("provider_metadata", {}).get("deterministic") is not True:
@@ -77,13 +90,52 @@ def main() -> int:
         session_id="failure-session",
         failure_mode=FAILURE_PROVIDER_ERROR,
     )
-    if failure_trace.get("quality_adjustment") is not None:
-        errors.append("provider failure should not store a Quality Adjustment")
+    if failure_trace.get("design_confidence") is not None:
+        errors.append("provider failure should not store Design Confidence")
     if failure_trace.get("failure_reason") is None:
         errors.append("provider failure should store a failure reason")
     cached_failure = cached_review_trace(state, failure_trace.get("input_hash"))
     if cached_failure and cached_failure.get("status") == "provider_error":
         errors.append("provider failure traces should not be cached as reusable reviews")
+
+    unsupported_pack_result = {
+        "review_needed": True,
+        "reuse_previous_review": False,
+        "provider": "mock",
+        "model_name": "fixture_hash_mock_v1",
+        "provider_metadata": {"deterministic": True},
+        "status": "reviewed",
+        "failure_reason": None,
+        "review": first.get("output_json"),
+        "validated_review": {
+            **(first.get("validated_review") or {}),
+            "trace": {
+                **((first.get("validated_review") or {}).get("trace") or {}),
+                "reference_pack_ids_used": [
+                    "strategic_context_2026_v1",
+                    "not_in_packet_v1",
+                ],
+            },
+        },
+        "scoring": {
+            "validation_status": first.get("validation_status"),
+            "validation_errors": first.get("validation_errors") or [],
+            "design_confidence": first.get("design_confidence"),
+            "total_scenario_score": first.get("total_scenario_score"),
+            "design_confidence_assessment": first.get("design_confidence_assessment") or {},
+            "input_hash": packet.get("input_hash"),
+        },
+    }
+    unsupported_pack_trace = store_review_trace(
+        state,
+        packet={**packet, "input_hash": f"{packet['input_hash']}-manual-unsupported-pack-check"},
+        review_result=unsupported_pack_result,
+        session_id="unsupported-pack-session-manual",
+    )
+    if unsupported_pack_trace.get("reference_pack_ids_used") != ["strategic_context_2026_v1"]:
+        errors.append("store should keep only provider-used reference pack IDs available in the packet")
+    if unsupported_pack_trace.get("unsupported_reference_pack_ids_used") != ["not_in_packet_v1"]:
+        errors.append("store should preserve unsupported provider-returned reference pack IDs for audit")
 
     missing_key_config = load_narrative_provider_config({
         "NARRATIVE_LLM_PROVIDER": "openai",
