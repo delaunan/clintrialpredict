@@ -189,7 +189,8 @@ def plot_adjustment_gauge(adjustment, limit=25, height=220):
     adjustment = float(adjustment or 0)
     limit = max(float(limit or 25), 1.0)
     bounded_adjustment = max(-limit, min(limit, adjustment))
-    gauge_value = 50 + (bounded_adjustment / limit) * 25
+    gauge_value = 50 + (bounded_adjustment / limit) * 50
+    half_limit = limit / 2.0
 
     steps = []
     c = STYLE_CONFIG["colors"]
@@ -228,8 +229,14 @@ def plot_adjustment_gauge(adjustment, limit=25, height=220):
             "axis": {
                 "range": [GAUGE_MIN, GAUGE_MAX],
                 "tickmode": "array",
-                "tickvals": [25, 50, 75],
-                "ticktext": [f"-{limit:.0f}", "0", f"+{limit:.0f}"],
+                "tickvals": [0, 25, 50, 75, 100],
+                "ticktext": [
+                    f"-{limit:.0f}",
+                    f"-{half_limit:.0f}",
+                    "0",
+                    f"+{half_limit:.0f}",
+                    f"+{limit:.0f}",
+                ],
                 "tickfont": {
                     "size": 14,
                     "color": "#475569",
@@ -257,7 +264,7 @@ def plot_adjustment_gauge(adjustment, limit=25, height=220):
         y=0.27,
         xref="paper",
         yref="paper",
-        text=f"<span style='font-weight:700'>{adjustment:+.1f} pts</span>",
+        text=f"<span style='font-weight:700'>{adjustment:+.1f}</span>",
         showarrow=False,
         font=dict(
             size=max(34, int(height * 0.12)),

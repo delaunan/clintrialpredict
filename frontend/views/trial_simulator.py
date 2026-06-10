@@ -33,6 +33,7 @@ from src.operational_benchmarks import (
 from src.narratives.packet_builder import build_review_packet
 from src.narratives.review_store import (
     compact_storyline_from_trace,
+    get_review_store,
     replay_or_review_with_provider,
 )
 from src.narratives.provider_config import (
@@ -407,6 +408,34 @@ COMPLETION_TIER_SCALE_TOOLTIP = f"""
     <span style="width:10px; height:10px; background:linear-gradient(90deg, {PLOT_RED_DEEP_RGB} 0%, {PLOT_RED_SOFT_RGB} 100%); border-radius:2px; display:inline-block; flex:0 0 10px;"></span>
     <span style="display:inline-block; width:72px;"><b>High Risk</b></span>
     <span style="display:inline-block; min-width:52px; text-align:left;">0–25</span>
+  </span>
+</p>
+"""
+
+DESIGN_CONFIDENCE_TIER_SCALE_TOOLTIP = f"""
+<p class="tooltip-section">
+  <span style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
+    <span style="width:10px; height:10px; background:linear-gradient(90deg, {PLOT_BLUE_SOFT_RGB} 0%, {PLOT_BLUE_DEEP_RGB} 100%); border-radius:2px; display:inline-block; flex:0 0 10px;"></span>
+    <span style="display:inline-block; width:72px;"><b>Low Risk</b></span>
+    <span style="display:inline-block; min-width:64px; text-align:left;">+25 to +50</span>
+  </span>
+
+  <span style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
+    <span style="width:10px; height:10px; background:linear-gradient(90deg, {PLOT_GREY_WARM_RGB} 0%, {PLOT_BLUE_SOFT_RGB} 100%); border-radius:2px; display:inline-block; flex:0 0 10px;"></span>
+    <span style="display:inline-block; width:72px;"><b>Favorable</b></span>
+    <span style="display:inline-block; min-width:64px; text-align:left;">0 to +25</span>
+  </span>
+
+  <span style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
+    <span style="width:10px; height:10px; background:linear-gradient(90deg, {PLOT_RED_SOFT_RGB} 0%, {PLOT_GREY_WARM_RGB} 100%); border-radius:2px; display:inline-block; flex:0 0 10px;"></span>
+    <span style="display:inline-block; width:72px;"><b>Watchlist</b></span>
+    <span style="display:inline-block; min-width:64px; text-align:left;">-25 to 0</span>
+  </span>
+
+  <span style="display:flex; align-items:center; gap:8px;">
+    <span style="width:10px; height:10px; background:linear-gradient(90deg, {PLOT_RED_DEEP_RGB} 0%, {PLOT_RED_SOFT_RGB} 100%); border-radius:2px; display:inline-block; flex:0 0 10px;"></span>
+    <span style="display:inline-block; width:72px;"><b>High Risk</b></span>
+    <span style="display:inline-block; min-width:64px; text-align:left;">-50 to -25</span>
   </span>
 </p>
 """
@@ -1593,6 +1622,8 @@ def inject_custom_styles():
                 display: flex !important;
                 justify-content: center !important;
                 align-items: center !important;
+                position: relative !important;
+                z-index: 5 !important;
                 width: 100% !important;
                 margin: 0 0 0 0 !important;
                 padding: 18px 0 0 0 !important;
@@ -3792,6 +3823,8 @@ def inject_custom_styles():
             }}
 
             .st-key-trial_score_gauge_body {{
+                position: relative !important;
+                z-index: 1 !important;
                 transform: translateY(var(--ui-trial-score-gauge-body-shift)) !important;
             }}
 
@@ -4643,31 +4676,70 @@ def inject_custom_styles():
                 top: 54px !important;
                 right: 18px !important;
                 z-index: 8 !important;
-                min-width: 178px !important;
-                padding: 14px 17px !important;
+                min-width: 196px !important;
+                padding: 13px 13px 12px 13px !important;
                 border: 1px solid #d8dee8 !important;
                 border-radius: 8px !important;
                 background: rgba(255, 255, 255, 0.96) !important;
                 box-shadow: 0 4px 12px rgba(51, 65, 85, 0.10) !important;
                 color: #334155 !important;
-                font-size: 1.12rem !important;
+                font-size: 1.02rem !important;
                 font-weight: 800 !important;
-                line-height: 1.18 !important;
+                line-height: 1.08 !important;
                 letter-spacing: 0 !important;
                 white-space: nowrap !important;
-                text-align: right !important;
+                text-align: left !important;
                 pointer-events: none !important;
+                display: inline-grid !important;
+                grid-template-columns: auto auto !important;
+                align-items: center !important;
+                column-gap: 11px !important;
             }}
 
             html body .simulation-score-delta .score-delta-label {{
                 font-weight: 800 !important;
             }}
 
+            html body .simulation-score-delta .score-delta-prev {{
+                display: inline-flex !important;
+                align-items: baseline !important;
+                gap: 5px !important;
+            }}
+
             html body .simulation-score-delta .score-delta-triangle {{
-                display: inline-block !important;
-                margin: 0 3px 0 7px !important;
-                font-size: 0.86em !important;
+                display: inline-flex !important;
+                width: 0.78em !important;
+                justify-content: center !important;
+                margin: 0 4px 0 0 !important;
+                font-size: 0.74em !important;
                 transform: translateY(-1px) !important;
+            }}
+
+            html body .simulation-score-delta .score-delta-variance {{
+                display: inline-flex !important;
+                flex-direction: column !important;
+                align-items: flex-start !important;
+                gap: 3px !important;
+                margin-left: 0 !important;
+                text-align: left !important;
+            }}
+
+            html body .simulation-score-delta .score-delta-line {{
+                display: inline-flex !important;
+                align-items: baseline !important;
+                line-height: 1 !important;
+            }}
+
+            html body .simulation-score-delta.score-delta-points-only {{
+                min-width: 172px !important;
+                grid-template-columns: auto auto !important;
+            }}
+
+            html body .simulation-score-delta.score-delta-points-only .score-delta-variance {{
+                flex-direction: row !important;
+                align-items: baseline !important;
+                gap: 0 !important;
+                white-space: nowrap !important;
             }}
 
             html body .simulation-stale-notice {{
@@ -6884,6 +6956,7 @@ def handle_predict_trial_completion():
             **get_selected_trial_audit_fields(),
         )
 
+        st.session_state[SCORE_VIEW_STATE_KEY] = SCORE_VIEW_TOTAL
         st.session_state.analysis_result = None
         st.session_state.analysis_nct_id = None
         start_prediction_request()
@@ -6948,11 +7021,13 @@ def handle_global_edit_toggle():
     reset_detail_prediction_state()
 
     if simulation_mode:
+        st.session_state[SCORE_VIEW_STATE_KEY] = SCORE_VIEW_COMPLETION
         st.session_state.simulation_open_features_tab = True
         st.session_state.completion_score_tab_jump_nonce += 1
         set_simulation_initial_score()
         reset_trial_editor_state()
     else:
+        st.session_state[SCORE_VIEW_STATE_KEY] = SCORE_VIEW_COMPLETION
         st.session_state.simulation_open_features_tab = False
         st.session_state.completion_score_tab_jump_nonce += 1
         reset_trial_editor_state()
@@ -7002,6 +7077,13 @@ def get_risk_tier(score: float):
     return "High Risk"
 
 
+def get_design_confidence_tier(score: float):
+    if score >= 25: return "Low Risk"
+    if score >= 0: return "Favorable"
+    if score >= -25: return "Watchlist"
+    return "High Risk"
+
+
 # ==========================
 # 4. COMPONENTS
 # ==========================
@@ -7014,6 +7096,24 @@ def render_transition_overlay_hook():
             const doc = parent.document;
             const win = parent.window;
             const OVERLAY_ID = "ctp-transition-overlay";
+            const TRIAL_FEATURES_READY_SELECTOR = '[data-ctp-ready="trial-features"]';
+
+            function isReadySelectorVisible(selector) {
+                if (!selector) return false;
+
+                const target = doc.querySelector(selector);
+                if (!target) return false;
+
+                const rect = target.getBoundingClientRect();
+                return rect.width >= 0 && rect.height >= 0;
+            }
+
+            function stopOverlayObserver() {
+                if (win.__ctpOverlayObserver) {
+                    win.__ctpOverlayObserver.disconnect();
+                    win.__ctpOverlayObserver = null;
+                }
+            }
 
             function removeOverlay() {
                 const existing = doc.getElementById(OVERLAY_ID);
@@ -7023,9 +7123,36 @@ def render_transition_overlay_hook():
                     win.clearTimeout(win.__ctpOverlayTimer);
                     win.__ctpOverlayTimer = null;
                 }
+
+                stopOverlayObserver();
+                win.__ctpOverlayWaitSelector = null;
+                win.__ctpOverlayMessage = null;
             }
 
-            function showOverlay(message, timeoutMs) {
+            function watchOverlayTarget(selector) {
+                if (!selector) return;
+
+                stopOverlayObserver();
+
+                if (isReadySelectorVisible(selector)) {
+                    win.setTimeout(removeOverlay, 120);
+                    return;
+                }
+
+                win.__ctpOverlayObserver = new MutationObserver(function() {
+                    if (isReadySelectorVisible(selector)) {
+                        removeOverlay();
+                    }
+                });
+                win.__ctpOverlayObserver.observe(doc.body, {
+                    childList: true,
+                    subtree: true,
+                    attributes: true,
+                    attributeFilter: ["style", "class", "data-ctp-ready"],
+                });
+            }
+
+            function showOverlay(message, timeoutMs, waitSelector) {
                 removeOverlay();
 
                 const overlay = doc.createElement("div");
@@ -7084,7 +7211,16 @@ def render_transition_overlay_hook():
                 overlay.addEventListener("click", removeOverlay);
                 doc.body.appendChild(overlay);
 
-                win.__ctpOverlayTimer = win.setTimeout(removeOverlay, timeoutMs);
+                win.__ctpOverlayMessage = message;
+                win.__ctpOverlayWaitSelector = waitSelector || null;
+
+                if (waitSelector) {
+                    watchOverlayTarget(waitSelector);
+                }
+
+                if (timeoutMs) {
+                    win.__ctpOverlayTimer = win.setTimeout(removeOverlay, timeoutMs);
+                }
             }
 
             win.__ctpShowOverlay = showOverlay;
@@ -7093,14 +7229,45 @@ def render_transition_overlay_hook():
                 return (button.innerText || button.textContent || "").trim();
             }
 
+            function isSimulationToggleTurningOn(label) {
+                const control = label.querySelector('input[type="checkbox"], [role="switch"]');
+                if (!control) return true;
+
+                if (typeof control.checked === "boolean") {
+                    return !control.checked;
+                }
+
+                return control.getAttribute("aria-checked") !== "true";
+            }
+
             function getOverlayConfig(text) {
                 if (text === "Search Trials") return ["Loading trials...", 1600];
                 if (text === "Reset Filters") return ["Resetting filters...", 1600];
                 if (text === "Review Scenario") return ["Reviewing scenario...", 3330];
+                if (text === "Simulation Mode (Editing Content)") {
+                    return ["Preparing Simulation Mode...", 12000, TRIAL_FEATURES_READY_SELECTOR];
+                }
                 return null;
             }
 
-            removeOverlay();
+            if (win.__ctpOverlayWaitSelector) {
+                if (isReadySelectorVisible(win.__ctpOverlayWaitSelector)) {
+                    removeOverlay();
+                } else {
+                    const existing = doc.getElementById(OVERLAY_ID);
+                    if (!existing) {
+                        showOverlay(
+                            win.__ctpOverlayMessage || "Preparing Simulation Mode...",
+                            12000,
+                            win.__ctpOverlayWaitSelector
+                        );
+                    } else {
+                        watchOverlayTarget(win.__ctpOverlayWaitSelector);
+                    }
+                }
+            } else {
+                removeOverlay();
+            }
 
             if (!win.__ctpOverlayListenerInstalled) {
                 doc.addEventListener("click", function(event) {
@@ -7110,7 +7277,25 @@ def render_transition_overlay_hook():
                         const config = getOverlayConfig(getButtonText(button));
                         if (!config) return;
 
-                        showOverlay(config[0], config[1]);
+                        showOverlay(config[0], config[1], config[2]);
+                        return;
+                    }
+
+                    const label = event.target.closest("label");
+
+                    if (label) {
+                        const labelText = getButtonText(label);
+                        if (
+                            labelText === "Simulation Mode (Editing Content)"
+                            && !isSimulationToggleTurningOn(label)
+                        ) {
+                            return;
+                        }
+
+                        const config = getOverlayConfig(labelText);
+                        if (!config) return;
+
+                        showOverlay(config[0], config[1], config[2]);
                         return;
                     }
 
@@ -8269,6 +8454,10 @@ def render_trial_features_text_cards(row):
 
 
 def render_trial_features_tab(row):
+    st.markdown(
+        '<span data-ctp-ready="trial-features" style="display:none;"></span>',
+        unsafe_allow_html=True,
+    )
     render_trial_features_text_cards(row)
 
     grouped = {pillar: [] for pillar in SIMULATION_PILLAR_ORDER}
@@ -8930,6 +9119,115 @@ def _quality_points_color(value):
     return PLOT_BLUE_DEEP_RGB if float(numeric) > 0 else PLOT_RED_DEEP_RGB
 
 
+def _score_value_color(value, *, midpoint=50.0):
+    numeric = pd.to_numeric(value, errors="coerce")
+    if pd.isna(numeric):
+        return "#64748b"
+    return PLOT_BLUE_DEEP_RGB if float(numeric) >= midpoint else PLOT_RED_DEEP_RGB
+
+
+def _delta_triangle_and_color(delta):
+    numeric = pd.to_numeric(delta, errors="coerce")
+    if pd.isna(numeric) or abs(float(numeric)) < 0.0001:
+        return "▬", "#64748b"
+    return ("▲", PLOT_BLUE_DEEP_RGB) if float(numeric) > 0 else ("▼", PLOT_RED_DEEP_RGB)
+
+
+def _scenario_review_iteration_number(trace):
+    numeric = pd.to_numeric((trace or {}).get("iteration_id"), errors="coerce")
+    if pd.notna(numeric):
+        return int(numeric)
+    packet = (trace or {}).get("input_packet") or {}
+    numeric = pd.to_numeric((packet.get("iteration_context") or {}).get("iteration_number"), errors="coerce")
+    return int(numeric) if pd.notna(numeric) else None
+
+
+def _scenario_review_trial_id(trace):
+    packet = (trace or {}).get("input_packet") or {}
+    identity = packet.get("trial_identity") or {}
+    return str(identity.get("nct_id") or "").strip()
+
+
+def _previous_visible_scenario_review_trace(nct_id, current_trace):
+    current_iteration = _scenario_review_iteration_number(current_trace)
+    if current_iteration is None or current_iteration < 2:
+        return None
+    current_hash = str((current_trace or {}).get("input_hash") or "")
+    nct_id = str(nct_id or "").strip()
+    for trace in reversed(get_review_store(st.session_state).get("trace_history") or []):
+        if trace.get("hidden_baseline"):
+            continue
+        if str(trace.get("input_hash") or "") == current_hash:
+            continue
+        if _scenario_review_trial_id(trace) != nct_id:
+            continue
+        iteration = _scenario_review_iteration_number(trace)
+        if iteration is None or iteration >= current_iteration:
+            continue
+        if trace.get("design_confidence") is None or trace.get("total_scenario_score") is None:
+            continue
+        return trace
+    return None
+
+
+def _score_delta_badge_html(previous_value, current_value, *, delta_unit, midpoint=50.0, signed_values=False):
+    previous_numeric = pd.to_numeric(previous_value, errors="coerce")
+    current_numeric = pd.to_numeric(current_value, errors="coerce")
+    if pd.isna(previous_numeric) or pd.isna(current_numeric):
+        return ""
+
+    previous_numeric = float(previous_numeric)
+    current_numeric = float(current_numeric)
+    delta_points = current_numeric - previous_numeric
+
+    if delta_unit == "percent":
+        triangle, delta_color = _delta_triangle_and_color(delta_points)
+        point_display = f"{delta_points:+.1f} pts"
+        if abs(previous_numeric) < 0.0001:
+            percent_display = "-"
+        else:
+            delta_percent = ((current_numeric / previous_numeric) - 1.0) * 100.0
+            percent_display = f"{delta_percent:+.1f}%"
+    else:
+        triangle, delta_color = _delta_triangle_and_color(delta_points)
+        delta_display = f"{delta_points:+.1f} pts"
+
+    value_format = "{:+.1f}" if signed_values else "{:.1f}"
+    previous_color = _quality_points_color(previous_numeric) if signed_values else _score_value_color(previous_numeric, midpoint=midpoint)
+    if delta_unit == "percent":
+        variance_html = (
+            '<span class="score-delta-variance">'
+            '<span class="score-delta-line">'
+            f'<span class="score-delta-triangle" style="color:{delta_color};">{triangle}</span>'
+            f'<span style="color:{delta_color};">{point_display}</span>'
+            '</span>'
+            '<span class="score-delta-line">'
+            f'<span class="score-delta-triangle" style="color:{delta_color};">{triangle}</span>'
+            f'<span style="color:{delta_color};">{percent_display}</span>'
+            '</span>'
+            '</span>'
+        )
+    else:
+        variance_html = (
+            '<span class="score-delta-variance">'
+            f'<span class="score-delta-triangle" style="color:{delta_color};">{triangle}</span>'
+            f'<span style="color:{delta_color};">{delta_display}</span>'
+            '</span>'
+        )
+    badge_class = "simulation-score-delta"
+    if delta_unit != "percent":
+        badge_class += " score-delta-points-only"
+    return (
+        f'<div class="{badge_class}">'
+        '<span class="score-delta-prev">'
+        f'<span class="score-delta-label" style="color:{previous_color};">Prev:</span>'
+        f'<span style="color:{previous_color};">{value_format.format(previous_numeric)}</span>'
+        '</span>'
+        f'{variance_html}'
+        '</div>'
+    )
+
+
 def _quality_review_metric(label, value, color="#1f2937"):
     return (
         "<div class='quality-review-metric'>"
@@ -9170,12 +9468,7 @@ def render_scenario_review_report(row, trace=None, snapshot=None):
     current_snapshot_id = snapshot.get("snapshot_id") or snapshot.get("timestamp")
 
     if snapshot.get("source") == "prerecorded_baseline":
-        _quality_review_unavailable_card(
-            "Scenario Review",
-            "Scenario Review appears after the first scenario prediction.",
-            "The baseline review remains hidden so participants start from the original trial context.",
-        )
-        return
+        trace = trace or get_hidden_baseline_review_trace(row, snapshot)
 
     if has_pending_simulation_changes(row):
         pending_diagnostics = {
@@ -9225,9 +9518,6 @@ def render_scenario_review_report(row, trace=None, snapshot=None):
     design_confidence = trace.get("design_confidence")
     total_scenario_score = trace.get("total_scenario_score")
     participant = (trace.get("validated_review") or {}).get("participant_review") or {}
-    assessment = trace.get("design_confidence_assessment") or {}
-    pillars = assessment.get("pillars") or {}
-    adjusted_visual_html = _design_confidence_visual_html(assessment)
 
     metric_html = "".join([
         _quality_review_metric("Completion", f"{float(completion_score):.1f}" if completion_score is not None else "N/A"),
@@ -9239,22 +9529,10 @@ def render_scenario_review_report(row, trace=None, snapshot=None):
         _quality_review_metric("Total", _format_candidate_score(total_scenario_score)),
     ])
 
-    pillar_html = ""
-    for pillar in pillars.values():
-        label = str(pillar.get("label") or "Design Confidence")
-        points = pillar.get("design_points")
-        pillar_html += (
-            "<div class='quality-review-row'>"
-            f"<span>{html.escape(label)}</span>"
-            f"<span class='quality-review-points' style='color:{_quality_points_color(points)};'>"
-            f"{html.escape(_format_quality_points(points))}</span>"
-            "</div>"
-        )
-
     central_tension = trace.get("central_tension") or (
         (trace.get("validated_review") or {}).get("tradeoff_review") or {}
     ).get("central_tension")
-    report_title = "Scenario Review"
+    report_title = "Baseline Scenario Review" if trace.get("hidden_baseline") else "Scenario Review"
     narrative_html = "".join([
         _scenario_review_text_block("Completion Outlook", participant.get("overall_completion_comment")),
         _scenario_review_text_block("Design Confidence", participant.get("overall_design_comment")),
@@ -9273,8 +9551,6 @@ def render_scenario_review_report(row, trace=None, snapshot=None):
             f"<div class='quality-review-title'>{html.escape(report_title)}</div>"
             f"<div class='quality-review-components'>{metric_html}</div>"
             f"{narrative_html}"
-            f"{adjusted_visual_html}"
-            f"{pillar_html}"
             f"<div class='quality-review-muted'>{html.escape(cached_note)}</div>"
             "</div>"
         ),
@@ -9321,7 +9597,9 @@ def render_trial_detail_tabs_refined(row):
         if st.session_state.get("trigger_prediction", False):
             get_analysis_result_for_selected_trial(row)
 
-    score_visible = st.session_state.get("detail_completion_tab_visible", False)
+    nct_id = str(row.get(ID_COL, st.session_state.get("selected_nct_id", "")))
+    baseline_score_visible = bool(simulation_mode and get_latest_prediction_snapshot(nct_id))
+    score_visible = st.session_state.get("detail_completion_tab_visible", False) or baseline_score_visible
     if st.session_state.get("prediction_error_notice"):
         st.error(st.session_state.prediction_error_notice)
 
@@ -9689,6 +9967,14 @@ def render_completion_prediction_tab(row):
     if can_generate_scenario_review and score_view in (SCORE_VIEW_DESIGN, SCORE_VIEW_TOTAL):
         with st.spinner("Generating Scenario Review..."):
             scenario_trace = get_quality_review_trace_for_snapshot(row, snapshot)
+    elif (
+        st.session_state.get("global_edit_mode", False)
+        and snapshot
+        and snapshot.get("source") == "prerecorded_baseline"
+        and score_view in (SCORE_VIEW_DESIGN, SCORE_VIEW_TOTAL)
+    ):
+        with st.spinner("Generating Baseline Scenario Review..."):
+            scenario_trace = get_hidden_baseline_review_trace(row, snapshot)
 
     design_pillar_impacts = _design_pillar_impacts(scenario_trace)
     design_subcat_impacts = _design_subcategory_impacts(scenario_trace)
@@ -9742,6 +10028,11 @@ def render_completion_prediction_tab(row):
                     display_snapshot = snapshot or {}
                     previous_score = pd.to_numeric(display_snapshot.get("previous_score"), errors="coerce")
                     delta_pct = pd.to_numeric(display_snapshot.get("score_delta_percent"), errors="coerce")
+                    snapshot_iteration = pd.to_numeric(
+                        (display_snapshot.get("iteration_context") or {}).get("iteration_number"),
+                        errors="coerce",
+                    )
+                    show_completion_delta = pd.notna(snapshot_iteration) and int(snapshot_iteration) >= 1
 
                     if has_pending_simulation_changes(row):
                         stale_html = (
@@ -9755,30 +10046,32 @@ def render_completion_prediction_tab(row):
                         and pd.notna(previous_score)
                         and pd.notna(delta_pct)
                         and score_view == SCORE_VIEW_COMPLETION
+                        and show_completion_delta
                     ):
-                        previous_color = PLOT_BLUE_DEEP_RGB if float(previous_score) >= 50 else PLOT_RED_DEEP_RGB
-                        if abs(float(delta_pct)) < 0.0001:
-                            pct_color = "#64748b"
-                            pct_text = "-"
-                            pct_triangle = "▬"
-                        elif float(delta_pct) > 0:
-                            pct_color = PLOT_BLUE_DEEP_RGB
-                            pct_text = f"{float(delta_pct):+.1f}%"
-                            pct_triangle = "▲"
-                        else:
-                            pct_color = PLOT_RED_DEEP_RGB
-                            pct_text = f"{float(delta_pct):+.1f}%"
-                            pct_triangle = "▼"
-                        delta_html = (
-                            '<div class="simulation-score-delta">'
-                            f'<span class="score-delta-label" style="color:{previous_color};">Prev: </span>'
-                            f'<span style="color:{previous_color};">{float(previous_score):.1f} pts</span>'
-                            f'<span class="score-delta-triangle" style="color:{pct_color};">{pct_triangle}</span>'
-                            f'<span style="color:{pct_color};">{pct_text}</span>'
-                            '</div>'
+                        delta_html = _score_delta_badge_html(
+                            previous_score,
+                            score,
+                            delta_unit="percent",
                         )
 
                 with st.container(key="trial_score_gauge_body"):
+                    if score_view in (SCORE_VIEW_DESIGN, SCORE_VIEW_TOTAL) and scenario_trace:
+                        previous_trace = _previous_visible_scenario_review_trace(nct_id, scenario_trace)
+                        if previous_trace and score_view == SCORE_VIEW_DESIGN:
+                            delta_html = _score_delta_badge_html(
+                                previous_trace.get("design_confidence"),
+                                scenario_trace.get("design_confidence"),
+                                delta_unit="points",
+                                midpoint=0.0,
+                                signed_values=True,
+                            )
+                        elif previous_trace and score_view == SCORE_VIEW_TOTAL:
+                            delta_html = _score_delta_badge_html(
+                                previous_trace.get("total_scenario_score"),
+                                scenario_trace.get("total_scenario_score"),
+                                delta_unit="percent",
+                            )
+
                     st.markdown(
                         (
                             f'{stale_html}'
@@ -9787,6 +10080,8 @@ def render_completion_prediction_tab(row):
                         unsafe_allow_html=True
                     )
 
+                    tier_tooltip = COMPLETION_TIER_SCALE_TOOLTIP
+                    tier_aria_label = "Completion score scale"
                     if score_view == SCORE_VIEW_DESIGN:
                         design_confidence = (scenario_trace or {}).get("design_confidence")
                         if design_confidence is None:
@@ -9794,11 +10089,13 @@ def render_completion_prediction_tab(row):
                             tier = "Design Confidence unavailable"
                         else:
                             st.plotly_chart(
-                                plot_adjustment_gauge(design_confidence, height=gauge_plot_h),
+                                plot_adjustment_gauge(design_confidence, limit=50, height=gauge_plot_h),
                                 width="stretch",
                                 config={"displayModeBar": False}
                             )
-                            tier = f"Design Confidence {_format_quality_points(design_confidence)} pts"
+                            tier = get_design_confidence_tier(float(design_confidence))
+                            tier_tooltip = DESIGN_CONFIDENCE_TIER_SCALE_TOOLTIP
+                            tier_aria_label = "Design Confidence scale"
                     elif score_view == SCORE_VIEW_TOTAL:
                         total_score = (scenario_trace or {}).get("total_scenario_score")
                         if total_score is None:
@@ -9819,23 +10116,24 @@ def render_completion_prediction_tab(row):
                         )
                         tier = get_risk_tier(score)
 
-                    st.markdown(
-                        (
-                            '<div class="completion-tier-row">'
-                                '<div class="completion-tier-inline-wrap">'
-                                    f'<span class="completion-tier-text">{tier}</span>'
-                                    '<span class="completion-tier-info-wrap">'
-                                        '<span class="completion-tier-info-anchor" '
-                                        'aria-label="Completion score scale" tabindex="0">i</span>'
-                                        '<span class="completion-tier-info-tooltip">'
-                                            f'{COMPLETION_TIER_SCALE_TOOLTIP}'
+                    if tier:
+                        st.markdown(
+                            (
+                                '<div class="completion-tier-row">'
+                                    '<div class="completion-tier-inline-wrap">'
+                                        f'<span class="completion-tier-text">{tier}</span>'
+                                        '<span class="completion-tier-info-wrap">'
+                                            '<span class="completion-tier-info-anchor" '
+                                            f'aria-label="{tier_aria_label}" tabindex="0">i</span>'
+                                            '<span class="completion-tier-info-tooltip">'
+                                                f'{tier_tooltip}'
+                                            '</span>'
                                         '</span>'
-                                    '</span>'
+                                    '</div>'
                                 '</div>'
-                            '</div>'
-                        ),
-                        unsafe_allow_html=True
-                    )
+                            ),
+                            unsafe_allow_html=True
+                        )
             render_summary_plot_shell_panel(
                 panel_suffix="completion_prediction_left_top_block",
                 body_renderer=_render_gauge_panel

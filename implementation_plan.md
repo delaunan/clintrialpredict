@@ -281,7 +281,7 @@ Notes:
 
 ### Phase 6: Migrate Simulator UI
 
-Status: complete
+Status: complete, with uncommitted polish pending final browser verification
 
 Files to update:
 
@@ -319,9 +319,24 @@ Verification:
 - Browser radio smoke confirmed `Design Confidence` view switches without crashing; no-edit baseline correctly keeps participant-visible Scenario Review unavailable under the hidden-baseline rule.
 - Live-provider review smoke was not run; it remains opt-in because it uses network/API spend.
 
+Current uncommitted status:
+
+- Trial Score radio behavior has been refined so Simulation Mode opens on `Completion Outlook`, while `Review Scenario` switches the view to `Total Scenario Score`.
+- Design Confidence now uses the same participant tier labels as the other score views: `Low Risk`, `Favorable`, `Watchlist`, and `High Risk`.
+- Design Confidence uses a signed `-50..+50` gauge mapped across the full `0..100` visual span: `-50 -> 0`, `-25 -> 25`, `0 -> 50`, `+25 -> 75`, `+50 -> 100`.
+- Design Confidence point deltas are displayed as a one-line tag; Completion Outlook and Total Scenario Score keep the two-line points-plus-percent tag.
+- The participant Scenario Review no longer shows the Design Confidence contribution/debug section.
+- Baseline Scenario Review is temporarily visible for testing and should be revisited before final participant-live behavior.
+- `Preparing Simulation Mode...` overlay has been changed to persist until Trial Features render, using a Trial Features readiness marker.
+- Final browser verification of the persistent Simulation Mode overlay is still pending because the last smoke attempt was interrupted.
+
 ### Phase 7: Full Narrative Regression Pass
 
 Status: pending
+
+Named live-review target:
+
+- Review `NCT03386721` - Simlukafusp alfa (ROCHE) | Oncology (2018), with special attention to whether Execution Framework / Operational Burden Balance narratives are specific, expert, auditable, and strategically useful without prescribing the solution.
 
 Verification:
 
@@ -358,4 +373,4 @@ These are real needs, but not blockers for the immediate schema migration:
 
 ## Immediate Next Step
 
-Finish Phase 6 verification: run the simulator smoke, inspect the `Trial Score` tab labels and radio behavior, then mark Phase 6 complete if the UI is stable.
+Run the Phase 7 narrative regression pass, starting with `NCT03386721` - Simlukafusp alfa (ROCHE) | Oncology (2018) as the focused Execution Framework narrative-quality review case.
