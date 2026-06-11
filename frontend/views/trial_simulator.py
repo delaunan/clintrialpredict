@@ -4158,7 +4158,7 @@ def inject_custom_styles():
                keeps pace with the user's screen resolution. */
             html body [class*="st-key-simulation_feature_pillar_"] {{
                 --sim-control-h: var(--ui-top-strip-control-h);
-                --sim-label-font: 0.75rem;
+                --sim-label-font: 0.78rem;
                 --sim-title-gap: 34px;
                 --sim-title-extra-gap: 22px;
                 --sim-row-gap-inner: 16px;
@@ -4167,6 +4167,8 @@ def inject_custom_styles():
                 --sim-icon-svg: 24px;
                 --sim-num-gap: 10px;
                 --sim-num-field-w: 92px;
+                --sim-op-num-field-w: 76px;
+                --sim-op-step-w: 26px;
                 --sim-row1-h: 248px;
                 --sim-row2-h: 338px;
 
@@ -4205,6 +4207,35 @@ def inject_custom_styles():
             html body [class*="st-key-simulation_feature_pillar_"] [data-testid="stHorizontalBlock"] {{
                 gap: var(--sim-space) !important;
                 justify-content: stretch !important;
+            }}
+
+            html body [class*="st-key-simfield_pair_"] [data-testid="stHorizontalBlock"] {{
+                gap: calc(var(--sim-space) * 0.45) !important;
+            }}
+
+            html body [class*="st-key-simulation_feature_pillar_"] [class*="st-key-simrow_"] {{
+                height: calc(var(--sim-control-h) + 18px) !important;
+                min-height: calc(var(--sim-control-h) + 18px) !important;
+                max-height: calc(var(--sim-control-h) + 18px) !important;
+                display: flex !important;
+                align-items: flex-end !important;
+                gap: 0 !important;
+                overflow: visible !important;
+            }}
+
+            html body [class*="st-key-simulation_feature_pillar_"] [class*="st-key-simrow_"] [data-testid="stVerticalBlock"] {{
+                gap: 0 !important;
+            }}
+
+            html body [class*="st-key-simulation_feature_pillar_"] [class*="st-key-simrow_"] [data-testid="stHorizontalBlock"] {{
+                flex-wrap: nowrap !important;
+                width: 100% !important;
+            }}
+
+            html body [class*="st-key-simulation_feature_pillar_"] [class*="st-key-simrow_"] [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] {{
+                flex: 1 1 0 !important;
+                min-width: 0 !important;
+                width: auto !important;
             }}
 
             /* Header — icon chip + pillar name. No bottom margin; the vertical
@@ -4325,6 +4356,87 @@ def inject_custom_styles():
                 width: var(--sim-num-field-w) !important;
                 min-width: var(--sim-num-field-w) !important;
                 max-width: var(--sim-num-field-w) !important;
+            }}
+
+            html body [class*="st-key-simulation_feature_pillar_"][class*="_execution_framework_"] [class*="st-key-simfield_"][class*="_num_"] [data-testid="stNumberInput"] {{
+                position: relative !important;
+                display: block !important;
+                height: calc(var(--sim-control-h) + 18px) !important;
+                min-height: calc(var(--sim-control-h) + 18px) !important;
+                max-height: calc(var(--sim-control-h) + 18px) !important;
+                padding: 0 !important;
+            }}
+
+            html body [class*="st-key-simulation_feature_pillar_"][class*="_execution_framework_"] [class*="st-key-simfield_"][class*="_num_"] [data-testid="stWidgetLabel"] {{
+                position: absolute !important;
+                left: 0 !important;
+                bottom: 0 !important;
+                width: calc(100% - (var(--sim-op-num-field-w) + (var(--sim-op-step-w) * 2) + 8px)) !important;
+                margin: 0 !important;
+                display: flex !important;
+                align-items: center !important;
+                min-height: 0 !important;
+                height: var(--sim-control-h) !important;
+                max-height: var(--sim-control-h) !important;
+                overflow: visible !important;
+                transform: translateY(-2px) !important;
+            }}
+
+            html body [class*="st-key-simulation_feature_pillar_"][class*="_execution_framework_"] [class*="st-key-simfield_"][class*="_num_"] [data-testid="stNumberInputContainer"] {{
+                position: absolute !important;
+                right: 0 !important;
+                bottom: 0 !important;
+                width: calc(var(--sim-op-num-field-w) + (var(--sim-op-step-w) * 2)) !important;
+                min-width: calc(var(--sim-op-num-field-w) + (var(--sim-op-step-w) * 2)) !important;
+                max-width: calc(var(--sim-op-num-field-w) + (var(--sim-op-step-w) * 2)) !important;
+                height: var(--sim-control-h) !important;
+                min-height: var(--sim-control-h) !important;
+                max-height: var(--sim-control-h) !important;
+            }}
+
+            html body [class*="st-key-simulation_feature_pillar_"][class*="_execution_framework_"] [class*="st-key-simfield_"][class*="_num_"] [data-testid="stNumberInputContainer"] > div {{
+                background-color: var(--ui-field-bg) !important;
+                border: var(--ui-control-border) !important;
+                border-radius: var(--ui-control-radius) !important;
+                box-shadow: var(--ui-control-shadow) !important;
+                overflow: hidden !important;
+            }}
+
+            html body [class*="st-key-simulation_feature_pillar_"][class*="_execution_framework_"] [class*="st-key-simfield_"][class*="_num_"] [data-baseweb="input"] > div {{
+                background: transparent !important;
+                border: none !important;
+                border-radius: 0 !important;
+                box-shadow: none !important;
+            }}
+
+            html body [class*="st-key-simulation_feature_pillar_"][class*="_execution_framework_"] [class*="st-key-simfield_"][class*="_num_"] [data-baseweb="input"] {{
+                flex-basis: var(--sim-op-num-field-w) !important;
+                width: var(--sim-op-num-field-w) !important;
+                min-width: var(--sim-op-num-field-w) !important;
+                max-width: var(--sim-op-num-field-w) !important;
+            }}
+
+            html body [class*="st-key-simulation_feature_pillar_"][class*="_execution_framework_"] [class*="st-key-simfield_"][class*="_num_"] [data-testid="stNumberInput"] input {{
+                text-align: center !important;
+                color: var(--ui-field-text) !important;
+                -webkit-text-fill-color: var(--ui-field-text) !important;
+                font-size: var(--ui-control-font-size) !important;
+            }}
+
+            html body [class*="st-key-simulation_feature_pillar_"][class*="_execution_framework_"] [class*="st-key-simfield_"][class*="_num_"] [data-testid="stNumberInput"] button {{
+                flex: 0 0 var(--sim-op-step-w) !important;
+                width: var(--sim-op-step-w) !important;
+                min-width: var(--sim-op-step-w) !important;
+                max-width: var(--sim-op-step-w) !important;
+                height: var(--sim-control-h) !important;
+                min-height: var(--sim-control-h) !important;
+                max-height: var(--sim-control-h) !important;
+                padding: 0 !important;
+                background: transparent !important;
+                border: none !important;
+                border-radius: 0 !important;
+                color: #64748b !important;
+                box-shadow: none !important;
             }}
 
             /* Match the top/bottom row separation to the compact horizontal
@@ -4724,7 +4836,7 @@ def inject_custom_styles():
             @media (min-width: 1800px) and (min-height: 950px) {{
                 html body [class*="st-key-simulation_feature_pillar_"] {{
                     --sim-control-h: 26px;
-                    --sim-label-font: 0.80rem;
+                    --sim-label-font: 0.83rem;
                     --sim-space: 22px;
                     --sim-title-gap: 38px;
                     --sim-title-extra-gap: 25px;
@@ -4733,15 +4845,23 @@ def inject_custom_styles():
                     --sim-icon: 46px;
                     --sim-icon-svg: 26px;
                     --sim-num-field-w: 100px;
+                    --sim-op-num-field-w: 82px;
+                    --sim-op-step-w: 28px;
                     --sim-row1-h: 278px;
                     --sim-row2-h: 380px;
+                }}
+            }}
+
+            @media (max-width: 1600px) {{
+                html body [class*="st-key-simulation_feature_pillar_"][class*="_execution_framework_"] [class*="st-key-simfield_"][class*="_num_"] [data-testid="stNumberInputContainer"] {{
+                    bottom: 2px !important;
                 }}
             }}
 
             @media (min-width: 2250px) and (min-height: 1050px) {{
                 html body [class*="st-key-simulation_feature_pillar_"] {{
                     --sim-control-h: 29px;
-                    --sim-label-font: 0.86rem;
+                    --sim-label-font: 0.89rem;
                     --sim-space: 25px;
                     --sim-title-gap: 44px;
                     --sim-title-extra-gap: 29px;
@@ -4750,6 +4870,8 @@ def inject_custom_styles():
                     --sim-icon: 50px;
                     --sim-icon-svg: 28px;
                     --sim-num-field-w: 108px;
+                    --sim-op-num-field-w: 88px;
+                    --sim-op-step-w: 30px;
                     --sim-row1-h: 378px;
                     --sim-row2-h: 432px;
                 }}
@@ -4758,7 +4880,7 @@ def inject_custom_styles():
             @media (min-width: 2700px) and (min-height: 1250px) {{
                 html body [class*="st-key-simulation_feature_pillar_"] {{
                     --sim-control-h: 32px;
-                    --sim-label-font: 0.92rem;
+                    --sim-label-font: 0.95rem;
                     --sim-space: 28px;
                     --sim-title-gap: 50px;
                     --sim-title-extra-gap: 33px;
@@ -4767,6 +4889,8 @@ def inject_custom_styles():
                     --sim-icon: 54px;
                     --sim-icon-svg: 31px;
                     --sim-num-field-w: 116px;
+                    --sim-op-num-field-w: 96px;
+                    --sim-op-step-w: 32px;
                     --sim-row1-h: 411px;
                     --sim-row2-h: 480px;
                 }}
@@ -5026,11 +5150,11 @@ SIMULATION_FEATURE_IDS = [
 ]
 SIMULATION_FEATURE_ID_SET = set(SIMULATION_FEATURE_IDS)
 SIMULATION_FEATURE_LABEL_OVERRIDES = {
-    "primary_duration_months_ml": "Max Primary Endpoint Duration  \n(in months)",
-    "has_dmc_ml": "Data Monitoring Comittee",
+    "primary_duration_months_ml": "Max Endpoint Duration  \n(months)",
+    "has_dmc_ml": "Data Monitoring Committee",
     "adult_ml": "Adult Profiles",
     "child_ml": "Pediatric Profiles",
-    "older_adult_ml": "Geratic Profiles",
+    "older_adult_ml": "Geriatric Profiles",
 }
 SIMULATION_FEATURE_LAYOUT = {
     "Therapeutic Context": [
@@ -5046,16 +5170,16 @@ SIMULATION_FEATURE_LAYOUT = {
     "Scientific Challenge": [
         ["target_precedent_ml", "target_pathway_class_ml"],
         ["therapeutic_modality_ml", "innovation_tier_ml"],
-        ["primary_purpose_ml", "intervention_model_ml"],
-        ["adaptive_design_ml", "biomarker_stratification_ml"],
-        ["endpoint_rigor_ml", "endpoint_structure_ml"],
+        ["primary_purpose_ml", "adaptive_design_ml"],
+        ["endpoint_structure_ml", "endpoint_rigor_ml"],
+        ["biomarker_stratification_ml"],
     ],
     "Execution Framework": [
+        ["op:planned_enrollment", "op:planned_sites", "op:planned_duration_months"],
+        ["number_of_arms_ml", "intervention_model_ml", "primary_duration_months_ml"],
         ["allocation_ml", "masking_ml"],
         ["comparator_benchmark_ml", "has_placebo_ml"],
-        ["administration_complexity_ml"],
-        ["number_of_arms_ml", "primary_duration_months_ml"],
-        ["has_dmc_ml", "sponsor_tier_ml"],
+        ["administration_complexity_ml", ["has_dmc_ml", "sponsor_tier_ml"]],
     ],
 }
 
@@ -6821,7 +6945,13 @@ def change_state_token(pending=False, committed=False, attention=False):
     return "base"
 
 
-def label_with_previous_value(label, previous_value, state_token, formatter=None):
+def label_with_previous_value(
+    label,
+    previous_value,
+    state_token,
+    formatter=None,
+    line_break_before_previous=False,
+):
     if state_token == "chg":
         color_token = "blue"
     elif state_token == "prev":
@@ -6835,7 +6965,36 @@ def label_with_previous_value(label, previous_value, state_token, formatter=None
     if formatter:
         previous_value = formatter(previous_value)
 
-    return f"{label} :{color_token}[(previous: {previous_value})]"
+    separator = "  \n" if line_break_before_previous else " "
+    return f"{label}{separator}:{color_token}[(prev: {previous_value})]"
+
+
+def _short_previous_display_value(field_id, previous_value):
+    previous_text = str(previous_value or "N/A")
+    if field_id == "gbd_cause_id_3_ml" and len(previous_text) > 34:
+        return f"{previous_text[:31].rstrip()}..."
+    if field_id == "sponsor_tier_ml":
+        if previous_text.startswith("Biotech and Emerging"):
+            return "Biotech"
+        if previous_text.startswith("Unknown Sponsor Tier"):
+            return "Unknown..."
+        if len(previous_text) > 24:
+            return f"{previous_text[:21].rstrip()}..."
+    return previous_text
+
+
+def _label_with_previous_for_field(label, field_id, previous_value, state_token):
+    previous_text = _short_previous_display_value(field_id, previous_value)
+    is_number_field = (
+        field_id != "gbd_cause_id_3_ml"
+        and not (TAXONOMY.get(field_id, {}).get("ui", {}).get("options") or _get_dynamic_field_options(field_id))
+    )
+    return label_with_previous_value(
+        label,
+        previous_text,
+        state_token,
+        line_break_before_previous=is_number_field and field_id != "primary_duration_months_ml",
+    )
 
 
 def get_committed_feature_ids(row):
@@ -6896,6 +7055,7 @@ def operational_assumption_label_with_previous(label, row, assumption_key):
             if isinstance(value, str)
             else _format_operational_assumption_display_value(assumption_key, value)
         ),
+        line_break_before_previous=True,
     )
 
 
@@ -8524,11 +8684,12 @@ def _label_with_previous_value(label, field_id, row):
             fallback_values = snapshot.get("submitted_values") or reference_values
         previous_value = get_display_value_for_field(field_id, fallback_values.get(field_id))
 
-    previous_value = str(previous_value or "N/A")
-    if field_id == "gbd_cause_id_3_ml" and len(previous_value) > 34:
-        previous_value = f"{previous_value[:31].rstrip()}..."
-
-    return label_with_previous_value(label, previous_value, state_token)
+    return _label_with_previous_for_field(
+        label,
+        field_id,
+        previous_value,
+        state_token,
+    )
 
 
 def _render_trial_feature_control(field_id, row):
@@ -8799,23 +8960,68 @@ def _render_trial_feature_pillar(pillar, fields, row):
             layout = [ordered_fields[offset:offset + 2] for offset in range(0, len(ordered_fields), 2)]
 
         available_fields = set(fields)
-        for field_row in layout:
-            visible_fields = [field_id for field_id in field_row if field_id in available_fields]
-            if not visible_fields:
+        for row_index, field_row in enumerate(layout):
+            visible_items = [
+                _visible_trial_feature_layout_item(item, available_fields)
+                for item in field_row
+            ]
+            visible_items = [item for item in visible_items if item]
+            if not visible_items:
                 continue
 
-            # Single-field rows still use a two-column grid (the second column
-            # is left empty) so the lone field keeps the same width as the
-            # left-hand field of the rows above it, rather than stretching
-            # across the whole card. Multi-field rows keep their own count.
-            column_count = 2 if len(visible_fields) == 1 else len(visible_fields)
-            row_cols = st.columns(column_count, gap="small")
-            for col, field_id in zip(row_cols, visible_fields):
+            with st.container(key=f"simrow_{_field_token(pillar)}_{row_index + 1}"):
+                # Single-cell rows still use a two-column grid (the second
+                # column is left empty) so the lone field keeps the same width
+                # as the left-hand field of the rows above it. Execution rows 1
+                # and 2 are intentionally true three-column rows.
+                column_count = 2 if len(visible_items) == 1 else len(visible_items)
+                row_cols = st.columns(column_count, gap="small")
+                for col, item in zip(row_cols, visible_items):
+                    with col:
+                        _render_trial_feature_layout_item(item, row)
+
+
+def _is_operational_layout_item(item):
+    return isinstance(item, str) and item.startswith("op:")
+
+
+def _operational_layout_key(item):
+    return item.split("op:", 1)[1]
+
+
+def _visible_trial_feature_layout_item(item, available_fields):
+    if isinstance(item, (list, tuple)):
+        visible_children = [
+            _visible_trial_feature_layout_item(child, available_fields)
+            for child in item
+        ]
+        visible_children = [child for child in visible_children if child]
+        return visible_children or None
+    if _is_operational_layout_item(item):
+        return item
+    if item in available_fields or item in SIMULATION_FEATURE_ID_SET:
+        return item
+    return None
+
+
+def _render_trial_feature_layout_item(item, row):
+    if isinstance(item, (list, tuple)):
+        pair_token = "_".join(_field_token(str(child)) for child in item)
+        with st.container(key=f"simfield_pair_{pair_token}"):
+            child_cols = st.columns(len(item), gap="small")
+            for col, child in zip(child_cols, item):
                 with col:
-                    _render_trial_feature_control(field_id, row)
+                    _render_trial_feature_layout_item(child, row)
+        return
+
+    if _is_operational_layout_item(item):
+        render_operational_assumption_input(row, _operational_layout_key(item), compact=True)
+        return
+
+    _render_trial_feature_control(item, row)
 
 
-def render_planned_enrollment_input(row):
+def render_planned_enrollment_input(row, compact=False):
     ensure_planned_enrollment_state(row)
     nct_id = str(row.get(ID_COL, st.session_state.get("selected_nct_id", "")))
     widget_key = get_operational_assumption_widget_key(nct_id, "planned_enrollment")
@@ -8844,18 +9050,24 @@ def render_planned_enrollment_input(row):
     )
 
     state_token = operational_assumption_history_state_token(row, "planned_enrollment")
-    with st.container(key=f"operational_assumption_{state_token}_{_field_token('planned_enrollment')}"):
-        st.markdown(
-            """
-            <div class="operational-assumption-head">
-                <div class="highlight-title">Operational Assumption</div>
-                <div class="operational-assumption-help">
-                    Operational assumption only. Does not enter the XGBoost Completion Score.
+    container_key = (
+        f"simfield_{state_token}_num_op_{_field_token('planned_enrollment')}"
+        if compact
+        else f"operational_assumption_{state_token}_{_field_token('planned_enrollment')}"
+    )
+    with st.container(key=container_key):
+        if not compact:
+            st.markdown(
+                """
+                <div class="operational-assumption-head">
+                    <div class="highlight-title">Operational Assumption</div>
+                    <div class="operational-assumption-help">
+                        Operational assumption only. Does not enter the XGBoost Completion Score.
+                    </div>
                 </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+                """,
+                unsafe_allow_html=True,
+            )
         input_kwargs = {
             "label": enrollment_label,
             "min_value": 0,
@@ -8863,14 +9075,15 @@ def render_planned_enrollment_input(row):
             "key": widget_key,
             "on_change": _sync_planned_enrollment_widget,
             "args": (row,),
-            "help": "Operational assumption only. Does not enter the XGBoost Completion Score.",
         }
+        if not compact:
+            input_kwargs["help"] = "Operational assumption only. Does not enter the XGBoost Completion Score."
         if widget_key not in st.session_state:
             input_kwargs["value"] = current_value
         st.number_input(**input_kwargs)
 
 
-def render_planned_sites_input(row):
+def render_planned_sites_input(row, compact=False):
     ensure_planned_sites_state(row)
     nct_id = str(row.get(ID_COL, st.session_state.get("selected_nct_id", "")))
     widget_key = get_operational_assumption_widget_key(nct_id, "planned_sites")
@@ -8899,18 +9112,24 @@ def render_planned_sites_input(row):
     )
 
     state_token = operational_assumption_history_state_token(row, "planned_sites")
-    with st.container(key=f"operational_assumption_{state_token}_{_field_token('planned_sites')}"):
-        st.markdown(
-            """
-            <div class="operational-assumption-head">
-                <div class="highlight-title">Operational Assumption</div>
-                <div class="operational-assumption-help">
-                    Scenario assumption compared with registry-derived facility-count benchmarks.
+    container_key = (
+        f"simfield_{state_token}_num_op_{_field_token('planned_sites')}"
+        if compact
+        else f"operational_assumption_{state_token}_{_field_token('planned_sites')}"
+    )
+    with st.container(key=container_key):
+        if not compact:
+            st.markdown(
+                """
+                <div class="operational-assumption-head">
+                    <div class="highlight-title">Operational Assumption</div>
+                    <div class="operational-assumption-help">
+                        Scenario assumption compared with registry-derived facility-count benchmarks.
+                    </div>
                 </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+                """,
+                unsafe_allow_html=True,
+            )
         input_kwargs = {
             "label": site_label,
             "min_value": 0,
@@ -8918,14 +9137,15 @@ def render_planned_sites_input(row):
             "key": widget_key,
             "on_change": _sync_planned_sites_widget,
             "args": (row,),
-            "help": "Operational assumption only. Uses registry-derived facility-count proxy benchmarks and does not enter the XGBoost Completion Score.",
         }
+        if not compact:
+            input_kwargs["help"] = "Operational assumption only. Uses registry-derived facility-count proxy benchmarks and does not enter the XGBoost Completion Score."
         if widget_key not in st.session_state:
             input_kwargs["value"] = current_value
         st.number_input(**input_kwargs)
 
 
-def render_planned_duration_input(row):
+def render_planned_duration_input(row, compact=False):
     ensure_planned_duration_state(row)
     nct_id = str(row.get(ID_COL, st.session_state.get("selected_nct_id", "")))
     widget_key = get_operational_assumption_widget_key(nct_id, "planned_duration_months")
@@ -8954,18 +9174,24 @@ def render_planned_duration_input(row):
     )
 
     state_token = operational_assumption_history_state_token(row, "planned_duration_months")
-    with st.container(key=f"operational_assumption_{state_token}_{_field_token('planned_duration_months')}"):
-        st.markdown(
-            """
-            <div class="operational-assumption-head">
-                <div class="highlight-title">Operational Assumption</div>
-                <div class="operational-assumption-help">
-                    Scenario assumption for total trial duration. Does not enter the XGBoost Completion Score.
+    container_key = (
+        f"simfield_{state_token}_num_op_{_field_token('planned_duration_months')}"
+        if compact
+        else f"operational_assumption_{state_token}_{_field_token('planned_duration_months')}"
+    )
+    with st.container(key=container_key):
+        if not compact:
+            st.markdown(
+                """
+                <div class="operational-assumption-head">
+                    <div class="highlight-title">Operational Assumption</div>
+                    <div class="operational-assumption-help">
+                        Scenario assumption for total trial duration. Does not enter the XGBoost Completion Score.
+                    </div>
                 </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+                """,
+                unsafe_allow_html=True,
+            )
         input_kwargs = {
             "label": duration_label,
             "min_value": 0.0,
@@ -8974,11 +9200,23 @@ def render_planned_duration_input(row):
             "key": widget_key,
             "on_change": _sync_planned_duration_widget,
             "args": (row,),
-            "help": "Operational assumption only. Benchmarks total duration from start date to completion date and does not enter the XGBoost Completion Score.",
         }
+        if not compact:
+            input_kwargs["help"] = "Operational assumption only. Benchmarks total duration from start date to completion date and does not enter the XGBoost Completion Score."
         if widget_key not in st.session_state:
             input_kwargs["value"] = current_value
         st.number_input(**input_kwargs)
+
+
+def render_operational_assumption_input(row, assumption_key, compact=False):
+    renderers = {
+        "planned_enrollment": render_planned_enrollment_input,
+        "planned_sites": render_planned_sites_input,
+        "planned_duration_months": render_planned_duration_input,
+    }
+    renderer = renderers.get(assumption_key)
+    if renderer:
+        renderer(row, compact=compact)
 
 
 def render_operational_assumption_inputs(row):
@@ -10063,7 +10301,6 @@ def render_trial_detail_tabs_refined(row):
 
                 with tab_features:
                     render_trial_features_tab(row)
-                    render_operational_assumption_inputs(row)
                     mark_trial_features_ready()
                     if sim_tab_reset_pending:
                         st.session_state.simulation_tab_reset_pending = False
@@ -10164,7 +10401,6 @@ def render_trial_detail_tabs_refined(row):
             if simulation_mode and tab_features is not None:
                 with tab_features:
                     render_trial_features_tab(row)
-                    render_operational_assumption_inputs(row)
                     mark_trial_features_ready()
                 if sim_tab_reset_pending:
                     st.session_state.simulation_tab_reset_pending = False

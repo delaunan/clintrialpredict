@@ -25,10 +25,10 @@ Current state to carry forward:
 - Sparse, unseen, or cross-TA indications remain selectable without user-facing model-support warnings.
 - Execution Framework has one-way alignment: changing Benchmark Comparator to `Placebo Control` sets Placebo Control to `Yes`; changing Benchmark Comparator to `No Control Group or Not Specified` sets Placebo Control to `No`. This triggers only from Benchmark Comparator changes, and the user can manually override Placebo Control afterward.
 - Simulation scoring still uses the existing model, SHAP contribution path, and TA calibration logic. No model artifacts were changed.
-- Simulation Mode has three active operational assumptions: Planned Enrollment, Planned Site Count, and Duration. They are benchmarked through the single combined artifact `frontend/data/operational_benchmarks_v1.csv` and runtime utility `src/operational_benchmarks.py`.
+- Simulation Mode has three active operational assumptions: Planned Enrollment, Planned Site Count, and Duration. They render as compact controls inside `Execution Framework` and are benchmarked through the single combined artifact `frontend/data/operational_benchmarks_v1.csv` and runtime utility `src/operational_benchmarks.py`.
 - Operational assumptions stay outside `/predict`, XGBoost, SHAP, Completion Score, TA calibration, taxonomy artifacts, and prediction payloads. Operational-only edits refresh snapshot metadata without calling `/predict`.
 - Benchmark maintenance is consolidated to one builder and one checker: `python scripts/build_operational_benchmarks.py` and `python scripts/check_operational_benchmarks.py`.
-- Operational assumption labels stay visually light: direct AACT-backed values have no suffix, system-filled defaults show `(est.)`, and participant edits remove the suffix while the snapshot metadata still records `source = user_scenario`.
+- Operational assumption labels stay visually light: direct AACT-backed values have no suffix, system-filled defaults show `(est.)`, previous markers use compact `prev:` text, and participant edits remove the suffix while the snapshot metadata still records `source = user_scenario`.
 
 Verification still needed:
 
@@ -254,7 +254,7 @@ Current Trial Features layout:
 - Top right: `Patient Profile`
 - Bottom left: `Scientific Challenge`
 - Bottom right: `Execution Framework`
-- The layout is visually finalized as of this session: four white rounded pillar cards, two fields per row by default, single-field rows left-aligned at half-card width, equal top-row card heights, equal bottom-row card heights, compact row-to-row spacing, and enlarged pillar icon/title headers with extra separation before the first field row.
+- The layout uses four white rounded pillar cards, two fields per row by default, single-field rows left-aligned at half-card width, equal top-row card heights, equal bottom-row card heights, compact row-to-row spacing, and enlarged pillar icon/title headers with extra separation before the first field row. `Execution Framework` uses homogeneous three-column rows for its first two rows and shares the same five-row rhythm as `Scientific Challenge`.
 - `number_of_arms_ml` remains an integer input. `primary_duration_months_ml` uses one-decimal display/comparison with `0.1` increments, matching the model-facing preprocessing rule.
 - The top text-context cards share the existing Trial Information text state and feed narrative `text_context`; they do not enter XGBoost Completion Score. In V1 narrative packets, `Conditions`, `Study Summary`, `Interventions`, and `Primary Outcomes` are sent by default. Long `Eligibility Criteria` remains editable/displayed but is deferred from default narrative packets unless a future compact eligibility summary or explicit narrative-edit policy is added.
 
@@ -271,23 +271,34 @@ Current Trial Features row structure:
 - Scientific Challenge:
   - `target_precedent_ml`, `target_pathway_class_ml`
   - `therapeutic_modality_ml`, `innovation_tier_ml`
-  - `primary_purpose_ml`, `intervention_model_ml`
-  - `adaptive_design_ml`, `biomarker_stratification_ml`
-  - `endpoint_rigor_ml`, `endpoint_structure_ml`
+  - `primary_purpose_ml`, `adaptive_design_ml`
+  - `endpoint_structure_ml`, `endpoint_rigor_ml`
+  - `biomarker_stratification_ml`
 - Execution Framework:
+  - `planned_enrollment`, `planned_sites`, `planned_duration_months`
+  - `number_of_arms_ml`, `intervention_model_ml`, `primary_duration_months_ml`
   - `allocation_ml`, `masking_ml`
   - `comparator_benchmark_ml`, `has_placebo_ml`
-  - `administration_complexity_ml`
-  - `number_of_arms_ml`, `primary_duration_months_ml`
-  - `has_dmc_ml`, `sponsor_tier_ml`
+  - `administration_complexity_ml` | `has_dmc_ml`, `sponsor_tier_ml`
 
 Current Trial Features label overrides:
 
-- `primary_duration_months_ml`: `Max Primary Endpoint Duration (in months)`, with `(in months)` visually on the second label line.
-- `has_dmc_ml`: `Data Monitoring Comittee`.
+- `primary_duration_months_ml`: `Max Endpoint Duration (months)`.
+- `has_dmc_ml`: `Data Monitoring Committee`.
 - `adult_ml`: `Adult Profiles`.
 - `child_ml`: `Pediatric Profiles`.
-- `older_adult_ml`: `Geratic Profiles`.
+- `older_adult_ml`: `Geriatric Profiles`.
+
+Trial Features UI review - 2026-06-11:
+
+- The active implementation keeps Trial Features in `frontend/views/trial_simulator.py` and still treats the tab as a scenario editor, not an automatic scoring trigger.
+- The four structured pillar cards are rendered from `SIMULATION_FEATURE_LAYOUT`, with layout items now supporting plain model-facing fields, nested field pairs, and `op:` operational-assumption entries.
+- The three operational assumptions are now compact number inputs in the first `Execution Framework` row. Their state, pending markers, previous-value labels, and operational-only update path remain separate from model-facing Trial Features and `/predict`.
+- Compact operational inputs intentionally suppress the larger operational-assumption card header/help copy so the controls fit the same row rhythm as adjacent model-facing fields.
+- Previous-value labels now use compact `prev:` text, may break onto a second line for numeric/operational labels, and truncate long indication/sponsor values for layout stability.
+- CSS for Trial Features is concentrated under the `st-key-simulation_feature_pillar_` selectors. The current design depends on fixed row/card heights, responsive `--sim-*` tokens, no-wrap row containers, and special `Execution Framework` number-input sizing so compact operational controls align with Streamlit number steppers.
+- Static review found no scoring/parity boundary change: the edited files do not alter model artifacts, preprocessing, SHAP, TA calibration, taxonomy mappings, or the prediction payload contract.
+- Residual UI risk is visual rather than algorithmic: because the CSS targets Streamlit DOM/testid structure and fixed card heights, the layout should still be browser-smoked at the usual viewport matrix after future spacing or label changes.
 
 Verification completed:
 
@@ -560,13 +571,13 @@ Include all 31 taxonomy model-facing fields with a non-`Metadata` UI pillar. Thi
 
 - `masking_ml` - Bias Control
 - `allocation_ml` - Allocation Method
-- `has_dmc_ml` - Data Monitoring Comittee
+- `has_dmc_ml` - Data Monitoring Committee
 - `has_placebo_ml` - Placebo Control
 - `comparator_benchmark_ml` - Benchmark Comparator
 - `administration_complexity_ml` - Delivery Profile
 - `number_of_arms_ml` - Number of Arms
 - `sponsor_tier_ml` - Sponsor Type
-- `primary_duration_months_ml` - Max Primary Endpoint Duration (in months)
+- `primary_duration_months_ml` - Max Endpoint Duration (months)
 
 Execution Framework alignment rules:
 
