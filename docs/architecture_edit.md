@@ -188,7 +188,9 @@ Implemented since the 2026-05-30 status:
 - Long previous indication labels are truncated inline for layout stability.
 - `primary_duration_months_ml` uses one-decimal display and `0.1` steps, matching the one-decimal model-facing endpoint-duration rule.
 - Trial Features widget keys are deleted during reset so Simulation Mode off/on starts from original selected-trial values and does not reuse stale previous-session dropdown state.
-- Simulation tab order is now `Trial Information`, `Population Details`, `Completion Score`, `Trial Features`; when Simulation Mode is toggled on, `Trial Features` opens by default.
+- Simulation Mode uses native Streamlit tabs with only `Trial Features` and `Trial Score`; when Simulation Mode is toggled on, `Trial Features` opens by default. Non-simulation mode keeps `Trial Information`, `Population Details`, and `Trial Score`.
+- Simulation Trial Features values are stored in a durable `simulation_input_{trial}_{field}` namespace. Pending-change reads must compare this explicit scenario state to the latest snapshot and must not promote generic `feature_*` widget values into scenario state during reruns.
+- Trial Score radio changes are view-only. They redraw stored Completion Outlook, Design Confidence, or Total Scenario Score outputs from the latest snapshot and cached Scenario Review traces; they must not call `/predict`, call Scenario Review/LLM, create an overlay, mark the scenario pending, or change the `Review Scenario` button state.
 - Simulation-only gauge comparison now shows compact previous-score and variance text (`Prev: SCORE pts` plus up/down/flat indicator and percent/flat marker).
 - Impact-bar pillar deltas now render without parentheses, use a slightly larger font, and show `-` for effectively zero variation.
 - `frontend/utils/plot.py` remains shared and now only carries the small formatting support for simulation pillar deltas.
@@ -766,9 +768,12 @@ Existing state to keep:
 - `analysis_result`
 - `analysis_nct_id`
 - `completion_score_tab_jump_nonce`
-- `input_{nct_id}_{field_id}` widget keys
+- `input_{nct_id}_{field_id}` widget keys outside Simulation Mode
+- `simulation_input_{nct_id}_{field_id}` durable Simulation Mode scenario keys
 
 Avoid separate long-lived state for original-vs-current edit comparisons once a prediction snapshot exists. The current visible values plus the latest snapshot should be enough to derive button state, field markers, stale notices, and changed-field history records.
+
+Simulation Mode must treat rendered Streamlit widget keys as transport, not truth. Scenario-changing surfaces are explicit: structured Trial Features (`SIMULATION_FEATURE_IDS`), active operational assumptions (`planned_enrollment`, `planned_sites`, `planned_duration_months`), and the editable narrative text fields. Other widgets, including Trial Score radios and hidden tab widgets mounted by Streamlit during reruns, are outside the scenario-change set and must not be considered by pending-change logic.
 
 Resolved behavior decisions:
 
@@ -779,7 +784,7 @@ Resolved behavior decisions:
 - Large text fields can remain editable for now, but the current simulation workflow should guide users to change model inputs from `Trial Features`.
 - LLM-derived dropdown values should not be recomputed from edited text in this phase. That can be a later capability after direct dropdown editing and live reprediction are stable.
 - Normal mode keeps the existing precomputed/audit prediction path.
-- Simulation mode uses live scoring.
+- Simulation mode uses live scoring only for explicit model-facing scenario submissions. The Trial Score radio is a display selector over already stored values and cached review traces.
 
 Recommended reset behavior:
 
@@ -801,14 +806,14 @@ Normal mode:
 
 Simulation mode after baseline snapshot creation:
 
-- `Trial Information`
-- `Population Details`
-- `Completion Score`
 - `Trial Features`
+- `Trial Score`
 
 When Simulation Mode is toggled on, `Trial Features` opens by default. For existing selected trials, `Completion Score` can be available immediately from the local prerecorded baseline snapshot. Baseline gauge, impact bar, and treemap should use precomputed audit decomposition when available.
 
-The `Predict Trial Completion` button should no longer be blocked by simulation mode. In simulation mode, it should submit the current edited row only when pending changes exist. Changing tabs, opening Population Details, or interacting anywhere except `Predict Trial Completion` must not run a new prediction.
+The `Predict Trial Completion` button should no longer be blocked by simulation mode. In simulation mode, it should submit the current edited row only when pending changes exist. Changing tabs, changing Trial Score radios, or interacting anywhere except `Predict Trial Completion` / `Review Scenario` must not run a new prediction or Scenario Review.
+
+Native tabs are acceptable in Simulation Mode only because hidden widget state is isolated from durable scenario state. If a future change reintroduces pending checks that read generic widget keys directly, tab/radio reruns can again create false pending state.
 
 ## Predict Trial Completion Button
 

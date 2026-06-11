@@ -42,6 +42,7 @@ load_test_results*/
 # Local assistant configs
 .gemini/.env
 .gemini/checkpoints/
+.gemini/tmp/clintrialpredict/diagnostics/
 .gemini/state.json
 .gemini/history/
 .antigravitycli/

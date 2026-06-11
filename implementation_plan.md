@@ -337,6 +337,7 @@ Status: pending
 Named live-review target:
 
 - Review `NCT03386721` - Simlukafusp alfa (ROCHE) | Oncology (2018), with special attention to whether Execution Framework / Operational Burden Balance narratives are specific, expert, auditable, and strategically useful without prescribing the solution.
+- Review `NCT03896581` - `[BE COMPLETE]` Bimekizumab (UCB) | Musculoskeletal (2019), with special attention to the narrative when Pathway Profile changes from `Interleukin Cytokine` to `Kinase Inhibitor`. Use this case to check whether the Scenario Review explains the clinical-development meaning of a pathway-class change without overclaiming mechanism, efficacy, or regulatory implications.
 
 Verification:
 
@@ -373,4 +374,4 @@ These are real needs, but not blockers for the immediate schema migration:
 
 ## Immediate Next Step
 
-Run the Phase 7 narrative regression pass, starting with `NCT03386721` - Simlukafusp alfa (ROCHE) | Oncology (2018) as the focused Execution Framework narrative-quality review case.
+Run the Phase 7 narrative regression pass, starting with `NCT03386721` - Simlukafusp alfa (ROCHE) | Oncology (2018) for Execution Framework narrative quality, then `NCT03896581` - `[BE COMPLETE]` Bimekizumab (UCB) | Musculoskeletal (2019) for Pathway Profile narrative quality on `Interleukin Cytokine` -> `Kinase Inhibitor`.

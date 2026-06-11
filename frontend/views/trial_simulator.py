@@ -21,6 +21,14 @@ import requests
 # IMPORT PLOTTING UTILS
 from frontend.utils.plot import plot_success_gauge, plot_adjustment_gauge, plot_impact_bar, plot_treemap
 from frontend.utils.audit_decomposition import build_prerecorded_audit_decomposition_result
+from frontend.utils.scenario_review_diagnostics import (
+    append_record as append_scenario_review_diagnostics_record,
+    build_exception_record as build_scenario_review_exception_record,
+    build_trace_record as build_scenario_review_trace_record,
+    diagnostics_payload as scenario_review_diagnostics_payload,
+    exception_log_key as scenario_review_exception_log_key,
+    trace_log_key as scenario_review_trace_log_key,
+)
 from src.operational_benchmarks import (
     load_operational_benchmarks,
     planned_enrollment_default_from_operational_benchmark,
@@ -68,6 +76,14 @@ ASSETS_DIR = FRONTEND_DIR / "assets"
 DATA_PATH = FRONTEND_DIR / "data" / "search_registry.csv"
 DATA_CLINPRED_PATH = PROJECT_ROOT / "data" / "data_clinpred.csv"
 GBD_L3_LOOKUP_PATH = FRONTEND_DIR / "data" / "gbd_l3_indication_lookup.csv"
+SCENARIO_REVIEW_DIAGNOSTICS_PATH = (
+    PROJECT_ROOT
+    / ".gemini"
+    / "tmp"
+    / "clintrialpredict"
+    / "diagnostics"
+    / "scenario_review_timing_diagnostics.jsonl"
+)
 OPERATIONAL_BENCHMARK_PATH = FRONTEND_DIR / "data" / "operational_benchmarks_v1.csv"
 TAXONOMY_PATH = PROJECT_ROOT / "models" / "taxonomy_01.json"
 IS_CLOUD_RUN = bool(os.getenv("K_SERVICE"))
@@ -1677,6 +1693,28 @@ def inject_custom_styles():
                 align-items: center !important;
                 justify-content: center !important;
                 margin: 0 !important;
+            }}
+
+            .st-key-summary_side_shell_completion_prediction_left_top_block .trial-score-completion-only-marker {{
+                display: none !important;
+            }}
+
+            .st-key-summary_side_shell_completion_prediction_left_top_block .trial-score-completion-only-label {{
+                position: absolute !important;
+                top: 18px !important;
+                left: 0 !important;
+                right: 0 !important;
+                z-index: 6 !important;
+                color: #334155 !important;
+                font-size: 1.05rem !important;
+                font-weight: 800 !important;
+                line-height: 1.05 !important;
+                text-align: center !important;
+                pointer-events: none !important;
+            }}
+
+            .st-key-summary_side_shell_completion_prediction_left_top_block .st-key-trial_score_mode_selector:has(.trial-score-completion-only-marker) [role="radiogroup"] {{
+                visibility: hidden !important;
             }}
 
             .st-key-summary_side_shell_completion_prediction_left_top_block .completion-gauge-help-wrap {{
@@ -5035,6 +5073,10 @@ def init_session_state():
         "prediction_error_notice": None,
         "completion_score_tab_jump_nonce": 0,
         "simulation_open_features_tab": False,
+        "simulation_tab_reset_pending": False,
+        "simulation_review_pending": False,
+        "simulation_review_transition_done": False,
+        "simulation_review_unavailable_notice": None,
         "simulation_prediction_result": None,
         "simulation_prediction_nct_id": None,
         "simulation_initial_result": None,
@@ -5899,6 +5941,7 @@ def set_latest_prediction_snapshot(
     st.session_state.simulation_prediction_result = snapshot["result"]
     st.session_state.simulation_prediction_nct_id = str(nct_id)
     st.session_state.simulation_last_score = score
+    st.session_state.simulation_has_edits = False
 
     if source == "prerecorded_baseline":
         st.session_state.simulation_initial_result = snapshot["result"]
@@ -6173,7 +6216,11 @@ def ensure_hidden_baseline_review_initialized(row):
         return None
 
     try:
-        return get_hidden_baseline_review_trace(row, baseline_snapshot)
+        return safe_get_hidden_baseline_review_trace(
+            row,
+            baseline_snapshot,
+            phase="hidden_baseline_initialization",
+        )
     except Exception:
         logger.exception("Hidden baseline Scenario Review initialization failed")
         return None
@@ -6182,6 +6229,35 @@ def ensure_hidden_baseline_review_initialized(row):
 def get_trace_current_snapshot_id(trace):
     packet = (trace or {}).get("input_packet") or {}
     return (packet.get("iteration_context") or {}).get("current_snapshot_id")
+
+
+def get_cached_hidden_baseline_review_trace_for_snapshot(snapshot):
+    if not snapshot:
+        return None
+
+    nct_id = str(snapshot.get("nct_id") or st.session_state.get("selected_nct_id", ""))
+    cached_trace = st.session_state.get(get_hidden_baseline_review_trace_state_key(nct_id))
+    runtime = narrative_review_runtime()
+    if not narrative_trace_matches_runtime(cached_trace, runtime):
+        return None
+    return normalize_hidden_baseline_review_trace(cached_trace)
+
+
+def get_cached_quality_review_trace_for_snapshot(snapshot):
+    if not snapshot or snapshot.get("source") == "prerecorded_baseline":
+        return None
+
+    nct_id = str(snapshot.get("nct_id") or st.session_state.get("selected_nct_id", ""))
+    cached_trace = st.session_state.get(get_quality_review_trace_state_key(nct_id))
+    current_snapshot_id = snapshot.get("snapshot_id") or snapshot.get("timestamp")
+    runtime = narrative_review_runtime()
+    if not (
+        cached_trace
+        and get_trace_current_snapshot_id(cached_trace) == current_snapshot_id
+        and narrative_trace_matches_runtime(cached_trace, runtime)
+    ):
+        return None
+    return cached_trace
 
 
 def get_quality_review_trace_for_snapshot(row, snapshot):
@@ -6212,7 +6288,11 @@ def get_quality_review_trace_for_snapshot(row, snapshot):
     previous_trace = cached_trace if narrative_trace_matches_runtime(cached_trace, runtime) else None
     baseline_snapshot = get_baseline_prediction_snapshot(nct_id)
     baseline_started_at = time.monotonic()
-    baseline_trace = get_hidden_baseline_review_trace(row, baseline_snapshot)
+    baseline_trace = safe_get_hidden_baseline_review_trace(
+        row,
+        baseline_snapshot,
+        phase="visible_baseline_context_generation",
+    )
     baseline_latency_ms = _elapsed_ms(baseline_started_at)
     compact_storyline_memory = compact_storyline_from_trace(previous_trace)
 
@@ -6270,6 +6350,34 @@ def get_quality_review_trace_for_snapshot(row, snapshot):
     })
     st.session_state[state_key] = trace
     return trace
+
+
+def safe_get_hidden_baseline_review_trace(row, baseline_snapshot, *, phase="hidden_baseline"):
+    try:
+        return get_hidden_baseline_review_trace(row, baseline_snapshot)
+    except Exception as exc:
+        persist_scenario_review_exception_diagnostics(
+            exc,
+            phase=phase,
+            row=row,
+            baseline_snapshot=baseline_snapshot,
+        )
+        logger.exception("Hidden baseline Scenario Review generation failed")
+        return None
+
+
+def safe_get_quality_review_trace_for_snapshot(row, snapshot, *, phase="visible_iteration"):
+    try:
+        return get_quality_review_trace_for_snapshot(row, snapshot)
+    except Exception as exc:
+        persist_scenario_review_exception_diagnostics(
+            exc,
+            phase=phase,
+            row=row,
+            snapshot=snapshot,
+        )
+        logger.exception("Visible Scenario Review generation failed")
+        return None
 
 
 def _mapped_value_for_option_key(field_id, option_key):
@@ -6393,40 +6501,20 @@ def get_display_value_for_field(field_id, value):
     return "N/A" if label in (None, "") else str(label)
 
 
-def sync_rendered_simulation_widgets_to_shared_state(row):
-    trial_key = str(row.get(ID_COL, st.session_state.get("selected_nct_id", "no_trial")))
+def get_simulation_feature_state_key(trial_key, field_id):
+    return f"simulation_input_{trial_key}_{field_id}"
 
-    for field_id in SIMULATION_FEATURE_IDS:
-        widget_key = f"feature_{trial_key}_{field_id}"
-        widget_override = _peek_feature_widget_override(field_id)
-        if widget_key not in st.session_state and widget_override is None:
-            continue
 
-        state_key = f"input_{trial_key}_{field_id}"
-        widget_value = widget_override if widget_override is not None else st.session_state.get(widget_key)
-
-        if field_id == "gbd_cause_id_3_ml":
-            selected_id = 0
-            selected_name = "Other / Unclassified"
-            for option_id, option_name in _get_indication_options(row):
-                if _format_indication_label(option_name, option_id) == widget_value:
-                    selected_id = option_id
-                    selected_name = option_name
-                    break
-            st.session_state[state_key] = selected_id
-            st.session_state[f"input_{trial_key}_gbd_indication_name_3"] = selected_name
-            continue
-
-        st.session_state[state_key] = widget_value
+def get_simulation_indication_name_state_key(trial_key):
+    return get_simulation_feature_state_key(trial_key, "gbd_indication_name_3")
 
 
 def get_current_feature_values(row):
-    sync_rendered_simulation_widgets_to_shared_state(row)
     values = {}
     trial_key = str(row.get(ID_COL, st.session_state.get("selected_nct_id", "no_trial")))
 
     for field_id in SIMULATION_FEATURE_IDS:
-        state_key = f"input_{trial_key}_{field_id}"
+        state_key = get_simulation_feature_state_key(trial_key, field_id)
         initial_val = _get_initial_field_value(field_id, row)
         values[field_id] = _canonical_feature_value(
             field_id,
@@ -6437,12 +6525,11 @@ def get_current_feature_values(row):
 
 
 def get_current_compare_values(row):
-    sync_rendered_simulation_widgets_to_shared_state(row)
     values = {}
     trial_key = str(row.get(ID_COL, st.session_state.get("selected_nct_id", "no_trial")))
 
     for field_id in SIMULATION_FEATURE_IDS:
-        state_key = f"input_{trial_key}_{field_id}"
+        state_key = get_simulation_feature_state_key(trial_key, field_id)
         initial_val = _get_initial_field_value(field_id, row)
         values[field_id] = _option_key_for_ui_value(
             field_id,
@@ -6750,6 +6837,12 @@ def operational_assumption_label_with_previous(label, row, assumption_key):
 
 
 def has_pending_simulation_changes(row):
+    if (
+        st.session_state.get("global_edit_mode", False)
+        and not st.session_state.get("simulation_has_edits", False)
+    ):
+        return False
+
     return (
         has_pending_changes(row)
         or has_pending_operational_assumptions(row)
@@ -6828,7 +6921,7 @@ def set_simulation_initial_score(row=None):
     )
 
 
-def start_prediction_request():
+def start_prediction_request(*, jump_to_score=True):
     st.session_state.detail_completion_tab_visible = True
     st.session_state.detail_prediction_notice = False
     st.session_state.prediction_error_notice = None
@@ -6836,12 +6929,20 @@ def start_prediction_request():
         st.session_state.analysis_result = None
         st.session_state.analysis_nct_id = None
     st.session_state.trigger_prediction = True
-    st.session_state.completion_score_tab_jump_nonce += 1
+    if jump_to_score:
+        st.session_state.completion_score_tab_jump_nonce += 1
+
+
+def finish_scenario_review_transition():
+    st.session_state.simulation_review_pending = False
+    st.session_state.simulation_review_transition_done = True
 
 
 def set_prediction_error_notice(message):
     st.session_state.prediction_error_notice = message
     st.session_state.trigger_prediction = False
+    if st.session_state.get("simulation_review_pending", False):
+        finish_scenario_review_transition()
 
 
 def is_valid_trial_id(selected_id):
@@ -6957,9 +7058,13 @@ def handle_predict_trial_completion():
         )
 
         st.session_state[SCORE_VIEW_STATE_KEY] = SCORE_VIEW_TOTAL
+        st.session_state.simulation_review_pending = True
+        st.session_state.simulation_review_transition_done = False
+        st.session_state.simulation_review_unavailable_notice = None
+        st.session_state.simulation_open_features_tab = True
         st.session_state.analysis_result = None
         st.session_state.analysis_nct_id = None
-        start_prediction_request()
+        start_prediction_request(jump_to_score=False)
         return
 
     audit_log(
@@ -6989,6 +7094,14 @@ def reset_trial_editor_state():
 
         _safe_set_session_value(state_key, initial_val)
         _safe_delete_session_value(widget_key)
+        _safe_delete_session_value(_feature_widget_override_key(field_id))
+
+    for field_id in SIMULATION_FEATURE_IDS:
+        st.session_state[get_simulation_feature_state_key(trial_key, field_id)] = _get_initial_field_value(field_id, row)
+    st.session_state[get_simulation_indication_name_state_key(trial_key)] = row.get(
+        "gbd_indication_name_3",
+        "Other / Unclassified",
+    )
 
     st.session_state[_indication_attention_key()] = False
 
@@ -7006,8 +7119,10 @@ def reset_trial_editor_state():
 
     for suffix, candidates in TRIAL_EDITOR_TEXT_FIELDS.items():
         state_key = f"text_{trial_key}_{suffix}"
+        widget_key = f"{state_key}_features"
         value = trial_val(row, *candidates)
         _safe_set_session_value(state_key, "" if value == "N/A" else str(value))
+        _safe_delete_session_value(widget_key)
 
 def handle_global_edit_toggle():
     simulation_mode = st.session_state.get("global_edit_mode", False)
@@ -7023,12 +7138,14 @@ def handle_global_edit_toggle():
     if simulation_mode:
         st.session_state[SCORE_VIEW_STATE_KEY] = SCORE_VIEW_COMPLETION
         st.session_state.simulation_open_features_tab = True
+        st.session_state.simulation_tab_reset_pending = True
         st.session_state.completion_score_tab_jump_nonce += 1
         set_simulation_initial_score()
         reset_trial_editor_state()
     else:
         st.session_state[SCORE_VIEW_STATE_KEY] = SCORE_VIEW_COMPLETION
         st.session_state.simulation_open_features_tab = False
+        st.session_state.simulation_tab_reset_pending = False
         st.session_state.completion_score_tab_jump_nonce += 1
         reset_trial_editor_state()
 
@@ -7097,6 +7214,9 @@ def render_transition_overlay_hook():
             const win = parent.window;
             const OVERLAY_ID = "ctp-transition-overlay";
             const TRIAL_FEATURES_READY_SELECTOR = '[data-ctp-ready="trial-features"]';
+            const SIMULATION_MODE_READY_SELECTOR = '[data-ctp-ready="simulation-mode"]';
+            const SCENARIO_REVIEW_DONE_SELECTOR = '[data-ctp-ready="scenario-review-finished"]';
+            const COMPLETION_SCORE_READY_SELECTOR = '[data-ctp-ready="completion-score"]';
 
             function isReadySelectorVisible(selector) {
                 if (!selector) return false;
@@ -7127,6 +7247,7 @@ def render_transition_overlay_hook():
                 stopOverlayObserver();
                 win.__ctpOverlayWaitSelector = null;
                 win.__ctpOverlayMessage = null;
+                win.__ctpOverlayTimeoutMs = null;
             }
 
             function watchOverlayTarget(selector) {
@@ -7213,6 +7334,7 @@ def render_transition_overlay_hook():
 
                 win.__ctpOverlayMessage = message;
                 win.__ctpOverlayWaitSelector = waitSelector || null;
+                win.__ctpOverlayTimeoutMs = timeoutMs || null;
 
                 if (waitSelector) {
                     watchOverlayTarget(waitSelector);
@@ -7240,12 +7362,35 @@ def render_transition_overlay_hook():
                 return control.getAttribute("aria-checked") !== "true";
             }
 
+            function isSimulationModeActive() {
+                const labels = Array.from(doc.querySelectorAll("label"));
+                const label = labels.find(function(candidate) {
+                    return getButtonText(candidate) === "Simulation Mode (Editing Content)";
+                });
+                if (!label) return false;
+
+                const control = label.querySelector('input[type="checkbox"], [role="switch"]');
+                if (!control) return false;
+
+                if (typeof control.checked === "boolean") {
+                    return control.checked;
+                }
+
+                return control.getAttribute("aria-checked") === "true";
+            }
+
             function getOverlayConfig(text) {
                 if (text === "Search Trials") return ["Loading trials...", 1600];
                 if (text === "Reset Filters") return ["Resetting filters...", 1600];
-                if (text === "Review Scenario") return ["Reviewing scenario...", 3330];
+                if (text === "Review Scenario") {
+                    if (isSimulationModeActive()) {
+                        return ["Evaluating scenario impact...", 90000, SCENARIO_REVIEW_DONE_SELECTOR];
+                    }
+                    return ["Reviewing completion score...", 12000, COMPLETION_SCORE_READY_SELECTOR];
+                }
+                if (text === "Retry Scenario Review") return ["Evaluating scenario impact...", 3330];
                 if (text === "Simulation Mode (Editing Content)") {
-                    return ["Preparing Simulation Mode...", 12000, TRIAL_FEATURES_READY_SELECTOR];
+                    return ["Preparing Simulation Mode...", 12000, SIMULATION_MODE_READY_SELECTOR];
                 }
                 return null;
             }
@@ -7258,7 +7403,7 @@ def render_transition_overlay_hook():
                     if (!existing) {
                         showOverlay(
                             win.__ctpOverlayMessage || "Preparing Simulation Mode...",
-                            12000,
+                            win.__ctpOverlayTimeoutMs || 12000,
                             win.__ctpOverlayWaitSelector
                         );
                     } else {
@@ -7763,6 +7908,8 @@ def _render_native_meta_field(label, field_id, row, key_suffix=""):
                 trial_val(row, field_id.replace("_ml", "_ui"), field_id, default=False)
             )
             widget_key = f"{state_key}_{key_suffix}" if key_suffix else state_key
+            if widget_key in st.session_state:
+                st.session_state[widget_key] = _coerce_checkbox_value(st.session_state.get(widget_key))
 
             checkbox_kwargs = {
                 "label": label,
@@ -7817,11 +7964,19 @@ def _render_native_meta_textarea_field(label, value, state_suffix, height):
     if state_key not in st.session_state:
         st.session_state[state_key] = safe_value
 
+    def _sync_native_textarea_edit():
+        if st.session_state.get("global_edit_mode", False):
+            if normalize_text_for_materiality(st.session_state.get(state_key, "")) == normalize_text_for_materiality(safe_value):
+                return
+            st.session_state.simulation_has_edits = True
+            queue_simulation_reprediction_if_score_visible()
+
     with st.container(key=f"meta_native_field_{state_suffix}"):
         st.text_area(
             label,
             key=state_key,
             height=height,
+            on_change=_sync_native_textarea_edit,
             disabled=not st.session_state.get("global_edit_mode", False)
         )
 
@@ -7838,6 +7993,13 @@ def render_top_title_panel(row):
     if text_key not in st.session_state:
         st.session_state[text_key] = current_value
 
+    def _sync_top_title_edit():
+        if st.session_state.get("global_edit_mode", False):
+            if normalize_text_for_materiality(st.session_state.get(text_key, "")) == normalize_text_for_materiality(current_value):
+                return
+            st.session_state.simulation_has_edits = True
+            queue_simulation_reprediction_if_score_visible()
+
     safe_nct = html.escape(trial_val(row, "nct_id"))
     safe_identity = html.escape(trial_val(row, "ui_search_label"))
 
@@ -7851,6 +8013,7 @@ def render_top_title_panel(row):
             key=text_key,
             height=TEXTAREA_HEIGHTS["top_title"],
             label_visibility="collapsed",
+            on_change=_sync_top_title_edit,
             disabled=not st.session_state.get("global_edit_mode", False)
         )
 
@@ -7985,7 +8148,7 @@ def render_trial_top_strip_refined(row):
 
 def _canonical_ta_from_state(row):
     trial_key = st.session_state.get("selected_nct_id", "no_trial")
-    state_key = f"input_{trial_key}_therapeutic_area_ml"
+    state_key = get_simulation_feature_state_key(trial_key, "therapeutic_area_ml")
     value = st.session_state.get(state_key, _get_initial_field_value("therapeutic_area_ml", row))
     meta = TAXONOMY.get("therapeutic_area_ml", {})
 
@@ -8009,7 +8172,7 @@ def _indication_attention_key():
 
 def _current_option_key_from_state(field_id, row):
     trial_key = st.session_state.get("selected_nct_id", "no_trial")
-    state_key = f"input_{trial_key}_{field_id}"
+    state_key = get_simulation_feature_state_key(trial_key, field_id)
     return _option_key_for_ui_value(
         field_id,
         st.session_state.get(state_key, _get_initial_field_value(field_id, row))
@@ -8036,10 +8199,6 @@ def _consume_feature_widget_override(field_id):
     if key not in st.session_state:
         return None
     return st.session_state.pop(key)
-
-
-def _peek_feature_widget_override(field_id):
-    return st.session_state.get(_feature_widget_override_key(field_id))
 
 
 def _observed_rows_for_ta(item, ta_code):
@@ -8069,14 +8228,14 @@ def _get_indication_options(row):
     trial_key = st.session_state.get("selected_nct_id", "no_trial")
     current_id = pd.to_numeric(
         st.session_state.get(
-            f"input_{trial_key}_gbd_cause_id_3_ml",
+            get_simulation_feature_state_key(trial_key, "gbd_cause_id_3_ml"),
             row.get("gbd_cause_id_3_ml", 0)
         ),
         errors="coerce"
     )
     current_id = 0 if pd.isna(current_id) else int(current_id)
     current_name = st.session_state.get(
-        f"input_{trial_key}_gbd_indication_name_3",
+        get_simulation_indication_name_state_key(trial_key),
         row.get("gbd_indication_name_3", "Other / Unclassified")
     )
 
@@ -8134,12 +8293,17 @@ def _get_indication_options(row):
 def _sync_feature_widget_to_shared_state(field_id):
     trial_key = st.session_state.get("selected_nct_id", "no_trial")
     widget_key = f"feature_{trial_key}_{field_id}"
-    state_key = f"input_{trial_key}_{field_id}"
-    st.session_state[state_key] = st.session_state.get(widget_key)
+    state_key = get_simulation_feature_state_key(trial_key, field_id)
+    widget_value = st.session_state.get(widget_key)
+    previous_value = st.session_state.get(state_key)
+    if _values_equal_for_snapshot(widget_value, previous_value, field_id=field_id):
+        return
+
+    st.session_state[state_key] = widget_value
 
     if field_id == "therapeutic_area_ml":
-        st.session_state[f"input_{trial_key}_gbd_cause_id_3_ml"] = 0
-        st.session_state[f"input_{trial_key}_gbd_indication_name_3"] = "Other / Unclassified"
+        st.session_state[get_simulation_feature_state_key(trial_key, "gbd_cause_id_3_ml")] = 0
+        st.session_state[get_simulation_indication_name_state_key(trial_key)] = "Other / Unclassified"
         _queue_feature_widget_override(
             "gbd_cause_id_3_ml",
             _format_indication_label("Other / Unclassified", 0)
@@ -8148,7 +8312,7 @@ def _sync_feature_widget_to_shared_state(field_id):
 
     if field_id == "comparator_benchmark_ml":
         comparator_key = _option_key_for_ui_value(field_id, st.session_state.get(state_key))
-        placebo_state_key = f"input_{trial_key}_has_placebo_ml"
+        placebo_state_key = get_simulation_feature_state_key(trial_key, "has_placebo_ml")
 
         if comparator_key == "PLACEBO":
             st.session_state[placebo_state_key] = "Yes"
@@ -8175,8 +8339,12 @@ def _sync_indication_widget_to_shared_state(row):
             selected_name = option_name
             break
 
-    st.session_state[f"input_{trial_key}_gbd_cause_id_3_ml"] = selected_id
-    st.session_state[f"input_{trial_key}_gbd_indication_name_3"] = selected_name
+    previous_id = st.session_state.get(get_simulation_feature_state_key(trial_key, "gbd_cause_id_3_ml"))
+    if _values_equal_for_snapshot(selected_id, previous_id, field_id="gbd_cause_id_3_ml"):
+        return
+
+    st.session_state[get_simulation_feature_state_key(trial_key, "gbd_cause_id_3_ml")] = selected_id
+    st.session_state[get_simulation_indication_name_state_key(trial_key)] = selected_name
     st.session_state[_indication_attention_key()] = False
     st.session_state.simulation_has_edits = True
     queue_simulation_reprediction_if_score_visible()
@@ -8187,7 +8355,14 @@ def _sync_planned_enrollment_widget(row):
     widget_key = get_operational_assumption_widget_key(nct_id, "planned_enrollment")
     value_key = get_planned_enrollment_state_key(nct_id)
     source_key = get_planned_enrollment_source_state_key(nct_id)
-    st.session_state[value_key] = st.session_state.get(widget_key, 0)
+    widget_value = st.session_state.get(widget_key, 0)
+    if _operational_assumption_values_equal(
+        widget_value,
+        st.session_state.get(value_key),
+        assumption_key="planned_enrollment",
+    ):
+        return
+    st.session_state[value_key] = widget_value
     st.session_state[source_key] = "user_scenario"
     st.session_state.simulation_has_edits = True
     queue_simulation_reprediction_if_score_visible()
@@ -8198,7 +8373,14 @@ def _sync_planned_sites_widget(row):
     widget_key = get_operational_assumption_widget_key(nct_id, "planned_sites")
     value_key = get_planned_sites_state_key(nct_id)
     source_key = get_planned_sites_source_state_key(nct_id)
-    st.session_state[value_key] = st.session_state.get(widget_key, 0)
+    widget_value = st.session_state.get(widget_key, 0)
+    if _operational_assumption_values_equal(
+        widget_value,
+        st.session_state.get(value_key),
+        assumption_key="planned_sites",
+    ):
+        return
+    st.session_state[value_key] = widget_value
     st.session_state[source_key] = "user_scenario"
     st.session_state.simulation_has_edits = True
     queue_simulation_reprediction_if_score_visible()
@@ -8210,7 +8392,14 @@ def _sync_planned_duration_widget(row):
     value_key = get_planned_duration_state_key(nct_id)
     source_key = get_planned_duration_source_state_key(nct_id)
     value = pd.to_numeric(st.session_state.get(widget_key, 0.0), errors="coerce")
-    st.session_state[value_key] = 0.0 if pd.isna(value) else round(float(value), 1)
+    widget_value = 0.0 if pd.isna(value) else round(float(value), 1)
+    if _operational_assumption_values_equal(
+        widget_value,
+        st.session_state.get(value_key),
+        assumption_key="planned_duration_months",
+    ):
+        return
+    st.session_state[value_key] = widget_value
     st.session_state[source_key] = "user_scenario"
     st.session_state.simulation_has_edits = True
     queue_simulation_reprediction_if_score_visible()
@@ -8245,9 +8434,13 @@ def _label_with_previous_value(label, field_id, row):
 
 def _render_trial_feature_control(field_id, row):
     trial_key = st.session_state.get("selected_nct_id", "no_trial")
-    state_key, initial_val, options = _init_trial_field_state(field_id, row)
-    widget_key = f"feature_{trial_key}_{field_id}"
+    initial_val = _get_initial_field_value(field_id, row)
+    state_key = get_simulation_feature_state_key(trial_key, field_id)
     meta = TAXONOMY.get(field_id, {})
+    options = meta.get("ui", {}).get("options")
+    if not options:
+        options = _get_dynamic_field_options(field_id)
+    widget_key = f"feature_{trial_key}_{field_id}"
     ui = meta.get("ui", {})
     label = SIMULATION_FEATURE_LABEL_OVERRIDES.get(field_id, ui.get("label", field_id))
     label = _label_with_previous_value(label, field_id, row)
@@ -8287,10 +8480,9 @@ def _render_trial_feature_control(field_id, row):
 
             widget_override = _consume_feature_widget_override(field_id)
             if widget_override in labels:
-                _safe_set_session_value(widget_key, widget_override)
-
-            if widget_key in st.session_state and st.session_state.get(widget_key) not in labels:
-                _safe_set_session_value(widget_key, labels[selected_index] if labels else "")
+                st.session_state[widget_key] = widget_override
+            elif labels:
+                st.session_state[widget_key] = labels[selected_index]
 
             _selectbox_with_optional_default(
                 label,
@@ -8306,10 +8498,9 @@ def _render_trial_feature_control(field_id, row):
             labels, selected_index = _resolve_field_labels(field_id, state_key, initial_val, options)
             widget_override = _consume_feature_widget_override(field_id)
             if widget_override in labels:
-                _safe_set_session_value(widget_key, widget_override)
-
-            if widget_key in st.session_state and st.session_state.get(widget_key) not in labels:
-                _safe_set_session_value(widget_key, labels[selected_index] if labels else "")
+                st.session_state[widget_key] = widget_override
+            elif labels:
+                st.session_state[widget_key] = labels[selected_index]
 
             _selectbox_with_optional_default(
                 label,
@@ -8349,6 +8540,7 @@ def _render_trial_feature_control(field_id, row):
                         else int(round(float(repaired)))
                     )
                 )
+            st.session_state[widget_key] = current_value
 
         _number_input_with_optional_default(
             label,
@@ -8385,7 +8577,12 @@ def _render_simulation_text_shell_panel(row, label, value, state_suffix, panel_s
         _safe_set_session_value(widget_key, safe_value)
 
     def _sync_text_feature_widget():
-        _safe_set_session_value(shared_key, st.session_state.get(widget_key, ""))
+        widget_value = st.session_state.get(widget_key, "")
+        if normalize_text_for_materiality(widget_value) == normalize_text_for_materiality(
+            st.session_state.get(shared_key, "")
+        ):
+            return
+        _safe_set_session_value(shared_key, widget_value)
         st.session_state.simulation_has_edits = True
         queue_simulation_reprediction_if_score_visible()
 
@@ -8525,7 +8722,12 @@ def render_planned_enrollment_input(row):
 
     if widget_key in st.session_state:
         stored = pd.to_numeric(st.session_state.get(widget_key), errors="coerce")
-        if pd.isna(stored) or float(stored) < 0:
+        if (
+            pd.isna(stored)
+            or float(stored) < 0
+        ):
+            st.session_state[widget_key] = current_value
+        else:
             st.session_state[widget_key] = current_value
 
     enrollment_label = operational_assumption_input_label(
@@ -8575,7 +8777,12 @@ def render_planned_sites_input(row):
 
     if widget_key in st.session_state:
         stored = pd.to_numeric(st.session_state.get(widget_key), errors="coerce")
-        if pd.isna(stored) or float(stored) < 0:
+        if (
+            pd.isna(stored)
+            or float(stored) < 0
+        ):
+            st.session_state[widget_key] = current_value
+        else:
             st.session_state[widget_key] = current_value
 
     site_label = operational_assumption_input_label(
@@ -8625,7 +8832,12 @@ def render_planned_duration_input(row):
 
     if widget_key in st.session_state:
         stored = pd.to_numeric(st.session_state.get(widget_key), errors="coerce")
-        if pd.isna(stored) or float(stored) < 0:
+        if (
+            pd.isna(stored)
+            or float(stored) < 0
+        ):
+            st.session_state[widget_key] = current_value
+        else:
             st.session_state[widget_key] = current_value
 
     duration_label = operational_assumption_input_label(
@@ -9398,61 +9610,102 @@ def _combined_subcategory_impacts(completion_subcats, design_subcats):
     return rows
 
 
-def _quality_review_diagnostics(trace):
-    if not trace or trace.get("provider") == PROVIDER_MOCK:
+def _diagnostics_row_value(row):
+    return row if row is not None else {}
+
+
+def _diagnostics_nct_id(row=None, snapshot=None, fallback=""):
+    row_value = _diagnostics_row_value(row)
+    snapshot_value = snapshot or {}
+    return str(
+        snapshot_value.get("nct_id")
+        or row_value.get(ID_COL, fallback or st.session_state.get("selected_nct_id", ""))
+    )
+
+
+def _diagnostics_provider_context():
+    try:
+        runtime = narrative_review_runtime()
+        context = {
+            "provider": runtime.get("provider"),
+            "review_runtime_key": runtime.get("runtime_key"),
+        }
+        config = runtime.get("config")
+        if config:
+            settings = config.provider_settings(config.provider)
+            if settings:
+                context["model_name"] = settings.model
+        return context
+    except Exception:
+        return {}
+
+
+def persist_scenario_review_exception_diagnostics(
+    exc,
+    *,
+    phase,
+    row=None,
+    snapshot=None,
+    baseline_snapshot=None,
+    context=None,
+):
+    record = build_scenario_review_exception_record(
+        exc,
+        diagnostics_file=str(SCENARIO_REVIEW_DIAGNOSTICS_PATH.relative_to(PROJECT_ROOT)),
+        phase=phase,
+        nct_id=_diagnostics_nct_id(row=row, snapshot=snapshot or baseline_snapshot),
+        trial_title=_diagnostics_row_value(row).get("brief_title"),
+        snapshot=snapshot,
+        baseline_snapshot=baseline_snapshot,
+        provider_context=_diagnostics_provider_context(),
+        state_context={
+            "has_snapshot": bool(snapshot),
+            "has_baseline_snapshot": bool(baseline_snapshot),
+            "global_edit_mode": bool(st.session_state.get("global_edit_mode", False)),
+            "score_view": st.session_state.get(SCORE_VIEW_STATE_KEY),
+            "pending_changes": bool(row is not None and has_pending_simulation_changes(row)),
+            **(context or {}),
+        },
+    )
+    append_scenario_review_diagnostics_record(
+        SCENARIO_REVIEW_DIAGNOSTICS_PATH,
+        record,
+        logged_keys=st.session_state.setdefault("scenario_review_diagnostics_logged_keys", set()),
+        log_key=scenario_review_exception_log_key(record),
+        logger=logger,
+    )
+
+
+def persist_scenario_review_diagnostics(trace, row=None, snapshot=None):
+    if not trace:
         return
 
-    metadata = trace.get("provider_metadata") or {}
-    workflow = trace.get("workflow_metadata") or {}
-    diagnostics = {
-        "status": trace.get("status"),
-        "failure_reason": trace.get("failure_reason"),
-        "workflow_timing": {
-            "review_phase": workflow.get("review_phase"),
-            "workflow_latency_ms": workflow.get("workflow_latency_ms"),
-            "baseline_lookup_latency_ms": workflow.get("baseline_lookup_latency_ms"),
-            "visible_provider_or_store_latency_ms": workflow.get("visible_provider_or_store_latency_ms"),
-            "provider_or_store_latency_ms": workflow.get("provider_or_store_latency_ms"),
-            "baseline_provider_latency_ms": workflow.get("baseline_provider_latency_ms"),
-            "session_cache_hit": workflow.get("session_cache_hit"),
-            "review_store_cache_hit": workflow.get("review_store_cache_hit"),
-            "baseline_session_cache_hit": workflow.get("baseline_session_cache_hit"),
-            "baseline_review_store_cache_hit": workflow.get("baseline_review_store_cache_hit"),
-        },
-        "provider": trace.get("provider"),
-        "model_name": trace.get("model_name"),
-        "prompt_mode": metadata.get("prompt_mode"),
-        "attempts": metadata.get("attempts"),
-        "provider_latency_ms": metadata.get("latency_ms"),
-        "response_text_length": metadata.get("response_text_length"),
-        "parsed_json_object": metadata.get("parsed_json_object"),
-        "parsed_payload_type": metadata.get("parsed_payload_type"),
-        "usage_metadata": metadata.get("usage_metadata"),
-        "finish_metadata": metadata.get("finish_metadata"),
-        "last_error_type": metadata.get("last_error_type"),
-        "malformed_json_retry_attempts": metadata.get("malformed_json_retry_attempts"),
-        "malformed_json_retry_latency_ms": metadata.get("malformed_json_retry_latency_ms"),
-        "malformed_json_retry_error_type": metadata.get("malformed_json_retry_error_type"),
-        "malformed_json_retry_controls": metadata.get("malformed_json_retry_controls"),
-        "configured_generation_controls": metadata.get("configured_generation_controls"),
-        "applied_generation_controls": metadata.get("applied_generation_controls"),
-        "fallback_after": metadata.get("fallback_after"),
-        "validation_status": trace.get("validation_status"),
-        "validation_errors": trace.get("validation_errors"),
-        "input_hash": trace.get("input_hash"),
-        "changed_fields": trace.get("changed_fields"),
-    }
-    diagnostics = {
-        key: value
-        for key, value in diagnostics.items()
-        if value not in (None, "", [], {})
-    }
-    if isinstance(diagnostics.get("workflow_timing"), dict):
-        diagnostics["workflow_timing"] = {
-            key: value
-            for key, value in diagnostics["workflow_timing"].items()
-            if value not in (None, "", [], {})
-        }
+    record = build_scenario_review_trace_record(
+        trace,
+        diagnostics_file=str(SCENARIO_REVIEW_DIAGNOSTICS_PATH.relative_to(PROJECT_ROOT)),
+        nct_id=_diagnostics_nct_id(row=row, snapshot=snapshot),
+        trial_title=_diagnostics_row_value(row).get("brief_title"),
+        snapshot=snapshot,
+    )
+    append_scenario_review_diagnostics_record(
+        SCENARIO_REVIEW_DIAGNOSTICS_PATH,
+        record,
+        logged_keys=st.session_state.setdefault("scenario_review_diagnostics_logged_keys", set()),
+        log_key=scenario_review_trace_log_key(trace),
+        logger=logger,
+    )
+
+
+def _quality_review_diagnostics(trace, row=None, snapshot=None):
+    if not trace:
+        return
+
+    persist_scenario_review_diagnostics(trace, row=row, snapshot=snapshot)
+
+    if trace.get("provider") == PROVIDER_MOCK:
+        return
+
+    diagnostics = scenario_review_diagnostics_payload(trace)
     with st.expander("Scenario Review timing and diagnostics", expanded=False):
         st.json(diagnostics)
 
@@ -9468,7 +9721,9 @@ def render_scenario_review_report(row, trace=None, snapshot=None):
     current_snapshot_id = snapshot.get("snapshot_id") or snapshot.get("timestamp")
 
     if snapshot.get("source") == "prerecorded_baseline":
-        trace = trace or get_hidden_baseline_review_trace(row, snapshot)
+        trace = trace or get_cached_hidden_baseline_review_trace_for_snapshot(snapshot)
+    else:
+        trace = trace or get_cached_quality_review_trace_for_snapshot(snapshot)
 
     if has_pending_simulation_changes(row):
         pending_diagnostics = {
@@ -9485,9 +9740,6 @@ def render_scenario_review_report(row, trace=None, snapshot=None):
             st.json(pending_diagnostics)
         return
 
-    if trace is None:
-        with st.spinner("Generating Scenario Review..."):
-            trace = get_quality_review_trace_for_snapshot(row, snapshot)
     if not trace:
         return
 
@@ -9506,7 +9758,7 @@ def render_scenario_review_report(row, trace=None, snapshot=None):
             message,
             reason or "Validation did not produce Design Confidence and Total Scenario Score.",
         )
-        _quality_review_diagnostics(trace)
+        _quality_review_diagnostics(trace, row=row, snapshot=snapshot)
         if trace.get("provider") != PROVIDER_MOCK:
             if st.button("Retry Scenario Review", key=f"scenario_review_retry_{nct_id}_{current_snapshot_id}", type="secondary"):
                 st.session_state.pop(get_quality_review_trace_state_key(nct_id), None)
@@ -9556,7 +9808,7 @@ def render_scenario_review_report(row, trace=None, snapshot=None):
         ),
         unsafe_allow_html=True,
     )
-    _quality_review_diagnostics(trace)
+    _quality_review_diagnostics(trace, row=row, snapshot=snapshot)
 
 
 def get_simulation_pillar_delta_map():
@@ -9588,6 +9840,58 @@ def get_simulation_pillar_delta_map():
     return deltas
 
 
+def scenario_score_trace_is_ready(trace):
+    return bool(
+        trace
+        and trace.get("design_confidence") is not None
+        and trace.get("total_scenario_score") is not None
+    )
+
+
+def scenario_review_unavailable_reason(trace):
+    if not trace:
+        return "Scenario Review did not return a usable response."
+    reason = trace.get("failure_reason") or "; ".join(trace.get("validation_errors") or [])
+    if not reason and str(trace.get("status") or "") == "no_fixture_match":
+        reason = "No mock Scenario Review fixture matched this live scenario."
+    return reason or "Validation did not produce Design Confidence and Total Scenario Score."
+
+
+def finalize_pending_scenario_review_before_tabs(row):
+    if not st.session_state.get("simulation_review_pending", False):
+        return
+
+    if st.session_state.get("trigger_prediction", False):
+        return
+
+    nct_id = str(row.get(ID_COL, st.session_state.get("selected_nct_id", "")))
+    snapshot = get_latest_prediction_snapshot(nct_id)
+    if not snapshot or snapshot.get("source") == "prerecorded_baseline":
+        return
+
+    if has_pending_simulation_changes(row):
+        return
+
+    with st.spinner("Evaluating scenario impact..."):
+        trace = safe_get_quality_review_trace_for_snapshot(
+            row,
+            snapshot,
+            phase="pre_tab_scenario_score_generation",
+        )
+
+    finish_scenario_review_transition()
+    persist_scenario_review_diagnostics(trace, row=row, snapshot=snapshot)
+
+    if scenario_score_trace_is_ready(trace):
+        st.session_state[SCORE_VIEW_STATE_KEY] = SCORE_VIEW_TOTAL
+        st.session_state.detail_completion_tab_visible = True
+        st.session_state.simulation_open_features_tab = False
+        st.session_state.completion_score_tab_jump_nonce += 1
+        st.rerun()
+
+    st.session_state.simulation_review_unavailable_notice = scenario_review_unavailable_reason(trace)
+
+
 def render_trial_detail_tabs_refined(row):
     render_trial_top_strip_refined(row)
 
@@ -9596,161 +9900,183 @@ def render_trial_detail_tabs_refined(row):
         ensure_simulation_baseline_snapshot(row)
         if st.session_state.get("trigger_prediction", False):
             get_analysis_result_for_selected_trial(row)
+        finalize_pending_scenario_review_before_tabs(row)
+        if has_pending_simulation_changes(row) and not st.session_state.get("prediction_error_notice"):
+            st.session_state.simulation_review_transition_done = False
+            st.session_state.simulation_review_unavailable_notice = None
+        elif st.session_state.get("simulation_review_transition_done", False):
+            st.markdown(
+                '<span data-ctp-ready="scenario-review-finished" style="display:none;"></span>',
+                unsafe_allow_html=True,
+            )
+
+        if not st.session_state.get("simulation_tab_reset_pending", False):
+            st.markdown(
+                '<span data-ctp-ready="simulation-mode" style="display:none;"></span>',
+                unsafe_allow_html=True,
+            )
 
     nct_id = str(row.get(ID_COL, st.session_state.get("selected_nct_id", "")))
     baseline_score_visible = bool(simulation_mode and get_latest_prediction_snapshot(nct_id))
-    score_visible = st.session_state.get("detail_completion_tab_visible", False) or baseline_score_visible
+    sim_tab_reset_pending = bool(
+        simulation_mode
+        and st.session_state.get("simulation_tab_reset_pending", False)
+    )
+    score_visible = (
+        st.session_state.get("detail_completion_tab_visible", False)
+        or baseline_score_visible
+    )
+    if sim_tab_reset_pending:
+        score_visible = False
     if st.session_state.get("prediction_error_notice"):
         st.error(st.session_state.prediction_error_notice)
+    elif st.session_state.get("simulation_review_unavailable_notice"):
+        st.warning(
+            "Scenario score is not available yet. "
+            f"{st.session_state.simulation_review_unavailable_notice}"
+        )
+
+    detail_tab_shell_mode = "sim" if simulation_mode else "audit"
+    detail_tab_shell_key = (
+        f"trial_detail_tabs_{detail_tab_shell_mode}_shell_"
+        f"{st.session_state.get('completion_score_tab_jump_nonce', 0)}"
+    )
 
     with st.container(key="trial_detail_tabs"):
-        if simulation_mode and score_visible:
-            default_sim_tab = (
-                DETAIL_TAB_FEATURES
-                if st.session_state.get("simulation_open_features_tab", False)
-                else DETAIL_TAB_SCORE
-            )
-            tab1, tab2, tab_score, tab_features = st.tabs(
-                [DETAIL_TAB_INFO, DETAIL_TAB_POPULATION, DETAIL_TAB_SCORE, DETAIL_TAB_FEATURES],
-                default=default_sim_tab,
-                key=f"trial_detail_tabs_sim_with_score_{st.session_state.get('completion_score_tab_jump_nonce', 0)}"
-            )
-            st.session_state.simulation_open_features_tab = False
-        elif simulation_mode:
-            tab1, tab2, tab_features = st.tabs(
-                [DETAIL_TAB_INFO, DETAIL_TAB_POPULATION, DETAIL_TAB_FEATURES],
-                default=DETAIL_TAB_FEATURES,
-                key="trial_detail_tabs_sim_base"
-            )
-            st.session_state.simulation_open_features_tab = False
-            tab_score = None
-        elif score_visible:
-            tab1, tab2, tab_score = st.tabs(
-                [DETAIL_TAB_INFO, DETAIL_TAB_POPULATION, DETAIL_TAB_SCORE],
-                default=DETAIL_TAB_SCORE,
-                key=f"trial_detail_tabs_with_score_{st.session_state.get('completion_score_tab_jump_nonce', 0)}"
-            )
-            tab_features = None
-        else:
-            tab1, tab2 = st.tabs(
-                [DETAIL_TAB_INFO, DETAIL_TAB_POPULATION],
-                default=DETAIL_TAB_INFO,
-                key="trial_detail_tabs_base"
-            )
-            tab_features = None
-            tab_score = None
-
-        with tab1:
-            left_col, middle_col, right_col = st.columns([0.82, 2.88, 0.82], gap="xsmall")
-
-            with left_col:
-                render_ta_conditions_panel(row)
-
-            with middle_col:
-                with st.container(key="summary_top_row"):
-                    render_summary_text_shell_panel(
-                        label="Study Summary",
-                        value=trial_val(row, "summary_ui"),
-                        state_suffix="study_summary",
-                        panel_suffix="study_summary_block",
-                        height=TEXTAREA_HEIGHTS["study_summary"]
-                    )
-
-                bottom_left, bottom_right = st.columns(2, gap="xsmall")
-
-                with bottom_left:
-                    render_summary_text_shell_panel(
-                        label="Interventions",
-                        value=trial_val(row, "interventions_ui"),
-                        state_suffix="interventions",
-                        panel_suffix="interventions_block",
-                        height=TEXTAREA_HEIGHTS["interventions"]
-                    )
-
-                with bottom_right:
-                    render_summary_text_shell_panel(
-                        label="Primary Outcomes",
-                        value=trial_val(row, "primary_outcomes_ui"),
-                        state_suffix="primary_outcomes",
-                        panel_suffix="primary_outcomes_block",
-                        height=TEXTAREA_HEIGHTS["primary_outcomes"]
-                    )
-
-            with right_col:
-                render_summary_side_panel(
-                    row=row,
-                    rows=[
-                        ("Phase", "phase_ml"),
-                        ("Allocation", "allocation_ml"),
-                        ("Intervention Model", "intervention_model_ml"),
-                        ("Number of Arms", "number_of_arms_ml"),
-                        ("Masking", "masking_ml"),
-                        ("Placebo Control", "has_placebo_ml"),
-                        ("DMC Involvment Status", "has_dmc_ml"),
-                    ],
-                    panel_suffix="design_block"
+        with st.container(key=detail_tab_shell_key):
+            if simulation_mode:
+                default_sim_tab = (
+                    DETAIL_TAB_FEATURES
+                    if st.session_state.get("simulation_open_features_tab", False)
+                    or st.session_state.get("simulation_review_pending", False)
+                    or not score_visible
+                    else DETAIL_TAB_SCORE
                 )
-
-        with tab2:
-            left_col, right_col = st.columns([3.70, 0.82], gap="xsmall")
-
-            with left_col:
-                render_summary_text_shell_panel(
-                    label="Eligibility Criteria",
-                    value=trial_val(row, "criteria_ui"),
-                    state_suffix="eligibility_criteria",
-                    panel_suffix="eligibility_block",
-                    height=TEXTAREA_HEIGHTS["eligibility_criteria"]
+                tab_features, tab_score = st.tabs(
+                    [DETAIL_TAB_FEATURES, DETAIL_TAB_SCORE],
+                    default=default_sim_tab,
+                    key=f"trial_detail_tabs_sim_{st.session_state.get('completion_score_tab_jump_nonce', 0)}"
                 )
+                st.session_state.simulation_open_features_tab = False
 
-            with right_col:
-                render_population_side_panel(row)
+                with tab_features:
+                    render_trial_features_tab(row)
+                    render_operational_assumption_inputs(row)
+                    if sim_tab_reset_pending:
+                        st.session_state.simulation_tab_reset_pending = False
+                        st.session_state.simulation_open_features_tab = True
+                        st.session_state.simulation_has_edits = False
+                        st.rerun()
 
-        if simulation_mode and tab_features is not None:
-            with tab_features:
-                render_trial_features_tab(row)
-                render_operational_assumption_inputs(row)
+                if score_visible:
+                    with tab_score:
+                        render_completion_prediction_tab(row)
 
-        if score_visible and tab_score is not None:
-            with tab_score:
-                render_completion_prediction_tab(row)
+                return
+
+            if score_visible:
+                tab1, tab2, tab_score = st.tabs(
+                    [DETAIL_TAB_INFO, DETAIL_TAB_POPULATION, DETAIL_TAB_SCORE],
+                    default=DETAIL_TAB_SCORE,
+                    key=f"trial_detail_tabs_with_score_{st.session_state.get('completion_score_tab_jump_nonce', 0)}"
+                )
+                tab_features = None
+            else:
+                tab1, tab2 = st.tabs(
+                    [DETAIL_TAB_INFO, DETAIL_TAB_POPULATION],
+                    default=DETAIL_TAB_INFO,
+                    key="trial_detail_tabs_base"
+                )
+                tab_features = None
+                tab_score = None
+
+            if tab1 is not None:
+                with tab1:
+                    left_col, middle_col, right_col = st.columns([0.82, 2.88, 0.82], gap="xsmall")
+
+                    with left_col:
+                        render_ta_conditions_panel(row)
+
+                    with middle_col:
+                        with st.container(key="summary_top_row"):
+                            render_summary_text_shell_panel(
+                                label="Study Summary",
+                                value=trial_val(row, "summary_ui"),
+                                state_suffix="study_summary",
+                                panel_suffix="study_summary_block",
+                                height=TEXTAREA_HEIGHTS["study_summary"]
+                            )
+
+                        bottom_left, bottom_right = st.columns(2, gap="xsmall")
+
+                        with bottom_left:
+                            render_summary_text_shell_panel(
+                                label="Interventions",
+                                value=trial_val(row, "interventions_ui"),
+                                state_suffix="interventions",
+                                panel_suffix="interventions_block",
+                                height=TEXTAREA_HEIGHTS["interventions"]
+                            )
+
+                        with bottom_right:
+                            render_summary_text_shell_panel(
+                                label="Primary Outcomes",
+                                value=trial_val(row, "primary_outcomes_ui"),
+                                state_suffix="primary_outcomes",
+                                panel_suffix="primary_outcomes_block",
+                                height=TEXTAREA_HEIGHTS["primary_outcomes"]
+                            )
+
+                    with right_col:
+                        render_summary_side_panel(
+                            row=row,
+                            rows=[
+                                ("Phase", "phase_ml"),
+                                ("Allocation", "allocation_ml"),
+                                ("Intervention Model", "intervention_model_ml"),
+                                ("Number of Arms", "number_of_arms_ml"),
+                                ("Masking", "masking_ml"),
+                                ("Placebo Control", "has_placebo_ml"),
+                                ("DMC Involvment Status", "has_dmc_ml"),
+                            ],
+                            panel_suffix="design_block"
+                        )
+
+            if tab2 is not None:
+                with tab2:
+                    left_col, right_col = st.columns([3.70, 0.82], gap="xsmall")
+
+                    with left_col:
+                        render_summary_text_shell_panel(
+                            label="Eligibility Criteria",
+                            value=trial_val(row, "criteria_ui"),
+                            state_suffix="eligibility_criteria",
+                            panel_suffix="eligibility_block",
+                            height=TEXTAREA_HEIGHTS["eligibility_criteria"]
+                        )
+
+                    with right_col:
+                        render_population_side_panel(row)
+
+            if simulation_mode and tab_features is not None:
+                with tab_features:
+                    render_trial_features_tab(row)
+                    render_operational_assumption_inputs(row)
+                if sim_tab_reset_pending:
+                    st.session_state.simulation_tab_reset_pending = False
+                    st.session_state.simulation_open_features_tab = True
+                    st.session_state.simulation_has_edits = False
+                    st.rerun()
+
+            if score_visible and tab_score is not None:
+                with tab_score:
+                    render_completion_prediction_tab(row)
 
 def get_edited_row(row: pd.Series) -> pd.Series:
-    sync_rendered_simulation_widgets_to_shared_state(row)
     edited_row = row.copy()
-    trial_key = st.session_state.get("selected_nct_id", "no_trial")
+    for field_id, value in get_current_feature_values(row).items():
+        edited_row[field_id] = value
 
-    # 1. Update from Smart Info Boxes: inputs, selectboxes, toggles
-    field_prefix = f"input_{trial_key}_"
-
-    for key in list(st.session_state.keys()):
-        if "__readonly" in key:
-            continue
-
-        if key.startswith(field_prefix):
-            field_id = key[len(field_prefix):]
-            val = st.session_state[key]
-
-            if field_id in {"has_placebo_ml", "has_dmc_ml"} and isinstance(val, bool):
-                edited_row[field_id] = int(val)
-                continue
-
-            meta = TAXONOMY.get(field_id, {})
-            options = meta.get("ui", {}).get("options")
-
-            if options:
-                # Map UI label back to ML code when needed
-                for opt in options:
-                    if opt[1] == val:
-                        if field_id.endswith("_ml"):
-                            edited_row[field_id] = opt[0]
-                        else:
-                            edited_row[field_id] = opt[1]
-                        break
-            else:
-                edited_row[field_id] = val
-
-    # 2. Update from large text areas
     for panel_key, candidates in TRIAL_EDITOR_TEXT_FIELDS.items():
         target_col = candidates[0]
         value, has_widget_value = get_current_text_panel_value(row, panel_key)
@@ -9950,31 +10276,29 @@ def get_analysis_result_for_selected_trial(row):
 
 def render_completion_prediction_tab(row):
     res = get_analysis_result_for_selected_trial(row)
+    simulation_mode = st.session_state.get("global_edit_mode", False)
     score_view = st.session_state.get(SCORE_VIEW_STATE_KEY, SCORE_VIEW_COMPLETION)
-    if score_view not in SCORE_VIEW_OPTIONS:
+    if not simulation_mode:
+        score_view = SCORE_VIEW_COMPLETION
+        st.session_state[SCORE_VIEW_STATE_KEY] = SCORE_VIEW_COMPLETION
+    elif score_view not in SCORE_VIEW_OPTIONS:
         score_view = SCORE_VIEW_COMPLETION
         st.session_state[SCORE_VIEW_STATE_KEY] = score_view
 
     nct_id = st.session_state.get("selected_nct_id", "")
-    snapshot = get_latest_prediction_snapshot(nct_id) if st.session_state.get("global_edit_mode", False) else None
+    snapshot = get_latest_prediction_snapshot(nct_id) if simulation_mode else None
     scenario_trace = None
-    can_generate_scenario_review = (
-        st.session_state.get("global_edit_mode", False)
-        and snapshot
-        and snapshot.get("source") != "prerecorded_baseline"
-        and not has_pending_simulation_changes(row)
-    )
-    if can_generate_scenario_review and score_view in (SCORE_VIEW_DESIGN, SCORE_VIEW_TOTAL):
-        with st.spinner("Generating Scenario Review..."):
-            scenario_trace = get_quality_review_trace_for_snapshot(row, snapshot)
-    elif (
-        st.session_state.get("global_edit_mode", False)
-        and snapshot
-        and snapshot.get("source") == "prerecorded_baseline"
-        and score_view in (SCORE_VIEW_DESIGN, SCORE_VIEW_TOTAL)
-    ):
-        with st.spinner("Generating Baseline Scenario Review..."):
-            scenario_trace = get_hidden_baseline_review_trace(row, snapshot)
+    if simulation_mode and snapshot and score_view in (SCORE_VIEW_DESIGN, SCORE_VIEW_TOTAL):
+        if snapshot.get("source") == "prerecorded_baseline":
+            scenario_trace = get_cached_hidden_baseline_review_trace_for_snapshot(snapshot)
+        elif not has_pending_simulation_changes(row):
+            scenario_trace = get_cached_quality_review_trace_for_snapshot(snapshot)
+
+    if res and not simulation_mode:
+        st.markdown(
+            '<span data-ctp-ready="completion-score" style="display:none;"></span>',
+            unsafe_allow_html=True,
+        )
 
     design_pillar_impacts = _design_pillar_impacts(scenario_trace)
     design_subcat_impacts = _design_subcategory_impacts(scenario_trace)
@@ -10008,13 +10332,29 @@ def render_completion_prediction_tab(row):
 
             def _render_gauge_panel():
                 with st.container(key="trial_score_mode_selector"):
-                    st.radio(
-                        "Trial score view",
-                        SCORE_VIEW_OPTIONS,
-                        horizontal=True,
-                        key=SCORE_VIEW_STATE_KEY,
-                        label_visibility="collapsed",
-                    )
+                    if simulation_mode:
+                        st.radio(
+                            "Trial score view",
+                            SCORE_VIEW_OPTIONS,
+                            horizontal=True,
+                            key=SCORE_VIEW_STATE_KEY,
+                            label_visibility="collapsed",
+                        )
+                    else:
+                        st.markdown(
+                            (
+                                '<span class="trial-score-completion-only-marker"></span>'
+                                f'<div class="trial-score-completion-only-label">{SCORE_VIEW_COMPLETION}</div>'
+                            ),
+                            unsafe_allow_html=True,
+                        )
+                        st.radio(
+                            "Trial score view",
+                            SCORE_VIEW_OPTIONS,
+                            horizontal=True,
+                            key=SCORE_VIEW_STATE_KEY,
+                            label_visibility="collapsed",
+                        )
 
                 if not res:
                     render_box_spacer(left_box_h)
@@ -10034,7 +10374,10 @@ def render_completion_prediction_tab(row):
                     )
                     show_completion_delta = pd.notna(snapshot_iteration) and int(snapshot_iteration) >= 1
 
-                    if has_pending_simulation_changes(row):
+                    if (
+                        score_view == SCORE_VIEW_COMPLETION
+                        and has_pending_simulation_changes(row)
+                    ):
                         stale_html = (
                             '<div class="simulation-stale-notice">'
                             'Score update pending'

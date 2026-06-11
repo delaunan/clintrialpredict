@@ -1112,6 +1112,13 @@ If a text-only material change triggers review, the narrative should state that 
 
 Do not run a clarification gate before prediction for structured/text mismatches. If text changes are material, submit the scenario through the normal `Predict Trial Completion` flow and let Scenario Review interpret the submitted structured fields, operational assumptions, and text context after scoring.
 
+### Live Regression Targets
+
+Keep a small named trial set for manual live Scenario Review calibration after schema or prompt changes:
+
+- `NCT03386721` - Simlukafusp alfa (ROCHE), Oncology, 2018: review whether Execution Framework / Operational Burden Balance narratives are specific, expert, auditable, and strategically useful without prescribing the next edit.
+- `NCT03896581` - `[BE COMPLETE]` Bimekizumab (UCB), Musculoskeletal, 2019: change Pathway Profile from `Interleukin Cytokine` to `Kinase Inhibitor` and review whether Scenario Review explains the clinical-development meaning of a pathway-class change without overclaiming mechanism, efficacy, or regulatory implications.
+
 ## 16. Reproducibility And Provider Fallback
 
 The architecture supports OpenAI and Gemini provider calls without binding product logic to one provider.
