@@ -707,7 +707,7 @@ PIPELINE_REGISTRY = {
         },
         "adult_ml": {
             "ui": {
-                "label": "Adult Profile Eligibility Status",
+                "label": "Adult Profiles",
                 "pillar": "Patient Profile",
                 "subgroup": "Population Scope",
                 "priority": 28,
@@ -728,7 +728,7 @@ PIPELINE_REGISTRY = {
         },
         "child_ml": {
             "ui": {
-                "label": "Pediatric Profile Eligibility Status",
+                "label": "Pediatric Profiles",
                 "pillar": "Patient Profile",
                 "subgroup": "Population Scope",
                 "priority": 29,
@@ -749,7 +749,7 @@ PIPELINE_REGISTRY = {
         },
         "older_adult_ml": {
             "ui": {
-                "label": "Geriatric Profile Eligibility Status",
+                "label": "Geriatric Profiles",
                 "pillar": "Patient Profile",
                 "subgroup": "Population Scope",
                 "priority": 30,

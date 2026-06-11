@@ -4395,7 +4395,7 @@ SIMULATION_FEATURE_LABEL_OVERRIDES = {
     "has_dmc_ml": "Data Monitoring Comittee",
     "adult_ml": "Adult Profiles",
     "child_ml": "Pediatric Profiles",
-    "older_adult_ml": "Geratic Profiles",
+    "older_adult_ml": "Geriatric Profiles",
 }
 SIMULATION_FEATURE_LAYOUT = {
     "Therapeutic Context": [

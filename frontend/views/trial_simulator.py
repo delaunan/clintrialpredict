@@ -2279,6 +2279,15 @@ def inject_custom_styles():
                 margin-top: var(--ui-detail-tabs-offset-y) !important;
             }}
 
+            html body [data-testid="stElementContainer"]:has([data-ctp-ready]) {{
+                display: none !important;
+                height: 0 !important;
+                min-height: 0 !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                overflow: hidden !important;
+            }}
+
             .st-key-trial_detail_tabs .stTabs [data-baseweb="tab-list"] {{
                 gap: 8px !important;
                 background: transparent !important;
@@ -3849,17 +3858,7 @@ def inject_custom_styles():
             }}
 
             .st-key-trial_detail_tabs .st-key-completion_prediction_top_row {{
-                margin-bottom: calc(var(--ui-score-card-gap-y) - 16px) !important;
-            }}
-
-            html body [class*="st-key-trial_detail_tabs_sim_"].stTabs {{
-                transform: translateY(-16px) !important;
-                margin-bottom: -16px !important;
-            }}
-
-            html body [class*="st-key-trial_detail_tabs_with_score_"] [data-testid="stHorizontalBlock"]:has(.st-key-summary_side_shell_completion_prediction_left_top_block):has(.st-key-summary_side_shell_completion_prediction_right_block) {{
-                transform: translateY(-16px) !important;
-                margin-bottom: -16px !important;
+                margin-bottom: calc(var(--ui-score-card-gap-y) - 15px) !important;
             }}
 
             .st-key-summary_side_shell_completion_prediction_left_top_block .completion-tier-row {{
@@ -4518,7 +4517,8 @@ def inject_custom_styles():
             /* Changed value — the control box turns a soft blue so a modified
                input reads instantly against its unchanged white neighbours. */
             html body [class*="st-key-simfield_chg_"] div[data-baseweb="select"] > div,
-            html body [class*="st-key-simfield_chg_"] div[data-baseweb="input"] > div {{
+            html body [class*="st-key-simfield_chg_"] div[data-baseweb="input"] > div,
+            html body [class*="st-key-simfield_chg_"] [data-testid="stNumberInputContainer"] > div {{
                 background-color: #e8f0fb !important;
                 border-color: #9bbbe2 !important;
                 box-shadow: inset 0 0 0 1px rgba(47,98,166,0.10),
@@ -4528,7 +4528,8 @@ def inject_custom_styles():
             /* Previously predicted change - keep it visible, but quieter than
                the blue pending-change state. */
             html body [class*="st-key-simfield_prev_"] div[data-baseweb="select"] > div,
-            html body [class*="st-key-simfield_prev_"] div[data-baseweb="input"] > div {{
+            html body [class*="st-key-simfield_prev_"] div[data-baseweb="input"] > div,
+            html body [class*="st-key-simfield_prev_"] [data-testid="stNumberInputContainer"] > div {{
                 background-color: #f1f5f9 !important;
                 border-color: #cbd5e1 !important;
                 box-shadow: inset 0 0 0 1px rgba(100,116,139,0.08),
@@ -4536,7 +4537,8 @@ def inject_custom_styles():
             }}
 
             html body [class*="st-key-simfield_attn_"] div[data-baseweb="select"] > div,
-            html body [class*="st-key-simfield_attn_"] div[data-baseweb="input"] > div {{
+            html body [class*="st-key-simfield_attn_"] div[data-baseweb="input"] > div,
+            html body [class*="st-key-simfield_attn_"] [data-testid="stNumberInputContainer"] > div {{
                 background-color: #fff1f2 !important;
                 border-color: #f29aa3 !important;
                 box-shadow: inset 0 0 0 1px rgba(190,18,60,0.16),
@@ -4592,14 +4594,16 @@ def inject_custom_styles():
                 max-width: 250px !important;
             }}
 
-            html body [class*="st-key-operational_assumption_chg_"] div[data-baseweb="input"] > div {{
+            html body [class*="st-key-operational_assumption_chg_"] div[data-baseweb="input"] > div,
+            html body [class*="st-key-operational_assumption_chg_"] [data-testid="stNumberInputContainer"] > div {{
                 background-color: #e8f0fb !important;
                 border-color: #9bbbe2 !important;
                 box-shadow: inset 0 0 0 1px rgba(47,98,166,0.10),
                             var(--ui-control-shadow) !important;
             }}
 
-            html body [class*="st-key-operational_assumption_prev_"] div[data-baseweb="input"] > div {{
+            html body [class*="st-key-operational_assumption_prev_"] div[data-baseweb="input"] > div,
+            html body [class*="st-key-operational_assumption_prev_"] [data-testid="stNumberInputContainer"] > div {{
                 background-color: #f1f5f9 !important;
                 border-color: #cbd5e1 !important;
                 box-shadow: inset 0 0 0 1px rgba(100,116,139,0.08),

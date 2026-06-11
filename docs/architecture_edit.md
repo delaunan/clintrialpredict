@@ -565,7 +565,7 @@ Include all 31 taxonomy model-facing fields with a non-`Metadata` UI pillar. Thi
 - `healthy_volunteers_ml` - Population Type
 - `adult_ml` - Adult Profiles
 - `child_ml` - Pediatric Profiles
-- `older_adult_ml` - Geratic Profiles
+- `older_adult_ml` - Geriatric Profiles
 
 ### Execution Framework
 
