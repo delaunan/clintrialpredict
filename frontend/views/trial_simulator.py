@@ -1642,7 +1642,7 @@ def inject_custom_styles():
                 z-index: 5 !important;
                 width: 100% !important;
                 margin: 0 0 0 0 !important;
-                padding: 18px 0 0 0 !important;
+                padding: 8px 0 0 0 !important;
             }}
 
             .st-key-summary_side_shell_completion_prediction_left_top_block .st-key-trial_score_view {{
@@ -1701,7 +1701,7 @@ def inject_custom_styles():
 
             .st-key-summary_side_shell_completion_prediction_left_top_block .trial-score-completion-only-label {{
                 position: absolute !important;
-                top: 18px !important;
+                top: 22px !important;
                 left: 0 !important;
                 right: 0 !important;
                 z-index: 6 !important;
@@ -1715,6 +1715,17 @@ def inject_custom_styles():
 
             .st-key-summary_side_shell_completion_prediction_left_top_block .st-key-trial_score_mode_selector:has(.trial-score-completion-only-marker) [role="radiogroup"] {{
                 visibility: hidden !important;
+                height: 38px !important;
+                min-height: 38px !important;
+                max-height: 38px !important;
+                overflow: hidden !important;
+            }}
+
+            .st-key-summary_side_shell_completion_prediction_left_top_block .st-key-trial_score_mode_selector:has(.trial-score-completion-only-marker) {{
+                height: 48px !important;
+                min-height: 48px !important;
+                max-height: 48px !important;
+                overflow: visible !important;
             }}
 
             .st-key-summary_side_shell_completion_prediction_left_top_block .completion-gauge-help-wrap {{
@@ -3408,6 +3419,13 @@ def inject_custom_styles():
                 --ui-score-card-gap-y: 6px;
                 --ui-scenario-review-card-gap: -10px;
                 --ui-completion-left-card-h: 272px;
+                --ui-completion-left-top-card-h: 264px;
+                --ui-completion-left-bottom-card-h: calc(
+                    var(--ui-completion-right-card-h)
+                    - var(--ui-score-card-gap-y)
+                    - var(--ui-completion-left-top-card-h)
+                    - 6px
+                );
                 --ui-completion-right-card-h: 558px;
                 --ui-completion-tier-font-size: 1.5rem;
                 --ui-completion-tier-overlap: -32px;
@@ -3438,6 +3456,12 @@ def inject_custom_styles():
                     --ui-population-eligibility-text-h: calc(var(--ui-detail-side-min-h) - 50px);
 
                     --ui-completion-left-card-h: 282px;
+                    --ui-completion-left-top-card-h: 274px;
+                    --ui-completion-left-bottom-card-h: calc(
+                        var(--ui-completion-right-card-h)
+                        - var(--ui-score-card-gap-y)
+                        - var(--ui-completion-left-top-card-h)
+                    );
                     --ui-completion-right-card-h: 569px;
                     --ui-completion-tier-font-size: 1.6rem;
                     --ui-completion-tier-overlap: -34px;
@@ -3469,6 +3493,12 @@ def inject_custom_styles():
                     --ui-population-eligibility-text-h: calc(var(--ui-detail-side-min-h) - 50px);
 
                     --ui-completion-left-card-h: 289px;
+                    --ui-completion-left-top-card-h: 281px;
+                    --ui-completion-left-bottom-card-h: calc(
+                        var(--ui-completion-right-card-h)
+                        - var(--ui-score-card-gap-y)
+                        - var(--ui-completion-left-top-card-h)
+                    );
                     --ui-completion-right-card-h: 584px;
                     --ui-completion-tier-font-size: 1.70rem;
                     --ui-completion-tier-overlap: -35px;
@@ -3500,6 +3530,12 @@ def inject_custom_styles():
                     --ui-population-eligibility-text-h: calc(var(--ui-detail-side-min-h) - 55px);
 
                     --ui-completion-left-card-h: 294px;
+                    --ui-completion-left-top-card-h: 286px;
+                    --ui-completion-left-bottom-card-h: calc(
+                        var(--ui-completion-right-card-h)
+                        - var(--ui-score-card-gap-y)
+                        - var(--ui-completion-left-top-card-h)
+                    );
                     --ui-completion-right-card-h: 594px;
                     --ui-completion-tier-font-size: 1.66rem;
                     --ui-completion-tier-overlap: -35px;
@@ -3512,11 +3548,23 @@ def inject_custom_styles():
                     --ui-detail-conditions-h: 351px;
                     --ui-detail-side-min-h: 442px;
                     --ui-completion-left-card-h: 276px;
+                    --ui-completion-left-top-card-h: 268px;
+                    --ui-completion-left-bottom-card-h: calc(
+                        var(--ui-completion-right-card-h)
+                        - var(--ui-score-card-gap-y)
+                        - var(--ui-completion-left-top-card-h)
+                        - 19px
+                    );
                     --sim-text-conditions-h: 435px;
                     --sim-text-shell-h: 491px;
                     --ui-completion-right-card-h: 578px;
                     --ui-scenario-review-card-gap: -10px;
                     --ui-treemap-hint-y-shift: 12px;
+                }}
+
+                html body [class*="st-key-trial_detail_tabs_with_score_"] .st-key-summary_side_shell_completion_prediction_left_bottom_block {{
+                    min-height: calc(var(--ui-completion-left-bottom-card-h) + 17px) !important;
+                    height: calc(var(--ui-completion-left-bottom-card-h) + 17px) !important;
                 }}
             }}
 
@@ -3773,10 +3821,15 @@ def inject_custom_styles():
             }}
 
             /* Completion Score: aligned card shells and stronger score/tier text. */
-            .st-key-summary_side_shell_completion_prediction_left_top_block,
+            .st-key-summary_side_shell_completion_prediction_left_top_block {{
+                min-height: var(--ui-completion-left-top-card-h) !important;
+                height: var(--ui-completion-left-top-card-h) !important;
+                box-sizing: border-box !important;
+            }}
+
             .st-key-summary_side_shell_completion_prediction_left_bottom_block {{
-                min-height: var(--ui-completion-left-card-h) !important;
-                height: var(--ui-completion-left-card-h) !important;
+                min-height: var(--ui-completion-left-bottom-card-h) !important;
+                height: var(--ui-completion-left-bottom-card-h) !important;
                 box-sizing: border-box !important;
             }}
 
@@ -3797,6 +3850,16 @@ def inject_custom_styles():
 
             .st-key-trial_detail_tabs .st-key-completion_prediction_top_row {{
                 margin-bottom: calc(var(--ui-score-card-gap-y) - 16px) !important;
+            }}
+
+            html body [class*="st-key-trial_detail_tabs_sim_"].stTabs {{
+                transform: translateY(-16px) !important;
+                margin-bottom: -16px !important;
+            }}
+
+            html body [class*="st-key-trial_detail_tabs_with_score_"] [data-testid="stHorizontalBlock"]:has(.st-key-summary_side_shell_completion_prediction_left_top_block):has(.st-key-summary_side_shell_completion_prediction_right_block) {{
+                transform: translateY(-16px) !important;
+                margin-bottom: -16px !important;
             }}
 
             .st-key-summary_side_shell_completion_prediction_left_top_block .completion-tier-row {{
@@ -7329,7 +7392,6 @@ def render_transition_overlay_hook():
                     </div>
                 `;
 
-                overlay.addEventListener("click", removeOverlay);
                 doc.body.appendChild(overlay);
 
                 win.__ctpOverlayMessage = message;
@@ -7349,6 +7411,17 @@ def render_transition_overlay_hook():
 
             function getButtonText(button) {
                 return (button.innerText || button.textContent || "").trim();
+            }
+
+            function isDisabledControl(control) {
+                if (!control) return false;
+                return (
+                    control.disabled === true
+                    || control.getAttribute("disabled") !== null
+                    || control.getAttribute("aria-disabled") === "true"
+                    || control.closest('[aria-disabled="true"]')
+                    || control.closest('[disabled]')
+                );
             }
 
             function isSimulationToggleTurningOn(label) {
@@ -7390,7 +7463,7 @@ def render_transition_overlay_hook():
                 }
                 if (text === "Retry Scenario Review") return ["Evaluating scenario impact...", 3330];
                 if (text === "Simulation Mode (Editing Content)") {
-                    return ["Preparing Simulation Mode...", 12000, SIMULATION_MODE_READY_SELECTOR];
+                    return ["Preparing Simulation Mode...", null, TRIAL_FEATURES_READY_SELECTOR];
                 }
                 return null;
             }
@@ -7403,7 +7476,7 @@ def render_transition_overlay_hook():
                     if (!existing) {
                         showOverlay(
                             win.__ctpOverlayMessage || "Preparing Simulation Mode...",
-                            win.__ctpOverlayTimeoutMs || 12000,
+                            win.__ctpOverlayTimeoutMs ?? 12000,
                             win.__ctpOverlayWaitSelector
                         );
                     } else {
@@ -7419,6 +7492,8 @@ def render_transition_overlay_hook():
                     const button = event.target.closest("button");
 
                     if (button) {
+                        if (isDisabledControl(button)) return;
+
                         const config = getOverlayConfig(getButtonText(button));
                         if (!config) return;
 
@@ -7429,6 +7504,8 @@ def render_transition_overlay_hook():
                     const label = event.target.closest("label");
 
                     if (label) {
+                        if (isDisabledControl(label)) return;
+
                         const labelText = getButtonText(label);
                         if (
                             labelText === "Simulation Mode (Editing Content)"
@@ -7439,6 +7516,15 @@ def render_transition_overlay_hook():
 
                         const config = getOverlayConfig(labelText);
                         if (!config) return;
+
+                        if (labelText === "Simulation Mode (Editing Content)") {
+                            win.setTimeout(function() {
+                                if (isSimulationModeActive()) {
+                                    showOverlay(config[0], config[1], config[2]);
+                                }
+                            }, 80);
+                            return;
+                        }
 
                         showOverlay(config[0], config[1], config[2]);
                         return;
@@ -7562,17 +7648,23 @@ def render_header(is_landing=True, show_predict_button=False, show_back_button=F
 
                 with c_predict:
                     if show_predict_button:
+                        predict_disabled = False
                         if st.session_state.get("global_edit_mode", False):
                             selected_row = get_selected_trial_row()
+                            simulation_pending = bool(
+                                selected_row is not None and has_pending_simulation_changes(selected_row)
+                            )
                             predict_btn_type = (
                                 "primary"
-                                if selected_row is not None and has_pending_simulation_changes(selected_row)
+                                if simulation_pending
                                 else "secondary"
                             )
+                            predict_disabled = not simulation_pending
                         else:
+                            predict_disabled = bool(st.session_state.get("detail_completion_tab_visible", False))
                             predict_btn_type = (
                                 "secondary"
-                                if st.session_state.get("detail_completion_tab_visible", False)
+                                if predict_disabled
                                 else "primary"
                             )
 
@@ -7581,7 +7673,8 @@ def render_header(is_landing=True, show_predict_button=False, show_back_button=F
                             width="stretch",
                             type=predict_btn_type,
                             key="header_predict_btn",
-                            on_click=handle_predict_trial_completion
+                            on_click=handle_predict_trial_completion,
+                            disabled=predict_disabled
                         )
 
 
@@ -8002,20 +8095,26 @@ def render_top_title_panel(row):
 
     safe_nct = html.escape(trial_val(row, "nct_id"))
     safe_identity = html.escape(trial_val(row, "ui_search_label"))
+    state_token = (
+        text_context_history_state_token(row, "top_title")
+        if st.session_state.get("global_edit_mode", False)
+        else "base"
+    )
 
     with st.container(key="trial_title_shell"):
         st.markdown(
             f"<div class='top-strip-title-label'>{safe_nct}&nbsp;&nbsp;&nbsp;{safe_identity}</div>",
             unsafe_allow_html=True
         )
-        st.text_area(
-            "Title",
-            key=text_key,
-            height=TEXTAREA_HEIGHTS["top_title"],
-            label_visibility="collapsed",
-            on_change=_sync_top_title_edit,
-            disabled=not st.session_state.get("global_edit_mode", False)
-        )
+        with st.container(key=f"simtext_{state_token}_top_title"):
+            st.text_area(
+                "Title",
+                key=text_key,
+                height=TEXTAREA_HEIGHTS["top_title"],
+                label_visibility="collapsed",
+                on_change=_sync_top_title_edit,
+                disabled=not st.session_state.get("global_edit_mode", False)
+            )
 
 
 def render_top_meta_panel(row):
@@ -8651,10 +8750,6 @@ def render_trial_features_text_cards(row):
 
 
 def render_trial_features_tab(row):
-    st.markdown(
-        '<span data-ctp-ready="trial-features" style="display:none;"></span>',
-        unsafe_allow_html=True,
-    )
     render_trial_features_text_cards(row)
 
     grouped = {pillar: [] for pillar in SIMULATION_PILLAR_ORDER}
@@ -8676,6 +8771,13 @@ def render_trial_features_tab(row):
 
                 with col:
                     _render_trial_feature_pillar(pillar, grouped.get(pillar, []), row)
+
+
+def mark_trial_features_ready():
+    st.markdown(
+        '<span data-ctp-ready="trial-features" style="display:none;"></span>',
+        unsafe_allow_html=True,
+    )
 
 
 def _render_trial_feature_pillar(pillar, fields, row):
@@ -9962,6 +10064,7 @@ def render_trial_detail_tabs_refined(row):
                 with tab_features:
                     render_trial_features_tab(row)
                     render_operational_assumption_inputs(row)
+                    mark_trial_features_ready()
                     if sim_tab_reset_pending:
                         st.session_state.simulation_tab_reset_pending = False
                         st.session_state.simulation_open_features_tab = True
@@ -10062,6 +10165,7 @@ def render_trial_detail_tabs_refined(row):
                 with tab_features:
                     render_trial_features_tab(row)
                     render_operational_assumption_inputs(row)
+                    mark_trial_features_ready()
                 if sim_tab_reset_pending:
                     st.session_state.simulation_tab_reset_pending = False
                     st.session_state.simulation_open_features_tab = True

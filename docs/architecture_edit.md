@@ -376,8 +376,8 @@ Clinical_Score = clip(round(50 + sum(rounded pillar impacts), 1), 1, 99)
 - Trial Features must remain visible throughout simulation mode, including after a successful prediction.
 - When simulation mode turns on, Trial Features must be visible immediately. For an existing selected trial, the app creates a local prerecorded baseline snapshot from registry values and precomputed audit SHAP/decomposition artifacts, then may show the baseline Completion Score, impact bar, and treemap from that snapshot without calling `/predict`.
 - If precomputed decomposition is unavailable for a specific trial, the app may fall back to a score-only registry baseline; chart-rich outputs then require a successful explicit prediction response.
-- In simulation mode with score visible, tab order is `Trial Information`, `Population Details`, `Completion Score`, `Trial Features`; when Simulation Mode is toggled on, `Trial Features` opens by default.
-- `Predict Trial Completion` is grey/visually inactive when current visible Trial Features values match the latest prediction snapshot. It may remain enabled for implementation simplicity, but clicking it in this state must not run prediction.
+- In simulation mode, tab order is `Trial Features`, then `Trial Score`; when Simulation Mode is toggled on, `Trial Features` opens by default.
+- `Predict Trial Completion` / `Review Scenario` is grey and disabled when current visible Trial Features, active operational assumptions, and editable text context match the latest prediction snapshot; it becomes enabled only when pending scenario changes exist.
 - `Predict Trial Completion` is blue/active when at least one visible Trial Features value has pending changes.
 - No `Check Scenario`, `Continue Prediction`, or structured/text clarification gate should appear between editing the scenario and running `Predict Trial Completion`.
 - If the user changes a field and then reverts all fields back to the latest snapshot values, `Predict Trial Completion` turns grey/inactive again.
