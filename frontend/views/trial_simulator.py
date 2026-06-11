@@ -4518,7 +4518,9 @@ def inject_custom_styles():
                input reads instantly against its unchanged white neighbours. */
             html body [class*="st-key-simfield_chg_"] div[data-baseweb="select"] > div,
             html body [class*="st-key-simfield_chg_"] div[data-baseweb="input"] > div,
-            html body [class*="st-key-simfield_chg_"] [data-testid="stNumberInputContainer"] > div {{
+            html body [class*="st-key-simfield_chg_"] [data-testid="stNumberInputContainer"] > div,
+            html body [class*="st-key-simfield_chg_"] [data-testid="stNumberInputContainer"] input,
+            html body [class*="st-key-simfield_chg_"] [data-testid="stNumberInputContainer"] button {{
                 background-color: #e8f0fb !important;
                 border-color: #9bbbe2 !important;
                 box-shadow: inset 0 0 0 1px rgba(47,98,166,0.10),
@@ -4529,7 +4531,9 @@ def inject_custom_styles():
                the blue pending-change state. */
             html body [class*="st-key-simfield_prev_"] div[data-baseweb="select"] > div,
             html body [class*="st-key-simfield_prev_"] div[data-baseweb="input"] > div,
-            html body [class*="st-key-simfield_prev_"] [data-testid="stNumberInputContainer"] > div {{
+            html body [class*="st-key-simfield_prev_"] [data-testid="stNumberInputContainer"] > div,
+            html body [class*="st-key-simfield_prev_"] [data-testid="stNumberInputContainer"] input,
+            html body [class*="st-key-simfield_prev_"] [data-testid="stNumberInputContainer"] button {{
                 background-color: #f1f5f9 !important;
                 border-color: #cbd5e1 !important;
                 box-shadow: inset 0 0 0 1px rgba(100,116,139,0.08),
@@ -4538,7 +4542,9 @@ def inject_custom_styles():
 
             html body [class*="st-key-simfield_attn_"] div[data-baseweb="select"] > div,
             html body [class*="st-key-simfield_attn_"] div[data-baseweb="input"] > div,
-            html body [class*="st-key-simfield_attn_"] [data-testid="stNumberInputContainer"] > div {{
+            html body [class*="st-key-simfield_attn_"] [data-testid="stNumberInputContainer"] > div,
+            html body [class*="st-key-simfield_attn_"] [data-testid="stNumberInputContainer"] input,
+            html body [class*="st-key-simfield_attn_"] [data-testid="stNumberInputContainer"] button {{
                 background-color: #fff1f2 !important;
                 border-color: #f29aa3 !important;
                 box-shadow: inset 0 0 0 1px rgba(190,18,60,0.16),
@@ -4595,7 +4601,9 @@ def inject_custom_styles():
             }}
 
             html body [class*="st-key-operational_assumption_chg_"] div[data-baseweb="input"] > div,
-            html body [class*="st-key-operational_assumption_chg_"] [data-testid="stNumberInputContainer"] > div {{
+            html body [class*="st-key-operational_assumption_chg_"] [data-testid="stNumberInputContainer"] > div,
+            html body [class*="st-key-operational_assumption_chg_"] [data-testid="stNumberInputContainer"] input,
+            html body [class*="st-key-operational_assumption_chg_"] [data-testid="stNumberInputContainer"] button {{
                 background-color: #e8f0fb !important;
                 border-color: #9bbbe2 !important;
                 box-shadow: inset 0 0 0 1px rgba(47,98,166,0.10),
@@ -4603,7 +4611,9 @@ def inject_custom_styles():
             }}
 
             html body [class*="st-key-operational_assumption_prev_"] div[data-baseweb="input"] > div,
-            html body [class*="st-key-operational_assumption_prev_"] [data-testid="stNumberInputContainer"] > div {{
+            html body [class*="st-key-operational_assumption_prev_"] [data-testid="stNumberInputContainer"] > div,
+            html body [class*="st-key-operational_assumption_prev_"] [data-testid="stNumberInputContainer"] input,
+            html body [class*="st-key-operational_assumption_prev_"] [data-testid="stNumberInputContainer"] button {{
                 background-color: #f1f5f9 !important;
                 border-color: #cbd5e1 !important;
                 box-shadow: inset 0 0 0 1px rgba(100,116,139,0.08),
