@@ -171,15 +171,31 @@ deploy_ui() {
     local service_name="${1:-$UI_SERVICE}"
     local variant="${2:-"trial_audit"}"
     local api_url
+    local env_vars
     api_url=$(get_api_url)
+    env_vars="API_URL=$api_url,APP_VARIANT=$variant"
+
+    if [ "$variant" == "trial_simulator" ]; then
+        env_vars="${env_vars},NARRATIVE_LIVE_REVIEW_ENABLED=true"
+        env_vars="${env_vars},NARRATIVE_LLM_PROVIDER=gemini"
+        env_vars="${env_vars},GEMINI_NARRATIVE_MODEL=gemini-3.1-flash-lite"
+        env_vars="${env_vars},NARRATIVE_LLM_TEMPERATURE=0"
+        env_vars="${env_vars},NARRATIVE_LLM_SEED=20260607"
+        env_vars="${env_vars},NARRATIVE_LLM_TIMEOUT_SECONDS=60"
+        env_vars="${env_vars},NARRATIVE_LLM_MAX_OUTPUT_TOKENS=12000"
+        env_vars="${env_vars},NARRATIVE_LLM_MAX_RETRIES=0"
+    fi
 
     echo -e "${BLUE}Deploying UI service: $service_name (Variant: $variant)...${NC}"
     echo -e "${BLUE}Targeting API URL: $api_url${NC}"
+    if [ "$variant" == "trial_simulator" ]; then
+        echo -e "${BLUE}Enabling live Gemini Scenario Review. Ensure GEMINI_API_KEY or GOOGLE_API_KEY is configured as a Cloud Run secret/env var.${NC}"
+    fi
     
     gcloud run deploy "$service_name" \
        --image "$IMAGE" \
        --command "streamlit","run","frontend/app.py","--server.port","8080","--server.address","0.0.0.0" \
-       --set-env-vars API_URL="$api_url",APP_VARIANT="$variant" \
+       --update-env-vars "$env_vars" \
        --memory 3Gi \
        --port 8080 \
        --concurrency 4 \

@@ -41,6 +41,30 @@ The same Docker image is used for the API and all UI services. The UI service se
 | `./scripts/deploy.sh trial-edit` | `clintrial-edit` | `trial_edit` | `frontend/views/trial_edit.py` |
 | `./scripts/deploy.sh trial-simulator` | `clintrial-simulator` | `trial_simulator` | `frontend/views/trial_simulator.py` |
 
+The simulator deploy also sets the non-secret live Scenario Review configuration for Gemini:
+
+```text
+NARRATIVE_LIVE_REVIEW_ENABLED=true
+NARRATIVE_LLM_PROVIDER=gemini
+GEMINI_NARRATIVE_MODEL=gemini-3.1-flash-lite
+NARRATIVE_LLM_TEMPERATURE=0
+NARRATIVE_LLM_SEED=20260607
+NARRATIVE_LLM_TIMEOUT_SECONDS=60
+NARRATIVE_LLM_MAX_OUTPUT_TOKENS=12000
+NARRATIVE_LLM_MAX_RETRIES=0
+```
+
+The Gemini API key is not stored in this repository or Docker image. Configure it once on the Cloud Run `clintrial-simulator` service as `GEMINI_API_KEY` or `GOOGLE_API_KEY`, preferably from Secret Manager:
+
+```bash
+gcloud run services update clintrial-simulator \
+  --region europe-west1 \
+  --project clintrial-predict-2025 \
+  --update-secrets GEMINI_API_KEY=gemini-api-key:latest
+```
+
+The deploy script uses non-destructive environment updates for UI services, so existing secrets and unrelated service environment variables are preserved.
+
 ## Normal UI update
 
 If you have only made changes to one frontend variant, use the matching command above. To update only the default audit UI:
