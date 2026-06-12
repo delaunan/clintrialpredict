@@ -137,7 +137,7 @@ def run(args: argparse.Namespace) -> int:
 
     packets = {
         "baseline_hidden": baseline_packet,
-        "visible_iteration": iteration_packet,
+        "first_visible_iteration": iteration_packet,
     }
 
     if args.compare_providers:
@@ -190,7 +190,7 @@ def run(args: argparse.Namespace) -> int:
                 use_provider_chain=True,
             )
         )
-        _print_json(_summary("combined_step_2_visible_iteration", iteration_elapsed, iteration_trace))
+        _print_json(_summary("combined_step_2_first_visible_iteration", iteration_elapsed, iteration_trace))
         _print_json({
             "label": "combined_total_without_prediction_api",
             "elapsed_s": round(baseline_elapsed + iteration_elapsed, 2),
@@ -206,7 +206,7 @@ def run(args: argparse.Namespace) -> int:
                 use_provider_chain=True,
             )
         )
-        _print_json(_summary("cache_replay_visible_iteration", replay_elapsed, replay_trace))
+        _print_json(_summary("cache_replay_first_visible_iteration", replay_elapsed, replay_trace))
 
     return 0
 

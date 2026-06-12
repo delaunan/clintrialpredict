@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Validate Scenario Review scoring against V2 contract fixtures."""
+"""Validate Scenario Review scoring against contract fixtures."""
 
 from __future__ import annotations
 
@@ -19,16 +19,23 @@ from src.narratives.packet_builder import build_review_packet_from_fixture  # no
 from src.narratives.scoring import validate_and_score_review  # noqa: E402
 
 
+def _subcategory(rating: str, rationale: str, evidence_fields: list[str]) -> dict:
+    return {
+        "rating": rating,
+        "rationale": rationale,
+        "evidence_fields": evidence_fields,
+        "short_rationale": rationale.split(".", 1)[0],
+        "optional_lenses_used": [],
+        "regulatory_or_finance_note": "",
+    }
+
+
 def _review_template() -> tuple[dict, dict]:
     fixture = next(item for item in get_contract_fixtures() if item.get("mock_review"))
     packet = build_review_packet_from_fixture(fixture)
     review = deepcopy(fixture["mock_review"])
     review["design_confidence_subcategories"] = {
-        subcategory_name: {
-            "rating": "balanced",
-            "rationale": "Neutral test subcategory.",
-            "evidence_fields": ["phase_ml"],
-        }
+        subcategory_name: _subcategory("balanced", "Neutral test subcategory.", ["phase_ml"])
         for subcategory_name in sorted(REQUIRED_DESIGN_SUBCATEGORIES)
     }
     return packet, review
@@ -103,11 +110,11 @@ def _check_evidence_required(errors: list[str]) -> None:
 
 def _check_unsupported_evidence_required(errors: list[str]) -> None:
     packet, review = _review_template()
-    review["design_confidence_subcategories"]["endpoint_evidence_strength"] = {
-        "rating": "weak",
-        "rationale": "Unsupported evidence should not move scoring.",
-        "evidence_fields": ["not_a_packet_field"],
-    }
+    review["design_confidence_subcategories"]["endpoint_evidence_strength"] = _subcategory(
+        "weak",
+        "Unsupported evidence should not move scoring.",
+        ["not_a_packet_field"],
+    )
     result = validate_and_score_review(packet, review)
     scoring = result["scoring"]
     if scoring.get("design_confidence") != 0:
@@ -125,11 +132,11 @@ def _check_unsupported_evidence_required(errors: list[str]) -> None:
 
 def _check_score_reconciliation(errors: list[str]) -> None:
     packet, review = _review_template()
-    review["design_confidence_subcategories"]["endpoint_evidence_strength"] = {
-        "rating": "conflicting",
-        "rationale": "Single-subcategory mapping test.",
-        "evidence_fields": ["endpoint_rigor_ml", "comparator_benchmark_ml", "primary_duration_months_ml"],
-    }
+    review["design_confidence_subcategories"]["endpoint_evidence_strength"] = _subcategory(
+        "conflicting",
+        "Single-subcategory mapping test.",
+        ["endpoint_rigor_ml", "comparator_benchmark_ml", "primary_duration_months_ml"],
+    )
     result = validate_and_score_review(packet, review)
     endpoint = (
         result["scoring"].get("design_confidence_assessment", {})
@@ -143,25 +150,15 @@ def _check_score_reconciliation(errors: list[str]) -> None:
     packet["model_interpretation"]["completion_score"] = 3
     review["design_confidence_subcategories"] = {
         "phase_intent_alignment": {
-            "rating": "conflicting",
-            "rationale": "Total reconciliation test.",
-            "evidence_fields": ["phase_ml"],
+            **_subcategory("conflicting", "Total reconciliation test.", ["phase_ml"]),
         },
-        "endpoint_evidence_strength": {
-            "rating": "conflicting",
-            "rationale": "Total reconciliation test.",
-            "evidence_fields": ["endpoint_rigor_ml", "comparator_benchmark_ml", "primary_duration_months_ml"],
-        },
-        "target_population_alignment": {
-            "rating": "conflicting",
-            "rationale": "Total reconciliation test.",
-            "evidence_fields": ["adult_ml"],
-        },
-        "operational_burden_balance": {
-            "rating": "conflicting",
-            "rationale": "Total reconciliation test.",
-            "evidence_fields": ["has_dmc_ml"],
-        },
+        "endpoint_evidence_strength": _subcategory(
+            "conflicting",
+            "Total reconciliation test.",
+            ["endpoint_rigor_ml", "comparator_benchmark_ml", "primary_duration_months_ml"],
+        ),
+        "target_population_alignment": _subcategory("conflicting", "Total reconciliation test.", ["adult_ml"]),
+        "operational_burden_balance": _subcategory("conflicting", "Total reconciliation test.", ["has_dmc_ml"]),
     }
     result = validate_and_score_review(packet, review)
     scoring = result["scoring"]
@@ -172,16 +169,16 @@ def _check_score_reconciliation(errors: list[str]) -> None:
 
     packet, review = _review_template()
     packet["model_interpretation"]["score_delta"] = -2
-    review["design_confidence_subcategories"]["target_population_alignment"] = {
-        "rating": "supportive",
-        "rationale": "Half-point-preserving positive mapping test.",
-        "evidence_fields": ["older_adult_ml"],
-    }
-    review["design_confidence_subcategories"]["operational_burden_balance"] = {
-        "rating": "weak",
-        "rationale": "Half-point-preserving negative mapping test.",
-        "evidence_fields": ["has_dmc_ml"],
-    }
+    review["design_confidence_subcategories"]["target_population_alignment"] = _subcategory(
+        "supportive",
+        "Half-point-preserving positive mapping test.",
+        ["older_adult_ml"],
+    )
+    review["design_confidence_subcategories"]["operational_burden_balance"] = _subcategory(
+        "weak",
+        "Half-point-preserving negative mapping test.",
+        ["has_dmc_ml"],
+    )
     result = validate_and_score_review(packet, review)
     scoring = result["scoring"]
     if scoring.get("design_confidence") != 0:
@@ -196,11 +193,11 @@ def _check_score_reconciliation(errors: list[str]) -> None:
     packet["model_interpretation"]["completion_score"] = 98
     packet["model_interpretation"]["score_delta"] = -1
     for subcategory_name in REQUIRED_DESIGN_SUBCATEGORIES:
-        review["design_confidence_subcategories"][subcategory_name] = {
-            "rating": "strong",
-            "rationale": "Positive ceiling test.",
-            "evidence_fields": ["phase_ml"],
-        }
+        review["design_confidence_subcategories"][subcategory_name] = _subcategory(
+            "strong",
+            "Positive ceiling test.",
+            ["phase_ml"],
+        )
     result = validate_and_score_review(packet, review)
     scoring = result["scoring"]
     if scoring.get("design_confidence") != 12:
@@ -218,6 +215,24 @@ def _check_incomplete_review_suppresses_scores(errors: list[str]) -> None:
         errors.append("incomplete review should not return Design Confidence")
     if scoring.get("total_scenario_score") is not None:
         errors.append("incomplete review should not return Total Scenario Score")
+
+    packet, review = _review_template()
+    del review["completion_outlook_analysis"]["risk_pattern_summary"]
+    result = validate_and_score_review(packet, review)
+    scoring = result["scoring"]
+    if scoring.get("design_confidence") is not None:
+        errors.append("incomplete completion_outlook_analysis should not return Design Confidence")
+    if not any("completion_outlook_analysis.risk_pattern_summary" in error for error in result["validated_review"].get("validation_errors") or []):
+        errors.append("missing completion_outlook_analysis field should be reported")
+
+    packet, review = _review_template()
+    del review["design_confidence_subcategories"]["phase_intent_alignment"]["short_rationale"]
+    result = validate_and_score_review(packet, review)
+    scoring = result["scoring"]
+    if scoring.get("design_confidence") is not None:
+        errors.append("missing short_rationale should suppress Design Confidence")
+    if not any("short_rationale" in error for error in result["validated_review"].get("validation_errors") or []):
+        errors.append("missing short_rationale should be reported")
 
 
 def _check_app_owned_score_fields_ignored(errors: list[str]) -> None:
@@ -251,7 +266,7 @@ def main() -> int:
             print(f"ERROR: {error}")
         return 1
 
-    print("Validated Scenario Review scoring against V2 contract fixtures.")
+    print("Validated Scenario Review scoring against contract fixtures.")
     return 0
 
 

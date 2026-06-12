@@ -72,13 +72,36 @@ APP_OWNED_SCORE_FIELDS = {
 }
 
 PARTICIPANT_REVIEW_KEYS = {
-    "overall_completion_comment",
-    "overall_design_comment",
-    "most_impactful_pillar_1",
-    "most_impactful_pillar_2",
-    "interaction_summary",
     "medical_development_question",
-    "clinops_execution_question",
+    "clinical_operations_question",
+}
+
+SUPPORTED_REVIEW_MODES = {
+    "hidden_baseline",
+    "first_visible_iteration",
+    "later_visible_iteration",
+}
+
+COMPLETION_OUTLOOK_ANALYSIS_KEYS = {
+    "risk_pattern_summary",
+    "driver_summary",
+    "main_model_signals",
+    "interpretive_hypotheses",
+    "movement_explanation",
+    "model_boundary_note",
+}
+
+DESIGN_CONFIDENCE_ANALYSIS_KEYS = {
+    "summary",
+    "confidence_rationale",
+    "supporting_evidence",
+    "limiting_evidence",
+}
+
+SCENARIO_CONSISTENCY_NOTE_KEYS = {
+    "has_clear_mismatch",
+    "message",
+    "fields_in_tension",
 }
 
 
@@ -224,6 +247,9 @@ def _validated_subcategory(subcategory_name: str, subcategory: Any) -> tuple[dic
     rating = subcategory.get("rating")
     rationale = subcategory.get("rationale")
     evidence_fields = subcategory.get("evidence_fields")
+    short_rationale = subcategory.get("short_rationale")
+    optional_lenses_used = subcategory.get("optional_lenses_used")
+    regulatory_or_finance_note = subcategory.get("regulatory_or_finance_note")
     valid = True
 
     if rating not in DESIGN_RATINGS:
@@ -237,30 +263,57 @@ def _validated_subcategory(subcategory_name: str, subcategory: Any) -> tuple[dic
         errors.append(f"{subcategory_name}: evidence_fields must be a list")
         evidence_fields = []
         valid = False
+    if not isinstance(short_rationale, str):
+        errors.append(f"{subcategory_name}: short_rationale must be a string")
+        short_rationale = ""
+        valid = False
+    if not isinstance(optional_lenses_used, list):
+        errors.append(f"{subcategory_name}: optional_lenses_used must be a list")
+        optional_lenses_used = []
+        valid = False
+    if not isinstance(regulatory_or_finance_note, str):
+        errors.append(f"{subcategory_name}: regulatory_or_finance_note must be a string")
+        regulatory_or_finance_note = ""
+        valid = False
 
     return {
         "rating": rating,
         "rationale": rationale,
         "evidence_fields": [str(field) for field in evidence_fields],
+        "short_rationale": short_rationale,
+        "optional_lenses_used": [
+            str(lens)
+            for lens in optional_lenses_used
+            if str(lens).strip()
+        ],
+        "regulatory_or_finance_note": regulatory_or_finance_note,
         "valid": valid,
         "validation_notes": [],
     }, errors
 
 
-def _validate_participant_review(review: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
-    participant = review.get("participant_review")
-    if not isinstance(participant, dict):
-        return {}, ["participant_review must be an object"]
+def _validate_key_questions(review: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
+    questions = review.get("key_questions")
+    if not isinstance(questions, dict):
+        # Backward compatibility for cached V2 reviews.
+        old_participant = review.get("participant_review")
+        if isinstance(old_participant, dict):
+            questions = {
+                "medical_development_question": old_participant.get("medical_development_question"),
+                "clinical_operations_question": old_participant.get("clinops_execution_question"),
+            }
+        else:
+            return {}, ["key_questions must be an object"]
 
     errors = [
-        f"participant_review.{key} must be a string"
+        f"key_questions.{key} must be a string"
         for key in sorted(PARTICIPANT_REVIEW_KEYS)
-        if not isinstance(participant.get(key), str)
+        if not isinstance(questions.get(key), str)
     ]
     return {
-        key: participant.get(key, "")
+        key: questions.get(key, "")
         for key in sorted(PARTICIPANT_REVIEW_KEYS)
-        if isinstance(participant.get(key), str)
+        if isinstance(questions.get(key), str)
     }, errors
 
 
@@ -272,11 +325,114 @@ def _validate_object(value: Any, field_name: str, required: bool = True) -> tupl
     return deepcopy(value), []
 
 
+def _validate_review_metadata(value: Any) -> tuple[dict[str, Any], list[str]]:
+    metadata, errors = _validate_object(value, "review_metadata")
+    if errors:
+        return {}, errors
+    review_mode = metadata.get("review_mode")
+    participant_visible = metadata.get("participant_visible")
+    if review_mode not in SUPPORTED_REVIEW_MODES:
+        errors.append(f"review_metadata.review_mode must be one of {sorted(SUPPORTED_REVIEW_MODES)}")
+    if not isinstance(participant_visible, bool):
+        errors.append("review_metadata.participant_visible must be a boolean")
+    return metadata, errors
+
+
+def _validate_string_array(value: Any, field_name: str) -> list[str]:
+    return [
+        f"{field_name} must be an array of strings"
+    ] if not isinstance(value, list) or any(not isinstance(item, str) for item in value) else []
+
+
+def _validate_analysis_object(
+    value: Any,
+    field_name: str,
+    required_fields: set[str],
+    array_fields: set[str],
+) -> tuple[dict[str, Any], list[str]]:
+    obj, errors = _validate_object(value, field_name)
+    if errors:
+        return {}, errors
+    for key in sorted(required_fields):
+        if key not in obj:
+            errors.append(f"{field_name}.{key} is required")
+            continue
+        if key in array_fields:
+            errors.extend(_validate_string_array(obj.get(key), f"{field_name}.{key}"))
+        elif not isinstance(obj.get(key), str):
+            errors.append(f"{field_name}.{key} must be a string")
+    return obj, errors
+
+
+def _validate_completion_outlook_analysis(value: Any, field_name: str) -> tuple[dict[str, Any], list[str]]:
+    obj, errors = _validate_object(value, field_name)
+    if errors:
+        return {}, errors
+    for key in sorted(COMPLETION_OUTLOOK_ANALYSIS_KEYS):
+        if key not in obj:
+            errors.append(f"{field_name}.{key} is required")
+            continue
+        if key == "main_model_signals":
+            errors.extend(_validate_string_array(obj.get(key), f"{field_name}.{key}"))
+        elif key == "interpretive_hypotheses":
+            hypotheses = obj.get(key)
+            if not isinstance(hypotheses, list):
+                errors.append(f"{field_name}.{key} must be an array")
+            else:
+                for index, hypothesis in enumerate(hypotheses):
+                    if not isinstance(hypothesis, dict):
+                        errors.append(f"{field_name}.{key}[{index}] must be an object")
+                        continue
+                    for child_key in ("signal", "possible_pattern", "boundary"):
+                        if not isinstance(hypothesis.get(child_key), str):
+                            errors.append(f"{field_name}.{key}[{index}].{child_key} must be a string")
+                    errors.extend(
+                        _validate_string_array(
+                            hypothesis.get("context_modifiers"),
+                            f"{field_name}.{key}[{index}].context_modifiers",
+                        )
+                    )
+        elif not isinstance(obj.get(key), str):
+            errors.append(f"{field_name}.{key} must be a string")
+    return obj, errors
+
+
+def _validate_scenario_consistency_note(value: Any) -> tuple[dict[str, Any], list[str]]:
+    obj, errors = _validate_object(value, "scenario_consistency_note", required=False)
+    if not obj and not errors:
+        return {
+            "has_clear_mismatch": False,
+            "message": "",
+            "fields_in_tension": [],
+        }, []
+    if errors:
+        return {}, errors
+    for key in sorted(SCENARIO_CONSISTENCY_NOTE_KEYS):
+        if key not in obj:
+            errors.append(f"scenario_consistency_note.{key} is required")
+    if "has_clear_mismatch" in obj and not isinstance(obj.get("has_clear_mismatch"), bool):
+        errors.append("scenario_consistency_note.has_clear_mismatch must be a boolean")
+    if "message" in obj and not isinstance(obj.get("message"), str):
+        errors.append("scenario_consistency_note.message must be a string")
+    if "fields_in_tension" in obj:
+        errors.extend(_validate_string_array(obj.get("fields_in_tension"), "scenario_consistency_note.fields_in_tension"))
+    return obj, errors
+
+
 def _has_complete_design_subcategories(validated_review: dict[str, Any]) -> bool:
     subcategories = validated_review.get("design_confidence_subcategories") or {}
     if set(subcategories) != REQUIRED_DESIGN_SUBCATEGORIES:
         return False
     return all(subcategory.get("valid") is True for subcategory in subcategories.values())
+
+
+def _blocking_validation_errors(validated_review: dict[str, Any]) -> list[str]:
+    errors = list(validated_review.get("validation_errors") or [])
+    return [
+        error
+        for error in errors
+        if "is application-owned and ignored if returned by provider" not in str(error)
+    ]
 
 
 def _score_subcategory(packet: dict[str, Any], subcategory_name: str, subcategory: dict[str, Any]) -> dict[str, Any]:
@@ -350,11 +506,12 @@ def validate_review_json(review: dict[str, Any]) -> dict[str, Any]:
         return {
             "validation_status": "invalid",
             "validation_errors": ["review must be an object"],
-            "completion_outlook_review": {},
+            "review_metadata": {},
+            "completion_outlook_analysis": {},
             "design_confidence_subcategories": {},
-            "pillar_reviews": {},
-            "tradeoff_review": {},
-            "participant_review": {},
+            "design_confidence_analysis": {},
+            "key_questions": {},
+            "scenario_consistency_note": {},
             "continuity": {},
             "trace": {},
         }
@@ -383,31 +540,64 @@ def validate_review_json(review: dict[str, Any]) -> dict[str, Any]:
             validated_subcategories[subcategory_name] = validated
             errors.extend(subcategory_errors)
 
-    completion_outlook_review, completion_errors = _validate_object(
-        review.get("completion_outlook_review"),
-        "completion_outlook_review",
+    review_metadata, metadata_errors = _validate_review_metadata(review.get("review_metadata"))
+    completion_source = review.get("completion_outlook_analysis")
+    completion_field_name = "completion_outlook_analysis"
+    if completion_source is None and isinstance(review.get("completion_outlook_review"), dict):
+        old_completion = review.get("completion_outlook_review") or {}
+        completion_source = {
+            "risk_pattern_summary": old_completion.get("score_delta_summary", ""),
+            "driver_summary": old_completion.get("score_delta_summary", ""),
+            "main_model_signals": old_completion.get("model_supported_drivers") or [],
+            "interpretive_hypotheses": [],
+            "movement_explanation": old_completion.get("score_delta_summary", ""),
+            "model_boundary_note": "Legacy completion_outlook_review normalized to completion_outlook_analysis.",
+        }
+        completion_field_name = "completion_outlook_review"
+    completion_outlook_analysis, completion_errors = _validate_completion_outlook_analysis(
+        completion_source,
+        completion_field_name,
     )
-    pillar_reviews, pillar_errors = _validate_object(review.get("pillar_reviews"), "pillar_reviews")
-    tradeoff_review, tradeoff_errors = _validate_object(review.get("tradeoff_review"), "tradeoff_review")
-    participant_review, participant_errors = _validate_participant_review(review)
+    design_confidence_source = review.get("design_confidence_analysis")
+    if design_confidence_source is None and isinstance(review.get("tradeoff_review"), dict):
+        tradeoff = review.get("tradeoff_review") or {}
+        old_participant = review.get("participant_review") or {}
+        design_confidence_source = {
+            "summary": old_participant.get("overall_design_comment", ""),
+            "confidence_rationale": tradeoff.get("central_tension", ""),
+            "supporting_evidence": [],
+            "limiting_evidence": [],
+        }
+    design_confidence_analysis, design_analysis_errors = _validate_analysis_object(
+        design_confidence_source,
+        "design_confidence_analysis",
+        DESIGN_CONFIDENCE_ANALYSIS_KEYS,
+        {"supporting_evidence", "limiting_evidence"},
+    )
+    key_questions, question_errors = _validate_key_questions(review)
+    consistency_note, consistency_errors = _validate_scenario_consistency_note(
+        review.get("scenario_consistency_note")
+    )
     continuity, continuity_errors = _validate_object(review.get("continuity"), "continuity")
     trace, trace_errors = _validate_object(review.get("trace"), "trace")
 
+    errors.extend(metadata_errors)
     errors.extend(completion_errors)
-    errors.extend(pillar_errors)
-    errors.extend(tradeoff_errors)
-    errors.extend(participant_errors)
+    errors.extend(design_analysis_errors)
+    errors.extend(question_errors)
+    errors.extend(consistency_errors)
     errors.extend(continuity_errors)
     errors.extend(trace_errors)
 
     return {
         "validation_status": "valid" if not errors else "partial",
         "validation_errors": errors,
-        "completion_outlook_review": completion_outlook_review,
+        "review_metadata": review_metadata,
+        "completion_outlook_analysis": completion_outlook_analysis,
         "design_confidence_subcategories": validated_subcategories,
-        "pillar_reviews": pillar_reviews,
-        "tradeoff_review": tradeoff_review,
-        "participant_review": participant_review,
+        "design_confidence_analysis": design_confidence_analysis,
+        "key_questions": key_questions,
+        "scenario_consistency_note": consistency_note,
         "continuity": continuity,
         "trace": trace,
     }
@@ -427,7 +617,8 @@ def score_validated_review(packet: dict[str, Any], validated_review: dict[str, A
             "input_hash": input_hash,
         }
 
-    if not _has_complete_design_subcategories(validated_review):
+    blocking_errors = _blocking_validation_errors(validated_review)
+    if blocking_errors or not _has_complete_design_subcategories(validated_review):
         return {
             "validation_status": validated_review.get("validation_status", "partial"),
             "validation_errors": list(validated_review.get("validation_errors") or []),

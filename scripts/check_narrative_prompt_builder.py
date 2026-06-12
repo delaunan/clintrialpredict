@@ -15,6 +15,8 @@ from src.narratives.packet_builder import build_review_packet_from_fixture  # no
 from src.narratives.prompt_builder import (  # noqa: E402
     FORBIDDEN_PROVIDER_SCORE_FIELDS,
     PROMPT_MODE_HIDDEN_BASELINE,
+    PROMPT_MODE_FIRST_VISIBLE_ITERATION,
+    PROMPT_MODE_LATER_VISIBLE_ITERATION,
     PROMPT_MODE_VISIBLE_ITERATION,
     PROMPT_TEMPLATE_VERSION,
     RESPONSE_SCHEMA_VERSION,
@@ -46,16 +48,24 @@ def main() -> int:
         errors.append("response contract should expose stable schema version")
     if set(contract.get("required_design_confidence_subcategories") or []) != REQUIRED_DESIGN_SUBCATEGORIES:
         errors.append("response contract should include all Design Confidence subcategories")
-    if contract.get("required_subcategory_fields") != ["evidence_fields", "rationale", "rating"]:
-        errors.append("response contract should require evidence-first subcategory fields")
+    expected_subcategory_fields = [
+        "evidence_fields",
+        "rationale",
+        "rating",
+        "short_rationale",
+        "optional_lenses_used",
+        "regulatory_or_finance_note",
+    ]
+    if contract.get("required_subcategory_fields") != expected_subcategory_fields:
+        errors.append("response contract should require enhanced evidence-first subcategory fields")
     allowed = contract.get("allowed_ratings_by_subcategory") or {}
     if set(allowed) != REQUIRED_DESIGN_SUBCATEGORIES:
         errors.append("response contract should include rating enums for all subcategories")
     for subcategory, ratings in allowed.items():
         if set(ratings) != DESIGN_RATINGS:
             errors.append(f"response contract rating enum mismatch for {subcategory}")
-    if set(contract.get("required_participant_review_fields") or []) != PARTICIPANT_REVIEW_KEYS:
-        errors.append("response contract should include all participant-review fields")
+    if set(contract.get("required_key_question_fields") or []) != PARTICIPANT_REVIEW_KEYS:
+        errors.append("response contract should include all key-question fields")
     if set(contract.get("forbidden_provider_fields") or []) != set(FORBIDDEN_PROVIDER_SCORE_FIELDS):
         errors.append("response contract should declare app-owned forbidden score fields")
     if "select packet-supported evidence_fields" not in " ".join(contract.get("reasoning_sequence") or []):
@@ -104,41 +114,39 @@ def main() -> int:
     if "75-120 seconds" not in str(style.get("participant_panel_target")):
         errors.append("response contract should bound participant panel reading time")
     expected_participant_order = [
-        "overall_completion_comment",
-        "overall_design_comment",
-        "most_impactful_pillar_1",
-        "most_impactful_pillar_2",
-        "interaction_summary",
-        "medical_development_question",
-        "clinops_execution_question",
+        "completion_outlook_analysis",
+        "design_confidence_analysis",
+        "key_questions.medical_development_question",
+        "key_questions.clinical_operations_question",
     ]
-    if style.get("participant_review_order") != expected_participant_order:
-        errors.append("response contract should define the participant-review display order")
+    if style.get("participant_output_order") != expected_participant_order:
+        errors.append("response contract should define the three-block participant display order")
     for key in (
         "design_confidence_subcategories.*.rationale",
-        "participant_review.overall_completion_comment",
-        "participant_review.overall_design_comment",
-        "participant_review.most_impactful_pillar_1",
-        "participant_review.most_impactful_pillar_2",
-        "participant_review.interaction_summary",
-        "participant_review questions",
+        "design_confidence_subcategories.*.short_rationale",
+        "completion_outlook_analysis.risk_pattern_summary",
+        "design_confidence_analysis.summary",
+        "key_questions.*",
+        "scenario_consistency_note.message",
         "trace arrays",
     ):
         if key not in field_lengths:
             errors.append(f"response contract missing output length rule for {key}")
-    if "maximum 85 words" not in str(field_lengths.get("participant_review.overall_completion_comment")):
-        errors.append("overall completion comment should be capped at 85 words")
-    if "maximum 70 words" not in str(field_lengths.get("participant_review.most_impactful_pillar_1")):
-        errors.append("pillar comments should be capped at 70 words")
-    if "maximum 25 words" not in str(field_lengths.get("participant_review questions")):
-        errors.append("participant review questions should be capped at 25 words")
+    if "90-140 words" not in str(field_lengths.get("completion_outlook_analysis.risk_pattern_summary")):
+        errors.append("completion outlook analysis should target 90-140 words")
+    if "120-180 words" not in str(field_lengths.get("design_confidence_analysis.summary")):
+        errors.append("design confidence analysis should target 120-180 words")
+    if "20-30 words" not in str(field_lengths.get("key_questions.*")):
+        errors.append("key questions should target 20-30 words")
 
     schema = gemini_response_schema()
     schema_properties = schema.get("properties") or {}
     subcategory_schema = (schema_properties.get("design_confidence_subcategories") or {}).get("properties") or {}
-    participant_schema = (schema_properties.get("participant_review") or {}).get("properties") or {}
-    completion_schema = schema_properties.get("completion_outlook_review") or {}
-    tradeoff_schema = schema_properties.get("tradeoff_review") or {}
+    metadata_schema = schema_properties.get("review_metadata") or {}
+    questions_schema = (schema_properties.get("key_questions") or {}).get("properties") or {}
+    completion_schema = schema_properties.get("completion_outlook_analysis") or {}
+    design_analysis_schema = schema_properties.get("design_confidence_analysis") or {}
+    consistency_schema = schema_properties.get("scenario_consistency_note") or {}
     trace_schema = schema_properties.get("trace") or {}
     if schema.get("type") != "OBJECT":
         errors.append("Gemini response schema should require a top-level object")
@@ -146,37 +154,57 @@ def main() -> int:
         errors.append("Gemini response schema should require all top-level Scenario Review objects")
     if set(subcategory_schema) != REQUIRED_DESIGN_SUBCATEGORIES:
         errors.append("Gemini response schema should include all four Design Confidence subcategories")
-    if set(participant_schema) != PARTICIPANT_REVIEW_KEYS:
-        errors.append("Gemini response schema should include all participant-review fields")
+    if set((metadata_schema.get("properties") or {}).get("review_mode", {}).get("enum") or []) != {
+        PROMPT_MODE_HIDDEN_BASELINE,
+        PROMPT_MODE_FIRST_VISIBLE_ITERATION,
+        PROMPT_MODE_LATER_VISIBLE_ITERATION,
+    }:
+        errors.append("Gemini response schema should enumerate all prompt modes")
+    if set(questions_schema) != PARTICIPANT_REVIEW_KEYS:
+        errors.append("Gemini response schema should include both key-question fields")
     for subcategory_name, subcategory in subcategory_schema.items():
         required = subcategory.get("required") or []
-        if required != ["evidence_fields", "rationale", "rating"]:
-            errors.append(f"{subcategory_name}: schema should present evidence/rationale/rating order")
+        if required != [
+            "evidence_fields",
+            "rationale",
+            "short_rationale",
+            "optional_lenses_used",
+            "regulatory_or_finance_note",
+            "rating",
+        ]:
+            errors.append(f"{subcategory_name}: schema should present enhanced subcategory field order")
         rating_schema = (subcategory.get("properties") or {}).get("rating") or {}
         if set(rating_schema.get("enum") or []) != DESIGN_RATINGS:
             errors.append(f"Gemini response schema rating enum mismatch for {subcategory_name}")
     if set(completion_schema.get("required") or []) != {
-        "score_delta_summary",
-        "pillar_movement_summary",
-        "model_supported_drivers",
-        "cross_pillar_interaction_hypotheses",
-        "model_limits",
+        "risk_pattern_summary",
+        "driver_summary",
+        "main_model_signals",
+        "interpretive_hypotheses",
+        "movement_explanation",
+        "model_boundary_note",
     }:
-        errors.append("Gemini response schema should require all completion_outlook_review fields")
-    if set(tradeoff_schema.get("required") or []) != {
-        "central_tension",
-        "what_completion_gained",
-        "what_design_confidence_gained",
-        "what_may_have_been_sacrificed",
-        "main_uncertainty",
+        errors.append("Gemini response schema should require all completion_outlook_analysis fields")
+    if set(design_analysis_schema.get("required") or []) != {
+        "summary",
+        "confidence_rationale",
+        "supporting_evidence",
+        "limiting_evidence",
     }:
-        errors.append("Gemini response schema should require all tradeoff_review fields")
+        errors.append("Gemini response schema should require all design_confidence_analysis fields")
+    if set(consistency_schema.get("required") or []) != {
+        "has_clear_mismatch",
+        "message",
+        "fields_in_tension",
+    }:
+        errors.append("Gemini response schema should require all scenario_consistency_note fields")
     if set(trace_schema.get("required") or []) != {
         "main_features_considered",
         "main_completion_drivers_considered",
         "main_design_subcategories_considered",
         "operational_statuses_considered",
         "reference_pack_ids_used",
+        "therapeutic_area_pack_used",
         "compared_against",
         "should_repeat_prior_warning",
     }:
@@ -200,11 +228,20 @@ def main() -> int:
         "structured_feature_display_values",
         "structured_feature_meanings",
         "text_context_field_meanings",
-        "tradeoff_review.central_tension",
-        "Completion Outlook versus Design Confidence trade-off",
+        "review_metadata",
+        "completion_outlook_analysis",
+        "design_confidence_analysis",
+        "key_questions",
+        "scenario_consistency_note",
+        "early-termination risk",
+        "planned enrollment",
+        "planned site count",
+        "planned total duration",
+        "therapeutic_area_context",
+        "therapeutic_area_pack_used",
         "packet.reference_packs",
         "trace.reference_pack_ids_used",
-        "Do not invent current trends",
+        "do not invent specific disease",
         "one open-ended question",
         "not answerable with yes or no",
         "strategic and debate-worthy",
@@ -216,9 +253,8 @@ def main() -> int:
         "then assign the rating",
         "Return all four Design Confidence subcategories",
         "output_style_requirements",
-        "overall_completion_comment, overall_design_comment",
-        "The two pillar comments should cover the most material pillars or interactions",
-        "Participant-review overall comments should be 2-3 sentences and no more than 85 words each",
+        "three participant-facing blocks",
+        "Completion Outlook Analysis, Design Confidence Analysis, and Two Key Questions",
         "Each participant debate question should be one open-ended question",
         "phase_intent_alignment",
         "endpoint_evidence_strength",
@@ -242,8 +278,8 @@ def main() -> int:
     if "Packet JSON:" not in prompt:
         errors.append("prompt should include packet JSON marker")
 
-    if infer_prompt_mode(packet) != PROMPT_MODE_VISIBLE_ITERATION:
-        errors.append("edited fixture should infer visible_iteration prompt mode")
+    if infer_prompt_mode(packet) != PROMPT_MODE_FIRST_VISIBLE_ITERATION:
+        errors.append("edited fixture should infer first_visible_iteration prompt mode")
     if infer_prompt_mode(baseline_packet) != PROMPT_MODE_HIDDEN_BASELINE:
         errors.append("baseline fixture should infer hidden_baseline prompt mode")
     scratch_like_packet = {
@@ -255,13 +291,13 @@ def main() -> int:
             "changed_fields": [],
         }
     }
-    if infer_prompt_mode(scratch_like_packet) != PROMPT_MODE_VISIBLE_ITERATION:
-        errors.append("non-baseline iteration-0 packet should not infer hidden_baseline prompt mode")
+    if infer_prompt_mode(scratch_like_packet) != PROMPT_MODE_FIRST_VISIBLE_ITERATION:
+        errors.append("non-baseline iteration-0 packet should infer first_visible_iteration prompt mode")
 
     visible_terms = [
-        "Prompt mode: visible_iteration",
-        "Review the participant's current scenario change",
-        "what the design gained",
+        "Prompt mode: first_visible_iteration",
+        "Review the participant's first visible scenario change",
+        "Do not say Design Confidence improved",
         "Scenario Review panel",
     ]
     for term in visible_terms:

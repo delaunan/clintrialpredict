@@ -95,6 +95,7 @@ def _build_trace(
     total_scenario_score = scoring.get("total_scenario_score")
     design_confidence_assessment = deepcopy(scoring.get("design_confidence_assessment") or {})
     provider_trace = (validated_review or {}).get("trace") or {}
+    design_confidence_analysis = (validated_review or {}).get("design_confidence_analysis") or {}
     tradeoff_review = (validated_review or {}).get("tradeoff_review") or {}
     reference_pack_ids_available = [
         pack.get("pack_id")
@@ -147,11 +148,18 @@ def _build_trace(
         "design_confidence_subcategories": deepcopy(
             (validated_review or {}).get("design_confidence_subcategories") or {}
         ),
+        "completion_outlook_analysis": deepcopy(
+            (validated_review or {}).get("completion_outlook_analysis") or {}
+        ),
+        "design_confidence_analysis": deepcopy(design_confidence_analysis),
+        "key_questions": deepcopy((validated_review or {}).get("key_questions") or {}),
+        "scenario_consistency_note": deepcopy((validated_review or {}).get("scenario_consistency_note") or {}),
         "design_confidence_contributions": deepcopy(design_confidence_assessment.get("subcategories") or {}),
-        "central_tension": tradeoff_review.get("central_tension"),
+        "central_tension": design_confidence_analysis.get("confidence_rationale") or tradeoff_review.get("central_tension"),
         "reference_pack_ids_available": reference_pack_ids_available,
         "reference_pack_ids_used": supported_reference_pack_ids_used,
         "unsupported_reference_pack_ids_used": unsupported_reference_pack_ids_used,
+        "therapeutic_area_pack_used": provider_trace.get("therapeutic_area_pack_used"),
         # Temporary aliases for the old simulator panel until Phase 6 migrates UI labels.
         "quality_adjustment": design_confidence,
         "final_candidate_score": total_scenario_score,

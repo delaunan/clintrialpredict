@@ -11,7 +11,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
-PROMPT_VERSION = "narratives_v2"
+PROMPT_VERSION = "narratives_v3"
 RUBRIC_VERSION = "design_confidence_v1"
 
 REQUIRED_SCENARIO_TYPES = {
@@ -217,6 +217,9 @@ def _domain(rating: str, rationale: str, evidence_fields: list[str]) -> dict[str
         "rating": rating,
         "rationale": rationale,
         "evidence_fields": evidence_fields,
+        "short_rationale": rationale.split(".", 1)[0][:80],
+        "optional_lenses_used": [],
+        "regulatory_or_finance_note": "",
     }
 
 
@@ -229,13 +232,10 @@ def _participant_review(
     clinops_question: str,
 ) -> dict[str, str]:
     return {
-        "overall_completion_comment": moved,
-        "overall_design_comment": signal,
-        "most_impactful_pillar_1": what_changed,
-        "most_impactful_pillar_2": tradeoff,
-        "interaction_summary": tradeoff,
+        "completion_outlook_summary": " ".join(part for part in [what_changed, moved] if part).strip(),
+        "design_confidence_summary": " ".join(part for part in [signal, tradeoff] if part).strip(),
         "medical_development_question": medical_question,
-        "clinops_execution_question": clinops_question,
+        "clinical_operations_question": clinops_question,
     }
 
 
@@ -245,50 +245,67 @@ def _review(
     design_subcategories: dict[str, dict[str, Any]],
     participant_review: dict[str, str],
     storyline_update: str,
+    review_mode: str = "first_visible_iteration",
     new_concerns: list[str] | None = None,
     operational_statuses: list[str] | None = None,
     design_gain: str = "",
     design_sacrifice: str = "",
 ) -> dict[str, Any]:
+    consistency_note = {
+        "has_clear_mismatch": False,
+        "message": "",
+        "fields_in_tension": [],
+    }
+    if any(
+        token in " ".join(
+            str(field)
+            for subcategory in design_subcategories.values()
+            for field in subcategory.get("evidence_fields", [])
+        )
+        for token in ("primary_outcomes_ui", "conditions_ui", "interventions_ui")
+    ):
+        consistency_note = {
+            "has_clear_mismatch": True,
+            "message": (
+                "Some scenario details are not fully aligned across free-text fields and selected fields. "
+                "In this case the value in the selected fields drive the analysis, while the text is used as supporting context."
+            ),
+            "fields_in_tension": ["selected fields", "free-text fields"],
+        }
     return {
-        "completion_outlook_review": {
-            "score_delta_summary": movement_summary,
-            "pillar_movement_summary": [],
-            "model_supported_drivers": [],
-            "cross_pillar_interaction_hypotheses": [],
-            "model_limits": [],
+        "review_metadata": {
+            "review_mode": review_mode,
+            "participant_visible": review_mode != "hidden_baseline",
+        },
+        "completion_outlook_analysis": {
+            "risk_pattern_summary": movement_summary,
+            "driver_summary": movement_summary,
+            "main_model_signals": [],
+            "interpretive_hypotheses": [
+                {
+                    "signal": "Completion Score movement",
+                    "possible_pattern": movement_summary,
+                    "context_modifiers": [],
+                    "boundary": "This is a historical risk-pattern interpretation, not proof that a field caused completion.",
+                }
+            ],
+            "movement_explanation": movement_summary,
+            "model_boundary_note": "Completion Outlook reflects resemblance to completed versus early-terminated historical patterns.",
         },
         "design_confidence_subcategories": design_subcategories,
-        "pillar_reviews": {
-            "therapeutic_context": {
-                "completion_interpretation": "",
-                "design_adjustment_interpretation": "",
-                "collateral_impacts": [],
-            },
-            "scientific_challenge": {
-                "completion_interpretation": "",
-                "design_adjustment_interpretation": "",
-                "collateral_impacts": [],
-            },
-            "patient_profile": {
-                "completion_interpretation": "",
-                "design_adjustment_interpretation": "",
-                "collateral_impacts": [],
-            },
-            "execution_framework": {
-                "completion_interpretation": "",
-                "design_adjustment_interpretation": "",
-                "collateral_impacts": [],
-            },
+        "design_confidence_analysis": {
+            "summary": participant_review.get("design_confidence_summary", ""),
+            "confidence_rationale": (
+                "The main tension is whether completion favorability and design defensibility move in the same direction."
+            ),
+            "supporting_evidence": [design_gain] if design_gain else [],
+            "limiting_evidence": [design_sacrifice] if design_sacrifice else [],
         },
-        "tradeoff_review": {
-            "central_tension": "The main tension is whether completion favorability and design defensibility move in the same direction.",
-            "what_completion_gained": movement_summary,
-            "what_design_confidence_gained": design_gain,
-            "what_may_have_been_sacrificed": design_sacrifice,
-            "main_uncertainty": "",
+        "key_questions": {
+            "medical_development_question": participant_review.get("medical_development_question", ""),
+            "clinical_operations_question": participant_review.get("clinical_operations_question", ""),
         },
-        "participant_review": participant_review,
+        "scenario_consistency_note": consistency_note,
         "continuity": {
             "prior_concerns_resolved": [],
             "prior_concerns_worsened": [],
@@ -309,6 +326,7 @@ def _review(
             "main_design_subcategories_considered": sorted(design_subcategories),
             "operational_statuses_considered": operational_statuses or [],
             "reference_pack_ids_used": [],
+            "therapeutic_area_pack_used": "",
             "compared_against": "previous_prediction",
             "should_repeat_prior_warning": False,
         },
@@ -399,6 +417,7 @@ def _fixture(
     storyline_update: str = "",
     new_concerns: list[str] | None = None,
     operational_statuses: list[str] | None = None,
+    review_mode: str = "first_visible_iteration",
 ) -> dict[str, Any]:
     review = None
     if design_subcategories is not None and participant_review is not None:
@@ -409,6 +428,7 @@ def _fixture(
             storyline_update=storyline_update,
             new_concerns=new_concerns,
             operational_statuses=operational_statuses,
+            review_mode=review_mode,
         )
     return {
         "fixture_id": fixture_id,
@@ -450,6 +470,7 @@ CONTRACT_FIXTURES: list[dict[str, Any]] = [
         movement_summary="Baseline review anchors later comparisons; no participant change has occurred.",
         storyline_update="Baseline anchored with balanced Design Confidence and no participant-introduced concern.",
         operational_statuses=["typical"],
+        review_mode="hidden_baseline",
     ),
     _fixture(
         fixture_id="score_improves_evidence_weakens_v2",
@@ -1061,6 +1082,13 @@ def validate_contract_fixtures(fixtures: list[dict[str, Any]] | None = None) -> 
             errors.append(f"{fixture_id}: review-needed fixture must define mock_review")
             continue
 
+        metadata = review.get("review_metadata") or {}
+        expected_mode = "hidden_baseline" if scenario_type == "baseline" else "first_visible_iteration"
+        if metadata.get("review_mode") != expected_mode:
+            errors.append(f"{fixture_id}: review_metadata.review_mode should be {expected_mode}")
+        if metadata.get("participant_visible") is not (expected_mode != "hidden_baseline"):
+            errors.append(f"{fixture_id}: review_metadata.participant_visible mismatch for {expected_mode}")
+
         subcategories = review.get("design_confidence_subcategories")
         if not isinstance(subcategories, dict):
             errors.append(f"{fixture_id}: missing design_confidence_subcategories")
@@ -1078,16 +1106,23 @@ def validate_contract_fixtures(fixtures: list[dict[str, Any]] | None = None) -> 
                 errors.append(f"{fixture_id}: {subcategory_name} missing rating")
             if "rationale" not in subcategory:
                 errors.append(f"{fixture_id}: {subcategory_name} missing rationale")
+            if "short_rationale" not in subcategory:
+                errors.append(f"{fixture_id}: {subcategory_name} missing short_rationale")
+            if "optional_lenses_used" not in subcategory:
+                errors.append(f"{fixture_id}: {subcategory_name} missing optional_lenses_used")
+            if "regulatory_or_finance_note" not in subcategory:
+                errors.append(f"{fixture_id}: {subcategory_name} missing regulatory_or_finance_note")
             evidence_fields = subcategory.get("evidence_fields")
             if not isinstance(evidence_fields, list):
                 errors.append(f"{fixture_id}: {subcategory_name} evidence_fields must be a list")
 
         for key in (
-            "completion_outlook_review",
+            "review_metadata",
+            "completion_outlook_analysis",
             "design_confidence_subcategories",
-            "pillar_reviews",
-            "tradeoff_review",
-            "participant_review",
+            "design_confidence_analysis",
+            "key_questions",
+            "scenario_consistency_note",
             "continuity",
             "trace",
         ):

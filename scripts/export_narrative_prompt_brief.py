@@ -19,6 +19,13 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+try:
+    from dotenv import load_dotenv
+except ImportError:  # pragma: no cover - export still works with process env only.
+    load_dotenv = None
+else:
+    load_dotenv(ROOT / ".env")
+
 from src.narratives.contract_fixtures import get_contract_fixtures  # noqa: E402
 from src.narratives.packet_builder import build_review_packet_from_fixture  # noqa: E402
 from src.narratives.prompt_builder import (  # noqa: E402

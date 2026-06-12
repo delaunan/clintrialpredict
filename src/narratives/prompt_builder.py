@@ -8,19 +8,27 @@ from typing import Any
 from src.narratives.contract_fixtures import REQUIRED_DESIGN_SUBCATEGORIES
 from src.narratives.scoring import DESIGN_RATINGS, PARTICIPANT_REVIEW_KEYS
 
-PROMPT_TEMPLATE_VERSION = "narrative_provider_prompt_v2"
-RESPONSE_SCHEMA_VERSION = "scenario_review_schema_v2"
+PROMPT_TEMPLATE_VERSION = "narrative_provider_prompt_v3"
+RESPONSE_SCHEMA_VERSION = "scenario_review_schema_v3"
 PROMPT_MODE_HIDDEN_BASELINE = "hidden_baseline"
-PROMPT_MODE_VISIBLE_ITERATION = "visible_iteration"
-SUPPORTED_PROMPT_MODES = {PROMPT_MODE_HIDDEN_BASELINE, PROMPT_MODE_VISIBLE_ITERATION}
+PROMPT_MODE_FIRST_VISIBLE_ITERATION = "first_visible_iteration"
+PROMPT_MODE_LATER_VISIBLE_ITERATION = "later_visible_iteration"
+# Compatibility alias for callers that have not yet split visible modes.
+PROMPT_MODE_VISIBLE_ITERATION = PROMPT_MODE_FIRST_VISIBLE_ITERATION
+SUPPORTED_PROMPT_MODES = {
+    PROMPT_MODE_HIDDEN_BASELINE,
+    PROMPT_MODE_FIRST_VISIBLE_ITERATION,
+    PROMPT_MODE_LATER_VISIBLE_ITERATION,
+}
 
 REQUIRED_SUBCATEGORY_NAMES = tuple(sorted(REQUIRED_DESIGN_SUBCATEGORIES))
 REQUIRED_TOP_LEVEL_OBJECTS = (
-    "completion_outlook_review",
+    "review_metadata",
+    "completion_outlook_analysis",
     "design_confidence_subcategories",
-    "pillar_reviews",
-    "tradeoff_review",
-    "participant_review",
+    "design_confidence_analysis",
+    "key_questions",
+    "scenario_consistency_note",
     "continuity",
     "trace",
 )
@@ -87,8 +95,10 @@ EXPERT_ANALYSIS_REQUIREMENTS = {
     ],
     "do_not_overstate": [
         "Do not present the model score as clinical truth.",
+        "Do not describe Completion Outlook as a promised chance of completion.",
         "Do not infer regulatory acceptability, efficacy, safety, or feasibility beyond packet evidence.",
         "Do not imply that a higher Completion Score means a better trial design.",
+        "Do not cite planned enrollment, planned site count, planned total duration, or operational benchmark metadata as Completion Outlook drivers.",
         "Do not turn the review into a prescription for the next edit.",
     ],
     "participant_examples": {
@@ -159,35 +169,29 @@ OUTPUT_STYLE_REQUIREMENTS = {
     ],
     "field_lengths": {
         "design_confidence_subcategories.*.rationale": "1 sentence, usually 18-35 words, maximum 45 words",
-        "completion_outlook_review.score_delta_summary": "1 sentence, maximum 35 words",
-        "completion_outlook_review arrays": "each item maximum 25 words",
-        "pillar_reviews.*.completion_interpretation": "1 sentence, maximum 30 words",
-        "pillar_reviews.*.design_adjustment_interpretation": "1 sentence, maximum 30 words",
-        "pillar_reviews.*.collateral_impacts": "each item maximum 20 words",
-        "tradeoff_review.*": "1 sentence, maximum 35 words",
-        "participant_review.overall_completion_comment": "1 short paragraph of 2-3 sentences, maximum 85 words",
-        "participant_review.overall_design_comment": "1 short paragraph of 2-3 sentences, maximum 85 words",
-        "participant_review.most_impactful_pillar_1": "1 short paragraph of 2 sentences, maximum 70 words, naming the pillar",
-        "participant_review.most_impactful_pillar_2": "1 short paragraph of 2 sentences, maximum 70 words, naming the pillar",
-        "participant_review.interaction_summary": "1-2 sentences, maximum 55 words",
-        "participant_review questions": "one question, maximum 25 words",
+        "design_confidence_subcategories.*.short_rationale": "short treemap label, usually 4-10 words, maximum 12 words",
+        "design_confidence_subcategories.*.regulatory_or_finance_note": "empty unless materially relevant; 1 cautious sentence maximum",
+        "completion_outlook_analysis.risk_pattern_summary": "1 paragraph, 90-140 words",
+        "completion_outlook_analysis.driver_summary": "1 sentence, maximum 40 words",
+        "completion_outlook_analysis.main_model_signals": "each item maximum 25 words",
+        "completion_outlook_analysis.interpretive_hypotheses": "each object must state signal, possible_pattern, context_modifiers, and boundary",
+        "design_confidence_analysis.summary": "1 paragraph, 120-180 words",
+        "design_confidence_analysis.confidence_rationale": "1-2 sentences, maximum 70 words",
+        "key_questions.*": "one open-ended question, 20-30 words, not answerable with yes or no",
+        "scenario_consistency_note.message": "empty unless selected fields and free text clearly conflict; maximum 45 words",
         "continuity.storyline_update": "1 sentence, maximum 35 words",
         "trace arrays": "short field names or compact labels, not full narrative sentences",
     },
-    "participant_panel_target": "Readable in roughly 75-120 seconds.",
-    "participant_review_order": [
-        "overall_completion_comment",
-        "overall_design_comment",
-        "most_impactful_pillar_1",
-        "most_impactful_pillar_2",
-        "interaction_summary",
-        "medical_development_question",
-        "clinops_execution_question",
+    "participant_panel_target": "Readable in roughly 75-120 seconds, with a target total of about 300-380 words.",
+    "participant_output_order": [
+        "completion_outlook_analysis",
+        "design_confidence_analysis",
+        "key_questions.medical_development_question",
+        "key_questions.clinical_operations_question",
     ],
-    "participant_review_focus": (
-        "Start with one overall Completion Outlook comment and one overall Design Confidence comment. "
-        "Then discuss the two most impactful pillars or interactions, not all four pillars. "
-        "Be substantial enough for discussion without giving an optimization recipe."
+    "participant_output_focus": (
+        "Write three participant-facing blocks: Completion Outlook Analysis, Design Confidence Analysis, and Two Key Questions. "
+        "Use internal subcategories for validation, scoring, and treemap rationale, but do not make every subcategory an equal participant narrative section."
     ),
 }
 
@@ -208,9 +212,42 @@ def provider_response_contract() -> dict[str, Any]:
         "expert_analysis_requirements": EXPERT_ANALYSIS_REQUIREMENTS,
         "expert_question_requirements": EXPERT_QUESTION_REQUIREMENTS,
         "output_style_requirements": OUTPUT_STYLE_REQUIREMENTS,
-        "required_subcategory_fields": ["evidence_fields", "rationale", "rating"],
-        "required_participant_review_fields": sorted(PARTICIPANT_REVIEW_KEYS),
+        "required_subcategory_fields": [
+            "evidence_fields",
+            "rationale",
+            "rating",
+            "short_rationale",
+            "optional_lenses_used",
+            "regulatory_or_finance_note",
+        ],
+        "required_key_question_fields": sorted(PARTICIPANT_REVIEW_KEYS),
         "forbidden_provider_fields": list(FORBIDDEN_PROVIDER_SCORE_FIELDS),
+        "completion_outlook_rules": {
+            "required_framing": (
+                "Frame Completion Outlook as lower/higher early-termination risk or resemblance to historical completed/terminated-trial patterns."
+            ),
+            "forbidden_drivers": [
+                "planned enrollment",
+                "planned site count",
+                "planned total duration",
+                "operational benchmark metadata",
+            ],
+            "duration_boundary": (
+                "primary_duration_months_ml may be used when it appears as XGBoost/model evidence; planned total duration must not be used as a Completion Outlook driver."
+            ),
+            "causality_boundary": "Do not claim any field caused completion or termination.",
+        },
+        "mode_constraints": {
+            PROMPT_MODE_HIDDEN_BASELINE: (
+                "Create hidden qualitative baseline context only; participant_visible must be false and no baseline Design Confidence comparison is allowed."
+            ),
+            PROMPT_MODE_FIRST_VISIBLE_ITERATION: (
+                "Compare Completion Outlook to the visible original Completion Score, but do not say Design Confidence improved or worsened versus baseline."
+            ),
+            PROMPT_MODE_LATER_VISIBLE_ITERATION: (
+                "Use previous visible context for continuity, but keep Design Confidence grounded in supported field changes and evidence."
+            ),
+        },
         "reasoning_sequence": [
             "select packet-supported evidence_fields",
             "write rationale from those evidence_fields",
@@ -228,12 +265,22 @@ def _subcategory_schema() -> dict[str, Any]:
                 "items": {"type": "STRING"},
             },
             "rationale": {"type": "STRING"},
+            "short_rationale": {"type": "STRING"},
+            "optional_lenses_used": _string_array_schema(),
+            "regulatory_or_finance_note": {"type": "STRING"},
             "rating": {
                 "type": "STRING",
                 "enum": sorted(DESIGN_RATINGS),
             },
         },
-        "required": ["evidence_fields", "rationale", "rating"],
+        "required": [
+            "evidence_fields",
+            "rationale",
+            "short_rationale",
+            "optional_lenses_used",
+            "regulatory_or_finance_note",
+            "rating",
+        ],
     }
 
 
@@ -254,41 +301,50 @@ def gemini_response_schema() -> dict[str, Any]:
         key: {"type": "STRING"}
         for key in sorted(PARTICIPANT_REVIEW_KEYS)
     }
-    pillar_properties = {
-        pillar: {
-            "type": "OBJECT",
-            "properties": {
-                "completion_interpretation": {"type": "STRING"},
-                "design_adjustment_interpretation": {"type": "STRING"},
-                "collateral_impacts": _string_array_schema(),
-            },
-            "required": [
-                "completion_interpretation",
-                "design_adjustment_interpretation",
-                "collateral_impacts",
-            ],
-        }
-        for pillar in ("therapeutic_context", "scientific_challenge", "patient_profile", "execution_framework")
-    }
 
     return {
         "type": "OBJECT",
         "properties": {
-            "completion_outlook_review": {
+            "review_metadata": {
                 "type": "OBJECT",
                 "properties": {
-                    "score_delta_summary": {"type": "STRING"},
-                    "pillar_movement_summary": _string_array_schema(),
-                    "model_supported_drivers": _string_array_schema(),
-                    "cross_pillar_interaction_hypotheses": _string_array_schema(),
-                    "model_limits": _string_array_schema(),
+                    "review_mode": {
+                        "type": "STRING",
+                        "enum": sorted(SUPPORTED_PROMPT_MODES),
+                    },
+                    "participant_visible": {"type": "BOOLEAN"},
+                },
+                "required": ["review_mode", "participant_visible"],
+            },
+            "completion_outlook_analysis": {
+                "type": "OBJECT",
+                "properties": {
+                    "risk_pattern_summary": {"type": "STRING"},
+                    "driver_summary": {"type": "STRING"},
+                    "main_model_signals": _string_array_schema(),
+                    "interpretive_hypotheses": {
+                        "type": "ARRAY",
+                        "items": {
+                            "type": "OBJECT",
+                            "properties": {
+                                "signal": {"type": "STRING"},
+                                "possible_pattern": {"type": "STRING"},
+                                "context_modifiers": _string_array_schema(),
+                                "boundary": {"type": "STRING"},
+                            },
+                            "required": ["signal", "possible_pattern", "context_modifiers", "boundary"],
+                        },
+                    },
+                    "movement_explanation": {"type": "STRING"},
+                    "model_boundary_note": {"type": "STRING"},
                 },
                 "required": [
-                    "score_delta_summary",
-                    "pillar_movement_summary",
-                    "model_supported_drivers",
-                    "cross_pillar_interaction_hypotheses",
-                    "model_limits",
+                    "risk_pattern_summary",
+                    "driver_summary",
+                    "main_model_signals",
+                    "interpretive_hypotheses",
+                    "movement_explanation",
+                    "model_boundary_note",
                 ],
             },
             "design_confidence_subcategories": {
@@ -296,32 +352,34 @@ def gemini_response_schema() -> dict[str, Any]:
                 "properties": subcategory_properties,
                 "required": list(REQUIRED_SUBCATEGORY_NAMES),
             },
-            "pillar_reviews": {
-                "type": "OBJECT",
-                "properties": pillar_properties,
-                "required": list(pillar_properties),
-            },
-            "tradeoff_review": {
+            "design_confidence_analysis": {
                 "type": "OBJECT",
                 "properties": {
-                    "central_tension": {"type": "STRING"},
-                    "what_completion_gained": {"type": "STRING"},
-                    "what_design_confidence_gained": {"type": "STRING"},
-                    "what_may_have_been_sacrificed": {"type": "STRING"},
-                    "main_uncertainty": {"type": "STRING"},
+                    "summary": {"type": "STRING"},
+                    "confidence_rationale": {"type": "STRING"},
+                    "supporting_evidence": _string_array_schema(),
+                    "limiting_evidence": _string_array_schema(),
                 },
                 "required": [
-                    "central_tension",
-                    "what_completion_gained",
-                    "what_design_confidence_gained",
-                    "what_may_have_been_sacrificed",
-                    "main_uncertainty",
+                    "summary",
+                    "confidence_rationale",
+                    "supporting_evidence",
+                    "limiting_evidence",
                 ],
             },
-            "participant_review": {
+            "key_questions": {
                 "type": "OBJECT",
                 "properties": participant_properties,
                 "required": sorted(PARTICIPANT_REVIEW_KEYS),
+            },
+            "scenario_consistency_note": {
+                "type": "OBJECT",
+                "properties": {
+                    "has_clear_mismatch": {"type": "BOOLEAN"},
+                    "message": {"type": "STRING"},
+                    "fields_in_tension": _string_array_schema(),
+                },
+                "required": ["has_clear_mismatch", "message", "fields_in_tension"],
             },
             "continuity": {
                 "type": "OBJECT",
@@ -348,6 +406,7 @@ def gemini_response_schema() -> dict[str, Any]:
                     "main_design_subcategories_considered": _string_array_schema(),
                     "operational_statuses_considered": _string_array_schema(),
                     "reference_pack_ids_used": _string_array_schema(),
+                    "therapeutic_area_pack_used": {"type": "STRING"},
                     "compared_against": {"type": "STRING"},
                     "should_repeat_prior_warning": {"type": "BOOLEAN"},
                 },
@@ -357,6 +416,7 @@ def gemini_response_schema() -> dict[str, Any]:
                     "main_design_subcategories_considered",
                     "operational_statuses_considered",
                     "reference_pack_ids_used",
+                    "therapeutic_area_pack_used",
                     "compared_against",
                     "should_repeat_prior_warning",
                 ],
@@ -388,7 +448,9 @@ def infer_prompt_mode(packet: dict[str, Any]) -> str:
         )
     ):
         return PROMPT_MODE_HIDDEN_BASELINE
-    return PROMPT_MODE_VISIBLE_ITERATION
+    if previous_snapshot_id is None or iteration_number in {0, 1}:
+        return PROMPT_MODE_FIRST_VISIBLE_ITERATION
+    return PROMPT_MODE_LATER_VISIBLE_ITERATION
 
 
 def _mode_instruction(prompt_mode: str) -> str:
@@ -401,10 +463,19 @@ def _mode_instruction(prompt_mode: str) -> str:
             "Identify baseline strengths, baseline concerns, text/structured consistency flags, and compact storyline memory. "
             "Do not expose participant-facing baseline Design Confidence, Total Scenario Score, or any hidden numeric design score.\n"
         )
+    if prompt_mode == PROMPT_MODE_FIRST_VISIBLE_ITERATION:
+        return (
+            "Prompt mode: first_visible_iteration.\n"
+            "Review the participant's first visible scenario change. Explain what changed and why Completion Outlook may have moved "
+            "relative to the visible original Completion Score. Do not say Design Confidence improved, declined, increased, or decreased "
+            "versus baseline because participants did not see a baseline Design Confidence score. Evaluate Design Confidence for the current "
+            "scenario using supported field changes and evidence only. Use participant-facing wording suitable for the simulator Scenario Review panel.\n"
+        )
     return (
-        "Prompt mode: visible_iteration.\n"
+        "Prompt mode: later_visible_iteration.\n"
         "Review the participant's current scenario change. Explain what changed, why the Completion Score may have moved, "
-        "what the design gained, what it may have sacrificed, and how the scenario relates to prior baseline or iteration context. "
+        "what the design gained, what it may have sacrificed, and how the scenario relates to prior visible iteration context. "
+        "Design Confidence continuity must be grounded in changed fields and supported evidence, not unsupported score-to-score storytelling. "
         "Use participant-facing wording suitable for the simulator Scenario Review panel.\n"
     )
 
@@ -418,6 +489,7 @@ def _evidence_instruction(prompt_mode: str) -> str:
         )
     return (
         "Use iteration_context.field_changes to identify what the participant changed.\n"
+        "Use iteration_context.text_change_evidence to distinguish alignment-only text edits from new information when available.\n"
         "Use model_interpretation.xgboost_impact_changes only to understand which model-explanation movements were material. "
         "Do not treat model movement as proof of clinical causality.\n"
     )
@@ -444,23 +516,31 @@ def build_provider_prompt(packet: dict[str, Any], *, prompt_mode: str | None = N
         "target-population relevance, operational proportionality, shortcut risk, governance adequacy, and cross-pillar "
         "tension when they are supported by the packet.\n"
         "Use structured_feature_display_values for readable field labels and structured_feature_meanings or "
-        "text_context_field_meanings to understand what each field means clinically. Use tradeoff_review.central_tension "
-        "to summarize the single most important Completion Outlook versus Design Confidence trade-off in one sentence.\n"
+        "text_context_field_meanings to understand what each field means clinically. If selected categorical/numeric fields conflict "
+        "with free text, the selected fields drive the analysis and free text is supporting context.\n"
+        "If a clear mismatch remains, populate scenario_consistency_note with this participant-ready message exactly unless field names differ: "
+        "\"Some scenario details are not fully aligned across free-text fields and selected fields. In this case the value in the selected fields drive the analysis, while the text is used as supporting context (Intervention text, Therapeutic Modality).\"\n"
         "Use packet.reference_packs as curated context only. They are secondary to the scenario packet. When you use a "
         "reference pack to shape reasoning or questions, include its pack_id in trace.reference_pack_ids_used. Do not "
-        "invent current trends beyond the supplied reference packs and packet evidence.\n"
+        "invent specific disease, regulatory, efficacy, safety, prevalence, or cost facts beyond supplied reference packs and packet evidence. "
+        "Broad therapeutic-area and clinical-development knowledge may be used cautiously when no therapeutic-area pack exists.\n"
+        "Use packet.therapeutic_area_context when present. If pack_found is true, use prompt_safe_summary as optional therapeutic context "
+        "and record the pack ID in trace.therapeutic_area_pack_used. If pack_found is false, do not fail the review.\n"
         "For each Design Confidence subcategory, reason in this sequence: first select packet-supported evidence_fields, "
         "then write the rationale from those fields, then assign the rating that follows from the evidence and rationale. "
         "Do not choose a rating first and search for justification afterward.\n"
         "Return all four Design Confidence subcategories on every review: phase_intent_alignment, endpoint_evidence_strength, "
         "target_population_alignment, and operational_burden_balance.\n"
         "Follow the output_style_requirements exactly. Keep each rationale concise, bounded, and auditable. "
-        "Organize participant_review in this order: overall_completion_comment, overall_design_comment, "
-        "most_impactful_pillar_1, most_impactful_pillar_2, interaction_summary, then two debate questions. "
-        "The two pillar comments should cover the most material pillars or interactions, not all four. "
-        "Participant-review overall comments should be 2-3 sentences and no more than 85 words each. "
-        "Each participant debate question should be one open-ended question, no more than 25 words, and not answerable "
+        "Organize participant-facing content into three blocks: Completion Outlook Analysis, Design Confidence Analysis, "
+        "and Two Key Questions. Keep internal Design Confidence subcategories available for validation, scoring, and treemap labels, "
+        "but do not turn every subcategory into an equal participant narrative section. "
+        "Each participant debate question should be one open-ended question, 20-30 words, and not answerable "
         "with yes or no. Use the expert_question_requirements to make questions strategic and debate-worthy.\n"
+        "Frame Completion Outlook as lower or higher early-termination risk or resemblance to historical completed/terminated-trial patterns. "
+        "Never claim a field caused completion, and do not describe the score as a promised chance of completion. "
+        "Do not cite planned enrollment, planned site count, planned total duration, or operational benchmark metadata as Completion Outlook drivers. "
+        "primary_duration_months_ml may be discussed only when it appears as XGBoost/model evidence.\n"
         "Do not calculate, estimate, or return Design Confidence, Total Scenario Score, Design Confidence point values, "
         "Quality Adjustment, Final Candidate Score, or Quality Assessment point values. "
         "Those are application-owned calculations derived after validation.\n"

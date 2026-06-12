@@ -70,7 +70,16 @@ def main() -> int:
         "changed_fields": [],
         "score_movement": 0,
         "validated_review": {
-            "participant_review": {"what_changed": "Baseline"},
+            "review_metadata": {"review_mode": "hidden_baseline", "participant_visible": False},
+            "completion_outlook_analysis": {"risk_pattern_summary": "Baseline reviewed."},
+            "design_confidence_analysis": {
+                "summary": "Baseline design context.",
+                "confidence_rationale": "Baseline rationale.",
+            },
+            "key_questions": {
+                "medical_development_question": "What evidence standard matters most?",
+                "clinical_operations_question": "What operational burden is proportionate?",
+            },
             "continuity": {"storyline_update": "Baseline reviewed."},
         },
         "compact_storyline_memory": "Baseline reviewed.",

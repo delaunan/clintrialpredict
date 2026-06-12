@@ -87,6 +87,7 @@ ACTIVE_OPERATIONAL_ASSUMPTION_KEYS = (
 
 REFERENCE_PACK_DIR = Path(__file__).resolve().parents[2] / "frontend" / "data" / "docs" / "narrative_reference_packs"
 REFERENCE_PACK_MANIFEST = REFERENCE_PACK_DIR / "pack_manifest_v1.json"
+THERAPEUTIC_AREA_PACK_DIR = REFERENCE_PACK_DIR
 DEFAULT_REFERENCE_PACK_IDS = (
     "core_clinical_development_v1",
     "strategic_context_2026_v1",
@@ -176,6 +177,45 @@ def _extract_prompt_safe_summary(text: str) -> str:
     if "\n## " in summary:
         summary = summary.split("\n## ", 1)[0].strip()
     return " ".join(summary.split())
+
+
+def _safe_therapeutic_area_filename(canonical_value: Any) -> str:
+    raw = str(canonical_value or "").strip()
+    safe = "".join(char if char.isalnum() or char in {"_", "-"} else "_" for char in raw)
+    return f"{safe or 'UNKNOWN'}.md"
+
+
+def _therapeutic_area_context(structured_features: dict[str, Any]) -> dict[str, Any]:
+    canonical_value = str(structured_features.get("therapeutic_area_ml") or "").strip()
+    expected_filename = _safe_therapeutic_area_filename(canonical_value)
+    expected_path = THERAPEUTIC_AREA_PACK_DIR / expected_filename
+    context = {
+        "canonical_value": canonical_value,
+        "expected_filename": expected_filename,
+        "pack_found": False,
+        "pack_id": "",
+        "prompt_safe_summary": "",
+        "missing_pack_instruction": (
+            "No therapeutic-area pack was found. Use cautious broad clinical-development knowledge only; "
+            "do not invent specific disease, regulatory, efficacy, safety, prevalence, or cost facts."
+        ),
+    }
+    try:
+        if expected_path.parent.resolve() != THERAPEUTIC_AREA_PACK_DIR.resolve():
+            return context
+        text = expected_path.read_text()
+    except OSError:
+        return context
+    summary = _extract_prompt_safe_summary(text) or " ".join(text.split())
+    if not summary:
+        return context
+    context.update({
+        "pack_found": True,
+        "pack_id": f"therapeutic_area:{canonical_value}",
+        "prompt_safe_summary": summary[:2500],
+        "missing_pack_instruction": "",
+    })
+    return context
 
 
 @lru_cache(maxsize=1)
@@ -520,6 +560,55 @@ def _changed_field_entry(
     }
 
 
+def _changed_terms(previous_value: Any, current_value: Any) -> tuple[list[str], list[str]]:
+    previous_terms = {
+        term.strip(".,;:()[]{}").lower()
+        for term in str(previous_value or "").split()
+        if len(term.strip(".,;:()[]{}")) >= 4
+    }
+    current_terms = {
+        term.strip(".,;:()[]{}").lower()
+        for term in str(current_value or "").split()
+        if len(term.strip(".,;:()[]{}")) >= 4
+    }
+    added = sorted(current_terms - previous_terms)[:20]
+    removed = sorted(previous_terms - current_terms)[:20]
+    return added, removed
+
+
+def _text_change_evidence(
+    current_snapshot: dict[str, Any],
+    previous_snapshot: dict[str, Any] | None,
+    baseline_snapshot: dict[str, Any] | None,
+) -> list[dict[str, Any]]:
+    evidence: list[dict[str, Any]] = []
+    current_text = _snapshot_text_context(current_snapshot)
+    previous_text = _snapshot_text_context(previous_snapshot)
+    baseline_text = _snapshot_text_context(baseline_snapshot)
+    for field in _changed_fields(current_snapshot):
+        if not field.startswith("text_context."):
+            continue
+        text_key = field.split(".", 1)[1]
+        previous_value = previous_text.get(text_key)
+        current_value = current_text.get(text_key)
+        added, removed = _changed_terms(previous_value, current_value)
+        changed = str(previous_value or "") != str(current_value or "")
+        change_type = "minor_cleanup"
+        if changed and (added or removed):
+            change_type = "new_information"
+        evidence.append({
+            "field": field,
+            "changed": changed,
+            "baseline_excerpt": str(baseline_text.get(text_key) or "")[:500],
+            "previous_excerpt": str(previous_value or "")[:500],
+            "current_excerpt": str(current_value or "")[:500],
+            "changed_terms_added": added,
+            "changed_terms_removed": removed,
+            "change_type": change_type,
+        })
+    return evidence
+
+
 def _field_changes(
     current_snapshot: dict[str, Any],
     previous_snapshot: dict[str, Any] | None,
@@ -612,9 +701,10 @@ def _compact_review_context(
 
     validated = trace.get("validated_review") or {}
     continuity = validated.get("continuity") or {}
-    participant = validated.get("participant_review") or {}
-    completion_outlook = validated.get("completion_outlook_review") or {}
+    participant = validated.get("key_questions") or validated.get("participant_review") or {}
+    completion_outlook = validated.get("completion_outlook_analysis") or validated.get("completion_outlook_review") or {}
     design_subcategories = validated.get("design_confidence_subcategories") or {}
+    design_confidence_analysis = validated.get("design_confidence_analysis") or {}
     tradeoff_review = validated.get("tradeoff_review") or {}
     design_confidence = trace.get("design_confidence", trace.get("quality_adjustment"))
     total_scenario_score = trace.get("total_scenario_score", trace.get("final_candidate_score"))
@@ -629,8 +719,15 @@ def _compact_review_context(
         "design_numeric_context": "visible_review" if include_quality_scores else "hidden_baseline_qualitative_only",
         "changed_fields": trace.get("changed_fields") or [],
         "score_delta": trace.get("score_delta", trace.get("score_movement")),
-        "completion_outlook_summary": completion_outlook.get("score_delta_summary"),
-        "central_tension": trace.get("central_tension") or tradeoff_review.get("central_tension"),
+        "completion_outlook_summary": (
+            completion_outlook.get("risk_pattern_summary")
+            or completion_outlook.get("score_delta_summary")
+        ),
+        "central_tension": (
+            trace.get("central_tension")
+            or design_confidence_analysis.get("confidence_rationale")
+            or tradeoff_review.get("central_tension")
+        ),
         "design_confidence_subcategory_ratings": {
             subcategory_name: {
                 "rating": subcategory.get("rating"),
@@ -645,14 +742,12 @@ def _compact_review_context(
             if include_quality_scores
             else {}
         ),
-        "participant_review": {
-            "overall_completion_comment": participant.get("overall_completion_comment"),
-            "overall_design_comment": participant.get("overall_design_comment"),
-            "most_impactful_pillar_1": participant.get("most_impactful_pillar_1"),
-            "most_impactful_pillar_2": participant.get("most_impactful_pillar_2"),
-            "interaction_summary": participant.get("interaction_summary"),
+        "key_questions": {
+            "completion_outlook_summary": completion_outlook.get("risk_pattern_summary"),
+            "design_confidence_summary": design_confidence_analysis.get("summary"),
             "medical_development_question": participant.get("medical_development_question"),
-            "clinops_execution_question": participant.get("clinops_execution_question"),
+            "clinical_operations_question": participant.get("clinical_operations_question")
+            or participant.get("clinops_execution_question"),
         },
         "continuity": {
             "prior_concerns_resolved": continuity.get("prior_concerns_resolved") or [],
@@ -665,7 +760,10 @@ def _compact_review_context(
     }
 
     if not include_quality_scores:
-        compact["baseline_completion_outlook_summary"] = completion_outlook.get("score_delta_summary")
+        compact["baseline_completion_outlook_summary"] = (
+            completion_outlook.get("risk_pattern_summary")
+            or completion_outlook.get("score_delta_summary")
+        )
         compact["baseline_design_subcategory_ratings"] = compact["design_confidence_subcategory_ratings"]
         compact["baseline_strengths"] = [
             subcategory.get("rationale")
@@ -735,6 +833,7 @@ def build_review_packet(
         "structured_feature_meanings": _select_field_meanings(STRUCTURED_FEATURE_KEYS),
         "text_context_field_meanings": _select_field_meanings(TEXT_CONTEXT_KEYS),
         "reference_packs": _selected_reference_packs(changed_fields),
+        "therapeutic_area_context": _therapeutic_area_context(_select_keys(current_values, STRUCTURED_FEATURE_KEYS)),
         "operational_assumptions": _select_keys(
             current_snapshot.get("operational_assumptions") or {},
             ACTIVE_OPERATIONAL_ASSUMPTION_KEYS,
@@ -768,6 +867,7 @@ def build_review_packet(
             "iteration_number": _iteration_number(current_snapshot, previous_snapshot),
             "changed_fields": changed_fields,
             "field_changes": _field_changes(current_snapshot, previous_snapshot, baseline_snapshot),
+            "text_change_evidence": _text_change_evidence(current_snapshot, previous_snapshot, baseline_snapshot),
             "compact_storyline_memory": compact_storyline_memory,
         },
     }

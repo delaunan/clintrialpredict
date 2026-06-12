@@ -1,4 +1,4 @@
-"""Deterministic mock reviewer for narrative V2 development.
+"""Deterministic mock reviewer for narrative prompt/schema development.
 
 This module is a stand-in for a future LLM provider. It returns fixture-backed
 JSON so packet building, validation, scoring, no-op behavior, and failure

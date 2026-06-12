@@ -1064,6 +1064,41 @@ Treemap signed-value rule:
 - The root label should show the Total Scenario Score when combined view is enabled, but the chart should not imply that negative tile areas add arithmetically as positive area.
 - Completion Outlook and Design Confidence provenance should remain inspectable so users do not confuse app-scored design contributions with SHAP-derived model impacts.
 
+### Score Visibility, Pending State, And Delta Policy
+
+Hidden baseline:
+
+- Completion Outlook may be participant-visible because it is the original visible model score.
+- Design Confidence and Total Scenario Score must remain participant-hidden.
+- Do not show previous-value cards or deltas for hidden baseline Design Confidence or Total Scenario Score.
+
+Pending review after a feature change:
+
+- Completion Outlook, Design Confidence, and Total Scenario Score should keep showing the latest successful reviewed values until the participant clicks `Review Scenario`.
+- Each affected score view should clearly mark that a review is pending. Completion Outlook already shows `Score update pending`; Design Confidence and Total Scenario Score should receive equivalent pending-review signaling.
+- Design Confidence and Total Scenario Score should not disappear merely because a feature value changed. They should disappear only when no participant-visible review exists yet, such as immediately after hidden baseline generation.
+- If the participant changes a value and then restores it to the latest reviewed value, the pending state should clear and the previous reviewed score views should restore.
+
+Previous-value and delta policy:
+
+- Baseline: no Design Confidence or Total Scenario Score previous-value cards.
+- First visible iteration:
+  - Completion Outlook compares current Completion Outlook against baseline Completion Outlook.
+  - Design Confidence shows no previous-value delta because participants did not see a baseline Design Confidence score.
+  - Total Scenario Score compares current Total Scenario Score against baseline Completion Outlook, with points and percent variance calculated from those two values.
+- Second and later visible iterations:
+  - Completion Outlook compares current Completion Outlook against previous visible Completion Outlook.
+  - Design Confidence compares current Design Confidence against previous visible Design Confidence.
+  - Total Scenario Score compares current Total Scenario Score against previous visible Total Scenario Score.
+
+Bar chart delta policy:
+
+- Completion Outlook bar chart shows pillar `+/- pts` variance against the previous Completion Outlook snapshot, including first iteration versus baseline.
+- Design Confidence bar chart should not show previous-point variance on the first visible iteration.
+- First visible Total Scenario Score bar chart compares current combined pillar values against baseline Completion Outlook pillar values.
+- From the second visible iteration onward, Design Confidence bar chart variance compares current Design Confidence pillar contributions against previous visible Design Confidence pillar contributions.
+- From the second visible iteration onward, Total Scenario Score bar chart variance compares current combined pillar values against previous visible Total Scenario Score pillar values.
+
 ## 14. Narrative Tone Rules
 
 Participant-facing writing rules:
@@ -1076,6 +1111,7 @@ Participant-facing writing rules:
 - Encourage discussion rather than provide the answer.
 - Maintain continuity with previous iterations.
 - Do not contradict previous feedback unless the current change resolves or changes the issue.
+- Generate fresh medical/development and ClinOps questions at each visible iteration. Assume participants discussed the previous questions, so new questions should respond to the latest value changes, current dilemma, or a high-value challenge raised by the trial context.
 
 The narrative should say what a pattern may suggest, what trade-off may be present, and what question the team should debate. It should not claim clinical truth or prescribe the next design edit.
 

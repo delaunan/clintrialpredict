@@ -120,8 +120,9 @@ def _check_review_continuity_context(errors: list[str]) -> None:
         "score_delta": 0,
         "central_tension": "Baseline central tension.",
         "validated_review": {
-            "completion_outlook_review": {
-                "score_delta_summary": "Baseline score reflects an acceptable original design profile.",
+            "review_metadata": {"review_mode": "hidden_baseline", "participant_visible": False},
+            "completion_outlook_analysis": {
+                "risk_pattern_summary": "Baseline score reflects an acceptable original design profile.",
             },
             "design_confidence_subcategories": {
                 "endpoint_evidence_strength": {
@@ -130,15 +131,15 @@ def _check_review_continuity_context(errors: list[str]) -> None:
                     "evidence_fields": ["endpoint_rigor_ml", "allocation_ml"],
                 },
             },
-            "tradeoff_review": {"central_tension": "Baseline central tension."},
-            "participant_review": {
-                "overall_completion_comment": "Baseline completion comment.",
-                "overall_design_comment": "Baseline design comment.",
-                "most_impactful_pillar_1": "Baseline pillar one.",
-                "most_impactful_pillar_2": "Baseline pillar two.",
-                "interaction_summary": "Baseline interaction.",
+            "design_confidence_analysis": {
+                "summary": "Baseline design comment.",
+                "confidence_rationale": "Baseline central tension.",
+                "supporting_evidence": [],
+                "limiting_evidence": [],
+            },
+            "key_questions": {
                 "medical_development_question": "What evidence standard matters most?",
-                "clinops_execution_question": "What operational burden is proportionate?",
+                "clinical_operations_question": "What operational burden is proportionate?",
             },
             "continuity": {
                 "new_concerns": [],

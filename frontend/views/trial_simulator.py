@@ -39,6 +39,7 @@ from src.operational_benchmarks import (
     planned_sites_default_from_operational_benchmark,
 )
 from src.narratives.packet_builder import build_review_packet
+from src.narratives.prompt_builder import infer_prompt_mode
 from src.narratives.review_store import (
     compact_storyline_from_trace,
     get_review_store,
@@ -6273,8 +6274,13 @@ def normalize_hidden_baseline_review_trace(trace):
     normalized = dict(trace)
     normalized["hidden_baseline"] = True
     normalized["participant_visible"] = False
+    normalized["design_confidence"] = None
+    normalized["total_scenario_score"] = None
     normalized["quality_adjustment"] = None
     normalized["final_candidate_score"] = None
+    normalized["design_confidence_assessment"] = {}
+    normalized["design_confidence_contributions"] = {}
+    normalized["quality_assessment"] = {}
     normalized["baseline_quality_numeric_policy"] = "qualitative_context_only"
     return normalized
 
@@ -6478,8 +6484,12 @@ def get_quality_review_trace_for_snapshot(row, snapshot):
         and get_trace_current_snapshot_id(cached_trace) == current_snapshot_id
         and narrative_trace_matches_runtime(cached_trace, runtime)
     ):
+        cached_review_mode = (
+            ((cached_trace.get("validated_review") or {}).get("review_metadata") or {}).get("review_mode")
+            or "first_visible_iteration"
+        )
         return attach_narrative_workflow_metadata(cached_trace, {
-            "review_phase": "visible_iteration",
+            "review_phase": cached_review_mode,
             "workflow_latency_ms": _elapsed_ms(workflow_started_at),
             "session_cache_hit": True,
             "review_store_cache_hit": bool(cached_trace.get("cached")),
@@ -6508,6 +6518,7 @@ def get_quality_review_trace_for_snapshot(row, snapshot):
         user_clarifications=user_clarifications,
         compact_storyline_memory=compact_storyline_memory,
     )
+    prompt_mode = infer_prompt_mode(packet)
 
     if (
         cached_trace
@@ -6515,7 +6526,7 @@ def get_quality_review_trace_for_snapshot(row, snapshot):
         and narrative_trace_matches_runtime(cached_trace, runtime)
     ):
         return attach_narrative_workflow_metadata(cached_trace, {
-            "review_phase": "visible_iteration",
+            "review_phase": prompt_mode,
             "workflow_latency_ms": _elapsed_ms(workflow_started_at),
             "baseline_lookup_latency_ms": baseline_latency_ms,
             "baseline_session_cache_hit": bool((baseline_trace or {}).get("workflow_metadata", {}).get("session_cache_hit")),
@@ -6537,7 +6548,7 @@ def get_quality_review_trace_for_snapshot(row, snapshot):
     )
     trace = attach_narrative_runtime(trace, runtime)
     trace = attach_narrative_workflow_metadata(trace, {
-        "review_phase": "visible_iteration",
+        "review_phase": prompt_mode,
         "workflow_latency_ms": _elapsed_ms(workflow_started_at),
         "baseline_lookup_latency_ms": baseline_latency_ms,
         "visible_provider_or_store_latency_ms": _elapsed_ms(visible_review_started_at),
@@ -6567,7 +6578,7 @@ def safe_get_hidden_baseline_review_trace(row, baseline_snapshot, *, phase="hidd
         return None
 
 
-def safe_get_quality_review_trace_for_snapshot(row, snapshot, *, phase="visible_iteration"):
+def safe_get_quality_review_trace_for_snapshot(row, snapshot, *, phase="first_visible_iteration"):
     try:
         return get_quality_review_trace_for_snapshot(row, snapshot)
     except Exception as exc:
@@ -9894,7 +9905,25 @@ def _clean_plot_pillar_label(value):
     return re.sub(r"^\d+\.\s*", "", str(value or "").strip())
 
 
+def _trace_allows_design_confidence_display(trace):
+    if not trace:
+        return False
+    if trace.get("hidden_baseline") or trace.get("participant_visible") is False:
+        return False
+    return trace.get("design_confidence") is not None
+
+
+def _trace_allows_total_scenario_display(trace):
+    if not trace:
+        return False
+    if trace.get("hidden_baseline") or trace.get("participant_visible") is False:
+        return False
+    return trace.get("total_scenario_score") is not None
+
+
 def _design_pillar_impacts(trace):
+    if not _trace_allows_design_confidence_display(trace):
+        return []
     assessment = (trace or {}).get("design_confidence_assessment") or {}
     rows = []
     for pillar in (assessment.get("pillars") or {}).values():
@@ -9906,6 +9935,8 @@ def _design_pillar_impacts(trace):
 
 
 def _design_subcategory_impacts(trace):
+    if not _trace_allows_design_confidence_display(trace):
+        return []
     assessment = (trace or {}).get("design_confidence_assessment") or {}
     rows = []
     for pillar in (assessment.get("pillars") or {}).values():
@@ -10123,7 +10154,12 @@ def render_scenario_review_report(row, trace=None, snapshot=None):
     completion_score = snapshot.get("score")
     design_confidence = trace.get("design_confidence")
     total_scenario_score = trace.get("total_scenario_score")
-    participant = (trace.get("validated_review") or {}).get("participant_review") or {}
+    validated_review = trace.get("validated_review") or {}
+    participant = validated_review.get("participant_review") or {}
+    completion_analysis = validated_review.get("completion_outlook_analysis") or {}
+    design_analysis = validated_review.get("design_confidence_analysis") or {}
+    consistency_note = validated_review.get("scenario_consistency_note") or {}
+    key_questions = validated_review.get("key_questions") or {}
 
     metric_html = "".join([
         _quality_review_metric("Completion", f"{float(completion_score):.1f}" if completion_score is not None else "N/A"),
@@ -10139,15 +10175,34 @@ def render_scenario_review_report(row, trace=None, snapshot=None):
         (trace.get("validated_review") or {}).get("tradeoff_review") or {}
     ).get("central_tension")
     report_title = "Baseline Scenario Review" if trace.get("hidden_baseline") else "Scenario Review"
+    completion_text = (
+        completion_analysis.get("risk_pattern_summary")
+        or participant.get("overall_completion_comment")
+    )
+    design_text = (
+        design_analysis.get("summary")
+        or participant.get("overall_design_comment")
+    )
+    consistency_text = (
+        consistency_note.get("message")
+        if consistency_note.get("has_clear_mismatch")
+        else ""
+    )
+    medical_question = (
+        key_questions.get("medical_development_question")
+        or participant.get("medical_development_question")
+    )
+    operations_question = (
+        key_questions.get("clinical_operations_question")
+        or participant.get("clinops_execution_question")
+    )
     narrative_html = "".join([
-        _scenario_review_text_block("Completion Outlook", participant.get("overall_completion_comment")),
-        _scenario_review_text_block("Design Confidence", participant.get("overall_design_comment")),
+        _scenario_review_text_block("Scenario Consistency", consistency_text),
+        _scenario_review_text_block("Completion Outlook Analysis", completion_text),
+        _scenario_review_text_block("Design Confidence Analysis", design_text),
         _scenario_review_text_block("Central Tension", central_tension),
-        _scenario_review_text_block("Most Impactful Pillar", participant.get("most_impactful_pillar_1")),
-        _scenario_review_text_block("Second Impactful Pillar", participant.get("most_impactful_pillar_2")),
-        _scenario_review_text_block("Interaction", participant.get("interaction_summary")),
-        _scenario_review_text_block("Medical Development Question", participant.get("medical_development_question")),
-        _scenario_review_text_block("Clinical Operations Question", participant.get("clinops_execution_question")),
+        _scenario_review_text_block("Medical Development Question", medical_question),
+        _scenario_review_text_block("Clinical Operations Question", operations_question),
     ])
 
     cached_note = narrative_trace_provider_note(trace)
@@ -10663,8 +10718,12 @@ def render_completion_prediction_tab(row):
         active_pillar_impacts = design_pillar_impacts
         active_subcat_impacts = design_subcat_impacts
     elif score_view == SCORE_VIEW_TOTAL:
-        active_pillar_impacts = _combined_pillar_impacts(completion_pillar_impacts, design_pillar_impacts)
-        active_subcat_impacts = _combined_subcategory_impacts(completion_subcat_impacts, design_subcat_impacts)
+        if _trace_allows_total_scenario_display(scenario_trace):
+            active_pillar_impacts = _combined_pillar_impacts(completion_pillar_impacts, design_pillar_impacts)
+            active_subcat_impacts = _combined_subcategory_impacts(completion_subcat_impacts, design_subcat_impacts)
+        else:
+            active_pillar_impacts = []
+            active_subcat_impacts = []
     else:
         active_pillar_impacts = completion_pillar_impacts
         active_subcat_impacts = completion_subcat_impacts

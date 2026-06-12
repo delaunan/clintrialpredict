@@ -717,6 +717,310 @@ Design Confidence can evaluate:
 - Whether a high Completion Outlook may reflect score-seeking simplification.
 - Whether a lower Completion Outlook may reflect rigorous or patient-relevant design ambition.
 
+## Live Prompt Review Log
+
+This section centralizes live prompt-quality observations from manual scenario testing. Use it to refine the prompt, update fixtures, and later create one-shot examples if rule-based prompting is not enough.
+
+### Live Test Iteration 1: Randomized Active-Controlled Evidence Upgrade
+
+Baseline scenario:
+
+- Trial: `NCT03287245`, idasanutlin, hematology, polycythemia vera.
+- Baseline structure: Phase 2, single-arm, open-label, patients with hydroxyurea-resistant/intolerant polycythemia vera.
+- Baseline Completion Outlook: `46.9`.
+
+Edited scenario:
+
+- `number_of_arms_ml`: changed from `1` to `2`.
+- `allocation_method_ml`: changed from not specified / not applicable to randomized.
+- Comparator / placebo / endpoint fields were changed toward active-controlled, placebo-controlled, hard clinical endpoint evidence.
+- `primary_duration_months_ml` / maximum primary endpoint duration was set to `12.0`.
+- Study summary text added a simulated randomized-control-arm sentence.
+
+Observed scores:
+
+- Completion Outlook stayed flat at `46.9`.
+- Design Confidence increased to `+6.0`.
+- Total Scenario Score increased to `52.9`.
+
+What worked:
+
+- The review correctly identified the central tension: stronger evidence interpretability versus added design and execution burden.
+- Design Confidence moved positively for randomized, active-controlled, hard clinical endpoint evidence.
+- Completion Outlook did not increase merely because the design became more rigorous.
+- The participant questions were open-ended and relevant to evidence standard and operational proportionality.
+
+Issues to correct in the prompt:
+
+- Completion Outlook over-explained with unsupported assumptions. It mentioned a need for a "larger, more diverse patient population" even though no diversity-related or population-breadth field was changed or clearly model-supported.
+- Completion Outlook used broad clinical-development generalization too assertively: "Historically, randomized trials with active comparators and hard clinical endpoints face greater recruitment and retention challenges..." This is directionally plausible but too factual/causal unless grounded in changed model evidence.
+- Completion Outlook should stay closer to score movement, non-movement, model-facing changed fields, and resemblance to historical completion / early-termination risk patterns.
+- Design Confidence wording was directionally correct but too strong. Phrases such as "significantly improves" and "the design is now more robust" should be softened.
+- Design Confidence should more explicitly keep the counterweight: stronger evidence generation may also create cost, governance, operational burden, feasibility, or proportionality concerns when supported by the packet.
+- Design Confidence treemap subcategory tiles did not show the short rationale needed to evidence why each rating was strong, supportive, balanced, weak, or conflicting.
+
+Preferred prompt wording direction:
+
+- Prefer "may improve interpretability" instead of "significantly improves interpretability."
+- Prefer "appears more robust from an evidence-generation perspective" instead of "the design is now more robust."
+- Prefer "may resemble patterns associated with greater execution burden where comparator structure and endpoint ambition increase" instead of broad factual claims about historical recruitment and retention.
+- When Completion Outlook is flat, explicitly state that the edited fields did not materially shift the scenario's resemblance to historical completion or early-termination patterns.
+- If operational or feasibility language is used in Completion Outlook, it must be framed as a cautious risk-pattern interpretation and tied to model-supported fields, not as clinical truth.
+
+Candidate improved Completion Outlook wording:
+
+```text
+The Completion Outlook remains essentially unchanged, suggesting that the added comparator structure and endpoint ambition do not materially shift the model's resemblance to historical completion or early-termination patterns in this scenario. The randomized, active-controlled structure and longer endpoint horizon may introduce execution burden, but this should be read as a risk-pattern interpretation rather than proof that the trial would be harder to complete. The main discussion point is therefore the trade-off between stronger evidentiary interpretability and a design that may require more operational discipline to execute.
+```
+
+Candidate one-shot lesson:
+
+- Use this scenario later as a first-visible-iteration example where Completion Outlook is flat but Design Confidence improves.
+- The one-shot should demonstrate that the model score did not materially move, while Design Confidence may increase because evidence interpretability improved.
+- The one-shot should also demonstrate the redline: do not invent population diversity, recruitment, retention, cost, or feasibility facts unless supported by changed evidence fields or kept in cautious Design Confidence language.
+- The one-shot should include Design Confidence subcategory `short_rationale` values suitable for treemap labels or tooltips.
+
+### Live Test Iteration 2: Revert To Simpler Single-Arm Evidence Strategy
+
+Starting point:
+
+- Previous iteration had randomized / active-controlled / hard clinical endpoint evidence.
+- Previous scores: Completion Outlook `46.9`, Design Confidence `+6.0`, Total Scenario Score `52.9`.
+
+Edited scenario:
+
+- `number_of_arms_ml`: changed from `2` back to `1`.
+- `allocation_method_ml`: changed from randomized back to not specified / not applicable.
+- Comparator / placebo / control fields were moved back toward weaker or single-arm settings.
+- Endpoint evidence was moved toward surrogate or less rigorous evidence.
+- `primary_duration_months_ml` / maximum primary endpoint duration remained `12.0`.
+- Study summary text described a single-arm design interpreted against clinical context rather than a randomized control arm.
+
+Observed scores:
+
+- Completion Outlook increased only slightly from `46.9` to `47.2`.
+- Design Confidence decreased from `+6.0` to `-3.5`.
+- Total Scenario Score decreased from `52.9` to `43.7`.
+
+What worked:
+
+- The small Completion Outlook movement was appropriate: the simpler design did not create an exaggerated score gain.
+- Design Confidence dropped strongly, which matched the expected interpretation: operational simplicity came with weaker comparative interpretability.
+- Total Scenario Score moved down because the Design Confidence penalty outweighed the small Completion Outlook increase.
+- The central tension was clear: a simpler single-arm structure may not match pivotal / registration intent.
+- The clinical operations question about assessment bias was useful and discussion-oriented.
+
+Issues to correct in the prompt:
+
+- Completion Outlook again used overly broad feasibility language: "historically associated with lower operational complexity and faster recruitment." "Faster recruitment" should not be stated unless directly supported by model-facing changed fields or packet evidence.
+- Completion Outlook described the result as an improvement even though `+0.3 pts` is marginal. It should call this essentially stable or only slightly higher.
+- Design Confidence was directionally correct but too categorical in phrases such as "less robust" and "significant interpretability gap."
+- Design Confidence treemap subcategory tiles still lacked the short rationale needed to explain the rating in a few words.
+- Some proposed model-grounding language can become too complex for participants. Phrases such as "on model-supported design features," "more execution-favorable," and "does not materially alter the scenario's resemblance" are directionally right but should be simplified for live use.
+
+Preferred prompt wording direction:
+
+- Prefer "The Completion Outlook is almost unchanged, with only a small increase" over "The Completion Outlook appears to improve" for tiny score movements.
+- Prefer "the simpler structure may look easier to run in the score pattern" over "more execution-favorable on model-supported design features."
+- Prefer "the score pattern is still close to the previous scenario" over "does not materially alter the scenario's resemblance."
+- Prefer "may be less convincing for a registration-focused decision" over "less robust for a pivotal registration intent" when writing for participants.
+- Prefer "important interpretability concern" over "significant interpretability gap."
+- Keep clinical-development wording serious, but avoid unnecessary technical phrasing when a simpler sentence preserves the boundary.
+
+Candidate improved Completion Outlook wording:
+
+```text
+The Completion Outlook is almost unchanged, with only a small increase. Moving back to a single-arm structure may look slightly easier in the score pattern, but this should not be read as proof that recruitment, retention, or completion would improve. The main discussion point is that a simpler design may reduce some execution burden while weakening how clearly the trial can support the intended development decision.
+```
+
+Candidate one-shot lesson:
+
+- Use this scenario later as a first-visible or later-visible iteration example where Completion Outlook is nearly flat but Design Confidence drops.
+- The one-shot should demonstrate that a small Completion Outlook gain must not be over-narrated as a meaningful improvement.
+- The one-shot should show Design Confidence challenging score-seeking simplification.
+- The one-shot should use simpler participant language while preserving risk-pattern and anti-causality boundaries.
+
+### Live Test Iteration 3: Narrower Refractory / Advanced Population
+
+Starting point:
+
+- Previous scenario was single-arm, open-label, weaker comparator/control, surrogate endpoint evidence.
+- Previous scores: Completion Outlook `47.2`, Design Confidence `-3.5`, Total Scenario Score `43.7`.
+
+Edited scenario:
+
+- `rare_condition_status_ml`: changed from unlikely to yes / likely.
+- `patient_severity_ml`: changed from chronic progressive to advanced / metastatic.
+- `line_of_therapy_ml`: changed from later-line to refractory / relapsed.
+- Single-arm, open-label, surrogate-based structure was kept.
+- `primary_duration_months_ml` / maximum primary endpoint duration remained `12.0`.
+- Study summary text added that the target population would be narrowed toward more advanced or treatment-resistant disease, potentially increasing clinical relevance while making evidence more dependent on patient selection.
+
+Observed scores:
+
+- Completion Outlook decreased from `47.2` to `45.5`.
+- Design Confidence increased from `-3.5` to `-1.5`.
+- Total Scenario Score increased slightly from `43.7` to `44.0`.
+
+What worked:
+
+- The score pattern was useful: narrower / more severe population lowered Completion Outlook, while Design Confidence improved because target-population alignment became more defensible.
+- Design Confidence correctly recognized better alignment with refractory / relapsed patients.
+- The central tension was directionally right: patient relevance and operational simplicity versus weak comparative rigor for registration intent.
+
+Issues to correct in the prompt:
+
+- Completion Outlook again introduced unsupported operational assumptions: "may facilitate recruitment and site execution." This should not be stated unless recruitment/site execution fields changed and are in the supported evidence context.
+- Completion Outlook again used broad historical generalization too strongly: "Historically, such designs face challenges..." This should be made conditional and grounded in the current evidence fields.
+- Completion Outlook mixed design-quality critique into the Completion Outlook paragraph. Lack of control group, surrogate endpoints, masking, and interpretability belong mainly in Design Confidence unless directly tied to model-facing Completion Outlook evidence.
+- Design Confidence duplicated itself: it repeated the "significant interpretability gap" and "team must defend..." idea twice.
+- Design Confidence remained too categorical. "Well-aligned," "significant interpretability gap," and "required for pivotal registration" should be softened when not directly established by the packet.
+- The participant language still occasionally overcomplicates or overstates. It should remain serious but shorter, less repetitive, and more conditional.
+- Design Confidence treemap subcategory tiles still lacked visible short rationale, so participants can see ratings but not the rationale behind the rating.
+- The two participant questions were too similar to prior iterations. The prompt should assume participants already discussed the previous questions and should generate new, iteration-specific questions after each reviewed change.
+- Questions should route naturally from the latest value changes and the dilemma they create. They can be general and high-value, but they should connect to the current trial context or to a ClinOps / development challenge raised by the latest scenario.
+
+Preferred prompt wording direction:
+
+- Prefer "The Completion Outlook moves down, which is consistent with a narrower and more severe population profile appearing riskier in the score pattern" over operational claims about recruitment or site execution.
+- Prefer "The single-arm, surrogate-endpoint structure may still make the evidence less convincing for a registration-focused decision" over "lacks the comparative rigor required for pivotal registration."
+- Prefer "appears better aligned with the intended refractory / relapsed population" over "is well-aligned."
+- Avoid repeating the same concern twice in Design Confidence; compress to one trade-off sentence.
+- Keep Completion Outlook focused on score movement and changed model-facing fields; keep interpretability and evidence adequacy mainly in Design Confidence.
+- Generate fresh key questions each iteration. Avoid reusing the same evidence-standard or operations-balance question unless the latest change truly makes the same question newly relevant.
+- The medical/development question should challenge the current design dilemma created by the latest change. The ClinOps question should raise a high-value execution, governance, data reliability, bias, burden, or proportionality issue linked to the current scenario.
+
+Candidate improved Completion Outlook wording:
+
+```text
+The Completion Outlook decreases from the prior scenario, which suggests that the narrower refractory / advanced population profile looks riskier in the score pattern. This should not be read as proof that recruitment or completion would be worse. The main point is that the scenario may now be more clinically focused, but the completion-risk signal has moved in the less favorable direction.
+```
+
+Candidate improved Design Confidence wording:
+
+```text
+Design Confidence improves modestly because the population appears more closely aligned with a refractory / relapsed PV decision context. However, the single-arm, surrogate-endpoint structure may still be less convincing for a registration-focused decision, so the stronger patient relevance does not fully offset the evidence-interpretability concern.
+```
+
+Candidate one-shot lesson:
+
+- Use this scenario later as an example where Completion Outlook worsens while Design Confidence improves modestly.
+- The one-shot should demonstrate separation between patient-relevance value and completion-risk pattern.
+- The one-shot should avoid unsupported claims about recruitment, site execution, and speed.
+- The one-shot should show concise, non-duplicative Design Confidence reasoning.
+- The one-shot should show that the two participant questions evolve across iterations and do not repeat the same wording or same discussion target.
+
+### Live Test Iteration 4: Free-Text / Structured-Field Contradiction
+
+Starting point:
+
+- Previous scenario was single-arm, open-label, refractory / relapsed, advanced / metastatic, rare-condition status yes, surrogate-based evidence.
+- Previous scores: Completion Outlook `45.5`, Design Confidence `-1.5`, Total Scenario Score `44.0`.
+
+Edited scenario:
+
+- `pathway_profile_ml`: changed from enzyme modulator to GPCR target.
+- Structured treatment fields remained aligned with a small-molecule oral intervention:
+  - `therapeutic_modality_ml`: small molecule.
+  - `delivery_profile_ml`: simple oral pill/tablet.
+- Intervention free text added a deliberately contradictory description:
+  - cell-based immunotherapy.
+  - individualized manufacturing.
+  - infusion-site coordination.
+
+Observed scores:
+
+- Completion Outlook decreased slightly from `45.5` to `45.2`.
+- Design Confidence decreased from `-1.5` to `-7.5`.
+- Total Scenario Score decreased from `44.0` to `37.7`.
+
+What worked:
+
+- Design Confidence appropriately became much more negative when the scenario contained incoherent intervention information.
+- The clinical operations question picked up the manufacturing-coordination issue, which is relevant if the free text were true.
+- Total Scenario Score appropriately reflected the negative Design Confidence pressure.
+
+Issues to correct in the prompt:
+
+- The review did not appear to show the required `scenario_consistency_note` despite a clear contradiction between structured fields and free text.
+- The review treated the free-text cell-therapy/manufacturing description as if it were true scenario evidence, even though selected structured fields still said small molecule and simple oral delivery.
+- The prompt must more strongly state that selected structured/categorical fields prevail when they conflict with free text.
+- Contradictory free text may be used as a coherence concern in Design Confidence, but it must not replace the structured fields as the analysis source of truth.
+- Completion Outlook must not use contradictory free-text manufacturing, site coordination, infusion burden, or retention burden as model-facing drivers when the selected model fields remain small molecule / simple oral.
+- The narrative introduced an apparent "female-only population" restriction. This was not part of the intended Iteration 4 change and should not be invented unless supported by changed structured fields or text evidence.
+- The two participant questions again repeated earlier evidence-standard and assessment-bias patterns too closely.
+- Design Confidence again used categorical language such as "typically required for registration-enabling studies" and "can provide the necessary evidence." This should be softened.
+
+Preferred prompt wording direction:
+
+- If text and structured fields conflict, start with a short consistency note such as:
+
+```text
+Some scenario details are not fully aligned across selected fields and free-text fields. The selected fields drive the analysis, while the text is used as supporting context (Therapeutic Modality, Intervention text).
+```
+
+- In Completion Outlook, prefer:
+
+```text
+The Completion Outlook changes only slightly. Because the selected intervention fields still describe a small-molecule oral treatment, the contradictory cell-therapy wording should not be treated as a model driver. The main risk-pattern signal is therefore limited to the changed structured fields, while the text mismatch mainly raises a design-coherence question.
+```
+
+- In Design Confidence, prefer:
+
+```text
+Design Confidence falls because the intervention description is internally inconsistent: selected fields describe an oral small molecule, while the intervention text describes cell-based manufacturing and infusion logistics. The selected fields should drive the score interpretation, but the mismatch makes the scenario harder to defend unless clarified.
+```
+
+Candidate one-shot lesson:
+
+- Use this scenario as the primary one-shot example for structured/free-text contradiction handling.
+- The one-shot should demonstrate a visible `scenario_consistency_note`.
+- The one-shot should show that structured fields prevail in Completion Outlook.
+- The one-shot should allow Design Confidence to penalize coherence, but only as a text/field mismatch concern, not as if the cell-therapy text had replaced selected values.
+- The one-shot should generate new participant questions that focus on clarification and governance of inconsistent scenario evidence rather than repeating the earlier evidence-standard question.
+
+## UI Review Notes From Live Testing
+
+These notes should be implemented after the narrative-quality review is complete.
+
+### Pending Review Visibility
+
+When the participant changes any feature after the latest reviewed scenario:
+
+- Completion Outlook should keep showing the latest successful Completion Score, but display `Score update pending`.
+- Design Confidence should keep showing the previous reviewed Design Confidence, but display a pending-review notice until `Review Scenario` is clicked.
+- Total Scenario Score should keep showing the previous reviewed Total Scenario Score, but display a pending-review notice until `Review Scenario` is clicked.
+- Design Confidence and Total Scenario Score should not disappear merely because a feature value changed. Hiding them is valid only for hidden baseline generation or when no participant-visible review exists yet.
+- If the user realigns the changed value back to the reviewed value, the pending state should clear and the previous reviewed views should restore.
+
+### Previous-Value And Delta Display Policy
+
+Baseline:
+
+- Completion Outlook may show the baseline score and drivers.
+- Design Confidence should not show a previous value, delta card, or participant-visible score.
+- Total Scenario Score should not show a previous value, delta card, or participant-visible score.
+
+First visible iteration:
+
+- Completion Outlook delta card compares current Completion Outlook against baseline Completion Outlook.
+- Design Confidence has no previous-value delta card, because no participant-visible Design Confidence baseline existed.
+- Total Scenario Score delta card uses baseline Completion Outlook as the previous value, then compares current Total Scenario Score against that baseline Completion Outlook. The point and percent variance should be based on those two values.
+
+Second and later visible iterations:
+
+- Completion Outlook delta card compares current Completion Outlook against previous visible Completion Outlook.
+- Design Confidence delta card compares current Design Confidence against previous visible Design Confidence.
+- Total Scenario Score delta card compares current Total Scenario Score against previous visible Total Scenario Score.
+
+Bar chart delta policy:
+
+- Completion Outlook bar chart keeps per-pillar `+/- pts` variance from the previous Completion Outlook snapshot, including first iteration versus baseline.
+- Design Confidence bar chart should not show previous-point variance on the first visible iteration.
+- First visible Total Scenario Score bar chart compares the current combined pillar values against baseline Completion Outlook pillar values.
+- From the second visible iteration onward, Total Scenario Score bar chart variance compares current combined pillar values against previous visible Total Scenario Score pillar values.
+- From the second visible iteration onward, Design Confidence bar chart variance compares current Design Confidence pillar contributions against previous visible Design Confidence pillar contributions.
+
 ## Regression Acceptance Criteria
 
 Prompt and schema changes should be tested against concrete pass/fail criteria, not only subjective quality.
@@ -737,6 +1041,13 @@ Design Confidence acceptance checks:
 - Pass if positive Design Confidence is backed by explicit design-quality evidence, not merely model-favorable simplification. Verification: manual or LLM-review.
 - Pass if Design Confidence can challenge a high Completion Outlook when evidence value, patient relevance, governance, or proportionality is weakened. Verification: golden examples plus manual review.
 - Pass if Design Confidence can be positive despite lower Completion Outlook when added difficulty reflects justified rigor, relevance, or governance. Verification: golden examples plus manual review.
+- Pass if the Design Confidence narrative avoids duplicating the same concern in the same participant-facing block. Verification: manual or LLM-review.
+
+Key-question acceptance checks:
+
+- Pass if the two questions differ materially from the previous visible iteration unless the latest change genuinely reopens the same dilemma. Verification: golden examples plus manual review.
+- Pass if each question is linked to the latest value changes, current narrative tension, or a high-value clinical-development / ClinOps dilemma relevant to the trial. Verification: manual or LLM-review.
+- Pass if questions remain open-ended and not answerable with yes/no. Verification: automated pattern check plus manual review.
 
 Therapeutic-area context acceptance checks:
 
@@ -760,6 +1071,8 @@ Lifecycle acceptance checks:
 - Pass if first visible iteration can compare Completion Outlook to visible original Completion Score. Verification: manual or LLM-review.
 - Pass if first visible iteration evaluates Design Confidence as current-scenario design defensibility, not hidden-score variance. Verification: manual or LLM-review.
 - Pass if later visible iterations use prior visible review for continuity without overusing Design Confidence score-to-score storytelling. Verification: manual or LLM-review.
+- Pass if pending feature changes preserve previous visible Design Confidence and Total Scenario Score while clearly marking those views as pending review. Verification: focused UI smoke.
+- Pass if first visible Total Scenario Score delta uses baseline Completion Outlook as the previous value, then later iterations use previous visible Total Scenario Score. Verification: automated snapshot/delta test plus UI smoke.
 
 ## Implementation Sequence
 
