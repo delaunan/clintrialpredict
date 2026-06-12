@@ -360,6 +360,40 @@ Parity note:
 - These phases should not touch XGBoost scoring, preprocessing, model artifacts, taxonomy encoding, SHAP, or audit/demo prediction behavior.
 - If any future change touches scoring/prep/model artifacts, run `python refresh_registry.py` and `python audit_parity.py` before deployment.
 
+### Phase 8: Prompt Engineering Brief And Knowledge Substrate Review
+
+Status: started
+
+Purpose:
+
+- Make the Scenario Review prompt system understandable, reproducible, and reusable before deeper prompt editing.
+- Separate prompt/content engineering from provider-settings tuning.
+- Document what the LLM currently receives as if the prompt were manually submitted to ChatGPT/Gemini with attached context.
+
+Current artifact:
+
+- `docs/narrative_prompt_engineering_brief.md`
+- `prompt_enhancement_plan.md`
+
+The brief captures:
+
+- current prompt anatomy
+- current context/files feeding the LLM
+- current LLM flow architecture
+- reference-pack selection
+- provider settings and retry behavior
+- test cases used for regression
+- before/after observation template
+- first recommendations for prompt, reference-pack, taxonomy, and settings changes
+
+Next work:
+
+- Use the prompt reconstruction helper to inspect one representative prompt, packet, selected reference packs, response contract, and sanitized provider settings:
+  - `python scripts/export_narrative_prompt_brief.py --fixture operational_only_ambitious_enrollment_v2 --out /tmp/narrative_prompt_export`
+- Use `prompt_enhancement_plan.md` as the working implementation plan for the next narrative prompt/schema migration.
+- Before code changes, promote accepted durable decisions from `prompt_enhancement_plan.md` into `docs/architecture_narratives.md`.
+- Then implement in staged order: contract fixtures, packet builder, prompt/schema, mock/provider normalization, scoring/storage, prompt export review, UI integration, regression/live review, then provider settings.
+
 ## Deferred Work
 
 These are real needs, but not blockers for the immediate schema migration:
@@ -374,4 +408,4 @@ These are real needs, but not blockers for the immediate schema migration:
 
 ## Immediate Next Step
 
-Run the Phase 7 narrative regression pass, starting with `NCT03386721` - Simlukafusp alfa (ROCHE) | Oncology (2018) for Execution Framework narrative quality, then `NCT03896581` - `[BE COMPLETE]` Bimekizumab (UCB) | Musculoskeletal (2019) for Pathway Profile narrative quality on `Interleukin Cytokine` -> `Kinase Inhibitor`.
+Review and approve `prompt_enhancement_plan.md`, then promote accepted durable decisions into `docs/architecture_narratives.md` before implementing the staged prompt/schema migration. The Phase 7 named trials remain the first live regression cases after the new prompt contract is implemented.

@@ -12,9 +12,11 @@ Efficient update rule: change this file when narrative inputs/outputs, LLM contr
 
 This document defines the staged design for adding a serious-game narrative layer around single-trial simulation in ClinTrialPredict. Current implementation covers contract fixtures, deterministic packet building, validation/scoring, mock review, session-state storage/replay, minimal Quality Review UI, hidden baseline continuity, provider configuration, real OpenAI/Gemini provider boundaries, Gemini Flash-Lite live settings, prompt-mode scaffolding, and opt-in live-provider UI routing. The simulator still uses the deterministic mock provider by default unless `NARRATIVE_LIVE_REVIEW_ENABLED=1` explicitly enables the live provider chain. The active target architecture supersedes the earlier three-pillar Quality Assessment model with a four-pillar Design Confidence model aligned to the existing Completion Outlook pillars.
 
+Current planning checkpoint: `prompt_enhancement_plan.md` is the working implementation plan for the next prompt/schema migration. Its accepted durable decisions should be promoted into this architecture document before code changes. The next target contract keeps app-owned scoring but reshapes participant output around Completion Outlook Analysis, Design Confidence Analysis, and Two Key Questions; adds `review_metadata`; separates `hidden_baseline`, `first_visible_iteration`, and `later_visible_iteration`; treats Completion Outlook as early-termination risk-pattern interpretation; keeps operational assumptions out of Completion Outlook; adds optional therapeutic-area `.md` context by XGBoost canonical `therapeutic_area_ml`; and adds `scenario_consistency_note` plus `text_change_evidence`.
+
 The current edit/simulation workflow remains the foundation. A facilitator selects an existing trial, participants adjust structured Trial Features, and the application calls the existing prediction flow to produce a completion score with SHAP-derived impact decomposition.
 
-The narrative layer exists because completion likelihood alone is not enough for a serious-game discussion. Some changes may raise completion likelihood by making a trial easier to complete while reducing scientific rigor, evidence value, endpoint interpretability, population relevance, governance quality, or strategic defensibility. Other changes may lower completion likelihood while making the design more robust or more relevant.
+The narrative layer exists because the Completion Score alone is not enough for a serious-game discussion. Some changes may make the scenario look more similar to historically completed-trial patterns while reducing scientific rigor, evidence value, endpoint interpretability, population relevance, governance quality, or strategic defensibility. Other changes may increase apparent early-termination risk while making the design more robust or more relevant.
 
 The narrative layer should help participants reason about this trade-off without giving direct optimization instructions. It should interpret score movement, surface design trade-offs, and challenge teams to defend their choices.
 
@@ -51,7 +53,7 @@ Example:
 
 Interpretation:
 
-- The Completion Score remains the modelled likelihood of completion.
+- The Completion Score remains the existing XGBoost score; participant-facing narrative should treat it as an early-termination risk-pattern signal, not as a promise of completion.
 - Design Confidence is a serious-game modifier for design defensibility, decision usefulness, patient relevance, and proportionate execution choices.
 - The Total Scenario Score can recognize a risky but well-strengthened design without replacing or rewriting XGBoost.
 - A trial below `50` on Completion Score can improve if the design choices meaningfully explain why some completion risk reflects rigor, ambition, patient relevance, or prudent governance rather than poor design.
@@ -59,8 +61,8 @@ Interpretation:
 
 Terminology:
 
-- `Completion Score` = modelled likelihood of completion.
-- `Completion Outlook` = explanation of model-derived score movement using feature, subcategory, pillar, and score movement evidence.
+- `Completion Score` = existing XGBoost score shown from 0 to 100.
+- `Completion Outlook` = explanation of model-derived score movement using feature, subcategory, pillar, and score movement evidence, framed as lower/higher early-termination risk or resemblance to historically completed/terminated-trial patterns.
 - `Scenario Review` = participant-facing narrative explanation of Completion Outlook movement, Design Confidence evidence, trade-offs, and two expert questions.
 - `Design Confidence` = application-calculated point adjustment derived from validated design subcategories with supported evidence.
 - `Total Scenario Score` = Completion Score plus Design Confidence, when the combined view is enabled.
@@ -352,7 +354,7 @@ Operational assumptions remain outside XGBoost. They may appear near Execution F
 
 ## 9. Shortcut Detection Concept
 
-A shortcut is not simply a change that increases the completion score. A higher Completion Score can reflect a more robust, better-governed, better-aligned, or lower-risk development pattern, but it can also reflect simplification or loss of evidence value when scientific challenge, endpoint rigor, comparator credibility, population relevance, or interpretability is reduced. For example, a Data Monitoring Committee may increase operational oversight and completion confidence in one context while adding complexity or risk in another. A shortcut is a change that increases completion likelihood while potentially weakening evidence value, scientific rigor, population relevance, endpoint interpretability, or strategic defensibility.
+A shortcut is not simply a change that increases the completion score. A higher Completion Score can reflect a more robust, better-governed, better-aligned, or lower-risk development pattern, but it can also reflect simplification or loss of evidence value when scientific challenge, endpoint rigor, comparator credibility, population relevance, or interpretability is reduced. For example, a Data Monitoring Committee may increase operational oversight and reduce apparent early-termination risk in one context while adding complexity or risk in another. A shortcut is a change that improves the Completion Outlook while potentially weakening evidence value, scientific rigor, population relevance, endpoint interpretability, or strategic defensibility.
 
 Examples:
 
@@ -674,15 +676,18 @@ The LLM should return structured JSON. The application should validate the respo
 
 The LLM should not return the final score as an authority. It should return review ratings, evidence fields, narrative, and continuity fields.
 
-Proposed contract:
+Target contract:
 
 ```json
 {
-  "completion_outlook_review": {
-    "score_delta_summary": "short explanation of the observed Completion Score movement",
-    "pillar_movement_summary": [],
-    "model_supported_drivers": [],
-    "cross_pillar_interaction_hypotheses": [],
+  "review_metadata": {
+    "review_mode": "hidden_baseline | first_visible_iteration | later_visible_iteration",
+    "participant_visible": true
+  },
+  "completion_outlook_analysis": {
+    "score_movement_summary": "short explanation of the observed Completion Score movement",
+    "main_model_signals": [],
+    "interpretive_hypotheses": [],
     "model_limits": []
   },
   "design_confidence_subcategories": {
@@ -815,11 +820,45 @@ Operational burden increases without evidence gain:
 The scenario may add enrollment, sites, duration, arms, or oversight burden. However, if the packet does not show a matching evidence or population-fit gain, the review should flag proportionality rather than treating operational ambition as inherently positive.
 ```
 
+### Golden / One-Shot Example Policy
+
+The current implementation has contract fixtures in `src/narratives/contract_fixtures.py` and compact style examples in this prompt architecture, but it does not yet need full one-shot examples embedded in the live provider prompt.
+
+Near-term recommendation:
+
+- Create 3-5 golden prompt examples outside the live prompt first, for calibration and regression review.
+- Keep them in documentation or fixture-style artifacts until the target schema, prompt modes, and participant output format are stable.
+- Add full one-shot examples to the live provider prompt only if schema/rules/reference packs are not enough to produce consistent output.
+
+Each golden example should include:
+
+- Scenario setup and trial context.
+- Changed structured fields and changed free-text evidence.
+- Whether the mode is `hidden_baseline`, `first_visible_iteration`, or `later_visible_iteration`.
+- Expected Completion Outlook framing, including early-termination risk-pattern language and model-boundary wording.
+- Expected Design Confidence challenge, including whether it should moderate a clear Completion Outlook increase or decrease.
+- Relevant Design Confidence subcategories and evidence fields.
+- Any text/structured-field consistency note expected.
+- Optional therapeutic-area context and whether a TA `.md` pack is present or missing.
+- Optional regulatory or finance/cost lens only when materially relevant.
+- Forbidden wording, especially causal field claims, hidden-baseline Design Confidence comparisons, unsupported disease/regulatory/cost claims, and planned enrollment/sites/total-duration claims as Completion Outlook drivers.
+- Ideal short participant output: Completion Outlook Analysis, Design Confidence Analysis, and Two Key Questions.
+
+Recommended initial golden examples:
+
+1. Completion Outlook improves but Design Confidence weakens because evidence value or interpretability is reduced.
+2. Completion Outlook worsens but Design Confidence strengthens because rigor, patient relevance, governance, or justified ambition improves.
+3. Text/structured contradiction where selected categorical/numeric fields prevail and a consistency note is shown.
+4. Operational burden increases without matching evidence gain.
+5. Therapeutic-area/pathway change requiring cautious interpretation without overclaiming mechanism, efficacy, safety, or regulatory significance.
+
+Golden examples should be used as prompt-regression references and teaching artifacts first. If later embedded in the live prompt, they must be compact enough not to crowd the packet, must match the current response schema, and must be updated whenever the schema or participant UI contract changes.
+
 Required field lengths:
 
 - Each Design Confidence subcategory `rationale`: 1 sentence, usually 18-35 words, maximum 45 words.
-- `completion_outlook_review.score_delta_summary`: 1 sentence, maximum 35 words.
-- Each item in `pillar_movement_summary`, `model_supported_drivers`, `cross_pillar_interaction_hypotheses`, and `model_limits`: maximum 25 words.
+- `completion_outlook_analysis.score_movement_summary`: 1 sentence, maximum 35 words.
+- Each item in `main_model_signals`, `interpretive_hypotheses`, and `model_limits`: maximum 25 words.
 - Each `pillar_reviews.*.completion_interpretation`: 1 sentence, maximum 30 words.
 - Each `pillar_reviews.*.design_adjustment_interpretation`: 1 sentence, maximum 30 words.
 - Each `pillar_reviews.*.collateral_impacts` item: maximum 20 words.
@@ -1144,7 +1183,7 @@ Provider selection and secret handling:
   - `NARRATIVE_LLM_TIMEOUT_SECONDS`
   - `NARRATIVE_LLM_MAX_RETRIES`
 - Current setup status: local `.env` can hold these values, and `src/narratives/provider_config.py` reads and validates them without making any LLM API call. `scripts/check_narrative_openai_smoke.py` and `scripts/check_narrative_gemini_smoke.py` can run opt-in API smoke tests when `RUN_NARRATIVE_OPENAI_SMOKE=1` or `RUN_NARRATIVE_GEMINI_SMOKE=1` is set; they skip by default to avoid accidental network calls or API spend. `src/narratives/provider.py` contains real OpenAI and Gemini invocation helpers behind the same normalized provider result shape. `frontend/views/trial_simulator.py` uses the deterministic mock provider by default and routes both hidden baseline and visible Quality Review calls through the live provider chain only when `NARRATIVE_LIVE_REVIEW_ENABLED=1`. Live wrapper checks have validated one full fixture review with OpenAI and one full fixture review with Gemini using the normalized provider boundary.
-- Provider config, prompt/schema fixtures, opt-in OpenAI/Gemini smoke testing, and opt-in simulator UI routing are implemented against the older Quality Review contract. The active implementation task is to migrate that contract to `completion_outlook_review` and `design_confidence_subcategories`. If live routing is enabled and all configured providers fail or validation does not produce a complete Scenario Review, the participant panel shows Completion Score only and marks Scenario Review unavailable for the current scenario, with a narrow retry action for live-provider failures. It does not reuse stale Design Confidence for a new packet.
+- Provider config, prompt/schema fixtures, opt-in OpenAI/Gemini smoke testing, and opt-in simulator UI routing are implemented against the older Quality Review contract. The active implementation task is to migrate that contract to the target `completion_outlook_analysis`, `design_confidence_subcategories`, `review_metadata`, `scenario_consistency_note`, and `text_change_evidence` shape described in `prompt_enhancement_plan.md`. If live routing is enabled and all configured providers fail or validation does not produce a complete Scenario Review, the participant panel shows Completion Score only and marks Scenario Review unavailable for the current scenario, with a narrow retry action for live-provider failures. It does not reuse stale Design Confidence for a new packet.
 - Any OpenAI model used in later validation should be pinned to an explicit snapshot rather than a floating alias. OpenAI Pro/high-reasoning profiles can be considered for slower, high-quality hidden baseline generation or offline review, but they are not the default live interactive path after the June 2026 Gemini Flash-Lite decision.
 - Any Gemini model used in production or fallback should be configured with an explicit model ID rather than hard-coded in product logic. The current live interactive candidate is `gemini-3.1-flash-lite`; a Pro-class Gemini model can be evaluated later for slower offline or fallback review quality.
 - Future provider-chain mode should try the configured primary provider first, then the configured fallback only for provider/network/rate-limit/unavailable failure. Do not fallback when the primary provider returns valid but unfavorable clinical reasoning, or when the provider returns malformed/invalid review JSON; that would create provider-shopping behavior and hide prompt/contract problems that should be fixed.
@@ -1194,7 +1233,7 @@ Current mid-way development sanity check:
 
 This review has been superseded by the four-pillar Design Confidence plan. It remains useful as historical context for why prompt size, provider reliability, and participant display need explicit calibration.
 
-1. Prompt, token, output, and cost audit. First inspect exactly what the application sends to the LLM for `hidden_baseline` and `visible_iteration` prompts: prompt instructions, response contract, packet JSON, field-change evidence, XGBoost movement evidence, text context, baseline/previous review context, operational assumptions, and clarification context. For each representative packet, record prompt character count, approximate input tokens, configured output budget, actual response length, parser/validation result, cache behavior, and estimated cost for the selected model. Then compare observed wall-clock time against this input/output volume and provider limitations. The audit should make the LLM input readable as if a facilitator had written the prompt manually, while keeping secrets and raw provider outputs out of participant UI.
+1. Prompt, token, output, and cost audit. First inspect exactly what the application sends to the LLM for `hidden_baseline`, `first_visible_iteration`, and `later_visible_iteration` prompts: prompt instructions, response contract, packet JSON, field-change evidence, XGBoost movement evidence, text context, baseline/previous review context, operational assumptions, and clarification context. For each representative packet, record prompt character count, approximate input tokens, configured output budget, actual response length, parser/validation result, cache behavior, and estimated cost for the selected model. Then compare observed wall-clock time against this input/output volume and provider limitations. The audit should make the LLM input readable as if a facilitator had written the prompt manually, while keeping secrets and raw provider outputs out of participant UI.
 2. Design Confidence and participant display review. Reassess whether the four design subcategories, rating-to-point mapping, and participant wording are coherent, legitimate, and easy to explain. The review should test whether participants can understand how Completion Score features, Scenario Review evidence, and Design Confidence differ.
 3. Implementation plan for prompt/UI changes. Only after the first two reviews decide what to change in code: which packet fields should be removed, summarized, or added; whether hidden baseline generation should be deferred or cached durably; which provider/model profile should be used for interactive play; and how the Total Scenario Score, Completion Outlook drivers, and Design Confidence contributions should be rendered in the simulator.
 
@@ -1253,11 +1292,12 @@ Provider abstraction should be thin. The application should own payload construc
 Real-provider prompts use a funnel instruction, currently implemented in `src/narratives/prompt_builder.py` and validated by `scripts/check_narrative_prompt_builder.py`:
 
 - Use prompt mode `hidden_baseline` for the original trial before participant changes. This mode creates hidden baseline context, qualitative baseline score interpretation, baseline strengths/concerns, consistency flags, and compact memory. It must not write as if the participant changed the scenario and must not expose participant-facing baseline Design Confidence, Total Scenario Score, or hidden numeric quality score.
-- Use prompt mode `visible_iteration` for participant-modified scenarios. This mode explains the participant change, Completion Score movement, design gains, possible sacrifices, and continuity with baseline/previous iteration context for the visible Scenario Review panel.
-- In `visible_iteration` mode, use `iteration_context.field_changes` to identify what the participant changed.
+- Use prompt mode `first_visible_iteration` for the first participant-modified scenario. This mode can compare Completion Outlook to the visible original Completion Score, but must not claim Design Confidence improved or worsened versus a hidden baseline score.
+- Use prompt mode `later_visible_iteration` for later participant-modified scenarios. This mode can use previous visible review context for continuity, but Design Confidence wording should stay grounded in supported field changes and evidence rather than unsupported score-to-score storytelling.
+- In visible modes, use `iteration_context.field_changes` to identify what the participant changed.
 - Use `model_interpretation.xgboost_impact_changes` to understand model movement and materiality. In `hidden_baseline` mode, do not invent participant edits when `field_changes` is empty.
 - Treat XGBoost/SHAP movement as model explanation evidence, not proof of clinical causality.
-- Translate model evidence into clinical trial / pharma development language for participant-facing text. Explain why the revised scenario may look more or less completion-like, robust, feasible, governed, strategically aligned, risk-reduced, simplified, or less evidence-generating in terms of endpoint timing, comparator choice, population scope, oversight, operational burden, trial duration, scientific challenge, or development strategy rather than exposing raw model vocabulary. Do not equate a higher Completion Score with simplification by default, but do flag simplification or value loss when the evidence points that way.
+- Translate model evidence into clinical trial / pharma development language for participant-facing text. Explain why the revised scenario may look more or less completion-like, robust, feasible, governed, strategically aligned, risk-reduced, simplified, or less evidence-generating in terms of supported evidence such as endpoint timing, comparator choice, population scope, oversight, operational burden, scientific challenge, or development strategy rather than exposing raw model vocabulary. Total duration, planned enrollment, planned site count, and operational benchmark assumptions must not be cited as Completion Outlook drivers; maximum primary endpoint duration may be used only when present as XGBoost evidence. Do not equate a higher Completion Score with simplification by default, but do flag simplification or value loss when the evidence points that way.
 - Produce design subcategory ratings, rationale, evidence fields, participant-facing narrative, continuity, and trace fields.
 - Do not calculate or return `Design Confidence`, `Total Scenario Score`, or Design Confidence point values. The application calculates those from the validated subcategory ratings.
 
@@ -1580,7 +1620,7 @@ The field set should support the Scenario Review and Design Confidence rubric by
 
 Examples:
 
-- A narrower population may improve completion likelihood but could lower population relevance.
+- A narrower population may reduce apparent early-termination risk but could lower population relevance.
 - A shorter endpoint duration may improve feasibility but could weaken clinical interpretability.
 - Adding a DMC may be appropriate if proportionate to risk, phase, population, and intervention, but should not be automatically treated as a quality improvement.
 - Removing biomarker stratification may simplify operations but could weaken mechanistic coherence in a targeted development setting.
@@ -1683,6 +1723,8 @@ Implementation staging:
 11. Durable baseline store: add a database-backed baseline review repository keyed by trial/version and input hash. It should use create-if-missing semantics so the first team creates the hidden baseline and later teams reuse it.
 12. Two-branch adjusted treemap: add only after the simpler adjusted view is stable and understandable; defer to V1.1 if it slows the first implementation.
 13. Calibration/playtesting: review examples and tune rating-to-point mapping if Design Confidence is too strong or too weak.
+14. Golden / one-shot example calibration: create 3-5 external golden examples for prompt-quality review before deciding whether any compact one-shot examples should be embedded in the live provider prompt.
+15. Prompt enhancement migration checkpoint: before implementing the next prompt/schema migration, align this architecture document and `implementation_plan.md` with accepted durable decisions from `prompt_enhancement_plan.md`, then proceed through staged fixtures, packet builder, prompt/schema, mock/provider normalization, scoring/storage, prompt export review, UI integration, regression/live review, and only then provider settings tuning.
 
 ## 21. Open Questions
 
