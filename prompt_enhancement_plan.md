@@ -19,7 +19,7 @@ The current narrative system should be reshaped around three participant-facing 
 1. `Completion Outlook Analysis`
    - What the XGBoost risk-pattern model says changed.
    - Why the revised profile appears more or less similar to historically completed versus early-terminated trials.
-   - What model-facing fields, SHAP movements, pillar/subcategory movements, and changed structured fields support that interpretation.
+   - What Completion Outlook score inputs, model_interpretation evidence, pillar/subcategory movements, and changed structured_features support that interpretation.
 
 2. `Design Confidence Analysis`
    - Whether the resulting design is strategically, clinically, scientifically, and operationally defensible.
@@ -134,14 +134,14 @@ Required framing:
 - It is an early-termination risk-pattern assessment, not a prediction of clinical success.
 - It is not a claim that the trial will complete.
 - It is not a claim that the design is clinically better.
-- It should describe model-supported patterns, correlations, and plausible historical-profile interpretations, not causal certainty.
-- It may try to make sense of why the revised profile appears riskier or less risky, but only as an evidence-bounded interpretation grounded in score movement, SHAP/pillar/subcategory movement, changed fields, and surrounding context.
+- It should describe Completion Outlook score-input patterns, correlations, and plausible historical-profile interpretations, not causal certainty.
+- It may try to make sense of why the revised profile appears riskier or less risky, but only as an evidence-bounded interpretation grounded in score movement, `model_interpretation` evidence, changed `structured_features`, and surrounding context.
 - Participant-facing wording should prefer "lower/higher risk of early termination" or "more/less similar to completed-trial patterns" over "higher/lower chance of completion."
 
 Allowed evidence for Completion Outlook:
 
-- Model-facing structured fields.
-- Changed structured fields that feed the XGBoost pipeline.
+- Completion Outlook score inputs in `structured_features`.
+- Changed `structured_features` that feed the Completion Outlook score.
 - Completion Score and score movement.
 - Pillar impacts and pillar deltas.
 - SHAP/subcategory/feature impact changes.
@@ -159,7 +159,7 @@ Operational assumptions may be discussed under Design Confidence, especially `Op
 
 Duration distinction:
 
-- `primary_duration_months_ml` / maximum primary endpoint duration is a model-facing XGBoost field and may be used in Completion Outlook when present in model evidence.
+- `primary_duration_months_ml` / maximum primary endpoint duration is a Completion Outlook score input and may be used in Completion Outlook when present in `model_interpretation` evidence.
 - Planned total duration / operational duration assumption is outside XGBoost and must not be cited as a Completion Outlook driver.
 
 ## Completion Outlook Interpretation Depth
@@ -169,7 +169,7 @@ Completion Outlook should not be a shallow restatement of score movement. It sho
 Required interpretation pattern:
 
 1. Name the model signal.
-   - Which score, pillar, subcategory, SHAP, or model-facing field movement is relevant?
+   - Which score, pillar, subcategory, impact movement, or Completion Outlook score-input movement is relevant?
 
 2. Offer a possible historical-pattern meaning.
    - What might this signal represent in prior trial profiles?
@@ -202,7 +202,7 @@ Candidate response shape:
 }
 ```
 
-This applies to every field, not only obviously ambiguous fields. Any model-facing field may behave as a marker of historical trial profile, complexity, governance, evidence ambition, patient risk, operational footprint, or therapeutic-area norms. The LLM should not simplify a field into a one-direction causal story.
+This applies to every Completion Outlook score input, not only obviously ambiguous fields. Any score input may behave as a marker of historical trial profile, complexity, governance, evidence ambition, patient risk, operational profile, or therapeutic-area norms. The LLM should not simplify a field into a one-direction causal story.
 
 Examples of unsafe simplification:
 
@@ -227,8 +227,10 @@ Interaction rule:
 Redline:
 
 ```text
-Completion Outlook explanations must be framed as historical-pattern hypotheses grounded in model evidence and packet fields. They must not present field effects as clinical causality, operational truth, or design recommendations.
+Completion Outlook explanations must be framed as historical-pattern hypotheses grounded in `model_interpretation` evidence and packet fields. They must not present field effects as clinical causality, operational truth, or design recommendations.
 ```
+
+Participant-facing narratives should state unresolved concerns, not prescribe exact redesign paths. For example, prefer saying that a non-randomized, open-label structure remains an interpretability concern over saying the design would need to transition to randomized or blinded conduct.
 
 ## Design Confidence Rules
 
@@ -269,7 +271,7 @@ Calibration safeguards:
 
 Implemented scoring-contract target: each Design Confidence subcategory now spans `-5.0..+5.0` in `0.5` increments.
 
-This is implemented as an app-owned scoring migration, not by asking the LLM to return numeric points. The LLM builds the critical narrative lens: it reads the current packet, Completion Outlook score and delta, model evidence, field changes, operational assumptions, text context, consistency notes, therapeutic-area reference context, hidden-baseline qualitative memory, and prior visible review context. For each subcategory it selects evidence fields, explains the current design judgment, assigns a qualitative rating, and assigns a qualitative `score_materiality` level. The app then maps `rating + score_materiality + context guardrails` into points.
+This is implemented as an app-owned scoring migration, not by asking the LLM to return numeric points. The LLM builds the critical narrative lens from the current packet: Completion Outlook score and delta, `model_interpretation` score evidence, `iteration_context.field_changes`, `operational_assumptions` planning assumptions, `text_context` Trial description fields, consistency notes, therapeutic-area reference context, hidden-baseline qualitative memory, and prior visible review context. For each subcategory it selects evidence fields, explains the current design judgment, assigns a qualitative rating, and assigns a qualitative `score_materiality` level. The app then maps `rating + score_materiality + context guardrails` into points.
 
 Provider-owned qualitative fields:
 
@@ -303,7 +305,9 @@ Anti-inflation and context guardrails:
 - If Completion Outlook improves because the scenario is simpler, narrower, shorter, less governed, less blinded, less controlled, or operationally easier, positive Design Confidence should be blocked unless separate evidence shows the design became more defensible.
 - If Completion Outlook declines because the scenario adds rigor, patient relevance, endpoint interpretability, governance, or justified ambition, positive Design Confidence may be larger, but only in the subcategory directly supported by that evidence.
 - Operational assumptions can support `operational_burden_balance`, but operational burden alone should not produce a positive score. If enrollment, site count, planned duration, arms, oversight, or delivery burden increase without matching evidence or patient-relevance gain, `operational_burden_balance` should be neutral or negative.
-- Structured/free-text mismatch may be explained in the narrative and warning. It should remain bounded interpretability/coherence context and should not override selected-field evidence or become the main Design Confidence score driver by itself.
+- Operational simplification caused mainly by weaker comparator, masking, allocation, endpoint rigor, or evidence ambition should not receive strong positive `operational_burden_balance` unless the packet shows an independent gain in access, feasibility, oversight, data reliability, patient burden, or proportionality.
+- Use packet-section names consistently in prompt wording. `Completion Outlook score` is `model_interpretation.completion_score`; `Completion Outlook score inputs` are selected categorical/numeric fields in `structured_features` that feed the score, identified through `model_interpretation.direct_xgboost_shap_fields` and `model_interpretation` score evidence, with readable labels in `structured_feature_display_values` and meanings in `structured_feature_meanings`; `Trial description fields` are `text_context` fields with meanings in `text_context_field_meanings`, UI labels `Title` (top study title), `Summary`, `Conditions`, `Interventions`, and `Primary Outcomes`, and JSON keys `title`, `summary_ui`, `conditions_ui`, `interventions_ui`, and `primary_outcomes_ui`; `Planning assumptions` are `operational_assumptions.planned_enrollment`, `operational_assumptions.planned_sites`, and `operational_assumptions.planned_duration_months`; `Completion Outlook narrative` is `completion_outlook_analysis`; `Design Confidence narrative` is `design_confidence_analysis`; and `Design Confidence subcategory ratings` are `design_confidence_subcategories`.
+- Trial description fields do not directly feed the Completion Outlook score. They may support the Completion Outlook narrative only when they align with, clarify, or add non-conflicting detail to selected Completion Outlook score inputs. This conflict rule applies across all Trial description fields in `text_context` and all relevant `structured_features`, not only intervention descriptions. Completion Outlook score inputs define the score-interpreted scenario when they directly conflict with Trial description fields. Only the conflicting Trial description field detail should be treated as stale scenario text superseded by the structured_features value; it should not be used as Completion Outlook evidence or as evidence that the selected structured design has the contradicted modality, delivery burden, endpoint, or population feature. Structured_features/text_context conflict is a scenario-readiness warning and should not drive multiple strong negative subcategory ratings unless non-conflicting structured_features values independently support those penalties. In the participant warning, "text is used as supporting context" means aligned or non-conflicting Trial description field content.
 - Hidden baseline memory and prior visible reviews should shape continuity and identify unresolved or resolved concerns. They must not act as accumulated numeric penalties or bonuses.
 - Unsupported evidence fields force point effect to `0.0` even when the narrative is plausible.
 
@@ -492,9 +496,9 @@ However, the LLM should remain bounded:
 
 Future optional condition packs may be useful, but therapeutic-area packs should come first because they are broader and easier to maintain.
 
-## Free-Text And Structured-Field Consistency
+## Trial Description Fields And Structured-Feature Consistency
 
-Structured categorical and numeric scenario fields should prevail when they conflict with free-text fields. Free text should remain available as context, rationale, or contradiction evidence, but it should not silently override the selected scenario fields.
+`structured_features` values should prevail when they directly conflict with Trial description fields in `text_context`. Trial description fields remain available as aligned context, rationale, or contradiction evidence, but they should not silently override the selected scenario fields.
 
 Participant-facing consistency note:
 
@@ -502,7 +506,7 @@ Participant-facing consistency note:
 Some scenario details are not fully aligned across free-text fields and selected fields. In this case the value in the selected fields drive the analysis, while the text is used as supporting context. (Intervention text, Therapeutic Modality)
 ```
 
-Use this note only when a clear mismatch remains. The fields in parentheses should use participant-readable labels and should identify the relevant free-text field and selected categorical/numeric field.
+Use this note only when a clear mismatch remains. The fields in parentheses should use participant-readable labels and should identify the relevant Trial description field and selected categorical/numeric field.
 
 Planned response field:
 
@@ -516,15 +520,15 @@ Planned response field:
 
 Rules:
 
-- Do not block review generation because of a text/feature mismatch.
-- Do not let free text override structured categorical or numeric scenario choices.
-- Completion Outlook should follow model-facing structured fields and model evidence.
+- Do not block review generation because of a `text_context` / `structured_features` mismatch.
+- Do not let Trial description fields override structured categorical or numeric scenario choices.
+- Completion Outlook should follow Completion Outlook score inputs and `model_interpretation` evidence.
 - Design Confidence may use the mismatch as evidence of reduced coherence when supported.
 - Key questions may challenge the team to clarify or defend the mismatch when it is material.
 
 ## Text-Change Evidence
 
-The LLM should clearly see what changed in free-text fields, especially when the edit adds new information rather than simply aligning text with structured categorical or numeric choices.
+The LLM should clearly see what changed in Trial description fields, especially when the edit adds new information rather than simply aligning `text_context` with structured categorical or numeric choices.
 
 Planned packet field:
 
@@ -543,9 +547,9 @@ Planned packet field:
 
 Suggested `change_type` values:
 
-- `alignment_only`: text was edited mainly to match selected structured fields.
+- `alignment_only`: a Trial description field was edited mainly to match selected structured fields.
 - `new_information`: text adds new clinical, design, operational, or strategic meaning.
-- `contradiction`: text conflicts with selected structured fields.
+- `contradiction`: a Trial description field conflicts with selected structured fields.
 - `minor_cleanup`: wording change has no material scenario meaning.
 
 Implementation guidance:
@@ -753,7 +757,7 @@ The narrative should remain readable and not become a diagnostics panel. Raw evi
 
 Completion Outlook can reliably explain:
 
-- What model-facing fields changed.
+- What Completion Outlook score inputs changed.
 - Whether the Completion Score moved up/down.
 - Which SHAP/pillar/subcategory movements were material.
 - Whether the revised profile became more or less similar to completed-trial patterns in the training data.
@@ -792,7 +796,7 @@ Edited scenario:
 - `allocation_method_ml`: changed from not specified / not applicable to randomized.
 - Comparator / placebo / endpoint fields were changed toward active-controlled, placebo-controlled, hard clinical endpoint evidence.
 - `primary_duration_months_ml` / maximum primary endpoint duration was set to `12.0`.
-- Study summary text added a simulated randomized-control-arm sentence.
+- `text_context.summary_ui` added a simulated randomized-control-arm sentence.
 
 Observed scores:
 
@@ -809,9 +813,9 @@ What worked:
 
 Issues to correct in the prompt:
 
-- Completion Outlook over-explained with unsupported assumptions. It mentioned a need for a "larger, more diverse patient population" even though no diversity-related or population-breadth field was changed or clearly model-supported.
-- Completion Outlook used broad clinical-development generalization too assertively: "Historically, randomized trials with active comparators and hard clinical endpoints face greater recruitment and retention challenges..." This is directionally plausible but too factual/causal unless grounded in changed model evidence.
-- Completion Outlook should stay closer to score movement, non-movement, model-facing changed fields, and resemblance to historical completion / early-termination risk patterns.
+- Completion Outlook over-explained with unsupported assumptions. It mentioned a need for a "larger, more diverse patient population" even though no diversity-related or population-breadth field was changed or clearly supported by Completion Outlook score inputs.
+- Completion Outlook used broad clinical-development generalization too assertively: "Historically, randomized trials with active comparators and hard clinical endpoints face greater recruitment and retention challenges..." This is directionally plausible but too factual/causal unless grounded in changed `model_interpretation` evidence.
+- Completion Outlook should stay closer to score movement, non-movement, changed Completion Outlook score inputs, and resemblance to historical completion / early-termination risk patterns.
 - Design Confidence wording was directionally correct but too strong. Phrases such as "significantly improves" and "the design is now more robust" should be softened.
 - Design Confidence should more explicitly keep the counterweight: stronger evidence generation may also create cost, governance, operational burden, feasibility, or proportionality concerns when supported by the packet.
 - Design Confidence treemap subcategory tiles did not show the short rationale needed to evidence why each rating was strong, supportive, balanced, weak, or conflicting.
@@ -822,7 +826,7 @@ Preferred prompt wording direction:
 - Prefer "appears more robust from an evidence-generation perspective" instead of "the design is now more robust."
 - Prefer "may resemble patterns associated with greater execution burden where comparator structure and endpoint ambition increase" instead of broad factual claims about historical recruitment and retention.
 - When Completion Outlook is flat, explicitly state that the edited fields did not materially shift the scenario's resemblance to historical completion or early-termination patterns.
-- If operational or feasibility language is used in Completion Outlook, it must be framed as a cautious risk-pattern interpretation and tied to model-supported fields, not as clinical truth.
+- If operational or feasibility language is used in Completion Outlook, it must be framed as a cautious risk-pattern interpretation and tied to Completion Outlook score inputs, not as clinical truth.
 
 Candidate improved Completion Outlook wording:
 
@@ -851,7 +855,7 @@ Edited scenario:
 - Comparator / placebo / control fields were moved back toward weaker or single-arm settings.
 - Endpoint evidence was moved toward surrogate or less rigorous evidence.
 - `primary_duration_months_ml` / maximum primary endpoint duration remained `12.0`.
-- Study summary text described a single-arm design interpreted against clinical context rather than a randomized control arm.
+- `text_context.summary_ui` described a single-arm design interpreted against clinical context rather than a randomized control arm.
 
 Observed scores:
 
@@ -869,16 +873,16 @@ What worked:
 
 Issues to correct in the prompt:
 
-- Completion Outlook again used overly broad feasibility language: "historically associated with lower operational complexity and faster recruitment." "Faster recruitment" should not be stated unless directly supported by model-facing changed fields or packet evidence.
+- Completion Outlook again used overly broad feasibility language: "historically associated with lower operational complexity and faster recruitment." "Faster recruitment" should not be stated unless directly supported by changed Completion Outlook score inputs or packet evidence.
 - Completion Outlook described the result as an improvement even though `+0.3 pts` is marginal. It should call this essentially stable or only slightly higher.
 - Design Confidence was directionally correct but too categorical in phrases such as "less robust" and "significant interpretability gap."
 - Design Confidence treemap subcategory tiles still lacked the short rationale needed to explain the rating in a few words.
-- Some proposed model-grounding language can become too complex for participants. Phrases such as "on model-supported design features," "more execution-favorable," and "does not materially alter the scenario's resemblance" are directionally right but should be simplified for live use.
+- Some proposed score-grounding language can become too complex for participants. Phrases such as "on score-supported design features," "more execution-favorable," and "does not materially alter the scenario's resemblance" are directionally right but should be simplified for live use.
 
 Preferred prompt wording direction:
 
 - Prefer "The Completion Outlook is almost unchanged, with only a small increase" over "The Completion Outlook appears to improve" for tiny score movements.
-- Prefer "the simpler structure may look easier to run in the score pattern" over "more execution-favorable on model-supported design features."
+- Prefer "the simpler structure may look easier to run in the score pattern" over "more execution-favorable on score-supported design features."
 - Prefer "the score pattern is still close to the previous scenario" over "does not materially alter the scenario's resemblance."
 - Prefer "may be less convincing for a registration-focused decision" over "less robust for a pivotal registration intent" when writing for participants.
 - Prefer "important interpretability concern" over "significant interpretability gap."
@@ -911,7 +915,7 @@ Edited scenario:
 - `line_of_therapy_ml`: changed from later-line to refractory / relapsed.
 - Single-arm, open-label, surrogate-based structure was kept.
 - `primary_duration_months_ml` / maximum primary endpoint duration remained `12.0`.
-- Study summary text added that the target population would be narrowed toward more advanced or treatment-resistant disease, potentially increasing clinical relevance while making evidence more dependent on patient selection.
+- `text_context.summary_ui` added that the target population would be narrowed toward more advanced or treatment-resistant disease, potentially increasing clinical relevance while making evidence more dependent on patient selection.
 
 Observed scores:
 
@@ -929,7 +933,7 @@ Issues to correct in the prompt:
 
 - Completion Outlook again introduced unsupported operational assumptions: "may facilitate recruitment and site execution." This should not be stated unless recruitment/site execution fields changed and are in the supported evidence context.
 - Completion Outlook again used broad historical generalization too strongly: "Historically, such designs face challenges..." This should be made conditional and grounded in the current evidence fields.
-- Completion Outlook mixed design-quality critique into the Completion Outlook paragraph. Lack of control group, surrogate endpoints, masking, and interpretability belong mainly in Design Confidence unless directly tied to model-facing Completion Outlook evidence.
+- Completion Outlook mixed design-quality critique into the Completion Outlook paragraph. Lack of control group, surrogate endpoints, masking, and interpretability belong mainly in Design Confidence unless directly tied to Completion Outlook score-input evidence.
 - Design Confidence duplicated itself: it repeated the "significant interpretability gap" and "team must defend..." idea twice.
 - Design Confidence remained too categorical. "Well-aligned," "significant interpretability gap," and "required for pivotal registration" should be softened when not directly established by the packet.
 - The participant language still occasionally overcomplicates or overstates. It should remain serious but shorter, less repetitive, and more conditional.
@@ -943,7 +947,7 @@ Preferred prompt wording direction:
 - Prefer "The single-arm, surrogate-endpoint structure may still make the evidence less convincing for a registration-focused decision" over "lacks the comparative rigor required for pivotal registration."
 - Prefer "appears better aligned with the intended refractory / relapsed population" over "is well-aligned."
 - Avoid repeating the same concern twice in Design Confidence; compress to one trade-off sentence.
-- Keep Completion Outlook focused on score movement and changed model-facing fields; keep interpretability and evidence adequacy mainly in Design Confidence.
+- Keep Completion Outlook focused on score movement and changed Completion Outlook score inputs; keep interpretability and evidence adequacy mainly in Design Confidence.
 - Generate fresh key questions each iteration. Avoid reusing the same evidence-standard or operations-balance question unless the latest change truly makes the same question newly relevant.
 - The medical/development question should challenge the current design dilemma created by the latest change. The ClinOps question should raise a high-value execution, governance, data reliability, bias, burden, or proportionality issue linked to the current scenario.
 
@@ -967,7 +971,7 @@ Candidate one-shot lesson:
 - The one-shot should show concise, non-duplicative Design Confidence reasoning.
 - The one-shot should show that the two participant questions evolve across iterations and do not repeat the same wording or same discussion target.
 
-### Live Test Iteration 4: Free-Text / Structured-Field Contradiction
+### Live Test Iteration 4: Trial Description / Structured-Feature Intervention Contradiction Example
 
 Starting point:
 
@@ -980,7 +984,7 @@ Edited scenario:
 - Structured treatment fields remained aligned with a small-molecule oral intervention:
   - `therapeutic_modality_ml`: small molecule.
   - `delivery_profile_ml`: simple oral pill/tablet.
-- Intervention free text added a deliberately contradictory description:
+- `text_context.interventions_ui` added a deliberately contradictory Trial description:
   - cell-based immunotherapy.
   - individualized manufacturing.
   - infusion-site coordination.
@@ -994,23 +998,23 @@ Observed scores:
 What worked:
 
 - Design Confidence appropriately became much more negative when the scenario contained incoherent intervention information.
-- The clinical operations question picked up the manufacturing-coordination issue, which is relevant if the free text were true.
+- The clinical operations question picked up the manufacturing-coordination issue, which is relevant only if the contradictory Trial description detail were true.
 - Total Scenario Score appropriately reflected the negative Design Confidence pressure.
 
 Issues to correct in the prompt:
 
-- The review did not appear to show the required `scenario_consistency_note` despite a clear contradiction between structured fields and free text.
-- The review treated the free-text cell-therapy/manufacturing description as if it were true scenario evidence, even though selected structured fields still said small molecule and simple oral delivery.
-- The prompt must more strongly state that selected structured/categorical fields prevail when they conflict with free text.
-- Contradictory free text may be used as a coherence concern in Design Confidence, but it must not replace the structured fields as the analysis source of truth.
-- Completion Outlook must not use contradictory free-text manufacturing, site coordination, infusion burden, or retention burden as model-facing drivers when the selected model fields remain small molecule / simple oral.
+- The review did not appear to show the required `scenario_consistency_note` despite a clear contradiction between `structured_features` and `text_context`.
+- The review treated the contradictory `text_context.interventions_ui` cell-therapy/manufacturing description as if it were true scenario evidence, even though `structured_features` still said small molecule and simple oral delivery.
+- The prompt must more strongly state that `structured_features` values prevail when they conflict with Trial description fields.
+- A contradictory Trial description field may be used as a scenario-readiness concern in Design Confidence, but it must not replace `structured_features` as the analysis source of truth.
+- Completion Outlook must not use contradictory `text_context.interventions_ui` manufacturing, site coordination, infusion burden, or retention burden as Completion Outlook score drivers when the selected score inputs remain small molecule / simple oral.
 - The narrative introduced an apparent "female-only population" restriction. This was not part of the intended Iteration 4 change and should not be invented unless supported by changed structured fields or text evidence.
 - The two participant questions again repeated earlier evidence-standard and assessment-bias patterns too closely.
 - Design Confidence again used categorical language such as "typically required for registration-enabling studies" and "can provide the necessary evidence." This should be softened.
 
 Preferred prompt wording direction:
 
-- If text and structured fields conflict, start with a short consistency note such as:
+- If `text_context` and `structured_features` conflict, start with the approved participant consistency note:
 
 ```text
 Some scenario details are not fully aligned across free-text fields and selected fields. In this case the value in the selected fields drive the analysis, while the text is used as supporting context. (Intervention text, Therapeutic Modality)
@@ -1025,16 +1029,17 @@ The Completion Outlook changes only slightly. Because the selected intervention 
 - In Design Confidence, prefer:
 
 ```text
-Design Confidence falls because the intervention description is internally inconsistent: selected fields describe an oral small molecule, while the intervention text describes cell-based manufacturing and infusion logistics. The selected fields should drive the score interpretation, but the mismatch makes the scenario harder to defend unless clarified.
+Design Confidence falls because the intervention description is internally inconsistent: `structured_features` describe an oral small molecule, while `text_context.interventions_ui` describes cell-based manufacturing and infusion logistics. `structured_features` should drive the score interpretation, but the mismatch makes the scenario harder to defend unless clarified.
 ```
 
 Candidate one-shot lesson:
 
-- Use this scenario as the primary one-shot example for structured/free-text contradiction handling.
+- Use this scenario as one intervention-specific example for the general `structured_features` / `text_context` contradiction rule.
 - The one-shot should demonstrate a visible `scenario_consistency_note`.
-- The one-shot should show that structured fields prevail in Completion Outlook.
-- The one-shot should allow Design Confidence to penalize coherence, but only as a text/field mismatch concern, not as if the cell-therapy text had replaced selected values.
+- The one-shot should show that `structured_features` prevail in Completion Outlook.
+- The one-shot should allow Design Confidence to penalize scenario readiness, but only as a `text_context` / `structured_features` mismatch concern, not as if the cell-therapy Trial description had replaced selected values.
 - The one-shot should generate new participant questions that focus on clarification and governance of inconsistent scenario evidence rather than repeating the earlier evidence-standard question.
+- Later automated waves should add at least one non-intervention contradiction example, such as endpoint or population, to verify that the same rule applies across all Trial description fields.
 
 ## UI Review Notes From Live Testing
 
@@ -1043,7 +1048,7 @@ These notes should be implemented after the narrative-quality review is complete
 Implementation status - 2026-06-13:
 
 - Pending-review visibility and previous-value/delta display policy have been implemented in `frontend/views/trial_simulator.py`.
-- The prompt has been tightened for structured/free-text conflict handling, fresh key questions, conditional regulatory/evidence language, and non-duplicative Design Confidence reasoning in `src/narratives/prompt_builder.py`.
+- The prompt has been tightened for `structured_features` / `text_context` conflict handling, fresh key questions, conditional regulatory/evidence language, and non-duplicative Design Confidence reasoning in `src/narratives/prompt_builder.py`.
 - `scripts/check_narrative_prompt_builder.py` now protects those prompt requirements.
 - Live Gemini behavior after these wording changes has not yet been evaluated; the first-wave automated eval harness is the next validation step.
 
@@ -1057,7 +1062,7 @@ Implementation status - 2026-06-13:
   1. model-favorable simplification with weaker evidence value;
   2. lower Completion Outlook but potentially stronger patient relevance / design confidence;
   3. operational-burden-only change with no Completion Outlook movement expected;
-  4. structured/free-text contradiction where selected fields must prevail.
+  4. `structured_features` / `text_context` contradiction where structured fields must prevail.
 - The harness records exact UI-label field changes from `models/taxonomy_01.json`, expected behavior, provider output, validated narratives, Design Confidence scoring, key questions, deterministic gap checks, and Codex comments.
 - JSON reports preserve the full reviewed-trace audit payload: input packet, provider prompt, raw provider JSON, and validated review. Markdown reports remain shorter and oriented to user review.
 - The harness separates deterministic checks from human-review expectations so narrative realism, design-confidence judgment quality, and question usefulness are reviewed explicitly rather than hidden inside brittle automatic labels.
@@ -1083,9 +1088,9 @@ First live shakedown - 2026-06-13:
 Observed quality notes:
 
 - Good: Iteration 1 correctly counterweighted a model-favorable simplification. Completion Outlook improved from `45.0` to `50.0`, while Design Confidence fell to `-3.5` because pivotal intent was not supported by single-group, non-randomized, open-label design.
-- Good: The structured/free-text contradiction produced a visible consistency note and acknowledged selected `Small Molecule` / `Simple Oral` fields.
+- Good: The `structured_features` / `text_context` contradiction produced a visible consistency note and acknowledged selected `Small Molecule` / `Simple Oral` fields.
 - Issue: The operational-only iteration kept score delta at `0.0`, but the Completion Outlook narrative still used comments derived from planned enrollment, planned site count, and planned total duration. The prompt/checker should force those three planning-assumption fields into Design Confidence, not Completion Outlook, unless the Completion Outlook score inputs changed.
-- Issue: Iteration 4 repeated the same medical development question from iteration 3. Question-freshness guidance should be reinforced or the eval should require a scenario-specific question when a new structured/free-text contradiction appears.
+- Issue: Iteration 4 repeated the same medical development question from iteration 3. Question-freshness guidance should be reinforced or the eval should require a scenario-specific question when a new `structured_features` / `text_context` contradiction appears.
 - Eval-design correction implemented: Iteration 2 no longer requires total Design Confidence `>= 0.0`. Because the scenario is cumulative and still inherits the prior single-group, non-randomized, open-label pivotal-design weakness, the check now focuses on positive `target_population_alignment` / patient-relevance recognition while allowing total Design Confidence to remain negative.
 - Design-state decision implemented: keep eval iterations cumulative, but treat Design Confidence as a fresh current-scenario recalculation. Prior reviews are continuity/delta context only, not accumulated penalties or bonuses.
 - Added prompt/checker protection against using broad phrases such as `operational footprint`, `operational scale`, `site footprint`, or `recruitment footprint` as proxies for the three planning-assumption fields in Completion Outlook.
@@ -1101,7 +1106,7 @@ Live rerun after cumulative/current-state prompt fix - 2026-06-13:
 - Improvement: the iteration-2 expectation correction worked. The eval no longer requires total Design Confidence to become non-negative; it checks positive `target_population_alignment`, which Gemini satisfied.
 - Improvement: question freshness improved for iteration 4. The final medical question changed from the prior endpoint-standard question to a modality-specific small-molecule/GPCR evidence question.
 - Remaining issue after `first_wave_after_audit_trial1`: planning-assumption comments still leaked into Completion Outlook in iteration 3 through planned enrollment, site count, total duration, and operational-footprint wording. This is a real prompt adherence failure, not just a checker issue.
-- Corrected structured/free-text rule: structured scenario fields prevail for Completion Outlook and Design Confidence analysis. A free-text mismatch does not automatically cap Design Confidence; it requires a clear warning so users know the intervention text should be updated before relying on the scenario.
+- Corrected `structured_features` / `text_context` rule: structured scenario fields prevail for Completion Outlook and Design Confidence analysis. A Trial description mismatch does not automatically cap Design Confidence; it requires a clear warning so users know the intervention description should be updated before relying on the scenario.
 - Calibration note: the new cumulative/current-state wording may have overcorrected by making the provider drop inherited pivotal-design concerns too aggressively in iteration 2 and iteration 4. Future prompt refinement should say "recalculate fresh from current fields" while still preserving unresolved current weaknesses that remain present in the packet.
 
 Agreed narrow guardrail plan before next live run:
@@ -1111,17 +1116,17 @@ Agreed narrow guardrail plan before next live run:
   - Completion Outlook answers only: did Completion Outlook score inputs or early-termination risk-pattern evidence move, and why?
   - Design Confidence answers: is the current full design interpretable, coherent, proportionate, and strategically defensible using all relevant packet evidence?
 - Make duration wording explicit:
-  - `primary_duration_months_ml` / Max Endpoint Duration is model-facing and may support Completion Outlook when present in model evidence.
+  - `primary_duration_months_ml` / Max Endpoint Duration is a Completion Outlook score input and may support Completion Outlook when present in `model_interpretation` evidence.
   - `planned_duration_months` / Planned Total Duration is operational-only and may support Design Confidence proportionality, but must not explain Completion Outlook movement.
 - Add the operational-only zero-delta rule: if `score_delta` is `0.0` and only the three planning assumptions changed, Completion Outlook should use participant-friendly boundary wording: `The Completion Outlook is essentially unchanged because planning assumptions such as enrollment, site count, and total duration do not directly feed the score. They still matter for whether the scenario feels operationally proportionate and executable, so they are reflected in Design Confidence instead.`
 - Strengthen the automated operational-only check to fail movement/risk-change language and extra planning-assumption detail in Completion Outlook for zero-delta operational-only scenarios, not only exact forbidden terms.
 - Add a stale-carryover check: later non-operational iterations must not describe prior planned enrollment, site count, or planned-duration changes as if they were adjusted in the latest iteration.
-- Enforce structured/free-text warning without capping Design Confidence: when controlled fields and intervention text conflict, require `Some scenario details are not fully aligned across free-text fields and selected fields. In this case the value in the selected fields drive the analysis, while the text is used as supporting context.` followed by participant-readable field labels in parentheses, such as `(Intervention text, Therapeutic Modality)`.
-- Adjust the structured/free-text eval expectation from "Design Confidence must be negative" to "controlled structured fields drive analysis; exact warning required; no automatic Design Confidence cap."
+- Enforce the approved `structured_features` / `text_context` warning without capping Design Confidence: when controlled fields and intervention description conflict, require the approved participant consistency sentence followed by participant-readable field labels in parentheses, such as `(Intervention text, Therapeutic Modality)`.
+- Adjust the `structured_features` / `text_context` eval expectation from "Design Confidence must be negative" to "`structured_features` drive analysis; exact warning required; no automatic Design Confidence cap."
 
 Implementation status:
 
-- Implemented in `src/narratives/prompt_builder.py`, `scripts/check_narrative_prompt_builder.py`, and `scripts/run_narrative_eval_suite.py`. Operational-only zero-delta wording was updated to avoid internal phrases such as `model-facing` in participant narratives.
+- Implemented in `src/narratives/prompt_builder.py`, `scripts/check_narrative_prompt_builder.py`, and `scripts/run_narrative_eval_suite.py`. Operational-only zero-delta wording was updated to avoid internal model vocabulary in participant narratives.
 - Local verification passed: prompt-builder checker, py_compile, eval success-smoke, mock one-trial smoke, and `git diff --check`.
 
 Live rerun after participant wording fix - 2026-06-13:
@@ -1129,51 +1134,51 @@ Live rerun after participant wording fix - 2026-06-13:
 - Run: `python scripts/run_narrative_eval_suite.py --provider configured --max-trials 1 --run-id first_wave_live_trial1_after_warning_fix_live`.
 - Result: all four visible iterations returned validated Scenario Reviews; deterministic result was `1` failed check and `2` warnings.
 - Improvement: the operational-only Completion Outlook sentence was followed exactly. The review stated that planning assumptions such as enrollment, site count, and total duration do not directly feed the score, and that they are reflected in Design Confidence instead.
-- Improvement: the structured/free-text warning used the approved participant wording and appended field labels in parentheses, for example `(Intervention text, Therapeutic Modality, Administration Complexity)`.
-- Improvement: the structured/free-text contradiction did not automatically cap Design Confidence, which matches the source-of-truth rule for selected fields.
+- Improvement: the `structured_features` / `text_context` warning used the approved participant wording and appended field labels in parentheses, for example `(Intervention text, Therapeutic Modality, Administration Complexity)`.
+- Improvement: the `structured_features` / `text_context` contradiction did not automatically cap Design Confidence, which matches the source-of-truth rule for structured fields.
 - Remaining issue: the operational-only iteration failed because the harness expected total Design Confidence `<= 0.0`, but the scenario still inherited patient/evidence strengths from prior cumulative edits. The better expectation is subcategory-level: total Design Confidence may remain positive, but `operational_burden_balance` should be neutral or negative when enrollment, sites, or planned duration increase without matching evidence gain.
 - Remaining issue: the medical/development question repeated verbatim across later iterations. The prompt needs a stronger rule that unresolved concerns can persist, but the exact participant question must be rewritten around the newest scenario change.
-- Remaining issue: in the structured/free-text contradiction, the mismatch was discussed strongly enough that it could be read as driving the scenario judgment. When selected fields prevail, the mismatch may be explained in the consistency note and narrative, but it should remain bounded context and should not override selected-field evidence or become the main Design Confidence score driver.
+- Remaining issue: in the `structured_features` / `text_context` contradiction, the mismatch was discussed strongly enough that it could be read as driving the scenario judgment. When `structured_features` prevail, the mismatch may be explained in the consistency note and narrative, but it should remain scenario-readiness context and should not override structured-feature evidence or become the main Design Confidence score driver.
 
 Implemented calibration after this rerun:
 
 - Updated `scripts/run_narrative_eval_suite.py` so the operational-only iteration checks `operational_burden_balance <= 0.0` instead of total Design Confidence `<= 0.0`.
 - Added deterministic failure for verbatim repeated medical or operational questions; similar but non-identical questions remain warnings.
-- Kept structured/free-text mismatch handling as a human-review focus rather than a hard Completion Outlook narrative failure: narratives may discuss the mismatch, while selected fields remain the scoring source of truth.
+- Kept `structured_features` / `text_context` mismatch handling as a human-review focus rather than a hard Completion Outlook narrative failure: narratives may discuss the mismatch, while `structured_features` remain the scoring source of truth.
 - Updated `src/narratives/prompt_builder.py` to state that operational-burden-only increases without matching evidence gain should not improve `operational_burden_balance`.
 - Updated `src/narratives/prompt_builder.py` to state that prior visible questions must not be repeated verbatim; if the concern remains, rewrite around the newest scenario change.
-- Updated `src/narratives/prompt_builder.py` to state that structured/free-text mismatch may be discussed in narratives, but should remain bounded interpretability/coherence context and should not become the main Design Confidence score driver.
+- Updated `src/narratives/prompt_builder.py` to state that `structured_features` / `text_context` mismatch may be discussed in narratives, but should remain scenario-readiness context and should not become the main Design Confidence score driver.
 
 Live rerun after audit hardening - 2026-06-13:
 
 - Run: `python scripts/run_narrative_eval_suite.py --provider configured --max-trials 1 --run-id first_wave_after_audit_trial1`.
 - Result: all four visible iterations returned validated Scenario Reviews; deterministic result was `3` failed checks and `2` warnings.
-- What worked: shortcut scenario was correctly penalized by Design Confidence; patient-relevance scenario credited `target_population_alignment`; operational-only scenario kept `operational_burden_balance` neutral rather than positive; structured/free-text contradiction used the approved warning wording and selected fields prevailed.
-- Remaining issue: participant-facing Completion Outlook used internal wording such as `model-facing risk profile`. This should be replaced by plain language such as `Completion Outlook score inputs` or simply `score inputs`.
+- What worked: shortcut scenario was correctly penalized by Design Confidence; patient-relevance scenario credited `target_population_alignment`; operational-only scenario kept `operational_burden_balance` neutral rather than positive; `structured_features` / `text_context` contradiction used the approved warning wording and structured fields prevailed.
+- Remaining issue: participant-facing Completion Outlook used internal wording such as `model-facing risk profile`. This remains a quoted bad example; the replacement is plain language such as `Completion Outlook score inputs` or simply `score inputs`.
 - Remaining issue: operational-only Completion Outlook still added comments derived from the three planning-assumption fields: planned enrollment, planned site count, and planned total duration. These fields should not explain Completion Outlook; they belong in Design Confidence as proportionality/executability context.
-- Clarification from user: `operational details` in this boundary means only the three planning-assumption fields derived outside the Completion Outlook score: planned enrollment, planned site count, and planned total duration. Other operational trial features may still be discussed in Completion Outlook when they are actual Completion Outlook score inputs and model evidence supports them.
+- Clarification from user: `operational details` in this boundary means only the three planning-assumption fields derived outside the Completion Outlook score: planned enrollment, planned site count, and planned total duration. Other operational trial features may still be discussed in Completion Outlook when they are actual Completion Outlook score inputs and `model_interpretation` evidence supports them.
 - Remaining issue: later iterations can carry stale wording from prior changes, such as describing planning assumptions as adjusted in the current iteration when the latest change is actually modality/text. The eval should fail this stale prior-change wording.
-- Remaining issue: questions can remain too similar across later iterations. If the newest change is operational-only, at least one question should focus on operational proportionality or executability. If the newest change creates a structured/free-text conflict, at least one question should focus on resolving that contradiction before relying on the scenario.
+- Remaining issue: questions can remain too similar across later iterations. If the newest change is operational-only, at least one question should focus on operational proportionality or executability. If the newest change creates a `structured_features` / `text_context` conflict, at least one question should focus on resolving that contradiction before relying on the scenario.
 
 Implemented adaptation after this run:
 
-- Updated `src/narratives/prompt_builder.py` to avoid participant-facing `model-facing` language in the main question split and use `Completion Outlook score inputs`.
+- Updated `src/narratives/prompt_builder.py` to avoid participant-facing internal model vocabulary in the main question split and use `Completion Outlook score inputs`.
 - Narrowed the Completion Outlook boundary to the three planning-assumption fields: planned enrollment, planned site count, and planned total duration. Broad phrases such as `operational footprint`, `operational scale`, `site footprint`, and `recruitment footprint` are forbidden only when used as proxies for those three planning assumptions in Completion Outlook.
 - Strengthened the operational-only zero-delta instruction: after the agreed boundary sentence, do not add extra Completion Outlook commentary derived from those three planning assumptions; discuss them only in Design Confidence.
-- Strengthened question freshness instructions for operational-only and structured/free-text contradiction iterations.
+- Strengthened question freshness instructions for operational-only and `structured_features` / `text_context` contradiction iterations.
 - Updated `scripts/run_narrative_eval_suite.py` to fail extra planning-assumption detail after the agreed operational-only boundary sentence and to fail stale planning-assumption carryover in later non-operational iterations.
 
 Robust control-layer refinement after planning review:
 
 - Root cause: the provider has to evaluate the current cumulative scenario while also explaining the latest iteration. That creates a legitimate tension: prior concerns may still be true, but they must not be described as newly changed.
 - Root cause: the packet necessarily includes planned enrollment, planned site count, and planned total duration for Design Confidence, so prose-only prompt bans are fragile for Completion Outlook.
-- Root cause: question freshness cannot rely only on "be fresh"; the provider tends to repeat the dominant unresolved evidence-standard question even when the newest change is operational or a structured/free-text contradiction.
+- Root cause: question freshness cannot rely only on "be fresh"; the provider tends to repeat the dominant unresolved evidence-standard question even when the newest change is operational or a `structured_features` / `text_context` contradiction.
 - Strategy: keep Gemini's useful expert Design Confidence reasoning mostly unchanged, but add a small app-owned control layer for hard product boundaries.
 - Added `review_controls` to eval packets with `completion_outlook_mode`, `latest_change_focus`, `completion_outlook_forbidden_latest_fields`, and `question_controls`.
 - For the operational planning-assumption zero-delta mode, `completion_outlook_mode=fixed_planning_assumption_boundary` and `required_completion_outlook_sentence` is the agreed participant-facing sentence.
 - The eval harness now applies a narrow deterministic override before storing traces for this hard-boundary mode: `completion_outlook_analysis.risk_pattern_summary` and `movement_explanation` are normalized to the agreed sentence. This is intentionally limited to the three planning-assumption fields and does not modify Design Confidence, subcategory rationale, questions, or scoring.
 - The provider prompt now tells Gemini to follow `packet.review_controls` when present and treats those controls as product-level logic, not clinical reasoning.
-- The eval checker now verifies latest-change question focus for planning-only and structured/free-text contradiction steps.
+- The eval checker now verifies latest-change question focus for planning-only and `structured_features` / `text_context` contradiction steps.
 - The eval checker now exposes `completion_outlook_operational_extra_detail`, `completion_outlook_stale_prior_change`, and `question_latest_change_focus` labels in the Markdown report.
 
 Implementation files:
@@ -1192,12 +1197,12 @@ Verification:
 Audit follow-up implemented before next live run:
 
 - Preserve raw provider output before the operational planning-assumption override. JSON summaries now include `pre_control_output_json`, `pre_control_validated_review`, and `pre_control_scoring`; Markdown reports show the pre-control Completion Outlook when an override was applied.
-- Replace remaining active prompt wording that could leak internal phrasing into participant narratives: `model-supported dimensions` became `Completion Outlook score inputs`, and `model evidence` became `Completion Outlook score evidence` in the active provider prompt.
+- Replace remaining active prompt wording that could leak internal phrasing into participant narratives: internal model vocabulary became `Completion Outlook score inputs`, and generic score-evidence wording became `Completion Outlook score evidence` in the active provider prompt.
 - Extend `python scripts/run_narrative_eval_suite.py --success-smoke` so it exercises `review_controls`, verifies the packet hash changes when controls are attached, confirms the fixed operational-boundary sentence is applied, and confirms the pre-control Completion Outlook is preserved.
 
 Cautious pre-rerun strengthening:
 
-- Added a narrow participant-language rule to avoid internal phrases such as `model-facing`, `model-supported`, `the model says`, or `model reflects`; preferred replacements are `Completion Outlook score inputs`, `score pattern`, or `score-driving fields`.
+- Added a narrow participant-language rule to avoid internal phrases such as `model-facing`, `model-supported`, `the model says`, or `model reflects`; these are quoted bad examples. Preferred replacements are `Completion Outlook score inputs`, `score pattern`, or `score-driving fields`.
 - Added a narrow `review_controls` continuity rule: explain the latest change without re-labeling older cumulative issues as newly changed.
 - No additional clinical/domain constraints were added before the next live run, to avoid degrading the currently good Design Confidence reasoning.
 
@@ -1205,23 +1210,35 @@ Live rerun after control-layer hardening - 2026-06-13:
 
 - Run: `python scripts/run_narrative_eval_suite.py --provider configured --max-trials 1 --run-id first_wave_control_layer_rerun_1`.
 - Result: all four visible iterations returned validated Scenario Reviews; deterministic result was `1` failed check and `0` warnings.
-- What worked: operational-only Completion Outlook used the approved boundary sentence before and after the deterministic control; shortcut scenario penalized weaker evidence despite Completion Outlook improvement; patient relevance credited Target Population Alignment; structured/free-text contradiction used the approved warning and selected structured fields in Completion Outlook.
+- What worked: operational-only Completion Outlook used the approved boundary sentence before and after the deterministic control; shortcut scenario penalized weaker evidence despite Completion Outlook improvement; patient relevance credited Target Population Alignment; `structured_features` / `text_context` contradiction used the approved warning and selected structured fields in Completion Outlook.
 - Eval calibration issue: the operational-only question check was too narrow. The generated questions addressed enrollment, duration, expanded site network, oversight, and data quality, but the checker required a smaller vocabulary such as `planned enrollment`, `site count`, `proportionate`, or `executable`.
 - Remaining participant-language issue: Gemini still used phrases such as `in the model` and `model signals`. This should be caught by deterministic checks and lightly discouraged in the prompt without adding broad clinical rules.
-- Remaining structured/free-text quality issue: the mismatch can still dominate Design Confidence too strongly across multiple subcategories. The prompt should keep one compact principle: free-text mismatch remains bounded coherence context unless selected structured fields or endpoint text independently support a stronger penalty. Detailed severity enforcement should live in the eval checker as warnings/human-review signals, not as a long prompt rule list.
+- Remaining `structured_features` / `text_context` quality issue: the mismatch can still dominate Design Confidence too strongly across multiple subcategories. The prompt should keep one compact principle: only the conflicting Trial description detail is stale/superseded by the structured value; non-conflicting Trial description details and latest `text_context` changes remain useful context. The conflict should be framed as a scenario-readiness warning, not evidence that the selected structured design itself has the contradicted feature.
 
 Implemented adaptation after this run:
 
 - Broadened the operational-only question-focus checker to accept realistic wording around `enrollment`, `duration`, `scale`, `expanded network`, `oversight`, `data quality`, `site-level`, and `governance`.
 - Added deterministic participant-language failure for internal model vocabulary such as `model signals`, `model suggests`, `model indicates`, `model predicts`, `model implies`, `model-driven`, `according to the model`, `in the model`, and related terms.
-- Added structured/free-text bounded-impact warnings when a mismatch strongly penalizes Endpoint Evidence Strength without endpoint evidence support, or when mismatch language appears to dominate several severe Design Confidence subcategory penalties.
-- Kept prompt additions minimal: expanded the participant-language avoidance list and added one bounded-mismatch principle. No new clinical/domain rule block was added.
+- Added `structured_features` / `text_context` scenario-readiness dominance warnings when a mismatch strongly penalizes Endpoint Evidence Strength without endpoint evidence support, or when mismatch language appears to drive multiple strong negative Design Confidence subcategory penalties.
+- Kept prompt additions minimal: expanded the participant-language avoidance list and added one scenario-readiness principle. No new clinical/domain rule block was added.
 
 Minimal question-quality adjustment:
 
-- Replaced overlapping question-freshness guidance with a lighter two-question-pair rule: for later visible iterations, one question should focus on the newest material scenario change, while the other should raise a broader strategic development-design tension using the trial as a concrete example.
+- Replaced overlapping question-freshness guidance with a lighter two-question-pair rule: for later visible iterations, the medical/development question should focus on the medical or evidence implication of the newest material scenario change, while the clinical-operations question should raise a broader operational-development debate using the trial or latest change as a concrete example.
 - Removed the permissive `unless the latest change genuinely reopens the same dilemma` wording. If the same dilemma remains relevant, the provider should reframe it through the newest material change rather than repeating the prior question frame.
 - Kept similarity as a warning, not a failure. The warning text now asks the reviewer to check whether the two-question pair has this newest-change / broader-strategic split.
+- Added a light question-framing rule: questions should be general debate prompts. Prompt examples now use neutral wording rather than addressing `the team`; after the three-trial rerun, the eval now fails key questions that directly address `the team`.
+- Added an operational-only question bridge: when the latest change is limited to planning assumptions, the medical/development question should connect current evidence ambition to whether the added operational burden is justified rather than repeating the prior endpoint-standard frame.
+- Added a targeted three-trial follow-up: avoid repeating the same question opening stem across consecutive visible iterations, especially `What evidence standard would...`; for `structured_features` / `text_context` conflicts, questions should ask how to resolve or reconcile the scenario before relying on it, not how to operationalize stale contradictory Trial description detail.
+- Added a shortcut-simplification calibration: when easier execution comes from weaker comparator, masking, allocation, or endpoint rigor, `operational_burden_balance` may receive only limited feasibility credit rather than a strong positive rating.
+- Live rerun `first_wave_operational_shortcut_cap_3trials_1` returned 12/12 reviewed visible iterations, 0 failed checks, and 3 warning checks. The shortcut cap held: shortcut-driven simplification received only limited Operational Burden Balance credit. Remaining warnings were limited to question opening-frame repetition and one scenario-readiness dominance review item; no immediate prompt change is required from this run.
+
+Completion Outlook and scenario-readiness boundary refinement:
+
+- Planning-assumption boundary: if the latest change is limited to planned enrollment, planned site count, and/or planned total duration, the Completion Outlook score is unchanged because these fields do not feed the Completion Outlook score. If other Completion Outlook score inputs also changed, explain the Completion Outlook narrative using those score-input changes only; planning assumptions remain Design Confidence context for operational proportionality and executability.
+- The fixed planning-assumption Completion Outlook sentence is exclusive to the planning-assumption-only boundary mode. The eval now fails if a non-planning-only scenario reuses the exact fixed sentence.
+- Trial description field boundary: `text_context` Trial description fields may support the Completion Outlook narrative only when they align with or clarify selected Completion Outlook score inputs. A conflicting Trial description field detail is stale scenario text superseded by the corresponding `structured_features` value and should not be used as Completion Outlook evidence.
+- Scenario-readiness boundary: `structured_features` / `text_context` conflict remains visible and may affect Design Confidence as a readiness issue, but should not be treated as evidence that the selected structured design itself has the contradicted feature. The eval warns when the conflict appears to drive multiple strong negative subcategory ratings without independent non-conflicting structured support.
 
 Qualitative resource and budget burden:
 
@@ -1275,7 +1292,7 @@ Completion Outlook acceptance checks:
 
 - Pass if Completion Outlook does not cite planned enrollment or planned site count as score drivers. Verification: automated evidence-field check plus manual wording review.
 - Pass if Completion Outlook does not cite planned total duration / operational duration assumption as a score driver. Verification: automated evidence-field check plus manual wording review.
-- Pass if Completion Outlook may cite `primary_duration_months_ml` / maximum primary endpoint duration when it is present as model-facing XGBoost evidence. Verification: automated packet/field check.
+- Pass if Completion Outlook may cite `primary_duration_months_ml` / maximum primary endpoint duration when it is present as Completion Outlook score-input evidence. Verification: automated packet/field check.
 - Pass if Completion Outlook describes lower/higher risk of early termination or resemblance to completed/terminated historical patterns, rather than promising chance of completion. Verification: manual or LLM-review.
 - Pass if Completion Outlook does not claim that any field caused completion or caused early termination risk. Verification: manual or LLM-review.
 - Pass if interpretive hypotheses include model signal, possible pattern, context modifiers, and boundary when used. Verification: automated schema check plus manual quality review.
@@ -1291,7 +1308,7 @@ Design Confidence acceptance checks:
 
 Key-question acceptance checks:
 
-- Pass if the two questions differ materially from the previous visible iteration, with one question anchored to the newest material scenario change and the other raising a broader strategic development-design tension. Verification: golden examples plus manual review.
+- Pass if the two questions differ materially from the previous visible iteration, with the medical/development question anchored to the newest material scenario change and the clinical-operations question raising a broader operational-development debate. Verification: golden examples plus manual review.
 - Pass if each question is linked to the latest value changes, current narrative tension, or a high-value clinical-development / ClinOps dilemma relevant to the trial. Verification: manual or LLM-review.
 - Pass if questions remain open-ended and not answerable with yes/no. Verification: automated pattern check plus manual review.
 
@@ -1309,7 +1326,7 @@ Format and UI-readiness acceptance checks:
 - Pass if evidence fields used for rationale remain available for tooltip, expander, or facilitator/debug view. Verification: automated trace check.
 - Pass if `scenario_consistency_note` appears only when a clear text/structured-field mismatch remains. Verification: golden examples plus manual review.
 - Pass if the consistency note uses participant-readable field labels in parentheses. Verification: automated schema/string check plus manual review.
-- Pass if text-change evidence is available when material free-text fields changed. Verification: automated packet check.
+- Pass if `text_change_evidence` is available when material Trial description fields changed. Verification: automated packet check.
 
 Lifecycle acceptance checks:
 
@@ -1343,7 +1360,7 @@ Lifecycle acceptance checks:
    - Add optional therapeutic-area context lookup.
    - Include `therapeutic_area_context` with `pack_found`.
    - Record canonical therapeutic-area value and safe expected filename.
-   - Add `text_change_evidence` for material free-text edits.
+   - Add `text_change_evidence` for material Trial description field edits.
    - Preserve missing-pack trace without failing.
 
 4. Update prompt builder and response schema.
@@ -1415,7 +1432,7 @@ Current prompt strengths to preserve:
 - Evidence-first Design Confidence sequence: evidence fields, rationale, then rating.
 - Provider is forbidden from returning app-owned score fields.
 - Reference packs are secondary to scenario packet evidence.
-- User-editable trial text is treated as context, not instruction.
+- Trial description fields in `text_context` are treated as context, not instruction.
 - Hidden baseline context exists and is not participant-visible by default.
 - Provider traces keep model/settings/validation metadata without secrets.
 - Fallback/retry behavior is bounded.
@@ -1433,8 +1450,8 @@ Target enhancements to add:
 - Design Confidence as a quality-of-design adjustment and challenge layer, not a second completion predictor.
 - Design Confidence subcategory objects with rating, evidence fields, rationale, short rationale, optional lenses, and optional regulatory/finance note.
 - Optional TA `.md` lookup by XGBoost canonical therapeutic-area value.
-- `scenario_consistency_note` for clear free-text / selected-field mismatch.
-- `text_change_evidence` for material free-text edits.
+- `scenario_consistency_note` for clear `text_context` / `structured_features` mismatch.
+- `text_change_evidence` for material Trial description field edits.
 - Treemap short rationales for Design Confidence subcategories.
 - Regression acceptance criteria with automated/manual/LLM-review classification.
 

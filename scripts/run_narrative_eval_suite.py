@@ -128,11 +128,13 @@ SCENARIO_STEPS = (
         },
         expectations={
             "design_confidence_max": 0.0,
+            "operational_burden_balance_max": 1.5,
             "must_challenge_completion_gain": True,
             "forbid_completion_operational_drivers": True,
             "expected_quality": (
                 "Completion Outlook may improve, but Design Confidence should be neutral or negative "
-                "because the scenario weakens comparative rigor or endpoint interpretability."
+                "because the scenario weakens comparative rigor or endpoint interpretability. Operational Burden Balance "
+                "may credit simpler execution only mildly when the simplification comes from weakened comparator, masking, allocation, or endpoint rigor."
             ),
         },
     ),
@@ -183,7 +185,7 @@ SCENARIO_STEPS = (
     ),
     ScenarioStep(
         step_id="structured_text_intervention_conflict",
-        title="Structured/free-text contradiction",
+        title="structured_features / text_context intervention contradiction example",
         completion_delta=-0.3,
         pillar_for_delta="Scientific Challenge",
         structured_edits={
@@ -204,9 +206,10 @@ SCENARIO_STEPS = (
             "structured_fields_prevail": True,
             "forbid_completion_operational_drivers": True,
             "expected_quality": (
-                "The selected structured fields should drive analysis for Completion Outlook and Design Confidence. "
-                "Contradictory intervention text must trigger a clear warning, but should not override selected fields "
-                "or become the main Design Confidence score driver."
+                "This intervention example represents the general structured_features / text_context conflict rule. `structured_features` should drive Completion Outlook and core Design Confidence analysis. "
+                "Contradictory Trial description detail must trigger a scenario-readiness warning, but stale conflicting detail "
+                "should not be used as Completion Outlook evidence or as evidence that the selected structured design "
+                "has the contradicted feature."
             ),
         },
     ),
@@ -571,7 +574,7 @@ def _review_controls_for_step(step: ScenarioStep) -> dict[str, Any]:
     elif step.step_id == "structured_text_intervention_conflict":
         controls.update({
             "completion_outlook_mode": "consistency_note_only",
-            "latest_change_focus": "structured_free_text_conflict",
+            "latest_change_focus": "structured_features_text_context_conflict",
         })
         controls["question_controls"].update({
             "medical_question_focus": "evidence_implications_of_resolving_the_modality_mismatch",
@@ -718,6 +721,11 @@ def _completion_text_without_operational_boundary(text: str) -> str:
     return normalized.replace(OPERATIONAL_ONLY_COMPLETION_OUTLOOK_BOUNDARY, "")
 
 
+def _contains_operational_only_boundary(text: str) -> bool:
+    normalized = " ".join(str(text or "").split())
+    return OPERATIONAL_ONLY_COMPLETION_OUTLOOK_BOUNDARY in normalized
+
+
 def _has_expected_structured_text_warning(message: str, expected_fields: tuple[str, ...] = ()) -> bool:
     text = str(message or "").strip()
     if not text.startswith(STRUCTURED_TEXT_CONFLICT_WARNING):
@@ -805,6 +813,12 @@ def _grade_trace(
             })
 
     if step and step.step_id != "operational_burden_without_matching_evidence_gain":
+        if _contains_operational_only_boundary(texts["completion"]):
+            findings.append({
+                "severity": "fail",
+                "check": "completion_outlook_planning_boundary_leak",
+                "detail": "Non-planning-only scenario reused the fixed planning-assumption Completion Outlook sentence.",
+            })
         stale_planning_terms = (
             "specific operational assumptions adjusted in this iteration",
             "planning assumptions adjusted in this iteration",
@@ -850,6 +864,41 @@ def _grade_trace(
             "detail": "Participant-facing narrative uses internal model vocabulary instead of score-pattern language.",
         })
 
+    prescriptive_redesign_terms = (
+        "would need to transition",
+        "need to transition",
+        "needs to transition",
+        "must transition",
+        "should transition",
+        "would need to switch",
+        "need to switch",
+        "needs to switch",
+        "must switch",
+        "should switch",
+        "would need to be randomized",
+        "needs to be randomized",
+        "must be randomized",
+        "should be randomized",
+        "would need to be blinded",
+        "needs to be blinded",
+        "must be blinded",
+        "should be blinded",
+        "would need to add blinding",
+        "needs to add blinding",
+        "must add blinding",
+        "should add blinding",
+        "would need to add a comparator",
+        "needs to add a comparator",
+        "must add a comparator",
+        "should add a comparator",
+    )
+    if any(term in participant_text for term in prescriptive_redesign_terms):
+        findings.append({
+            "severity": "fail",
+            "check": "participant_prescriptive_redesign",
+            "detail": "Participant-facing narrative prescribes a specific redesign path instead of stating the unresolved concern.",
+        })
+
     design_confidence = pd.to_numeric(trace.get("design_confidence"), errors="coerce")
     if step:
         expectations = step.expectations
@@ -889,7 +938,7 @@ def _grade_trace(
                 })
         consistency = (trace.get("scenario_consistency_note") or {})
         if expectations.get("requires_consistency_note") and not consistency.get("has_clear_mismatch"):
-            findings.append({"severity": "fail", "check": "missing_consistency_note", "detail": "Expected visible scenario_consistency_note for structured/free-text conflict."})
+            findings.append({"severity": "fail", "check": "missing_consistency_note", "detail": "Expected visible scenario_consistency_note for structured_features / text_context conflict."})
         if expectations.get("requires_exact_consistency_warning") and not _has_expected_structured_text_warning(
             consistency.get("message") or "",
             tuple(expectations.get("expected_consistency_fields") or ()),
@@ -897,14 +946,15 @@ def _grade_trace(
             findings.append({
                 "severity": "fail",
                 "check": "scenario_consistency_warning",
-                "detail": "Expected structured/free-text warning followed by participant-readable field labels in parentheses.",
+                "detail": "Expected structured_features / text_context warning followed by participant-readable field labels in parentheses.",
             })
         if expectations.get("structured_fields_prevail"):
             design_lower = texts["design"].lower()
             subcategory_points = _design_confidence_subcategories(trace)
             if "cell" in completion_lower and "not" not in completion_lower and "contradict" not in completion_lower:
-                findings.append({"severity": "warn", "check": "structured_fields_prevail", "detail": "Completion Outlook may treat contradictory cell-therapy text as scenario truth."})
-            if "small molecule" not in (completion_lower + " " + design_lower):
+                findings.append({"severity": "warn", "check": "structured_fields_prevail", "detail": "Completion Outlook may treat contradictory Trial description detail as scenario truth."})
+            structured_field_text = (completion_lower + " " + design_lower).replace("-", " ")
+            if "small molecule" not in structured_field_text:
                 findings.append({"severity": "warn", "check": "structured_fields_context", "detail": "Review may not clearly acknowledge the selected Small Molecule field."})
             endpoint = subcategory_points.get("endpoint_evidence_strength") or {}
             endpoint_points = pd.to_numeric(endpoint.get("points"), errors="coerce")
@@ -919,8 +969,8 @@ def _grade_trace(
             if pd.notna(endpoint_points) and endpoint_points <= -3 and not any(ref in endpoint_evidence for ref in endpoint_refs):
                 findings.append({
                     "severity": "warn",
-                    "check": "structured_text_bounded_impact",
-                    "detail": "Structured/free-text mismatch strongly penalizes Endpoint Evidence Strength without endpoint evidence support.",
+                    "check": "structured_text_readiness_dominance",
+                    "detail": "structured_features / text_context mismatch strongly penalizes Endpoint Evidence Strength without endpoint evidence support.",
                 })
             severe_subcategories = [
                 name
@@ -929,18 +979,23 @@ def _grade_trace(
                 and pd.to_numeric((value or {}).get("points"), errors="coerce") <= -3
             ]
             mismatch_terms = ("contradiction", "mismatch", "misalignment", "conflict")
-            if (
-                pd.notna(design_confidence)
-                and design_confidence <= -6
-                and len(severe_subcategories) >= 2
-                and any(term in design_lower for term in mismatch_terms)
-            ):
+            mismatch_driven_severe = []
+            for name in severe_subcategories:
+                value = subcategory_points.get(name) or {}
+                subcategory_text = " ".join(
+                    str(value.get(key) or "").lower()
+                    for key in ("rationale", "short_rationale", "regulatory_or_finance_note")
+                )
+                evidence_text = " ".join(str(field).lower() for field in value.get("evidence_fields") or [])
+                if any(term in subcategory_text for term in mismatch_terms) or "text_context.interventions_ui" in evidence_text:
+                    mismatch_driven_severe.append(name)
+            if len(mismatch_driven_severe) >= 2 and any(term in design_lower for term in mismatch_terms):
                 findings.append({
                     "severity": "warn",
-                    "check": "structured_text_bounded_impact",
+                    "check": "structured_text_readiness_dominance",
                     "detail": (
-                        "Structured/free-text mismatch appears to dominate multiple Design Confidence subcategories; "
-                        "human review should confirm selected fields still prevail."
+                        "structured_features / text_context mismatch appears to drive multiple strong negative Design Confidence subcategories; "
+                        "human review should confirm this is a scenario-readiness issue rather than stale Trial description detail overriding structured_features."
                     ),
                 })
     for label, question in (
@@ -951,6 +1006,12 @@ def _grade_trace(
             findings.append({"severity": "warn", "check": f"{label}_form", "detail": "Question does not end with a question mark."})
         if re.match(r"^\s*(is|are|can|could|should|would|will|does|do|did)\b", question, re.I):
             findings.append({"severity": "warn", "check": f"{label}_yes_no", "detail": "Question may be answerable yes/no."})
+        if re.search(r"\bthe team\b", question, re.I):
+            findings.append({
+                "severity": "fail",
+                "check": f"{label}_direct_team_address",
+                "detail": "Participant question addresses 'the team' instead of using a general debate prompt.",
+            })
 
     if previous_visible_trace:
         previous_texts = _review_texts(previous_visible_trace)
@@ -971,6 +1032,14 @@ def _grade_trace(
                         f"Question similarity to previous iteration is {similarity:.2f}; check whether one question "
                         "is anchored to the newest material change and the other uses the trial as an example of a broader development-design tension."
                     ),
+                })
+            current_opening = " ".join(_normalize_question(texts[label]).split()[:4])
+            previous_opening = " ".join(_normalize_question(previous_texts[label]).split()[:4])
+            if current_opening and current_opening == previous_opening:
+                findings.append({
+                    "severity": "warn",
+                    "check": f"{label}_opening_frame_repetition",
+                    "detail": "Question repeats the prior visible question opening frame; review whether the newest change is being used to reframe the discussion.",
                 })
 
     combined_questions = f"{texts['medical_question']} {texts['operations_question']}".lower()
@@ -1014,12 +1083,44 @@ def _grade_trace(
             "resolve",
             "intervention text",
             "therapeutic modality",
+            "inconsistently defined",
+            "not fully aligned",
         )
         if not any(term in combined_questions for term in focus_terms):
             findings.append({
                 "severity": "fail",
                 "check": "question_latest_change_focus",
-                "detail": "Structured/free-text contradiction iteration should include a question about resolving the mismatch.",
+                "detail": "structured_features / text_context contradiction iteration should include a question about resolving the mismatch.",
+            })
+        stale_operationalization_terms = (
+            "manage the complex infusion",
+            "manage complex infusion",
+            "manage infusion logistics",
+            "manage the infusion logistics",
+            "operationalize the complex",
+            "operationalize complex",
+            "requirements of a cell-based",
+            "cell-based immunotherapy are feasible",
+            "individualized manufacturing",
+            "infusion logistics",
+            "infusion-site coordination",
+        )
+        stale_resolution_terms = (
+            "reconcile",
+            "resolve",
+            "discrepancy",
+            "contradiction",
+            "mismatch",
+            "consistency",
+            "inconsistently defined",
+        )
+        if any(term in combined_questions for term in stale_operationalization_terms) and not any(
+            term in combined_questions for term in stale_resolution_terms
+        ):
+            findings.append({
+                "severity": "fail",
+                "check": "question_operationalizes_stale_text",
+                "detail": "structured_features / text_context contradiction question asks how to operationalize stale contradictory Trial description detail.",
             })
 
     if not findings:
@@ -1241,9 +1342,10 @@ def _deterministic_check_labels(step: ScenarioStep | None) -> list[str]:
         labels.append("completion_outlook_operational_extra_detail")
     if step.step_id != "operational_burden_without_matching_evidence_gain":
         labels.append("completion_outlook_stale_prior_change")
+        labels.append("completion_outlook_planning_boundary_leak")
     if expectations.get("structured_fields_prevail"):
         labels.append("structured_fields_prevail")
-        labels.append("structured_text_bounded_impact")
+        labels.append("structured_text_readiness_dominance")
     if step.step_id in {"operational_burden_without_matching_evidence_gain", "structured_text_intervention_conflict"}:
         labels.append("question_latest_change_focus")
     return labels
@@ -1258,7 +1360,7 @@ def _human_review_expectations(step: ScenarioStep | None) -> list[str]:
         "must_challenge_completion_gain": "Review whether Design Confidence challenges a model-favorable shortcut instead of rewarding it.",
         "must_allow_design_gain_despite_completion_decline": "Review whether the narrative allows lower Completion Outlook to coexist with stronger design defensibility.",
         "must_not_move_completion_from_operational_only": "Review whether Completion Outlook stays separate from operational-only assumptions.",
-        "structured_fields_prevail": "Review whether selected structured fields clearly prevail over contradictory free text, while the mismatch remains a warning/context item rather than the main Design Confidence score driver.",
+        "structured_fields_prevail": "Review whether structured_features clearly prevail over contradictory Trial description fields, while the mismatch remains a scenario-readiness issue rather than evidence that the selected structured design has the contradicted feature.",
     }
     for key, text in flag_text.items():
         if expectations.get(key):
