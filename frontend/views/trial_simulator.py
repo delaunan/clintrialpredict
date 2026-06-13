@@ -10281,6 +10281,10 @@ def render_scenario_review_report(row, trace=None, snapshot=None):
         key_questions.get("clinical_operations_question")
         or participant.get("clinops_execution_question")
     )
+    strategic_question = (
+        key_questions.get("strategic_field_question")
+        or participant.get("strategic_field_question")
+    )
     narrative_html = "".join([
         _scenario_review_text_block("Scenario Consistency", consistency_text),
         _scenario_review_text_block("Completion Outlook Analysis", completion_text),
@@ -10288,6 +10292,7 @@ def render_scenario_review_report(row, trace=None, snapshot=None):
         _scenario_review_text_block("Central Tension", central_tension),
         _scenario_review_text_block("Medical Development Question", medical_question),
         _scenario_review_text_block("Clinical Operations Question", operations_question),
+        _scenario_review_text_block("Strategic Field Question", strategic_question),
     ])
 
     cached_note = narrative_trace_provider_note(trace)

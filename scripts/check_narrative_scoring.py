@@ -347,6 +347,28 @@ def _check_app_owned_score_fields_ignored(errors: list[str]) -> None:
         errors.append("provider-owned score fields should be reported as validation errors")
 
 
+def _check_legacy_participant_review_questions(errors: list[str]) -> None:
+    packet, review = _review_template()
+    legacy_medical = "What evidence standard matters most?"
+    legacy_clinops = "What operational burden is proportionate?"
+    review.pop("key_questions", None)
+    review["participant_review"] = {
+        "medical_development_question": legacy_medical,
+        "clinops_execution_question": legacy_clinops,
+    }
+    result = validate_and_score_review(packet, review)
+    validated = result["validated_review"]
+    questions = validated.get("key_questions") or {}
+    if result["scoring"].get("validation_status") != "valid":
+        errors.append("legacy participant_review questions should remain valid after strategic question migration")
+    if questions.get("medical_development_question") != legacy_medical:
+        errors.append("legacy participant_review medical question should be preserved")
+    if questions.get("clinical_operations_question") != legacy_clinops:
+        errors.append("legacy participant_review clinops question should be preserved")
+    if questions.get("strategic_field_question") != "":
+        errors.append("legacy participant_review should default missing strategic_field_question to an empty string")
+
+
 def main() -> int:
     errors: list[str] = []
     for fixture in get_contract_fixtures():
@@ -358,6 +380,7 @@ def main() -> int:
     _check_score_materiality_guardrails(errors)
     _check_incomplete_review_suppresses_scores(errors)
     _check_app_owned_score_fields_ignored(errors)
+    _check_legacy_participant_review_questions(errors)
 
     if errors:
         for error in errors:

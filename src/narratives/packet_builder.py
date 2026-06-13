@@ -749,6 +749,7 @@ def _compact_review_context(
             "medical_development_question": participant.get("medical_development_question"),
             "clinical_operations_question": participant.get("clinical_operations_question")
             or participant.get("clinops_execution_question"),
+            "strategic_field_question": participant.get("strategic_field_question"),
         },
         "continuity": {
             "prior_concerns_resolved": continuity.get("prior_concerns_resolved") or [],

@@ -26,10 +26,11 @@ The current narrative system should be reshaped around three participant-facing 
    - Whether the Completion Outlook movement appears supported by stronger design logic or challenged by weaker evidence value, reduced relevance, shortcut risk, or disproportionate burden.
    - The rationale behind Design Confidence subcategory ratings.
 
-3. `Two Key Questions`
+3. `Key Questions`
    - One medical/development question.
    - One clinical-operations/execution question.
-   - Questions should challenge the team without prescribing the next edit.
+   - One strategic/field question that raises a broader Therapeutic Area or field-level challenge using the scenario as the example.
+   - Questions should support general debate without prescribing the next edit or addressing participants as `the team`.
 
 The participant narrative should become easier to read and easier to place visually under the score areas in `frontend/views/trial_simulator.py`.
 
@@ -104,7 +105,8 @@ Canonical provider-facing structure:
   },
   "key_questions": {
     "medical_development_question": "...",
-    "clinical_operations_question": "..."
+    "clinical_operations_question": "...",
+    "strategic_field_question": "..."
   }
 }
 ```
@@ -121,7 +123,7 @@ Suggested participant text length:
 
 - Completion Outlook Analysis: 90-140 words.
 - Design Confidence Analysis: 120-180 words.
-- Two Key Questions: 20-30 words each.
+- Key Questions: 20-30 words each.
 - Total participant narrative target: roughly 300-380 words.
 
 ## Completion Outlook Rules
@@ -749,7 +751,7 @@ Participant-facing layout direction:
   - Design Confidence Analysis narrative box.
 
 - Under combined Scenario Review area or below both score sections:
-  - Two Key Questions.
+  - Key Questions.
 
 The narrative should remain readable and not become a diagnostics panel. Raw evidence fields, validation details, provider traces, and benchmark details belong in expanders or facilitator/debug views.
 
@@ -1232,6 +1234,7 @@ Minimal question-quality adjustment:
 - Added a targeted three-trial follow-up: avoid repeating the same question opening stem across consecutive visible iterations, especially `What evidence standard would...`; for `structured_features` / `text_context` conflicts, questions should ask how to resolve or reconcile the scenario before relying on it, not how to operationalize stale contradictory Trial description detail.
 - Added a shortcut-simplification calibration: when easier execution comes from weaker comparator, masking, allocation, or endpoint rigor, `operational_burden_balance` may receive only limited feasibility credit rather than a strong positive rating.
 - Live rerun `first_wave_operational_shortcut_cap_3trials_1` returned 12/12 reviewed visible iterations, 0 failed checks, and 3 warning checks. The shortcut cap held: shortcut-driven simplification received only limited Operational Burden Balance credit. Remaining warnings were limited to question opening-frame repetition and one scenario-readiness dominance review item; no immediate prompt change is required from this run.
+- Broader live run `first_wave_broader_trials_5_1` returned 20/20 reviewed visible iterations, 3 failed checks, and 10 warnings. Light follow-up only: replace `model signals` with score-pattern wording, make the patient-relevance expectation conditional when a prevention/vaccine-style trial objective conflicts with refractory/metastatic structured edits, and require operational-only medical questions to mention planning burden, scale, or proportionality so inherited endpoint/population questions cannot repeat verbatim.
 
 Completion Outlook and scenario-readiness boundary refinement:
 
@@ -1308,7 +1311,7 @@ Design Confidence acceptance checks:
 
 Key-question acceptance checks:
 
-- Pass if the two questions differ materially from the previous visible iteration, with the medical/development question anchored to the newest material scenario change and the clinical-operations question raising a broader operational-development debate. Verification: golden examples plus manual review.
+- Pass if the questions differ materially from the previous visible iteration, with the medical/development question anchored to the newest material scenario change, the clinical-operations question raising an operational-development debate, and the strategic/field question raising a broader Therapeutic Area or field-level challenge. Verification: golden examples plus manual review.
 - Pass if each question is linked to the latest value changes, current narrative tension, or a high-value clinical-development / ClinOps dilemma relevant to the trial. Verification: manual or LLM-review.
 - Pass if questions remain open-ended and not answerable with yes/no. Verification: automated pattern check plus manual review.
 
@@ -1440,7 +1443,7 @@ Current prompt strengths to preserve:
 
 Target enhancements to add:
 
-- Three participant-facing blocks: Completion Outlook Analysis, Design Confidence Analysis, and Two Key Questions.
+- Three participant-facing blocks: Completion Outlook Analysis, Design Confidence Analysis, and Key Questions.
 - Top-level `review_metadata` with `review_mode` and `participant_visible`.
 - Three prompt modes: `hidden_baseline`, `first_visible_iteration`, and `later_visible_iteration`.
 - Completion Outlook framed as early-termination risk-pattern interpretation.
@@ -1653,6 +1656,7 @@ Verification:
 - packet includes TA context and text-change evidence when relevant
 - response contract still forbids provider-owned score fields
 - Completion Outlook instructions exclude planned enrollment/sites/total duration
+- key_questions includes medical_development_question, clinical_operations_question, and strategic_field_question
 
 ### Step 8: UI Integration
 
@@ -1660,7 +1664,7 @@ Update `frontend/views/trial_simulator.py` only after the provider/mock path is 
 
 - Completion Outlook narrative box under Completion Outlook score/plot.
 - Design Confidence narrative box under Design Confidence score/plot.
-- Two Key Questions area.
+- Key Questions area with medical/development, clinical-operations, and strategic/field questions.
 - Optional consistency note.
 - Design Confidence treemap short rationale display or tooltip/expander.
 - Diagnostics remain behind expanders.

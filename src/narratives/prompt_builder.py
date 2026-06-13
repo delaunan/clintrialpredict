@@ -150,7 +150,7 @@ EXPERT_ANALYSIS_REQUIREMENTS = {
 
 EXPERT_QUESTION_REQUIREMENTS = {
     "purpose": (
-        "The two participant questions should elevate the discussion beyond the immediate field edit by asking what "
+        "The participant questions should elevate the discussion beyond the immediate field edit by asking what "
         "evidence standard, strategic rationale, population trade-off, governance burden, or operational proportionality "
         "would make the scenario defensible."
     ),
@@ -163,6 +163,7 @@ EXPERT_QUESTION_REQUIREMENTS = {
         "If the same dilemma remains relevant, reframe it through the newest material change rather than repeating the prior question frame.",
         "Make the medical/development question focus on the medical, evidence, endpoint, patient-relevance, or development-decision implication.",
         "Make the clinops/execution question a broader operational-development debate prompt rooted in the latest change or trial context, covering feasibility, access, oversight, data reliability, burden, resource proportionality, or risk-proportionate conduct.",
+        "Make the strategic/field question step back from this single scenario and raise a wider Therapeutic Area or field-level challenge, using the trial as a concrete example without prescribing a solution.",
     ],
     "strategic_context": (
         "When reference_packs include current strategic context, questions may raise access, representativeness, "
@@ -174,6 +175,7 @@ EXPERT_QUESTION_REQUIREMENTS = {
         "Which population-relevance trade-off is most important to justify?",
         "What governance or data-reliability burden would be proportionate to this design choice?",
         "How should access, feasibility, and interpretability be balanced in this scenario?",
+        "What broader development tension in this field does this scenario expose?",
     ],
 }
 
@@ -208,9 +210,10 @@ OUTPUT_STYLE_REQUIREMENTS = {
         "design_confidence_analysis",
         "key_questions.medical_development_question",
         "key_questions.clinical_operations_question",
+        "key_questions.strategic_field_question",
     ],
     "participant_output_focus": (
-        "Write three participant-facing blocks: Completion Outlook Analysis, Design Confidence Analysis, and Two Key Questions. "
+        "Write three participant-facing blocks: Completion Outlook Analysis, Design Confidence Analysis, and Key Questions. "
         "Use internal subcategories for validation, scoring, and treemap rationale, but do not make every subcategory an equal participant narrative section."
     ),
 }
@@ -569,7 +572,7 @@ def build_provider_prompt(packet: dict[str, Any], *, prompt_mode: str | None = N
         "Use packet.therapeutic_area_context when present. If pack_found is true, use prompt_safe_summary as optional therapeutic context "
         "and record the pack ID in trace.therapeutic_area_pack_used. If pack_found is false, do not fail the review.\n"
         "Use participant-facing scoring language. Avoid internal phrases such as model-facing, model-supported, model signals, in the model, the model says, or model reflects; "
-        "prefer Completion Outlook score inputs, score pattern, or score-driving fields when explaining the scoring boundary.\n"
+        "write score pattern suggests, Completion Outlook score reflects, Completion Outlook score inputs, or score-driving fields instead.\n"
         "For each Design Confidence subcategory, reason in this sequence: first select packet-supported evidence_fields, "
         "then write the rationale from those fields, then assign the rating that follows from the evidence and rationale, "
         "then assign score_materiality from the strength of the supported evidence and context guardrails. "
@@ -596,14 +599,14 @@ def build_provider_prompt(packet: dict[str, Any], *, prompt_mode: str | None = N
         "target_population_alignment, and operational_burden_balance.\n"
         "Follow the output_style_requirements exactly. Keep each rationale concise, bounded, and auditable. "
         "Organize participant-facing content into three blocks: Completion Outlook Analysis, Design Confidence Analysis, "
-        "and Two Key Questions. Keep internal Design Confidence subcategories available for validation, scoring, and treemap labels, "
+        "and Key Questions. Keep internal Design Confidence subcategories available for validation, scoring, and treemap labels, "
         "but do not turn every subcategory into an equal participant narrative section. "
         "Avoid duplicating the same concern across multiple participant-facing sections; make one concise central trade-off, then use each question for a distinct current dilemma. "
         "Each participant debate question should be one open-ended question, 20-30 words, and not answerable "
         "with yes or no. Use the expert_question_requirements to make questions strategic and debate-worthy. "
         "Frame questions as general debate prompts. "
         "Do not address participant questions to the team. "
-        "For later visible iterations, use the two questions as a pair: the medical/development question should focus on the medical or evidence implication of the newest material change, and the clinical-operations question should raise a broader operational-development debate using the trial or latest change as a concrete example. "
+        "For later visible iterations, use the questions as a set: the medical/development question should focus on the medical or evidence implication of the newest material change, the clinical-operations question should raise an operational-development debate using the trial or latest change as a concrete example, and the strategic/field question should step back to a broader Therapeutic Area or field-level challenge. "
         "Questions must be materially fresh versus prior visible questions; if the same dilemma remains relevant, reframe it through the newest material change rather than repeating the prior question frame or opening stem. Avoid reusing the same opening frame, especially What evidence standard would, across consecutive visible iterations. "
         "When the latest change is limited to planning assumptions, the medical/development question should connect current evidence ambition to whether the added operational burden is justified rather than repeating the prior endpoint-standard frame; the clinical-operations question should address operational proportionality, executability, oversight, data reliability, resource intensity, or budget burden. "
         "When the latest change creates a structured_features/text_context conflict, at least one question should focus on resolving or reconciling that contradiction before relying on the scenario; do not ask participants how to operationalize the stale contradictory Trial description detail.\n"

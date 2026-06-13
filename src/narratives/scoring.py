@@ -111,6 +111,7 @@ APP_OWNED_SCORE_FIELDS = {
 PARTICIPANT_REVIEW_KEYS = {
     "medical_development_question",
     "clinical_operations_question",
+    "strategic_field_question",
 }
 
 SUPPORTED_REVIEW_MODES = {
@@ -376,6 +377,7 @@ def _validate_key_questions(review: dict[str, Any]) -> tuple[dict[str, Any], lis
             questions = {
                 "medical_development_question": old_participant.get("medical_development_question"),
                 "clinical_operations_question": old_participant.get("clinops_execution_question"),
+                "strategic_field_question": old_participant.get("strategic_field_question", ""),
             }
         else:
             return {}, ["key_questions must be an object"]

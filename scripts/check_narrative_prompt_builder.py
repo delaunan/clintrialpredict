@@ -115,6 +115,8 @@ def main() -> int:
         "decentralized or digital data collection",
         "materially fresh",
         "newest material change",
+        "strategic/field question",
+        "Therapeutic Area or field-level challenge",
         "prior visible questions",
         "do not address them to the team",
     ):
@@ -129,6 +131,7 @@ def main() -> int:
         "design_confidence_analysis",
         "key_questions.medical_development_question",
         "key_questions.clinical_operations_question",
+        "key_questions.strategic_field_question",
     ]
     if style.get("participant_output_order") != expected_participant_order:
         errors.append("response contract should define the three-block participant display order")
@@ -172,7 +175,7 @@ def main() -> int:
     }:
         errors.append("Gemini response schema should enumerate all prompt modes")
     if set(questions_schema) != PARTICIPANT_REVIEW_KEYS:
-        errors.append("Gemini response schema should include both key-question fields")
+        errors.append("Gemini response schema should include all key-question fields")
     for subcategory_name, subcategory in subcategory_schema.items():
         required = subcategory.get("required") or []
         if required != [
@@ -298,12 +301,13 @@ def main() -> int:
         "not answerable with yes or no",
         "strategic and debate-worthy",
         "Frame questions as general debate prompts",
-        "use the two questions as a pair",
+        "use the questions as a set",
         "materially fresh versus prior visible questions",
         "rather than repeating the prior question frame or opening stem",
         "Avoid reusing the same opening frame",
         "medical/development question should focus on the medical or evidence implication of the newest material change",
-        "clinical-operations question should raise a broader operational-development debate using the trial or latest change as a concrete example",
+        "clinical-operations question should raise an operational-development debate using the trial or latest change as a concrete example",
+        "strategic/field question should step back to a broader Therapeutic Area or field-level challenge",
         "reframe it through the newest material change rather than repeating the prior question frame",
         "latest change is limited to planning assumptions",
         "medical/development question should connect current evidence ambition",
@@ -339,7 +343,7 @@ def main() -> int:
         "Question split: Completion Outlook narrative answers only whether the Completion Outlook score inputs or early-termination risk-pattern evidence moved",
         "Use participant-facing scoring language",
         "Avoid internal phrases such as model-facing, model-supported, model signals, in the model, the model says, or model reflects",
-        "prefer Completion Outlook score inputs, score pattern, or score-driving fields",
+        "write score pattern suggests, Completion Outlook score reflects, Completion Outlook score inputs, or score-driving fields instead",
         "Design Confidence narrative may use all relevant packet evidence",
         "planning assumptions, aligned Trial description field content, scenario-readiness warnings, governance, proportionality, and interpretability",
         "completion_outlook_mode controls only the Completion Outlook narrative",
@@ -369,7 +373,7 @@ def main() -> int:
         "Return all four Design Confidence subcategories",
         "output_style_requirements",
         "three participant-facing blocks",
-        "Completion Outlook Analysis, Design Confidence Analysis, and Two Key Questions",
+        "Completion Outlook Analysis, Design Confidence Analysis, and Key Questions",
         "Each participant debate question should be one open-ended question",
         "phase_intent_alignment",
         "endpoint_evidence_strength",

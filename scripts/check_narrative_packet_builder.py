@@ -140,6 +140,7 @@ def _check_review_continuity_context(errors: list[str]) -> None:
             "key_questions": {
                 "medical_development_question": "What evidence standard matters most?",
                 "clinical_operations_question": "What operational burden is proportionate?",
+                "strategic_field_question": "What broader field challenge does this scenario expose?",
             },
             "continuity": {
                 "new_concerns": [],

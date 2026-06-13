@@ -567,7 +567,7 @@ def _review_controls_for_step(step: ScenarioStep) -> dict[str, Any]:
             "latest_change_focus": "planning_assumptions_only",
         })
         controls["question_controls"].update({
-            "medical_question_focus": "evidence_standard_only_if_reframed_around_planning_burden",
+            "medical_question_focus": "evidence_standard_reframed_around_planning_burden_or_operational_scale",
             "operations_question_focus": "operational_proportionality_or_executability",
             "at_least_one_question_must_address": "planning_assumption_proportionality",
         })
@@ -664,6 +664,7 @@ def _review_texts(trace: dict[str, Any]) -> dict[str, str]:
         "design": str(design.get("summary") or ""),
         "medical_question": str(questions.get("medical_development_question") or ""),
         "operations_question": str(questions.get("clinical_operations_question") or ""),
+        "strategic_question": str(questions.get("strategic_field_question") or ""),
         "consistency_note": str(consistency.get("message") or ""),
     }
 
@@ -735,6 +736,44 @@ def _has_expected_structured_text_warning(message: str, expected_fields: tuple[s
         return False
     field_text = match.group(1).lower()
     return all(field.lower() in field_text for field in expected_fields)
+
+
+def _has_population_objective_conflict(trace: dict[str, Any], texts: dict[str, str]) -> bool:
+    consistency = trace.get("scenario_consistency_note") or {}
+    fields_text = " ".join(str(field).lower() for field in consistency.get("fields_in_tension") or ())
+    narrative_text = " ".join(
+        texts.get(key, "").lower()
+        for key in ("completion", "design", "medical_question", "operations_question")
+    )
+    population_fields = (
+        "condition",
+        "patient severity",
+        "line of therapy",
+        "rare disease",
+        "population",
+    )
+    objective_terms = (
+        "prevention",
+        "preventative",
+        "prophylaxis",
+        "vaccine",
+        "healthy",
+        "objective",
+        "study objective",
+    )
+    conflict_terms = (
+        "misaligned",
+        "misalignment",
+        "contradiction",
+        "conflict",
+        "inconsistent",
+        "not fully aligned",
+    )
+    return (
+        any(term in fields_text for term in population_fields)
+        and any(term in narrative_text for term in objective_terms)
+        and any(term in narrative_text for term in conflict_terms)
+    )
 
 
 def _design_confidence_subcategories(trace: dict[str, Any]) -> dict[str, Any]:
@@ -840,7 +879,7 @@ def _grade_trace(
 
     participant_text = " ".join(
         texts[key]
-        for key in ("completion", "design", "medical_question", "operations_question")
+        for key in ("completion", "design", "medical_question", "operations_question", "strategic_question")
     ).lower()
     internal_model_terms = (
         "model-facing",
@@ -906,7 +945,7 @@ def _grade_trace(
             findings.append({"severity": "fail", "check": "design_confidence_direction", "detail": f"Expected Design Confidence >= {expectations['design_confidence_min']}, got {design_confidence}."})
         if "design_confidence_max" in expectations and pd.notna(design_confidence) and design_confidence > expectations["design_confidence_max"]:
             findings.append({"severity": "fail", "check": "design_confidence_direction", "detail": f"Expected Design Confidence <= {expectations['design_confidence_max']}, got {design_confidence}."})
-        if "target_population_alignment_min" in expectations:
+        if "target_population_alignment_min" in expectations and not _has_population_objective_conflict(trace, texts):
             subcategory_points = _design_confidence_subcategories(trace)
             target_population = pd.to_numeric(
                 (subcategory_points.get("target_population_alignment") or {}).get("points"),
@@ -1001,6 +1040,7 @@ def _grade_trace(
     for label, question in (
         ("medical_question", texts["medical_question"]),
         ("operations_question", texts["operations_question"]),
+        ("strategic_question", texts["strategic_question"]),
     ):
         if not question.strip().endswith("?"):
             findings.append({"severity": "warn", "check": f"{label}_form", "detail": "Question does not end with a question mark."})
@@ -1015,7 +1055,7 @@ def _grade_trace(
 
     if previous_visible_trace:
         previous_texts = _review_texts(previous_visible_trace)
-        for label in ("medical_question", "operations_question"):
+        for label in ("medical_question", "operations_question", "strategic_question"):
             if _normalize_question(texts[label]) == _normalize_question(previous_texts[label]):
                 findings.append({
                     "severity": "fail",
@@ -1030,7 +1070,7 @@ def _grade_trace(
                     "check": f"{label}_freshness",
                     "detail": (
                         f"Question similarity to previous iteration is {similarity:.2f}; check whether one question "
-                        "is anchored to the newest material change and the other uses the trial as an example of a broader development-design tension."
+                        "is anchored to the newest material change and the strategic question uses the trial as an example of a broader field tension."
                     ),
                 })
             current_opening = " ".join(_normalize_question(texts[label]).split()[:4])
@@ -1042,9 +1082,9 @@ def _grade_trace(
                     "detail": "Question repeats the prior visible question opening frame; review whether the newest change is being used to reframe the discussion.",
                 })
 
-    combined_questions = f"{texts['medical_question']} {texts['operations_question']}".lower()
+    combined_questions = f"{texts['medical_question']} {texts['operations_question']} {texts['strategic_question']}".lower()
     if step and step.step_id == "operational_burden_without_matching_evidence_gain":
-        # Accepted terms for detecting latest-change focus in the two key questions.
+        # Accepted terms for detecting latest-change focus in the question set.
         # This is not a Completion Outlook forbidden-term list.
         question_focus_terms = (
             "proportionate",
@@ -1072,6 +1112,25 @@ def _grade_trace(
                 "severity": "fail",
                 "check": "question_latest_change_focus",
                 "detail": "Operational-only iteration should include a question about planning-assumption proportionality or executability.",
+            })
+        medical_question_lower = texts["medical_question"].lower()
+        medical_planning_terms = (
+            "operational",
+            "planning",
+            "enrollment",
+            "site",
+            "duration",
+            "scale",
+            "resource",
+            "burden",
+            "proportionate",
+            "proportionality",
+        )
+        if not any(term in medical_question_lower for term in medical_planning_terms):
+            findings.append({
+                "severity": "fail",
+                "check": "medical_question_latest_change_focus",
+                "detail": "Operational-only medical question should reframe the evidence question around planning burden, scale, or proportionality.",
             })
     if step and step.step_id == "structured_text_intervention_conflict":
         focus_terms = (
@@ -1485,6 +1544,7 @@ def _markdown_trace_block(item: dict[str, Any]) -> list[str]:
         ("Design Confidence", "design"),
         ("Medical Development Question", "medical_question"),
         ("Clinical Operations Question", "operations_question"),
+        ("Strategic Field Question", "strategic_question"),
     ):
         value = str(narrative.get(key) or "").strip()
         if value:

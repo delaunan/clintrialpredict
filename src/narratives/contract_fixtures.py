@@ -254,12 +254,14 @@ def _participant_review(
     tradeoff: str,
     medical_question: str,
     clinops_question: str,
+    strategic_question: str = "What broader development tension does this scenario expose for similar trials in this field?",
 ) -> dict[str, str]:
     return {
         "completion_outlook_summary": " ".join(part for part in [what_changed, moved] if part).strip(),
         "design_confidence_summary": " ".join(part for part in [signal, tradeoff] if part).strip(),
         "medical_development_question": medical_question,
         "clinical_operations_question": clinops_question,
+        "strategic_field_question": strategic_question,
     }
 
 
@@ -328,6 +330,7 @@ def _review(
         "key_questions": {
             "medical_development_question": participant_review.get("medical_development_question", ""),
             "clinical_operations_question": participant_review.get("clinical_operations_question", ""),
+            "strategic_field_question": participant_review.get("strategic_field_question", ""),
         },
         "scenario_consistency_note": consistency_note,
         "continuity": {
