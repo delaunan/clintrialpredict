@@ -983,6 +983,13 @@ Candidate one-shot lesson:
 
 These notes should be implemented after the narrative-quality review is complete.
 
+Implementation status - 2026-06-13:
+
+- Pending-review visibility and previous-value/delta display policy have been implemented in `frontend/views/trial_simulator.py`.
+- The prompt has been tightened for structured/free-text conflict handling, fresh key questions, conditional regulatory/evidence language, and non-duplicative Design Confidence reasoning in `src/narratives/prompt_builder.py`.
+- `scripts/check_narrative_prompt_builder.py` now protects those prompt requirements.
+- Live Gemini behavior after these wording changes has not yet been evaluated; the first-wave automated eval harness is the next validation step.
+
 ### Pending Review Visibility
 
 When the participant changes any feature after the latest reviewed scenario:

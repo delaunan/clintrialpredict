@@ -330,9 +330,49 @@ Current uncommitted status:
 - `Preparing Simulation Mode...` overlay has been changed to persist until Trial Features render, using a Trial Features readiness marker.
 - Final browser verification of the persistent Simulation Mode overlay is still pending because the last smoke attempt was interrupted.
 
+### Pre-Automation Checkpoint - 2026-06-13
+
+Status: ready for first-wave automated narrative eval harness after user UI validation.
+
+Completed from the manual four-iteration live-review feedback:
+
+- Pending edits preserve the latest visible `Scenario Review`, `Design Confidence`, and `Total Scenario Score` instead of blanking those views.
+- `Completion Outlook` now shows `Score update pending`; Design/Total score views and the Scenario Review card show `Review update pending`.
+- Hidden baseline still suppresses participant-visible Design Confidence and Total Scenario Score.
+- First visible `Total Scenario Score` delta compares against baseline `Completion Outlook`; first visible Design Confidence has no previous-value delta; later Design/Total deltas compare against the previous visible review.
+- Design Confidence treemap leaves include short rationale text when available.
+- Prompt instructions now explicitly state that selected structured/categorical fields are the source of truth when free text conflicts, while contradictory free text can only create a scenario-coherence concern.
+- Prompt instructions now require materially fresh key questions across visible iterations unless the same dilemma is genuinely reopened.
+- Prompt instructions now soften regulatory/evidence language and discourage unsupported categorical phrasing such as `required for registration` or `can provide the necessary evidence`.
+- Prompt instructions now discourage repeating the same Design Confidence concern across the summary, subcategory rationales, central tension, and questions.
+
+Verification completed:
+
+- `python -m py_compile frontend/views/trial_simulator.py`
+- `python -m py_compile src/narratives/prompt_builder.py scripts/check_narrative_prompt_builder.py`
+- `python scripts/check_narrative_prompt_builder.py`
+- `python scripts/check_narrative_provider.py`
+- `python scripts/check_narrative_mock_reviewer.py`
+- `python scripts/check_narrative_scoring.py`
+- `python scripts/check_narrative_contract_fixtures.py`
+- `python scripts/check_narrative_packet_builder.py`
+- `python scripts/check_narrative_review_store.py`
+- `python scripts/check_narrative_live_snapshot_flow.py`
+- `git diff --check`
+- Local Streamlit health smoke on port `8504` returned `ok`.
+
+Residual risk:
+
+- No live Gemini run has been performed after the latest prompt wording change.
+- No automated first-wave eval harness exists yet.
+
+Next step:
+
+- Implement the automated first-wave Scenario Review eval harness that applies scenario edits without manual UI interaction, calls Gemini when configured, and archives trial changes, narratives, Design Confidence scoring, questions, expectations, and gap analysis for user review.
+
 ### Phase 7: Full Narrative Regression Pass
 
-Status: pending
+Status: superseded as the next manual-only step by the automated first-wave eval harness described above. The named live-review trials remain useful seeds for that harness.
 
 Named live-review target:
 
@@ -362,7 +402,7 @@ Parity note:
 
 ### Phase 8: Prompt Engineering Brief And Knowledge Substrate Review
 
-Status: started
+Status: manual-feedback prompt/UI corrections complete; automated first-wave eval harness is next.
 
 Purpose:
 
@@ -408,4 +448,4 @@ These are real needs, but not blockers for the immediate schema migration:
 
 ## Immediate Next Step
 
-Review and approve `prompt_enhancement_plan.md`, then promote accepted durable decisions into `docs/architecture_narratives.md` before implementing the staged prompt/schema migration. The Phase 7 named trials remain the first live regression cases after the new prompt contract is implemented.
+Implement the first-wave automated Scenario Review quality-eval harness before further manual prompt tuning. The harness should use exact UI/taxonomy wording, run multi-iteration scenario edits without manual Streamlit input, call Gemini when configured, and produce human-readable plus machine-readable reports covering narratives, Design Confidence scoring, questions, expectations, and gap analysis.

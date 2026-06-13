@@ -83,6 +83,8 @@ def main() -> int:
         "operational proportionality",
         "shortcut risk",
         "Do not present the model score as clinical truth.",
+        "Use conditional regulatory and evidence language",
+        "would need stronger justification",
     ):
         if term not in expert_text:
             errors.append(f"response contract missing expert-analysis rule: {term}")
@@ -93,6 +95,7 @@ def main() -> int:
         "completion_improves_evidence_weakens",
         "completion_declines_design_improves",
         "operational_burden_without_evidence_gain",
+        "structured_text_conflict",
     ):
         if key not in examples:
             errors.append(f"response contract missing scenario example: {key}")
@@ -106,6 +109,8 @@ def main() -> int:
         "operational proportionality",
         "reference_packs",
         "decentralized or digital data collection",
+        "fresh questions",
+        "prior visible questions",
     ):
         if term not in question_text:
             errors.append(f"response contract missing expert-question rule: {term}")
@@ -233,6 +238,9 @@ def main() -> int:
         "design_confidence_analysis",
         "key_questions",
         "scenario_consistency_note",
+        "selected fields are the source of truth",
+        "must not replace selected fields",
+        "scenario-coherence concern",
         "early-termination risk",
         "planned enrollment",
         "planned site count",
@@ -245,9 +253,15 @@ def main() -> int:
         "one open-ended question",
         "not answerable with yes or no",
         "strategic and debate-worthy",
+        "materially fresh versus prior visible questions",
+        "Avoid duplicating the same concern",
+        "required for registration",
+        "can provide the necessary evidence",
+        "may be less convincing",
         "completion_improves_evidence_weakens",
         "completion_declines_design_improves",
         "operational_burden_without_evidence_gain",
+        "structured_text_conflict",
         "first select packet-supported evidence_fields",
         "then write the rationale",
         "then assign the rating",

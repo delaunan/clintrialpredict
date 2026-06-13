@@ -9747,6 +9747,59 @@ def _previous_visible_scenario_review_trace(nct_id, current_trace):
     return None
 
 
+def _baseline_completion_score_for_trace(current_trace, snapshot):
+    """Return the visible original Completion Outlook for first-iteration total deltas."""
+    candidates = [
+        (snapshot or {}).get("previous_score"),
+        ((current_trace or {}).get("input_packet") or {}).get("model_interpretation", {}).get("previous_completion_score"),
+        ((current_trace or {}).get("input_packet") or {}).get("baseline_snapshot", {}).get("score"),
+        ((current_trace or {}).get("input_packet") or {}).get("baseline_model_snapshot", {}).get("score"),
+    ]
+    for candidate in candidates:
+        numeric = pd.to_numeric(candidate, errors="coerce")
+        if pd.notna(numeric):
+            return float(numeric)
+    return None
+
+
+def _score_view_delta_html(score_view, scenario_trace, snapshot, nct_id):
+    if not scenario_trace:
+        return ""
+
+    current_iteration = _scenario_review_iteration_number(scenario_trace)
+    if score_view == SCORE_VIEW_DESIGN:
+        if current_iteration is None or current_iteration < 2:
+            return ""
+        previous_trace = _previous_visible_scenario_review_trace(nct_id, scenario_trace)
+        if not previous_trace:
+            return ""
+        return _score_delta_badge_html(
+            previous_trace.get("design_confidence"),
+            scenario_trace.get("design_confidence"),
+            delta_unit="points",
+            midpoint=0.0,
+            signed_values=True,
+        )
+
+    if score_view == SCORE_VIEW_TOTAL:
+        if current_iteration == 1:
+            previous_total_reference = _baseline_completion_score_for_trace(scenario_trace, snapshot)
+        else:
+            previous_trace = _previous_visible_scenario_review_trace(nct_id, scenario_trace)
+            previous_total_reference = (
+                previous_trace.get("total_scenario_score")
+                if previous_trace
+                else None
+            )
+        return _score_delta_badge_html(
+            previous_total_reference,
+            scenario_trace.get("total_scenario_score"),
+            delta_unit="percent",
+        )
+
+    return ""
+
+
 def _score_delta_badge_html(previous_value, current_value, *, delta_unit, midpoint=50.0, signed_values=False):
     previous_numeric = pd.to_numeric(previous_value, errors="coerce")
     current_numeric = pd.to_numeric(current_value, errors="coerce")
@@ -9945,6 +9998,12 @@ def _design_subcategory_impacts(trace):
             impact = pd.to_numeric(subcategory.get("points"), errors="coerce")
             if pd.isna(impact):
                 continue
+            details = [
+                f"Rating: {str(subcategory.get('rating') or 'not available').replace('_', ' ').title()}",
+            ]
+            short_rationale = str(subcategory.get("short_rationale") or "").strip()
+            if short_rationale:
+                details.append(f"Rationale: {html.escape(short_rationale)}")
             rows.append({
                 "Pillar": pillar_label,
                 "Subcategory": DESIGN_SUBCATEGORY_LABELS.get(
@@ -9952,11 +10011,14 @@ def _design_subcategory_impacts(trace):
                     str(subcategory_name).replace("_", " ").title(),
                 ),
                 "Impact": float(impact),
-                "FeatureDetails": [
-                    f"Rating: {str(subcategory.get('rating') or 'not available').replace('_', ' ').title()}",
-                ],
+                "FeatureDetails": details,
             })
     return rows
+
+
+def _completion_pillar_impacts_from_trace(trace):
+    interpretation = ((trace or {}).get("input_packet") or {}).get("model_interpretation") or {}
+    return interpretation.get("pillar_impacts") or []
 
 
 def _combined_pillar_impacts(completion_pillars, design_pillars):
@@ -9983,6 +10045,54 @@ def _combined_pillar_impacts(completion_pillars, design_pillars):
         if pd.notna(impact):
             combined[label] += float(impact)
     return [{"Pillar": label, "Impact": round(combined[label], 1)} for label in order]
+
+
+def _pillar_delta_map(current_rows, previous_rows):
+    previous = {}
+    for row in previous_rows or []:
+        label = _clean_plot_pillar_label(row.get("Pillar"))
+        impact = pd.to_numeric(row.get("Impact"), errors="coerce")
+        if label and pd.notna(impact):
+            previous[label] = float(impact)
+
+    deltas = {}
+    for row in current_rows or []:
+        label = _clean_plot_pillar_label(row.get("Pillar"))
+        current = pd.to_numeric(row.get("Impact"), errors="coerce")
+        if label and pd.notna(current) and label in previous:
+            deltas[label] = round(float(current) - previous[label], 1)
+    return deltas
+
+
+def _score_view_pillar_delta_map(score_view, snapshot, scenario_trace, current_completion_pillars, current_design_pillars):
+    if score_view == SCORE_VIEW_COMPLETION:
+        return get_simulation_pillar_delta_map()
+
+    if not scenario_trace:
+        return {}
+
+    current_iteration = _scenario_review_iteration_number(scenario_trace)
+    nct_id = st.session_state.get("selected_nct_id", "")
+
+    if score_view == SCORE_VIEW_DESIGN:
+        if current_iteration is None or current_iteration < 2:
+            return {}
+        previous_trace = _previous_visible_scenario_review_trace(nct_id, scenario_trace)
+        return _pillar_delta_map(current_design_pillars, _design_pillar_impacts(previous_trace))
+
+    if score_view == SCORE_VIEW_TOTAL:
+        current_combined = _combined_pillar_impacts(current_completion_pillars, current_design_pillars)
+        if current_iteration == 1:
+            previous_combined = (snapshot or {}).get("previous_pillar_impacts") or []
+        else:
+            previous_trace = _previous_visible_scenario_review_trace(nct_id, scenario_trace)
+            previous_combined = _combined_pillar_impacts(
+                _completion_pillar_impacts_from_trace(previous_trace),
+                _design_pillar_impacts(previous_trace),
+            )
+        return _pillar_delta_map(current_combined, previous_combined)
+
+    return {}
 
 
 def _combined_subcategory_impacts(completion_subcats, design_subcats):
@@ -10110,7 +10220,8 @@ def render_scenario_review_report(row, trace=None, snapshot=None):
     else:
         trace = trace or get_cached_quality_review_trace_for_snapshot(snapshot)
 
-    if has_pending_simulation_changes(row):
+    pending_changes = has_pending_simulation_changes(row)
+    if pending_changes and not trace:
         pending_diagnostics = {
             "pending_feature_ids": get_pending_feature_ids(row),
             "pending_text_context_fields": get_pending_text_context_fields(row),
@@ -10175,6 +10286,13 @@ def render_scenario_review_report(row, trace=None, snapshot=None):
         (trace.get("validated_review") or {}).get("tradeoff_review") or {}
     ).get("central_tension")
     report_title = "Baseline Scenario Review" if trace.get("hidden_baseline") else "Scenario Review"
+    pending_review_html = (
+        "<div class='simulation-stale-notice scenario-review-pending-notice'>"
+        "Review update pending"
+        "</div>"
+        if pending_changes and not trace.get("hidden_baseline")
+        else ""
+    )
     completion_text = (
         completion_analysis.get("risk_pattern_summary")
         or participant.get("overall_completion_comment")
@@ -10210,6 +10328,7 @@ def render_scenario_review_report(row, trace=None, snapshot=None):
         (
             "<div class='quality-review-card'>"
             f"<div class='quality-review-title'>{html.escape(report_title)}</div>"
+            f"{pending_review_html}"
             f"<div class='quality-review-components'>{metric_html}</div>"
             f"{narrative_html}"
             f"<div class='quality-review-muted'>{html.escape(cached_note)}</div>"
@@ -10700,7 +10819,7 @@ def render_completion_prediction_tab(row):
     if simulation_mode and snapshot and score_view in (SCORE_VIEW_DESIGN, SCORE_VIEW_TOTAL):
         if snapshot.get("source") == "prerecorded_baseline":
             scenario_trace = get_cached_hidden_baseline_review_trace_for_snapshot(snapshot)
-        elif not has_pending_simulation_changes(row):
+        else:
             scenario_trace = get_cached_quality_review_trace_for_snapshot(snapshot)
 
     if res and not simulation_mode:
@@ -10796,6 +10915,16 @@ def render_completion_prediction_tab(row):
                             'Score update pending'
                             '</div>'
                         )
+                    elif (
+                        score_view in (SCORE_VIEW_DESIGN, SCORE_VIEW_TOTAL)
+                        and scenario_trace
+                        and has_pending_simulation_changes(row)
+                    ):
+                        stale_html = (
+                            '<div class="simulation-stale-notice">'
+                            'Review update pending'
+                            '</div>'
+                        )
 
                     if (
                         display_snapshot.get("source") in SIMULATION_SNAPSHOT_SCORE_DELTA_SOURCES
@@ -10812,21 +10941,12 @@ def render_completion_prediction_tab(row):
 
                 with st.container(key="trial_score_gauge_body"):
                     if score_view in (SCORE_VIEW_DESIGN, SCORE_VIEW_TOTAL) and scenario_trace:
-                        previous_trace = _previous_visible_scenario_review_trace(nct_id, scenario_trace)
-                        if previous_trace and score_view == SCORE_VIEW_DESIGN:
-                            delta_html = _score_delta_badge_html(
-                                previous_trace.get("design_confidence"),
-                                scenario_trace.get("design_confidence"),
-                                delta_unit="points",
-                                midpoint=0.0,
-                                signed_values=True,
-                            )
-                        elif previous_trace and score_view == SCORE_VIEW_TOTAL:
-                            delta_html = _score_delta_badge_html(
-                                previous_trace.get("total_scenario_score"),
-                                scenario_trace.get("total_scenario_score"),
-                                delta_unit="percent",
-                            )
+                        delta_html = _score_view_delta_html(
+                            score_view,
+                            scenario_trace,
+                            snapshot,
+                            nct_id,
+                        )
 
                     st.markdown(
                         (
@@ -10900,16 +11020,22 @@ def render_completion_prediction_tab(row):
                 render_box_spacer(left_box_h)
                 return
 
+            score_view_delta_by_pillar = (
+                _score_view_pillar_delta_map(
+                    score_view,
+                    snapshot,
+                    scenario_trace,
+                    completion_pillar_impacts,
+                    design_pillar_impacts,
+                )
+                if st.session_state.get("global_edit_mode", False)
+                else {}
+            )
             st.plotly_chart(
                 plot_impact_bar(
                     pd.DataFrame(active_pillar_impacts),
                     height=bar_plot_h,
-                    delta_by_pillar=(
-                        get_simulation_pillar_delta_map()
-                        if st.session_state.get("global_edit_mode", False)
-                        and score_view == SCORE_VIEW_COMPLETION
-                        else None
-                    )
+                    delta_by_pillar=score_view_delta_by_pillar
                 ),
                 width="stretch",
                 config={

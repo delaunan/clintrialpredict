@@ -100,6 +100,7 @@ EXPERT_ANALYSIS_REQUIREMENTS = {
         "Do not imply that a higher Completion Score means a better trial design.",
         "Do not cite planned enrollment, planned site count, planned total duration, or operational benchmark metadata as Completion Outlook drivers.",
         "Do not turn the review into a prescription for the next edit.",
+        "Use conditional regulatory and evidence language; prefer may be less convincing, would need stronger justification, could be harder to defend, appears more aligned, or does not by itself establish.",
     ],
     "participant_examples": {
         "good_completion_comment": (
@@ -130,6 +131,11 @@ EXPERT_ANALYSIS_REQUIREMENTS = {
             "not show a matching evidence or population-fit gain, the review should flag proportionality rather than "
             "treating operational ambition as inherently positive."
         ),
+        "structured_text_conflict": (
+            "If selected fields say Small Molecule and simple oral delivery while intervention text describes cell "
+            "therapy, individualized manufacturing, or infusion logistics, selected fields remain the source of truth "
+            "for Completion Outlook. The contradictory text may lower Design Confidence only as a scenario-coherence concern."
+        ),
     },
 }
 
@@ -143,6 +149,7 @@ EXPERT_QUESTION_REQUIREMENTS = {
         "Ask open-ended questions that cannot be answered yes or no.",
         "Avoid asking whether a specific field should be changed.",
         "Ground each question in the current narrative, central_tension, reference_packs, and prior storyline when available.",
+        "Assume participants already discussed prior visible questions; generate fresh questions for the latest change unless the same dilemma is genuinely reopened.",
         "Make the medical/development question focus on evidence value, development decision, endpoint interpretability, or patient relevance.",
         "Make the clinops/execution question focus on feasibility, access, oversight, data reliability, burden, or risk-proportionate conduct.",
     ],
@@ -164,6 +171,8 @@ OUTPUT_STYLE_REQUIREMENTS = {
         "Use concise clinical-development prose, not marketing language and not technical model jargon.",
         "Use conditional language such as may, could, appears, and would need support.",
         "Do not recommend exact next edits; use questions to support discussion.",
+        "Avoid categorical claims such as required for registration or can provide necessary evidence unless the packet explicitly supports them.",
+        "Do not repeat the same Design Confidence concern across the summary, subcategory rationales, central tension, and questions; state the main trade-off once, then use questions for distinct angles.",
         "Do not mention SHAP, XGBoost, feature impact, model movement, or pillar delta in participant-facing fields.",
         "Do not calculate or mention Design Confidence points, Total Scenario Score, or subcategory point values.",
     ],
@@ -517,9 +526,10 @@ def build_provider_prompt(packet: dict[str, Any], *, prompt_mode: str | None = N
         "tension when they are supported by the packet.\n"
         "Use structured_feature_display_values for readable field labels and structured_feature_meanings or "
         "text_context_field_meanings to understand what each field means clinically. If selected categorical/numeric fields conflict "
-        "with free text, the selected fields drive the analysis and free text is supporting context.\n"
+        "with free text, selected fields are the source of truth for Completion Outlook and Design Confidence evidence. "
+        "Free text may create a scenario-coherence concern, but it must not replace selected fields or become a model-facing driver.\n"
         "If a clear mismatch remains, populate scenario_consistency_note with this participant-ready message exactly unless field names differ: "
-        "\"Some scenario details are not fully aligned across free-text fields and selected fields. In this case the value in the selected fields drive the analysis, while the text is used as supporting context (Intervention text, Therapeutic Modality).\"\n"
+        "\"Some scenario details are not fully aligned across free-text fields and selected fields. The selected fields drive the analysis, while the text is used as supporting context (Intervention text, Therapeutic Modality).\"\n"
         "Use packet.reference_packs as curated context only. They are secondary to the scenario packet. When you use a "
         "reference pack to shape reasoning or questions, include its pack_id in trace.reference_pack_ids_used. Do not "
         "invent specific disease, regulatory, efficacy, safety, prevalence, or cost facts beyond supplied reference packs and packet evidence. "
@@ -535,12 +545,16 @@ def build_provider_prompt(packet: dict[str, Any], *, prompt_mode: str | None = N
         "Organize participant-facing content into three blocks: Completion Outlook Analysis, Design Confidence Analysis, "
         "and Two Key Questions. Keep internal Design Confidence subcategories available for validation, scoring, and treemap labels, "
         "but do not turn every subcategory into an equal participant narrative section. "
+        "Avoid duplicating the same concern across multiple participant-facing sections; make one concise central trade-off, then use each question for a distinct current dilemma. "
         "Each participant debate question should be one open-ended question, 20-30 words, and not answerable "
-        "with yes or no. Use the expert_question_requirements to make questions strategic and debate-worthy.\n"
+        "with yes or no. Use the expert_question_requirements to make questions strategic and debate-worthy. "
+        "Generate questions that are materially fresh versus prior visible questions unless the latest change genuinely reopens the same dilemma.\n"
         "Frame Completion Outlook as lower or higher early-termination risk or resemblance to historical completed/terminated-trial patterns. "
         "Never claim a field caused completion, and do not describe the score as a promised chance of completion. "
         "Do not cite planned enrollment, planned site count, planned total duration, or operational benchmark metadata as Completion Outlook drivers. "
         "primary_duration_months_ml may be discussed only when it appears as XGBoost/model evidence.\n"
+        "Use cautious regulatory and evidence wording: prefer may be less convincing, would need stronger justification, could be harder to defend, appears more aligned, or does not by itself establish. "
+        "Avoid unsupported categorical phrases such as required for registration, registration-enabling evidence, or can provide the necessary evidence.\n"
         "Do not calculate, estimate, or return Design Confidence, Total Scenario Score, Design Confidence point values, "
         "Quality Adjustment, Final Candidate Score, or Quality Assessment point values. "
         "Those are application-owned calculations derived after validation.\n"
