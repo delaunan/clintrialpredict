@@ -15,6 +15,7 @@ from src.narratives.review_store import (  # noqa: E402
     cached_review_trace,
     replay_or_review_with_provider,
 )
+from frontend.utils.scenario_review_plot_data import design_subcategory_impacts  # noqa: E402
 
 
 def _result(score: int) -> dict:
@@ -124,6 +125,38 @@ def main() -> int:
         errors.append("stored trace should preserve frontend iteration_id")
     if cached_review_trace(state, current_packet["input_hash"], provider="not_configured"):
         errors.append("provider cache should be namespaced by provider/model")
+
+    treemap_trace = {
+        "status": "reviewed",
+        "design_confidence": 0.5,
+        "design_confidence_assessment": {
+            "pillars": {
+                "scientific_challenge": {
+                    "label": "Scientific Challenge",
+                    "design_subcategories": {
+                        "endpoint_evidence_strength": {
+                            "rating": "supportive",
+                            "score_materiality": "minimal",
+                            "points": 0.5,
+                        }
+                    },
+                }
+            }
+        },
+        "validated_review": {
+            "design_confidence_subcategories": {
+                "endpoint_evidence_strength": {
+                    "short_rationale": "Comparator supports clearer endpoint interpretation.",
+                }
+            }
+        },
+    }
+    treemap_rows = design_subcategory_impacts(treemap_trace)
+    if not treemap_rows or not any(
+        "Why: Comparator supports clearer endpoint interpretation." in detail
+        for detail in treemap_rows[0].get("FeatureDetails", [])
+    ):
+        errors.append("Design Confidence treemap details should include concise LLM short_rationale")
 
     if errors:
         for error in errors:

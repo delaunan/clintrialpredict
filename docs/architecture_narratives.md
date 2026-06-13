@@ -330,18 +330,29 @@ Recommended scoring discipline:
 ```text
 Default design adjustment = 0.0
 Non-zero adjustment requires supported packet evidence
-Each design subcategory = -4.0 to +4.0 in 0.5 increments
+Implemented design subcategory range = -5.0 to +5.0 in 0.5 increments, app-owned
 Typical subcategory movement = -2.5 to +2.5
 Total Design Confidence = sum of four design subcategories
 No hidden total cap
 ```
 
+The implemented `-5.0..+5.0` range preserves app-owned scoring. The provider must not return numeric subcategory points. Instead, the provider returns qualitative `rating` plus qualitative `score_materiality` for each subcategory after selecting supported evidence fields and writing the rationale. The app maps `rating + score_materiality + context guardrails` into points, preserving 0.5 increments and supported-evidence gates.
+
+Target qualitative `score_materiality` mapping:
+
+- `strong`: minimal `+3.0`, low `+3.5`, moderate `+4.0`, high `+4.5`, very_high `+5.0`.
+- `supportive`: minimal `+0.5`, low `+1.0`, moderate `+1.5`, high `+2.0`, very_high `+2.5`.
+- `balanced`: always `0.0`.
+- `weak`: minimal `-0.5`, low `-1.0`, moderate `-1.5`, high `-2.0`, very_high `-2.5`.
+- `conflicting`: minimal `-3.0`, low `-3.5`, moderate `-4.0`, high `-4.5`, very_high `-5.0`.
+
 The adjustment must not be fake balancing:
 
-- If a Completion Outlook pillar is already strongly positive, positive Design Confidence for that same pillar should usually remain `0.0` or `+0.5` unless the packet shows a specific unresolved baseline concern was improved.
+- If a Completion Outlook pillar is already strongly positive, positive Design Confidence for that same pillar should usually remain `0.0`, `+0.5`, or at most `+1.0` unless the packet shows a specific unresolved current-scenario weakness was improved or adds new design-quality evidence not already captured by Completion Outlook.
 - If a Completion Outlook pillar is neutral or negative, positive Design Confidence can be larger only when supported evidence shows the risk is caused by rigor, patient relevance, scientific ambition, or prudent governance.
 - If Completion Outlook rises sharply, negative Design Confidence can moderate the increase only when supported evidence suggests shortcut behavior or weakened design confidence.
 - If Completion Outlook falls sharply, positive Design Confidence can moderate the decrease only when supported evidence suggests the added risk comes from better evidence, broader patient relevance, or proportionate governance.
+- `high` positive `score_materiality` is rare and should require a clear critical narrative showing why the scenario is more defensible, interpretable, patient-relevant, governed, or proportionate. A favorable Completion Outlook, benchmark-typical operational assumption, or unresolved text/field mismatch is not enough.
 
 Text consistency should not be a standalone visual pillar in V1. It should be routed to the affected Design Confidence subcategory:
 
@@ -802,7 +813,7 @@ Compact examples:
 
 ```text
 Good Completion Outlook comment:
-The Completion Outlook appears to improve because the edited scenario looks easier to complete on the model-supported dimensions. However, that improvement should be read as operational or structural favorability, not as proof that the revised design would answer the development question better.
+The Completion Outlook appears to improve because the edited scenario looks easier to complete on the Completion Outlook score inputs. However, that improvement should be read as operational or structural favorability, not as proof that the revised design would answer the development question better.
 
 Good Design Confidence comment:
 The Design Confidence signal is more cautious because the scenario may have reduced evidentiary rigor relative to the stated development intent. Therefore, the team should be ready to defend whether the completion gain is worth the loss of interpretability.
@@ -891,8 +902,9 @@ Phase 4 prompt/schema work must make the provider reason in this order for every
 1. Select packet-supported `evidence_fields`.
 2. Write the subcategory `rationale` from those evidence fields.
 3. Assign the subcategory `rating` that follows from the evidence and rationale.
+4. Assign qualitative `score_materiality` from supported-evidence strength and context guardrails.
 
-The provider should not choose a rating first and then search for a justification. This evidence-first sequence is required for output quality and auditability. It makes the rating inspectable: a facilitator or developer can open the stored trace, see which packet fields were cited, read the rationale, and understand why the rating was valid or why the application gave it zero score effect.
+The provider should not choose a rating or score materiality first and then search for a justification. This evidence-first sequence is required for output quality and auditability. It makes the rating and materiality inspectable: a facilitator or developer can open the stored trace, see which packet fields were cited, read the rationale, and understand why the rating was valid or why the application gave it zero score effect.
 
 The JSON object may be parsed without relying on key order, but prompt examples and response schemas should present fields in the same conceptual order where possible:
 
@@ -900,7 +912,8 @@ The JSON object may be parsed without relying on key order, but prompt examples 
 {
   "evidence_fields": ["endpoint_rigor_ml", "comparator_benchmark_ml"],
   "rationale": "The endpoint and comparator choices weaken decision interpretability for the stated intent.",
-  "rating": "weak"
+  "rating": "weak",
+  "score_materiality": "moderate"
 }
 ```
 
@@ -909,6 +922,7 @@ Audit rules:
 - `evidence_fields` must cite packet fields or allowed packet evidence references.
 - `rationale` must explain how those fields support the rating in clinical-development terms.
 - `rating` must be one of the allowed labels and must not mention point values.
+- `score_materiality` must be one of `minimal`, `low`, `moderate`, `high`, or `very_high`; it controls app-owned point magnitude but is still qualitative provider evidence, not provider-owned scoring.
 - Unsupported evidence references are preserved in trace/debug output but have zero scoring effect.
 - A malformed, missing, or incomplete subcategory should suppress Design Confidence and Total Scenario Score for that review rather than silently counting as neutral.
 - Provider traces should store the original output JSON, normalized validated review, validation errors, supported/unsupported evidence fields, app-calculated subcategory points, Design Confidence, Total Scenario Score, prompt/rubric versions, provider/model namespace, and input hash so score rationale can be audited later.
@@ -932,10 +946,10 @@ The LLM does not return `Design Confidence`, `Total Scenario Score`, or final De
 The application calculates:
 
 ```text
-phase_intent_alignment_points = deterministic_map(validated_phase_intent_alignment_rating)
-endpoint_evidence_strength_points = deterministic_map(validated_endpoint_evidence_strength_rating)
-target_population_alignment_points = deterministic_map(validated_target_population_alignment_rating)
-operational_burden_balance_points = deterministic_map(validated_operational_burden_balance_rating)
+phase_intent_alignment_points = deterministic_map(validated_phase_intent_alignment_rating, score_materiality, context_guardrails)
+endpoint_evidence_strength_points = deterministic_map(validated_endpoint_evidence_strength_rating, score_materiality, context_guardrails)
+target_population_alignment_points = deterministic_map(validated_target_population_alignment_rating, score_materiality, context_guardrails)
+operational_burden_balance_points = deterministic_map(validated_operational_burden_balance_rating, score_materiality, context_guardrails)
 
 design_confidence =
     phase_intent_alignment_points
@@ -950,17 +964,17 @@ total_scenario_score = clamp(
 )
 ```
 
-Suggested initial mapping envelope:
+Implemented mapping envelope:
 
 ```text
-Each Design Confidence subcategory = -4.0 to +4.0
+Each Design Confidence subcategory = -5.0 to +5.0
 Allowed increments = 0.5
 Default = 0.0
 Typical movement = -2.5 to +2.5
 Strong movement = requires multiple explicit, supported signals
 ```
 
-The middle rating, `supportive`, allows the review to recognize directionally favorable design quality without forcing every positive observation into the top rating. `balanced` should usually map to `0.0` unless a deterministic evidence rule says otherwise.
+The provider supplies qualitative `rating` and `score_materiality`; it does not supply numeric points. The middle rating, `supportive`, allows the review to recognize directionally favorable design quality without forcing every positive observation into the top rating. `balanced` should map to `0.0` regardless of materiality.
 
 The final score should preserve half-point values when they occur and display one decimal only when needed. A design subcategory rating should affect Design Confidence only when the LLM provides supporting `evidence_fields`; otherwise the point effect should be zero and the issue can remain narrative-only. Evidence fields must also reference evidence available in the review packet. Unsupported evidence references are preserved for auditability but do not move Design Confidence.
 
@@ -1218,8 +1232,16 @@ Provider selection and secret handling:
   - `NARRATIVE_LLM_MAX_OUTPUT_TOKENS=12000`
   - `NARRATIVE_LLM_TIMEOUT_SECONDS`
   - `NARRATIVE_LLM_MAX_RETRIES`
-- Current setup status: local `.env` can hold these values, and `src/narratives/provider_config.py` reads and validates them without making any LLM API call. `scripts/check_narrative_openai_smoke.py` and `scripts/check_narrative_gemini_smoke.py` can run opt-in API smoke tests when `RUN_NARRATIVE_OPENAI_SMOKE=1` or `RUN_NARRATIVE_GEMINI_SMOKE=1` is set; they skip by default to avoid accidental network calls or API spend. `src/narratives/provider.py` contains real OpenAI and Gemini invocation helpers behind the same normalized provider result shape. `frontend/views/trial_simulator.py` uses the deterministic mock provider by default and routes both hidden baseline and visible Quality Review calls through the live provider chain only when `NARRATIVE_LIVE_REVIEW_ENABLED=1`. Live wrapper checks have validated one full fixture review with OpenAI and one full fixture review with Gemini using the normalized provider boundary.
-- Provider config, prompt/schema fixtures, opt-in OpenAI/Gemini smoke testing, and opt-in simulator UI routing are implemented against the older Quality Review contract. The active implementation task is to migrate that contract to the target `completion_outlook_analysis`, `design_confidence_subcategories`, `review_metadata`, `scenario_consistency_note`, and `text_change_evidence` shape described in `prompt_enhancement_plan.md`. If live routing is enabled and all configured providers fail or validation does not produce a complete Scenario Review, the participant panel shows Completion Score only and marks Scenario Review unavailable for the current scenario, with a narrow retry action for live-provider failures. It does not reuse stale Design Confidence for a new packet.
+- Current setup status: local `.env` can hold these values, and `src/narratives/provider_config.py` reads and validates them without making any LLM API call. `scripts/check_narrative_openai_smoke.py` and `scripts/check_narrative_gemini_smoke.py` can run opt-in API smoke tests when `RUN_NARRATIVE_OPENAI_SMOKE=1` or `RUN_NARRATIVE_GEMINI_SMOKE=1` is set; they skip by default to avoid accidental network calls or API spend. `src/narratives/provider.py` contains real OpenAI and Gemini invocation helpers behind the same normalized provider result shape. `frontend/views/trial_simulator.py` uses the deterministic mock provider by default and routes both hidden baseline and visible Scenario Review calls through the live provider chain only when `NARRATIVE_LIVE_REVIEW_ENABLED=1`. Live wrapper checks have validated full fixture reviews using the normalized provider boundary.
+- Provider config, prompt/schema fixtures, opt-in OpenAI/Gemini smoke testing, and opt-in simulator UI routing now target the active Scenario Review contract with `completion_outlook_analysis`, `design_confidence_subcategories`, required qualitative `score_materiality`, `review_metadata`, `scenario_consistency_note`, and text-change evidence in the packet context. If live routing is enabled and all configured providers fail or validation does not produce a complete Scenario Review, the participant panel shows Completion Score only and marks Scenario Review unavailable for the current scenario, with a narrow retry action for live-provider failures. It does not reuse stale Design Confidence for a new packet.
+- Participant-facing Completion Outlook wording should avoid internal terms such as `model-facing`. Use plain phrases such as `Completion Outlook score inputs`, `score inputs`, or `score-driving fields` when explaining the scoring boundary.
+- Planning-assumption fields are outside Completion Outlook: planned enrollment, planned site count, and planned total duration. These three fields may inform Design Confidence proportionality and executability, but they must not be used to explain Completion Outlook movement. Other operational trial features may still be discussed in Completion Outlook when they are actual Completion Outlook score inputs and packet evidence supports them.
+- Resource, staffing, and budget implications are qualitative Operational Burden Balance considerations. The system should not estimate monetary cost, affordability, or financial feasibility without explicit financial inputs. Added resource intensity should influence Design Confidence through proportionality: whether the added burden is justified by evidence, patient-relevance, governance, or interpretability value gained.
+- For hard product-boundary cases, the app may pass narrow `review_controls` to the provider. These controls should define the Completion Outlook mode, latest-change focus, forbidden latest fields for Completion Outlook, and required question focus. They should not reduce Design Confidence into a template; Design Confidence should continue to use evidence-first expert reasoning.
+- When `review_controls` are present, participant-facing narratives should explain the latest change without re-labeling older cumulative issues as newly changed. Older issues may remain relevant to the current full scenario, but they should not be described as if they were introduced by the latest edit.
+- For later visible iterations, the two participant questions should work as a pair: one should focus on the newest material scenario change, and the other should raise a broader strategic development-design tension using the trial as a concrete example. If an older dilemma remains relevant, it should be reframed through the newest material change rather than repeated in the same question frame.
+- Structured/free-text mismatch remains a bounded coherence warning unless selected structured fields or endpoint text independently support a stronger Design Confidence penalty. The consistency warning should be visible, but the mismatch should not become the main score driver across several Design Confidence subcategories by itself.
+- When only the three planning-assumption fields changed and the Completion Outlook score delta is `0.0`, the app may deterministically set the participant-facing Completion Outlook boundary sentence before storing/reporting the trace. This is a product boundary, not a clinical judgment, and should not alter Design Confidence ratings, score materiality, subcategory rationales, or Total Scenario Score calculation.
 - Any OpenAI model used in later validation should be pinned to an explicit snapshot rather than a floating alias. OpenAI Pro/high-reasoning profiles can be considered for slower, high-quality hidden baseline generation or offline review, but they are not the default live interactive path after the June 2026 Gemini Flash-Lite decision.
 - Any Gemini model used in production or fallback should be configured with an explicit model ID rather than hard-coded in product logic. The current live interactive candidate is `gemini-3.1-flash-lite`; a Pro-class Gemini model can be evaluated later for slower offline or fallback review quality.
 - Future provider-chain mode should try the configured primary provider first, then the configured fallback only for provider/network/rate-limit/unavailable failure. Do not fallback when the primary provider returns valid but unfavorable clinical reasoning, or when the provider returns malformed/invalid review JSON; that would create provider-shopping behavior and hide prompt/contract problems that should be fixed.
@@ -1333,7 +1355,7 @@ Real-provider prompts use a funnel instruction, currently implemented in `src/na
 - In visible modes, use `iteration_context.field_changes` to identify what the participant changed.
 - Use `model_interpretation.xgboost_impact_changes` to understand model movement and materiality. In `hidden_baseline` mode, do not invent participant edits when `field_changes` is empty.
 - Treat XGBoost/SHAP movement as model explanation evidence, not proof of clinical causality.
-- Translate model evidence into clinical trial / pharma development language for participant-facing text. Explain why the revised scenario may look more or less completion-like, robust, feasible, governed, strategically aligned, risk-reduced, simplified, or less evidence-generating in terms of supported evidence such as endpoint timing, comparator choice, population scope, oversight, operational burden, scientific challenge, or development strategy rather than exposing raw model vocabulary. Total duration, planned enrollment, planned site count, and operational benchmark assumptions must not be cited as Completion Outlook drivers; maximum primary endpoint duration may be used only when present as XGBoost evidence. Do not equate a higher Completion Score with simplification by default, but do flag simplification or value loss when the evidence points that way.
+- Translate score evidence into clinical trial / pharma development language for participant-facing text. Explain why the revised scenario may look more or less completion-like, robust, feasible, governed, strategically aligned, risk-reduced, simplified, or less evidence-generating in terms of supported evidence such as endpoint timing, comparator choice, population scope, oversight, operational burden, scientific challenge, or development strategy rather than exposing raw model vocabulary. Total duration, planned enrollment, planned site count, and operational benchmark assumptions must not be cited as Completion Outlook drivers; maximum primary endpoint duration may be used only when present as Completion Outlook score evidence. Do not equate a higher Completion Score with simplification by default, but do flag simplification or value loss when the evidence points that way.
 - Produce design subcategory ratings, rationale, evidence fields, participant-facing narrative, continuity, and trace fields.
 - Do not calculate or return `Design Confidence`, `Total Scenario Score`, or Design Confidence point values. The application calculates those from the validated subcategory ratings.
 
@@ -1748,11 +1770,11 @@ Implementation staging:
 
 1. Contract fixtures: replace or extend the current fixtures with scenarios that test the four Design Confidence subcategories. Include at least baseline, model-facing edit, operational-only edit, material text-only edit, structured/text context review, no-op/minor text edit, score improves but evidence value weakens, score improves and Design Confidence remains neutral, score declines but Design Confidence improves, endpoint text contradiction, biomarker/population mismatch, phase/intent ambition versus weak endpoint or comparator support, modality/risk-governance mismatch, and no-adjustment despite large Completion Outlook movement. Current artifact to migrate: `src/narratives/contract_fixtures.py`, validated by `scripts/check_narrative_contract_fixtures.py`.
 2. Deterministic review packet builder: assemble baseline/current/previous snapshots, changed fields, explicit field-change deltas, operational metadata, score deltas, XGBoost impact movements, text context, user clarification context, field dictionary version, canonical taxonomy option-key values, display labels, and compact storyline memory without calling an LLM. Current implementation artifact: `src/narratives/packet_builder.py`, validated by `scripts/check_narrative_packet_builder.py`.
-3. Validation and scoring engine: validate review JSON, enforce packet-supported `evidence_fields`, derive Design Confidence subcategory points, enforce default-zero and supported-evidence gates, preserve 0.5 increments, avoid fake balancing, require subcategory totals to reconcile to Design Confidence, and calculate Total Scenario Score when enabled. Current artifact to migrate: `src/narratives/scoring.py`, validated by `scripts/check_narrative_scoring.py`.
+3. Validation and scoring engine: validate review JSON, enforce packet-supported `evidence_fields`, derive Design Confidence subcategory points from `rating + score_materiality + context guardrails`, enforce default-zero and supported-evidence gates, preserve 0.5 increments across the `-5.0..+5.0` subcategory scale, avoid fake balancing, require subcategory totals to reconcile to Design Confidence, and calculate Total Scenario Score when enabled. Current implementation artifact: `src/narratives/scoring.py`, validated by `scripts/check_narrative_scoring.py`.
 4. Mock reviewer: use deterministic fake JSON responses based on the fixtures to test validation, scoring math, no-op behavior, text-materiality behavior, and failure handling. Current implementation artifact: `src/narratives/mock_reviewer.py`, validated by `scripts/check_narrative_mock_reviewer.py`.
 5. Storage and replay: persist validated review traces in session state first, including input hash, validation status, Design Confidence, Total Scenario Score, design subcategory contributions, and compact storyline memory. Reuse cached reviews for identical input hashes. Current artifact to migrate: `src/narratives/review_store.py`, validated by `scripts/check_narrative_review_store.py`. It supports direct mock replay now and an optional provider-chain path for future live-provider activation without reusing mock cache entries as real-provider reviews. This is prototype storage only and does not yet satisfy the durable cross-team baseline requirement.
 6. Pre-prediction consistency check: removed from the active simulator. Do not reintroduce `Check Scenario`, deterministic structured/text gates, or a lightweight LLM consistency pass without a new explicit product decision.
-7. Minimal UI panel: render Completion Score, Design Confidence, Total Scenario Score when enabled, Scenario Review, and compact four-pillar Design Confidence rows. Do not overexpose supported/unsupported evidence fields in the participant panel by default; reserve them for future facilitator/debug views. Current artifact to migrate: `frontend/views/trial_simulator.py`, using the provider-free packet builder, mock reviewer, and session-state review store.
+7. Minimal UI panel: render Completion Score, Design Confidence, Total Scenario Score when enabled, Scenario Review, and compact four-pillar Design Confidence rows. Design Confidence treemap leaves include concise rationale details prepared by the Streamlit-free `frontend/utils/scenario_review_plot_data.py` helper, so local checkers can validate plot data without importing the full Streamlit view. Do not overexpose supported/unsupported evidence fields in the participant panel by default; reserve them for future facilitator/debug views. Current implementation artifacts: `frontend/views/trial_simulator.py` and `frontend/utils/scenario_review_plot_data.py`, using the provider-free packet builder, mock reviewer, and session-state review store.
 8. Hidden baseline continuity: generate/store the hidden baseline review and verify that later iteration reviews use baseline review, previous review, compact non-numeric baseline quality summary, and compact storyline memory consistently. Current implementation is session-level only; it does not yet provide cross-team durable baseline reuse. Current implementation artifacts: `src/narratives/packet_builder.py`, `frontend/views/trial_simulator.py`, and `scripts/check_narrative_packet_builder.py`.
 9. Thin LLM provider wrapper: add provider config first, then opt-in config-path API smoke tests, then provider-chain invocation through the same normalized result shape for mock, OpenAI, and Gemini, then an explicit simulator UI activation flag. Provider config reads API keys from environment variables or secret managers; it never stores keys in code. Current implementation artifacts: `src/narratives/provider.py`, `src/narratives/provider_config.py`, `src/narratives/prompt_builder.py`, `src/narratives/review_store.py`, and the opt-in routing in `frontend/views/trial_simulator.py`, validated by `scripts/check_narrative_provider.py`, `scripts/check_narrative_provider_config.py`, `scripts/check_narrative_prompt_builder.py`, `scripts/check_narrative_review_store.py`, and the skipped-by-default `scripts/check_narrative_openai_smoke.py` / `scripts/check_narrative_gemini_smoke.py`; the simulator still uses the deterministic mock provider by default unless `NARRATIVE_LIVE_REVIEW_ENABLED=1`. Provider code invokes the model and normalizes JSON only; the application owns scoring. Live-provider UI routing is available, but durable provider tracing and live-play calibration remain future work.
 10. First adjusted-score visual: replace the current Final Candidate Score / seven-domain grouped chart with the Total Scenario Score view when implementation reaches UI migration. The active target keeps the four familiar pillars and adds one Design Confidence subcategory under each pillar; Completion Outlook and Design Confidence provenance must remain visible in trace/facilitator output.

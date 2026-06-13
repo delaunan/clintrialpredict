@@ -11,8 +11,8 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
-PROMPT_VERSION = "narratives_v3"
-RUBRIC_VERSION = "design_confidence_v1"
+PROMPT_VERSION = "narratives_v4"
+RUBRIC_VERSION = "design_confidence_v2"
 
 REQUIRED_SCENARIO_TYPES = {
     "baseline",
@@ -35,6 +35,14 @@ REQUIRED_DESIGN_SUBCATEGORIES = {
     "endpoint_evidence_strength",
     "target_population_alignment",
     "operational_burden_balance",
+}
+
+SCORE_MATERIALITY_LEVELS = {
+    "minimal",
+    "low",
+    "moderate",
+    "high",
+    "very_high",
 }
 
 # Temporary compatibility alias for old callers during the schema migration.
@@ -212,9 +220,25 @@ def _base_packet() -> dict[str, Any]:
     }
 
 
-def _domain(rating: str, rationale: str, evidence_fields: list[str]) -> dict[str, Any]:
+def _default_score_materiality(rating: str) -> str:
+    return {
+        "strong": "minimal",
+        "supportive": "minimal",
+        "balanced": "minimal",
+        "weak": "moderate",
+        "conflicting": "minimal",
+    }.get(rating, "minimal")
+
+
+def _domain(
+    rating: str,
+    rationale: str,
+    evidence_fields: list[str],
+    score_materiality: str | None = None,
+) -> dict[str, Any]:
     return {
         "rating": rating,
+        "score_materiality": score_materiality or _default_score_materiality(rating),
         "rationale": rationale,
         "evidence_fields": evidence_fields,
         "short_rationale": rationale.split(".", 1)[0][:80],
@@ -498,7 +522,7 @@ CONTRACT_FIXTURES: list[dict[str, Any]] = [
         design_subcategories={
             **_neutral_design(),
             "phase_intent_alignment": _domain("weak", "Confirmatory intent is less well matched to weakened evidence choices.", ["strategic_ambition_ml", "endpoint_rigor_ml"]),
-            "endpoint_evidence_strength": _domain("conflicting", "Endpoint rigor, comparator strength, and endpoint timing weaken together.", ["endpoint_rigor_ml", "comparator_benchmark_ml", "primary_duration_months_ml"]),
+            "endpoint_evidence_strength": _domain("conflicting", "Endpoint rigor, comparator strength, and endpoint timing weaken together.", ["endpoint_rigor_ml", "comparator_benchmark_ml", "primary_duration_months_ml"], "moderate"),
         },
         participant_review=_participant_review(
             "Endpoint rigor, comparator framing, and primary endpoint duration changed.",
@@ -620,9 +644,9 @@ CONTRACT_FIXTURES: list[dict[str, Any]] = [
         ),
         design_subcategories={
             **_neutral_design(),
-            "endpoint_evidence_strength": _domain("supportive", "Longer endpoint timing supports the stated clinical outcome.", ["primary_duration_months_ml", "primary_outcomes_ui"]),
-            "target_population_alignment": _domain("supportive", "Older adults and biomarker strategy improve relevance to the intended population.", ["older_adult_ml", "biomarker_stratification_ml"]),
-            "operational_burden_balance": _domain("supportive", "Oversight is proportionate to added population and duration complexity.", ["has_dmc_ml", "patient_severity_ml"]),
+            "endpoint_evidence_strength": _domain("supportive", "Longer endpoint timing supports the stated clinical outcome.", ["primary_duration_months_ml", "primary_outcomes_ui"], "moderate"),
+            "target_population_alignment": _domain("supportive", "Older adults and biomarker strategy improve relevance to the intended population.", ["older_adult_ml", "biomarker_stratification_ml"], "moderate"),
+            "operational_burden_balance": _domain("supportive", "Oversight is proportionate to added population and duration complexity.", ["has_dmc_ml", "patient_severity_ml"], "moderate"),
         },
         participant_review=_participant_review(
             "Population, biomarker, oversight, and duration choices became more demanding.",
@@ -670,7 +694,7 @@ CONTRACT_FIXTURES: list[dict[str, Any]] = [
         ),
         design_subcategories={
             **_neutral_design(),
-            "operational_burden_balance": _domain("weak", "Enrollment is above benchmark high and only partly supported by the biomarker-defined design.", ["operational_assumptions.planned_enrollment.enrollment_status", "operational_assumptions.planned_enrollment.support_level"]),
+            "operational_burden_balance": _domain("weak", "Enrollment is above benchmark high and only partly supported by the biomarker-defined design.", ["operational_assumptions.planned_enrollment.enrollment_status", "operational_assumptions.planned_enrollment.support_level"], "high"),
         },
         participant_review=_participant_review(
             "Only enrollment and site assumptions changed.",
@@ -1036,8 +1060,8 @@ def validate_contract_fixtures(fixtures: list[dict[str, Any]] | None = None) -> 
             for subcategory_name, points in subcategory_points.items():
                 if not isinstance(points, (int, float)):
                     errors.append(f"{fixture_id}: {subcategory_name} expected points must be numeric")
-                elif points < -4 or points > 4:
-                    errors.append(f"{fixture_id}: {subcategory_name} expected points must be between -4 and +4")
+                elif points < -5 or points > 5:
+                    errors.append(f"{fixture_id}: {subcategory_name} expected points must be between -5 and +5")
                 elif points * 2 != int(points * 2):
                     errors.append(f"{fixture_id}: {subcategory_name} expected points must use 0.5 increments")
             if isinstance(expected.get("expected_design_confidence"), (int, float)):
@@ -1104,6 +1128,10 @@ def validate_contract_fixtures(fixtures: list[dict[str, Any]] | None = None) -> 
         for subcategory_name, subcategory in subcategories.items():
             if "rating" not in subcategory:
                 errors.append(f"{fixture_id}: {subcategory_name} missing rating")
+            if "score_materiality" not in subcategory:
+                errors.append(f"{fixture_id}: {subcategory_name} missing score_materiality")
+            elif subcategory.get("score_materiality") not in SCORE_MATERIALITY_LEVELS:
+                errors.append(f"{fixture_id}: {subcategory_name} invalid score_materiality")
             if "rationale" not in subcategory:
                 errors.append(f"{fixture_id}: {subcategory_name} missing rationale")
             if "short_rationale" not in subcategory:

@@ -37,26 +37,63 @@ DESIGN_RATINGS = {
     "conflicting",
 }
 
-BASE_RATING_POINTS = {
-    "strong": 2.0,
-    "supportive": 0.5,
-    "balanced": 0.0,
-    "weak": -1.5,
-    "conflicting": -3.0,
+SCORE_MATERIALITY_LEVELS = {
+    "minimal",
+    "low",
+    "moderate",
+    "high",
+    "very_high",
 }
 
-SUPPORTIVE_RISK_TRADEOFF_POINTS = 1.5
-OPERATIONAL_BENCHMARK_WEAK_POINTS = -2.0
-MULTI_SIGNAL_ENDPOINT_CONFLICT_POINTS = -4.0
+DESIGN_RATING_MATERIALITY_POINTS = {
+    "strong": {
+        "minimal": 3.0,
+        "low": 3.5,
+        "moderate": 4.0,
+        "high": 4.5,
+        "very_high": 5.0,
+    },
+    "supportive": {
+        "minimal": 0.5,
+        "low": 1.0,
+        "moderate": 1.5,
+        "high": 2.0,
+        "very_high": 2.5,
+    },
+    "balanced": {
+        "minimal": 0.0,
+        "low": 0.0,
+        "moderate": 0.0,
+        "high": 0.0,
+        "very_high": 0.0,
+    },
+    "weak": {
+        "minimal": -0.5,
+        "low": -1.0,
+        "moderate": -1.5,
+        "high": -2.0,
+        "very_high": -2.5,
+    },
+    "conflicting": {
+        "minimal": -3.0,
+        "low": -3.5,
+        "moderate": -4.0,
+        "high": -4.5,
+        "very_high": -5.0,
+    },
+}
 
 # Temporary compatibility alias for prompt/schema code that migrates in Phase 4.
 DOMAIN_RATING_POINTS = {
-    subcategory_name: deepcopy(BASE_RATING_POINTS)
+    subcategory_name: {
+        rating: values["minimal"]
+        for rating, values in DESIGN_RATING_MATERIALITY_POINTS.items()
+    }
     for subcategory_name in sorted(REQUIRED_DESIGN_SUBCATEGORIES)
 }
 
-DESIGN_SUBCATEGORY_MIN = -4.0
-DESIGN_SUBCATEGORY_MAX = 4.0
+DESIGN_SUBCATEGORY_MIN = -5.0
+DESIGN_SUBCATEGORY_MAX = 5.0
 TOTAL_SCORE_MIN = 0
 TOTAL_SCORE_MAX = 100
 
@@ -196,39 +233,72 @@ def _contains_any(evidence_fields: list[str], tokens: tuple[str, ...]) -> bool:
     return any(token in joined for token in tokens)
 
 
-def _raw_design_points(subcategory_name: str, rating: str, evidence_fields: list[str], packet: dict[str, Any]) -> float:
-    """Map validated V2 ratings to deterministic Design Confidence points.
+def _changed_fields(packet: dict[str, Any]) -> set[str]:
+    iteration = packet.get("iteration_context") or {}
+    return {str(field) for field in iteration.get("changed_fields") or []}
 
-    The rating label supplies the base direction and magnitude. A small set of
-    deterministic packet-context modifiers handles the V1 cases where the same
-    rating should be smaller or larger because it moderates Completion Outlook
-    movement or combines multiple explicit conflict signals.
-    """
-    raw_points = BASE_RATING_POINTS.get(rating, 0.0)
-    score_delta = _numeric_score_delta(packet)
 
-    if rating == "strong" and score_delta < 0:
-        return 3.0
+def _changed_field_supports_evidence(packet: dict[str, Any], evidence_fields: list[str]) -> bool:
+    changed = _changed_fields(packet)
+    if not changed:
+        return False
+    for evidence in evidence_fields:
+        evidence_text = str(evidence)
+        if evidence_text in changed:
+            return True
+        if any(evidence_text.startswith(f"{field}.") or field.startswith(f"{evidence_text}.") for field in changed):
+            return True
+    return False
 
-    if rating == "supportive":
-        return SUPPORTIVE_RISK_TRADEOFF_POINTS if score_delta < 0 else raw_points
 
-    if rating == "weak":
-        if subcategory_name == "operational_burden_balance" and _contains_any(evidence_fields, ("operational_assumptions",)):
-            return OPERATIONAL_BENCHMARK_WEAK_POINTS
-        return raw_points
+def _is_operational_only_change(packet: dict[str, Any]) -> bool:
+    changed = _changed_fields(packet)
+    return bool(changed) and all(field.startswith("operational_assumptions.") for field in changed)
 
-    if rating == "conflicting":
-        if subcategory_name == "endpoint_evidence_strength" and _contains_any(
-            evidence_fields,
-            ("endpoint_rigor", "comparator_benchmark", "primary_duration"),
-        ):
-            has_endpoint = _contains_any(evidence_fields, ("endpoint_rigor",))
-            has_comparator = _contains_any(evidence_fields, ("comparator_benchmark",))
-            has_duration = _contains_any(evidence_fields, ("primary_duration",))
-            if has_endpoint and has_comparator and has_duration:
-                return MULTI_SIGNAL_ENDPOINT_CONFLICT_POINTS
-        return raw_points
+
+def _completion_pillar_value(packet: dict[str, Any], subcategory_name: str) -> float | None:
+    pillar_key = DESIGN_SUBCATEGORY_PILLARS.get(subcategory_name)
+    pillar_label = DESIGN_PILLAR_LABELS.get(pillar_key or "")
+    impacts = (packet.get("model_interpretation") or {}).get("pillar_impacts") or {}
+    value = None
+    if isinstance(impacts, dict):
+        value = impacts.get(pillar_label)
+    elif isinstance(impacts, list):
+        for impact in impacts:
+            if not isinstance(impact, dict):
+                continue
+            if impact.get("Pillar") == pillar_label:
+                value = impact.get("Impact")
+                break
+    return float(value) if isinstance(value, (int, float)) else None
+
+
+def _raw_design_points(
+    subcategory_name: str,
+    rating: str,
+    score_materiality: str,
+    evidence_fields: list[str],
+    packet: dict[str, Any],
+) -> float:
+    """Map validated qualitative review fields to deterministic Design Confidence points."""
+    raw_points = DESIGN_RATING_MATERIALITY_POINTS.get(rating, {}).get(score_materiality, 0.0)
+
+    if (
+        subcategory_name == "operational_burden_balance"
+        and raw_points > 0
+        and _is_operational_only_change(packet)
+    ):
+        return 0.0
+
+    pillar_value = _completion_pillar_value(packet, subcategory_name)
+    if (
+        raw_points > 1.0
+        and pillar_value is not None
+        and pillar_value >= 4.0
+        and _numeric_score_delta(packet) >= 0
+        and not _changed_field_supports_evidence(packet, evidence_fields)
+    ):
+        return 1.0
 
     return raw_points
 
@@ -245,6 +315,7 @@ def _validated_subcategory(subcategory_name: str, subcategory: Any) -> tuple[dic
         }, [f"{subcategory_name}: design subcategory is not an object"]
 
     rating = subcategory.get("rating")
+    score_materiality = subcategory.get("score_materiality")
     rationale = subcategory.get("rationale")
     evidence_fields = subcategory.get("evidence_fields")
     short_rationale = subcategory.get("short_rationale")
@@ -254,6 +325,9 @@ def _validated_subcategory(subcategory_name: str, subcategory: Any) -> tuple[dic
 
     if rating not in DESIGN_RATINGS:
         errors.append(f"{subcategory_name}: invalid rating {rating!r}")
+        valid = False
+    if score_materiality not in SCORE_MATERIALITY_LEVELS:
+        errors.append(f"{subcategory_name}: invalid score_materiality {score_materiality!r}")
         valid = False
     if not isinstance(rationale, str):
         errors.append(f"{subcategory_name}: rationale must be a string")
@@ -278,6 +352,7 @@ def _validated_subcategory(subcategory_name: str, subcategory: Any) -> tuple[dic
 
     return {
         "rating": rating,
+        "score_materiality": score_materiality,
         "rationale": rationale,
         "evidence_fields": [str(field) for field in evidence_fields],
         "short_rationale": short_rationale,
@@ -441,6 +516,7 @@ def _score_subcategory(packet: dict[str, Any], subcategory_name: str, subcategor
     raw_points = _raw_design_points(
         subcategory_name,
         str(subcategory.get("rating")),
+        str(subcategory.get("score_materiality")),
         evidence_fields,
         packet,
     )
@@ -479,9 +555,12 @@ def _design_contributions(packet: dict[str, Any], validated_subcategories: dict[
         pillars[pillar_key]["design_subcategories"][subcategory_name] = {
             "label": DESIGN_SUBCATEGORY_LABELS[subcategory_name],
             "rating": scored.get("rating"),
+            "score_materiality": scored.get("score_materiality"),
             "raw_points": scored.get("raw_points"),
             "points": scored.get("points"),
             "evidence_fields": deepcopy(scored.get("evidence_fields") or []),
+            "rationale": scored.get("rationale"),
+            "short_rationale": scored.get("short_rationale"),
             "supported_evidence_fields": deepcopy(scored.get("supported_evidence_fields") or []),
             "unsupported_evidence_fields": deepcopy(scored.get("unsupported_evidence_fields") or []),
             "validation_notes": deepcopy(scored.get("validation_notes") or []),

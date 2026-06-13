@@ -38,7 +38,7 @@ Scoring guardrails:
 - The provider must not return final app-owned scores.
 - The app validates review JSON and calculates Design Confidence deterministically.
 - Non-zero Design Confidence requires supported packet evidence.
-- Each design subcategory uses `-4.0..+4.0` in `0.5` increments.
+- Each design subcategory uses `-5.0..+5.0` in `0.5` increments, derived by the app from qualitative `rating + score_materiality + context guardrails`, not from provider-owned numeric point fields.
 - There is no hidden Design Confidence total cap; only Total Scenario Score is clamped to `0..100`.
 - Operational assumptions remain outside XGBoost and feed only Scenario Review / Design Confidence.
 
@@ -124,7 +124,7 @@ Required behavior:
 - Validate `design_confidence_subcategories`.
 - Reject or ignore provider-returned app-owned score fields.
 - Enforce supported packet evidence before any point effect.
-- Calculate per-subcategory Design Confidence contributions.
+- Calculate per-subcategory Design Confidence contributions from validated `rating + score_materiality + context guardrails`.
 - Sum subcategories into total Design Confidence.
 - Calculate Total Scenario Score as `completion_score + design_confidence`, clamped to `0..100`.
 - Preserve half-point values.
@@ -143,6 +143,16 @@ Notes:
 - `src/narratives/scoring.py` now returns V2 fields: `design_confidence`, `total_scenario_score`, and `design_confidence_assessment`.
 - Legacy Quality Review output aliases are intentionally not preserved in the scoring result; downstream modules are expected to migrate in Phase 4 and Phase 5.
 - The deterministic rating-to-points mapping uses rating direction plus packet context, so the app can distinguish small supportive signals from stronger evidence-backed trade-offs without accepting provider-owned final score values.
+
+Completed scoring-scale migration:
+
+- Added qualitative `score_materiality` to each Design Confidence subcategory in the prompt/schema.
+- Provider-owned numeric Design Confidence points remain forbidden.
+- `rating + score_materiality` maps to app-owned points across `-5.0..+5.0` in `0.5` increments.
+- Supported-evidence gating is preserved: unsupported non-neutral ratings still produce `0.0` point effect.
+- Added context guardrails so already-positive Completion Outlook pillars are not over-rewarded unless the packet shows a resolved weakness or new design-quality evidence.
+- Operational-only assumptions remain neutral or negative unless they are matched by evidence, patient-relevance, governance, or proportionality gains.
+- Updated fixtures, mock/provider paths, prompt checker, scoring checker, review-store traces, eval harness summaries, and UI trace details together.
 
 ### Phase 4: Migrate Prompt, Schema, Provider, And Mock
 
@@ -164,8 +174,9 @@ Required behavior:
 - Enforce evidence-first provider reasoning for each Design Confidence subcategory:
   1. choose packet-supported `evidence_fields`;
   2. write the `rationale` from those fields;
-  3. assign the `rating` from the evidence and rationale.
-- Make prompt examples and response schema present subcategory fields in evidence/rationale/rating order where possible, while keeping JSON parsing order-independent.
+  3. assign the `rating` from the evidence and rationale;
+  4. assign qualitative `score_materiality` from supported-evidence strength and context guardrails.
+- Make prompt examples and response schema present subcategory fields in evidence/rationale/rating/score-materiality order where possible, while keeping JSON parsing order-independent.
 - Store enough trace data to audit the score rationale later: original provider JSON, normalized validated review, validation errors, supported/unsupported evidence fields, app-calculated subcategory points, Design Confidence, Total Scenario Score, prompt/rubric versions, provider/model namespace, and input hash.
 - Make provider schema strict enough to require all top-level Scenario Review sections and all four Design Confidence subcategories on every review.
 - Add one bounded provider-wrapper retry/repair attempt for malformed JSON, missing required fields, or incomplete required subcategories; record the retry reason and use the same packet.
@@ -332,7 +343,7 @@ Current uncommitted status:
 
 ### Pre-Automation Checkpoint - 2026-06-13
 
-Status: ready for first-wave automated narrative eval harness after user UI validation.
+Status: first-wave automated narrative eval harness implemented; ready for controlled live Gemini run after user approval.
 
 Completed from the manual four-iteration live-review feedback:
 
@@ -341,6 +352,7 @@ Completed from the manual four-iteration live-review feedback:
 - Hidden baseline still suppresses participant-visible Design Confidence and Total Scenario Score.
 - First visible `Total Scenario Score` delta compares against baseline `Completion Outlook`; first visible Design Confidence has no previous-value delta; later Design/Total deltas compare against the previous visible review.
 - Design Confidence treemap leaves include short rationale text when available.
+- Design Confidence treemap data preparation now lives in `frontend/utils/scenario_review_plot_data.py`, so narrative checkers can verify treemap rationale details without importing the Streamlit view or emitting Streamlit runtime warnings.
 - Prompt instructions now explicitly state that selected structured/categorical fields are the source of truth when free text conflicts, while contradictory free text can only create a scenario-coherence concern.
 - Prompt instructions now require materially fresh key questions across visible iterations unless the same dilemma is genuinely reopened.
 - Prompt instructions now soften regulatory/evidence language and discourage unsupported categorical phrasing such as `required for registration` or `can provide the necessary evidence`.
@@ -360,15 +372,33 @@ Verification completed:
 - `python scripts/check_narrative_live_snapshot_flow.py`
 - `git diff --check`
 - Local Streamlit health smoke on port `8504` returned `ok`.
+- `python -m py_compile frontend/utils/scenario_review_plot_data.py frontend/views/trial_simulator.py scripts/check_narrative_live_snapshot_flow.py` passed after extracting the Streamlit-free plot-data helper.
+
+Automated eval harness:
+
+- Added `scripts/run_narrative_eval_suite.py`.
+- The harness selects real registry trials across target Therapeutic Areas and starting Completion Score bands.
+- It applies four scenario iterations without Streamlit UI interaction: model-favorable evidence shortcut, harder but more clinically focused design, operational-burden-only change, and structured/free-text contradiction.
+- It builds the same narrative review packets used by the simulator, calls `mock`, explicit `gemini`/`openai`, or configured provider chain, stores review traces, grades deterministic quality checks, and writes Markdown/JSON reports under ignored `reports/narrative_evals/`.
+- Reports include trial identity, exact UI-label changes, expectations, narratives, Design Confidence ratings/points, Total Scenario Score, key questions, deterministic gap analysis, and Codex comments.
+- JSON reports archive the full input packet, provider prompt, raw provider JSON, and validated review whenever a provider returns a reviewed trace. Markdown stays concise for user review.
+- Expectation flags are separated into deterministic checks and human-review focus items so subjective narrative-quality expectations are not treated as fully automated pass/fail signals.
+- Added `--success-smoke` to validate the full reviewed-trace path and the `review_controls` operational-boundary override path locally with a fixture-backed mock review before any external provider run.
 
 Residual risk:
 
-- No live Gemini run has been performed after the latest prompt wording change.
-- No automated first-wave eval harness exists yet.
+- A one-trial live Gemini rerun after the latest prompt wording change returned 4/4 reviewed iterations and identified targeted calibration items now implemented: operational-only checks are subcategory-level on `operational_burden_balance`, verbatim repeated questions fail deterministic freshness, and structured/free-text mismatch remains bounded narrative context rather than overriding selected-field evidence or becoming the main Design Confidence score driver.
+- The latest post-audit one-trial live Gemini run returned 4/4 reviewed iterations with `3` failed checks and `2` warnings. Implemented follow-up changes: remove participant-facing `model-facing` wording, narrow the Completion Outlook operational boundary to the three planning-assumption fields only, fail extra planning-assumption detail after the agreed zero-delta sentence, fail stale planning-assumption carryover in later non-operational iterations, and strengthen question freshness around operational-only and structured/free-text contradiction changes.
+- After planning review, added eval-packet `review_controls` / `question_controls` so the prompt receives explicit product controls for the latest-change focus and Completion Outlook mode. For the hard operational planning-assumption zero-delta case, the eval harness now applies a narrow deterministic override to the Completion Outlook summary before storing the trace; Design Confidence and scoring remain provider/app-derived as before.
+- Follow-up audit fixes implemented: raw pre-control provider review/scoring are preserved in report metadata before the operational-boundary override; remaining active prompt wording was changed from `model-supported` / `model evidence` to participant-friendlier score-input language; and `--success-smoke` now exercises the `review_controls` override path directly.
+- The first control-layer rerun returned 4/4 reviewed iterations with `1` failed deterministic check and `0` warnings. The fail was an overly narrow operational-question vocabulary check, while the generated questions did focus on enrollment, duration, expanded network, oversight, and data quality. Implemented follow-up changes keep prompt additions minimal and move detailed enforcement into the eval checker: broader operational-question vocabulary, participant-facing internal-model-language failures, and structured/free-text bounded-impact warnings.
+- Simplified question-freshness prompt wording to avoid rule saturation: later visible iterations now use a two-question-pair rule, with one question anchored to the newest material change and the other raising a broader strategic development-design tension. The old `unless the latest change genuinely reopens the same dilemma` escape hatch was removed; persistent dilemmas should be reframed through the newest change.
+- Added a compact Operational Burden Balance resource/budget principle: qualitative resource, staffing, and budget implications may be discussed when packet fields imply added burden, but monetary cost, affordability, or financial feasibility must not be estimated without explicit financial evidence. Resource intensity affects Design Confidence through proportionality rather than automatically lowering the subcategory score.
+- The harness currently uses planned/synthetic Completion Outlook score movements rather than calling live `/predict`; this is intentional for fast prompt-quality testing and can be replaced by API scoring later if needed.
 
 Next step:
 
-- Implement the automated first-wave Scenario Review eval harness that applies scenario edits without manual UI interaction, calls Gemini when configured, and archives trial changes, narratives, Design Confidence scoring, questions, expectations, and gap analysis for user review.
+- Rerun the same controlled one-trial Gemini eval with a new run id to verify the control-layer prompt/checker adaptations before expanding to `--max-trials 2`.
 
 ### Phase 7: Full Narrative Regression Pass
 
@@ -402,7 +432,7 @@ Parity note:
 
 ### Phase 8: Prompt Engineering Brief And Knowledge Substrate Review
 
-Status: manual-feedback prompt/UI corrections complete; automated first-wave eval harness is next.
+Status: manual-feedback prompt/UI corrections complete; automated first-wave eval harness implemented and awaiting live provider run.
 
 Purpose:
 
@@ -448,4 +478,4 @@ These are real needs, but not blockers for the immediate schema migration:
 
 ## Immediate Next Step
 
-Implement the first-wave automated Scenario Review quality-eval harness before further manual prompt tuning. The harness should use exact UI/taxonomy wording, run multi-iteration scenario edits without manual Streamlit input, call Gemini when configured, and produce human-readable plus machine-readable reports covering narratives, Design Confidence scoring, questions, expectations, and gap analysis.
+Run the first-wave automated Scenario Review quality-eval harness before further manual prompt tuning. Start small, inspect `reports/narrative_evals/*.md`, summarize recurring quality gaps into `prompt_enhancement_plan.md`, then refine the prompt only from repeated evidence across trials/iterations.

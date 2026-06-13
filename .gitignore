@@ -38,6 +38,7 @@ load_test_results*/
 **/load_test_results.csv
 **/user_*_failure.png
 **/user_*_failure.html
+reports/narrative_evals/
 
 # Local assistant configs
 .gemini/.env

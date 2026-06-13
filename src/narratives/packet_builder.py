@@ -731,6 +731,7 @@ def _compact_review_context(
         "design_confidence_subcategory_ratings": {
             subcategory_name: {
                 "rating": subcategory.get("rating"),
+                "score_materiality": subcategory.get("score_materiality"),
                 "rationale": subcategory.get("rationale"),
                 "evidence_fields": subcategory.get("evidence_fields") or [],
             }

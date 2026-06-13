@@ -29,6 +29,10 @@ from frontend.utils.scenario_review_diagnostics import (
     exception_log_key as scenario_review_exception_log_key,
     trace_log_key as scenario_review_trace_log_key,
 )
+from frontend.utils.scenario_review_plot_data import (
+    design_subcategory_impacts,
+    trace_allows_design_confidence_display as _trace_allows_design_confidence_display,
+)
 from src.operational_benchmarks import (
     load_operational_benchmarks,
     planned_enrollment_default_from_operational_benchmark,
@@ -9958,14 +9962,6 @@ def _clean_plot_pillar_label(value):
     return re.sub(r"^\d+\.\s*", "", str(value or "").strip())
 
 
-def _trace_allows_design_confidence_display(trace):
-    if not trace:
-        return False
-    if trace.get("hidden_baseline") or trace.get("participant_visible") is False:
-        return False
-    return trace.get("design_confidence") is not None
-
-
 def _trace_allows_total_scenario_display(trace):
     if not trace:
         return False
@@ -9984,35 +9980,6 @@ def _design_pillar_impacts(trace):
         impact = pd.to_numeric(pillar.get("design_points"), errors="coerce")
         if pd.notna(impact):
             rows.append({"Pillar": label, "Impact": float(impact)})
-    return rows
-
-
-def _design_subcategory_impacts(trace):
-    if not _trace_allows_design_confidence_display(trace):
-        return []
-    assessment = (trace or {}).get("design_confidence_assessment") or {}
-    rows = []
-    for pillar in (assessment.get("pillars") or {}).values():
-        pillar_label = str(pillar.get("label") or "Design Confidence")
-        for subcategory_name, subcategory in (pillar.get("design_subcategories") or {}).items():
-            impact = pd.to_numeric(subcategory.get("points"), errors="coerce")
-            if pd.isna(impact):
-                continue
-            details = [
-                f"Rating: {str(subcategory.get('rating') or 'not available').replace('_', ' ').title()}",
-            ]
-            short_rationale = str(subcategory.get("short_rationale") or "").strip()
-            if short_rationale:
-                details.append(f"Rationale: {html.escape(short_rationale)}")
-            rows.append({
-                "Pillar": pillar_label,
-                "Subcategory": DESIGN_SUBCATEGORY_LABELS.get(
-                    str(subcategory_name),
-                    str(subcategory_name).replace("_", " ").title(),
-                ),
-                "Impact": float(impact),
-                "FeatureDetails": details,
-            })
     return rows
 
 
@@ -10829,7 +10796,7 @@ def render_completion_prediction_tab(row):
         )
 
     design_pillar_impacts = _design_pillar_impacts(scenario_trace)
-    design_subcat_impacts = _design_subcategory_impacts(scenario_trace)
+    design_subcat_impacts = design_subcategory_impacts(scenario_trace)
     completion_pillar_impacts = (res or {}).get("pillar_impacts") or []
     completion_subcat_impacts = (res or {}).get("subcat_impacts") or []
 

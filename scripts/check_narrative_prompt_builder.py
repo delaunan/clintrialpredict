@@ -25,7 +25,7 @@ from src.narratives.prompt_builder import (  # noqa: E402
     infer_prompt_mode,
     provider_response_contract,
 )
-from src.narratives.scoring import DESIGN_RATINGS, PARTICIPANT_REVIEW_KEYS  # noqa: E402
+from src.narratives.scoring import DESIGN_RATINGS, PARTICIPANT_REVIEW_KEYS, SCORE_MATERIALITY_LEVELS  # noqa: E402
 
 
 def main() -> int:
@@ -52,6 +52,7 @@ def main() -> int:
         "evidence_fields",
         "rationale",
         "rating",
+        "score_materiality",
         "short_rationale",
         "optional_lenses_used",
         "regulatory_or_finance_note",
@@ -64,6 +65,8 @@ def main() -> int:
     for subcategory, ratings in allowed.items():
         if set(ratings) != DESIGN_RATINGS:
             errors.append(f"response contract rating enum mismatch for {subcategory}")
+    if set(contract.get("allowed_score_materiality") or []) != SCORE_MATERIALITY_LEVELS:
+        errors.append("response contract should include all score_materiality levels")
     if set(contract.get("required_key_question_fields") or []) != PARTICIPANT_REVIEW_KEYS:
         errors.append("response contract should include all key-question fields")
     if set(contract.get("forbidden_provider_fields") or []) != set(FORBIDDEN_PROVIDER_SCORE_FIELDS):
@@ -109,7 +112,8 @@ def main() -> int:
         "operational proportionality",
         "reference_packs",
         "decentralized or digital data collection",
-        "fresh questions",
+        "materially fresh",
+        "newest material change",
         "prior visible questions",
     ):
         if term not in question_text:
@@ -176,11 +180,15 @@ def main() -> int:
             "optional_lenses_used",
             "regulatory_or_finance_note",
             "rating",
+            "score_materiality",
         ]:
             errors.append(f"{subcategory_name}: schema should present enhanced subcategory field order")
         rating_schema = (subcategory.get("properties") or {}).get("rating") or {}
         if set(rating_schema.get("enum") or []) != DESIGN_RATINGS:
             errors.append(f"Gemini response schema rating enum mismatch for {subcategory_name}")
+        materiality_schema = (subcategory.get("properties") or {}).get("score_materiality") or {}
+        if set(materiality_schema.get("enum") or []) != SCORE_MATERIALITY_LEVELS:
+            errors.append(f"Gemini response schema score_materiality enum mismatch for {subcategory_name}")
     if set(completion_schema.get("required") or []) != {
         "risk_pattern_summary",
         "driver_summary",
@@ -241,10 +249,23 @@ def main() -> int:
         "selected fields are the source of truth",
         "must not replace selected fields",
         "scenario-coherence concern",
+        "Some scenario details are not fully aligned across free-text fields and selected fields. In this case the value in the selected fields drive the analysis, while the text is used as supporting context.",
+        "participant-readable field labels in parentheses",
         "early-termination risk",
+        "planning-assumption fields as Completion Outlook drivers",
         "planned enrollment",
         "planned site count",
         "planned total duration",
+        "operational footprint",
+        "operational scale",
+        "site footprint",
+        "recruitment footprint",
+        "Max Endpoint Duration / primary_duration_months_ml",
+        "Planned Total Duration / planned_duration_months",
+        "score_delta is 0.0 and only operational assumptions changed",
+        "The Completion Outlook is essentially unchanged because planning assumptions such as enrollment, site count, and total duration do not directly feed the score.",
+        "feels operationally proportionate and executable",
+        "reflected in Design Confidence instead",
         "therapeutic_area_context",
         "therapeutic_area_pack_used",
         "packet.reference_packs",
@@ -253,7 +274,15 @@ def main() -> int:
         "one open-ended question",
         "not answerable with yes or no",
         "strategic and debate-worthy",
+        "use the two questions as a pair",
         "materially fresh versus prior visible questions",
+        "one should focus on the newest material change in this scenario",
+        "the other should raise a broader strategic development-design tension using the trial as a concrete example",
+        "reframe it through the newest material change rather than repeating the prior question frame",
+        "latest change only adjusts planning assumptions",
+        "operational proportionality or executability",
+        "structured/free-text conflict",
+        "resolving that contradiction",
         "Avoid duplicating the same concern",
         "required for registration",
         "can provide the necessary evidence",
@@ -261,10 +290,46 @@ def main() -> int:
         "completion_improves_evidence_weakens",
         "completion_declines_design_improves",
         "operational_burden_without_evidence_gain",
+        "operational_burden_balance should be neutral or negative",
+        "burden increases without matching evidence gain",
+        "qualitative resource, staffing, and budget implications",
+        "must not estimate monetary cost, affordability, or financial feasibility",
+        "resource intensity is proportionate to the evidence, patient-relevance, governance, or interpretability value gained",
+        "current_full_scenario_not_accumulated_penalty",
         "structured_text_conflict",
+        "does not automatically cap Design Confidence",
+        "selected fields remain the scoring source of truth",
+        "bounded interpretability/coherence context",
+        "should not override selected-field evidence",
+        "main Design Confidence score driver",
+        "unless selected structured fields or endpoint text independently support a stronger Design Confidence penalty",
+        "Question split: Completion Outlook answers only whether the Completion Outlook score inputs or early-termination risk-pattern evidence moved",
+        "Use participant-facing scoring language",
+        "Avoid internal phrases such as model-facing, model-supported, model signals, in the model, the model says, or model reflects",
+        "prefer Completion Outlook score inputs, score pattern, or score-driving fields",
+        "Design Confidence may use all relevant packet evidence",
+        "operational assumptions, text coherence, governance, proportionality, and interpretability",
+        "packet.review_controls",
+        "fixed_planning_assumption_boundary",
+        "required_completion_outlook_sentence exactly",
+        "completion_outlook_forbidden_latest_fields",
+        "question_controls",
+        "latest change focus",
+        "without re-labeling older cumulative issues as newly changed",
+        "do not add extra Completion Outlook commentary derived from those three planning assumptions",
+        "discuss those only in Design Confidence",
         "first select packet-supported evidence_fields",
         "then write the rationale",
         "then assign the rating",
+        "score_materiality",
+        "Default to minimal",
+        "High or very_high positive score_materiality is rare",
+        "Scenario edits are cumulative",
+        "Design Confidence is recalculated fresh from the current full scenario state",
+        "Use prior visible reviews for continuity and deltas only",
+        "concerns that were resolved by current fields",
+        "Do not keep penalizing or rewarding a prior issue",
+        "field-level weakness has been fixed",
         "Return all four Design Confidence subcategories",
         "output_style_requirements",
         "three participant-facing blocks",

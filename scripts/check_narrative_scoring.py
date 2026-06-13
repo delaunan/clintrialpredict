@@ -19,9 +19,15 @@ from src.narratives.packet_builder import build_review_packet_from_fixture  # no
 from src.narratives.scoring import validate_and_score_review  # noqa: E402
 
 
-def _subcategory(rating: str, rationale: str, evidence_fields: list[str]) -> dict:
+def _subcategory(
+    rating: str,
+    rationale: str,
+    evidence_fields: list[str],
+    score_materiality: str = "minimal",
+) -> dict:
     return {
         "rating": rating,
+        "score_materiality": score_materiality,
         "rationale": rationale,
         "evidence_fields": evidence_fields,
         "short_rationale": rationale.split(".", 1)[0],
@@ -136,6 +142,7 @@ def _check_score_reconciliation(errors: list[str]) -> None:
         "conflicting",
         "Single-subcategory mapping test.",
         ["endpoint_rigor_ml", "comparator_benchmark_ml", "primary_duration_months_ml"],
+        "moderate",
     )
     result = validate_and_score_review(packet, review)
     endpoint = (
@@ -144,7 +151,7 @@ def _check_score_reconciliation(errors: list[str]) -> None:
         .get("endpoint_evidence_strength", {})
     )
     if endpoint.get("points") != -4:
-        errors.append("subcategory mapping failed: conflicting endpoint/comparator/duration should map to -4")
+        errors.append("subcategory mapping failed: conflicting moderate should map to -4")
 
     packet, review = _review_template()
     packet["model_interpretation"]["completion_score"] = 3
@@ -156,6 +163,7 @@ def _check_score_reconciliation(errors: list[str]) -> None:
             "conflicting",
             "Total reconciliation test.",
             ["endpoint_rigor_ml", "comparator_benchmark_ml", "primary_duration_months_ml"],
+            "moderate",
         ),
         "target_population_alignment": _subcategory("conflicting", "Total reconciliation test.", ["adult_ml"]),
         "operational_burden_balance": _subcategory("conflicting", "Total reconciliation test.", ["has_dmc_ml"]),
@@ -173,11 +181,13 @@ def _check_score_reconciliation(errors: list[str]) -> None:
         "supportive",
         "Half-point-preserving positive mapping test.",
         ["older_adult_ml"],
+        "moderate",
     )
     review["design_confidence_subcategories"]["operational_burden_balance"] = _subcategory(
         "weak",
         "Half-point-preserving negative mapping test.",
         ["has_dmc_ml"],
+        "moderate",
     )
     result = validate_and_score_review(packet, review)
     scoring = result["scoring"]
@@ -185,7 +195,7 @@ def _check_score_reconciliation(errors: list[str]) -> None:
         errors.append("half-point reconciliation failed: +1.5 and -1.5 should sum to 0")
     subcategories = scoring.get("design_confidence_assessment", {}).get("subcategories", {})
     if subcategories.get("target_population_alignment", {}).get("points") != 1.5:
-        errors.append("supportive score-decline mapping should contribute +1.5")
+        errors.append("supportive moderate mapping should contribute +1.5")
     if subcategories.get("operational_burden_balance", {}).get("points") != -1.5:
         errors.append("weak non-operational-evidence mapping should contribute -1.5")
 
@@ -197,13 +207,99 @@ def _check_score_reconciliation(errors: list[str]) -> None:
             "strong",
             "Positive ceiling test.",
             ["phase_ml"],
+            "minimal",
         )
     result = validate_and_score_review(packet, review)
     scoring = result["scoring"]
     if scoring.get("design_confidence") != 12:
-        errors.append("positive reconciliation failed: four strong subcategories should add to +12")
+        errors.append("positive reconciliation failed: four strong minimal subcategories should add to +12")
     if scoring.get("total_scenario_score") != 100:
         errors.append("positive final score cap failed: Total Scenario Score should clamp to 100")
+
+
+def _check_score_materiality_outer_bounds(errors: list[str]) -> None:
+    packet, review = _review_template()
+    review["design_confidence_subcategories"]["endpoint_evidence_strength"] = _subcategory(
+        "strong",
+        "Very high positive materiality should reach the upper subcategory bound.",
+        ["endpoint_rigor_ml"],
+        "very_high",
+    )
+    review["design_confidence_subcategories"]["target_population_alignment"] = _subcategory(
+        "conflicting",
+        "Very high negative materiality should reach the lower subcategory bound.",
+        ["older_adult_ml"],
+        "very_high",
+    )
+    result = validate_and_score_review(packet, review)
+    subcategories = result["scoring"].get("design_confidence_assessment", {}).get("subcategories", {})
+    if subcategories.get("endpoint_evidence_strength", {}).get("points") != 5:
+        errors.append("score_materiality upper bound failed: strong very_high should map to +5")
+    if subcategories.get("target_population_alignment", {}).get("points") != -5:
+        errors.append("score_materiality lower bound failed: conflicting very_high should map to -5")
+    if result["scoring"].get("design_confidence") != 0:
+        errors.append("score_materiality reconciliation failed: +5 and -5 should sum to 0 with neutral subcategories")
+
+
+def _check_score_materiality_guardrails(errors: list[str]) -> None:
+    fixture = next(
+        item for item in get_contract_fixtures()
+        if item["fixture_id"] == "operational_only_ambitious_enrollment_v2"
+    )
+    packet = build_review_packet_from_fixture(fixture)
+    review = deepcopy(fixture["mock_review"])
+    review["design_confidence_subcategories"]["operational_burden_balance"] = _subcategory(
+        "strong",
+        "Operational-only changes should not create positive Operational Burden Balance points.",
+        ["operational_assumptions.planned_enrollment.enrollment_status"],
+        "very_high",
+    )
+    result = validate_and_score_review(packet, review)
+    operational = (
+        result["scoring"].get("design_confidence_assessment", {})
+        .get("subcategories", {})
+        .get("operational_burden_balance", {})
+    )
+    if operational.get("points") != 0:
+        errors.append("operational-only guardrail failed: positive operational_burden_balance should be capped at 0")
+
+    packet, review = _review_template()
+    review["design_confidence_subcategories"]["phase_intent_alignment"] = _subcategory(
+        "strong",
+        "Already-positive Completion Outlook pillars need changed evidence before large positive design points.",
+        ["phase_ml"],
+        "very_high",
+    )
+    result = validate_and_score_review(packet, review)
+    phase = (
+        result["scoring"].get("design_confidence_assessment", {})
+        .get("subcategories", {})
+        .get("phase_intent_alignment", {})
+    )
+    if phase.get("points") != 1:
+        errors.append("anti-overreward guardrail failed: already-positive unchanged pillar should cap positive points at +1")
+
+    packet, review = _review_template()
+    packet["model_interpretation"]["pillar_impacts"] = [
+        {"Pillar": "Therapeutic Context", "Impact": 4.2},
+        {"Pillar": "Scientific Challenge", "Impact": -1.6},
+        {"Pillar": "Patient Profile", "Impact": 2.4},
+        {"Pillar": "Execution Framework", "Impact": 1.0},
+    ]
+    review["design_confidence_subcategories"]["phase_intent_alignment"] = _subcategory(
+        "strong",
+        "Live-style list pillar impacts should still trigger the anti-overreward guardrail.",
+        ["phase_ml"],
+        "very_high",
+    )
+    result = validate_and_score_review(packet, review)
+    phase = (
+        result["scoring"].get("design_confidence_assessment", {})
+        .get("subcategories", {})
+        .get("phase_intent_alignment", {})
+    )
+    if phase.get("points") != 1:
+        errors.append("anti-overreward guardrail failed for live-style list pillar impacts")
 
 
 def _check_incomplete_review_suppresses_scores(errors: list[str]) -> None:
@@ -258,6 +354,8 @@ def main() -> int:
     _check_evidence_required(errors)
     _check_unsupported_evidence_required(errors)
     _check_score_reconciliation(errors)
+    _check_score_materiality_outer_bounds(errors)
+    _check_score_materiality_guardrails(errors)
     _check_incomplete_review_suppresses_scores(errors)
     _check_app_owned_score_fields_ignored(errors)
 

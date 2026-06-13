@@ -6,10 +6,10 @@ import json
 from typing import Any
 
 from src.narratives.contract_fixtures import REQUIRED_DESIGN_SUBCATEGORIES
-from src.narratives.scoring import DESIGN_RATINGS, PARTICIPANT_REVIEW_KEYS
+from src.narratives.scoring import DESIGN_RATINGS, PARTICIPANT_REVIEW_KEYS, SCORE_MATERIALITY_LEVELS
 
-PROMPT_TEMPLATE_VERSION = "narrative_provider_prompt_v3"
-RESPONSE_SCHEMA_VERSION = "scenario_review_schema_v3"
+PROMPT_TEMPLATE_VERSION = "narrative_provider_prompt_v4"
+RESPONSE_SCHEMA_VERSION = "scenario_review_schema_v4"
 PROMPT_MODE_HIDDEN_BASELINE = "hidden_baseline"
 PROMPT_MODE_FIRST_VISIBLE_ITERATION = "first_visible_iteration"
 PROMPT_MODE_LATER_VISIBLE_ITERATION = "later_visible_iteration"
@@ -98,14 +98,14 @@ EXPERT_ANALYSIS_REQUIREMENTS = {
         "Do not describe Completion Outlook as a promised chance of completion.",
         "Do not infer regulatory acceptability, efficacy, safety, or feasibility beyond packet evidence.",
         "Do not imply that a higher Completion Score means a better trial design.",
-        "Do not cite planned enrollment, planned site count, planned total duration, or operational benchmark metadata as Completion Outlook drivers.",
+        "Do not cite planning-assumption fields as Completion Outlook drivers: planned enrollment, planned site count, planned total duration, or operational benchmark metadata. Do not use broad phrases such as operational footprint, operational scale, site footprint, or recruitment footprint as a proxy for those planning assumptions in Completion Outlook.",
         "Do not turn the review into a prescription for the next edit.",
         "Use conditional regulatory and evidence language; prefer may be less convincing, would need stronger justification, could be harder to defend, appears more aligned, or does not by itself establish.",
     ],
     "participant_examples": {
         "good_completion_comment": (
             "The Completion Outlook appears to improve because the edited scenario looks easier to complete on the "
-            "model-supported dimensions. However, that improvement should be read as operational or structural "
+            "Completion Outlook score inputs. However, that improvement should be read as operational or structural "
             "favorability, not as proof that the revised design would answer the development question better."
         ),
         "good_design_comment": (
@@ -129,12 +129,21 @@ EXPERT_ANALYSIS_REQUIREMENTS = {
         "operational_burden_without_evidence_gain": (
             "The scenario may add enrollment, sites, duration, arms, or oversight burden. However, if the packet does "
             "not show a matching evidence or population-fit gain, the review should flag proportionality rather than "
-            "treating operational ambition as inherently positive."
+            "treating operational ambition as inherently positive; operational_burden_balance should be neutral or "
+            "negative when burden increases without matching evidence gain."
+        ),
+        "current_full_scenario_not_accumulated_penalty": (
+            "Scenario edits are cumulative, so evaluate the current full scenario state. Recalculate Design Confidence "
+            "from the fields that are currently true; do not carry forward a prior penalty or bonus after the underlying "
+            "weakness has been resolved."
         ),
         "structured_text_conflict": (
             "If selected fields say Small Molecule and simple oral delivery while intervention text describes cell "
             "therapy, individualized manufacturing, or infusion logistics, selected fields remain the source of truth "
-            "for Completion Outlook. The contradictory text may lower Design Confidence only as a scenario-coherence concern."
+            "for Completion Outlook and Design Confidence analysis. The contradiction must create a visible warning, "
+            "but it does not automatically cap Design Confidence if the controlled fields support a stronger current design. "
+            "Narratives may explain the mismatch, but the mismatch should not override selected-field evidence or become "
+            "the main Design Confidence score driver."
         ),
     },
 }
@@ -149,7 +158,8 @@ EXPERT_QUESTION_REQUIREMENTS = {
         "Ask open-ended questions that cannot be answered yes or no.",
         "Avoid asking whether a specific field should be changed.",
         "Ground each question in the current narrative, central_tension, reference_packs, and prior storyline when available.",
-        "Assume participants already discussed prior visible questions; generate fresh questions for the latest change unless the same dilemma is genuinely reopened.",
+        "Assume participants already discussed prior visible questions; keep questions materially fresh.",
+        "If the same dilemma remains relevant, reframe it through the newest material change rather than repeating the prior question frame.",
         "Make the medical/development question focus on evidence value, development decision, endpoint interpretability, or patient relevance.",
         "Make the clinops/execution question focus on feasibility, access, oversight, data reliability, burden, or risk-proportionate conduct.",
     ],
@@ -216,6 +226,7 @@ def provider_response_contract() -> dict[str, Any]:
         "required_top_level_objects": list(REQUIRED_TOP_LEVEL_OBJECTS),
         "required_design_confidence_subcategories": list(REQUIRED_SUBCATEGORY_NAMES),
         "allowed_ratings_by_subcategory": rating_contract,
+        "allowed_score_materiality": sorted(SCORE_MATERIALITY_LEVELS),
         "rating_guidance": RATING_GUIDANCE,
         "subcategory_guidance": SUBCATEGORY_GUIDANCE,
         "expert_analysis_requirements": EXPERT_ANALYSIS_REQUIREMENTS,
@@ -225,6 +236,7 @@ def provider_response_contract() -> dict[str, Any]:
             "evidence_fields",
             "rationale",
             "rating",
+            "score_materiality",
             "short_rationale",
             "optional_lenses_used",
             "regulatory_or_finance_note",
@@ -242,7 +254,7 @@ def provider_response_contract() -> dict[str, Any]:
                 "operational benchmark metadata",
             ],
             "duration_boundary": (
-                "primary_duration_months_ml may be used when it appears as XGBoost/model evidence; planned total duration must not be used as a Completion Outlook driver."
+                "primary_duration_months_ml may be used when it appears as Completion Outlook score evidence; planned total duration must not be used as a Completion Outlook driver."
             ),
             "causality_boundary": "Do not claim any field caused completion or termination.",
         },
@@ -261,6 +273,7 @@ def provider_response_contract() -> dict[str, Any]:
             "select packet-supported evidence_fields",
             "write rationale from those evidence_fields",
             "assign rating from the evidence and rationale",
+            "assign score_materiality from supported evidence strength and context guardrails",
         ],
     }
 
@@ -281,6 +294,10 @@ def _subcategory_schema() -> dict[str, Any]:
                 "type": "STRING",
                 "enum": sorted(DESIGN_RATINGS),
             },
+            "score_materiality": {
+                "type": "STRING",
+                "enum": sorted(SCORE_MATERIALITY_LEVELS),
+            },
         },
         "required": [
             "evidence_fields",
@@ -289,6 +306,7 @@ def _subcategory_schema() -> dict[str, Any]:
             "optional_lenses_used",
             "regulatory_or_finance_note",
             "rating",
+            "score_materiality",
         ],
     }
 
@@ -527,18 +545,38 @@ def build_provider_prompt(packet: dict[str, Any], *, prompt_mode: str | None = N
         "Use structured_feature_display_values for readable field labels and structured_feature_meanings or "
         "text_context_field_meanings to understand what each field means clinically. If selected categorical/numeric fields conflict "
         "with free text, selected fields are the source of truth for Completion Outlook and Design Confidence evidence. "
-        "Free text may create a scenario-coherence concern, but it must not replace selected fields or become a model-facing driver.\n"
-        "If a clear mismatch remains, populate scenario_consistency_note with this participant-ready message exactly unless field names differ: "
-        "\"Some scenario details are not fully aligned across free-text fields and selected fields. The selected fields drive the analysis, while the text is used as supporting context (Intervention text, Therapeutic Modality).\"\n"
+        "Free text may create a scenario-coherence concern, but it must not replace selected fields or become a Completion Outlook score driver.\n"
+        "If structured scenario fields and free-text fields conflict, populate scenario_consistency_note.message with this participant-ready wording followed by participant-readable field labels in parentheses: "
+        "\"Some scenario details are not fully aligned across free-text fields and selected fields. In this case the value in the selected fields drive the analysis, while the text is used as supporting context. (Intervention text, Therapeutic Modality)\"\n"
         "Use packet.reference_packs as curated context only. They are secondary to the scenario packet. When you use a "
         "reference pack to shape reasoning or questions, include its pack_id in trace.reference_pack_ids_used. Do not "
         "invent specific disease, regulatory, efficacy, safety, prevalence, or cost facts beyond supplied reference packs and packet evidence. "
         "Broad therapeutic-area and clinical-development knowledge may be used cautiously when no therapeutic-area pack exists.\n"
         "Use packet.therapeutic_area_context when present. If pack_found is true, use prompt_safe_summary as optional therapeutic context "
         "and record the pack ID in trace.therapeutic_area_pack_used. If pack_found is false, do not fail the review.\n"
+        "Use participant-facing scoring language. Avoid internal phrases such as model-facing, model-supported, model signals, in the model, the model says, or model reflects; "
+        "prefer Completion Outlook score inputs, score pattern, or score-driving fields when explaining the scoring boundary.\n"
         "For each Design Confidence subcategory, reason in this sequence: first select packet-supported evidence_fields, "
-        "then write the rationale from those fields, then assign the rating that follows from the evidence and rationale. "
-        "Do not choose a rating first and search for justification afterward.\n"
+        "then write the rationale from those fields, then assign the rating that follows from the evidence and rationale, "
+        "then assign score_materiality from the strength of the supported evidence and context guardrails. "
+        "Allowed score_materiality values are minimal, low, moderate, high, and very_high. Default to minimal unless the rationale identifies a concrete reason for larger score movement. "
+        "High or very_high positive score_materiality is rare and requires new or resolved design-quality evidence, not merely a favorable Completion Outlook. "
+        "Do not choose a rating or score_materiality first and search for justification afterward.\n"
+        "Question split: Completion Outlook answers only whether the Completion Outlook score inputs or early-termination risk-pattern evidence moved, and why. "
+        "Design Confidence may use all relevant packet evidence, including Completion Outlook score inputs, operational assumptions, text coherence, governance, proportionality, and interpretability, to judge the current design quality.\n"
+        "When packet.review_controls is present, follow it as product-level control logic. "
+        "completion_outlook_mode controls only the Completion Outlook text, not the Design Confidence analysis. "
+        "If completion_outlook_mode is fixed_planning_assumption_boundary, completion_outlook_analysis.risk_pattern_summary must equal required_completion_outlook_sentence exactly, and Completion Outlook must not add other explanation from completion_outlook_forbidden_latest_fields. "
+        "If completion_outlook_mode is consistency_note_only, mention any structured/free-text mismatch only briefly and rely on selected structured fields for score interpretation. "
+        "Use packet.review_controls.question_controls to anchor questions to the latest change focus; do not let an older unresolved issue produce a verbatim repeated question. "
+        "When review_controls are present, explain the latest change without re-labeling older cumulative issues as newly changed.\n"
+        "If operational burden increases without matching evidence gain, operational_burden_balance should be neutral or negative even when the total Design Confidence remains positive because other current-scenario strengths remain.\n"
+        "Operational Burden Balance may discuss qualitative resource, staffing, and budget implications when packet fields imply added burden. It must not estimate monetary cost, affordability, or financial feasibility without explicit financial evidence. Judge whether the added resource intensity is proportionate to the evidence, patient-relevance, governance, or interpretability value gained.\n"
+        "If the corresponding Completion Outlook pillar is already strongly positive, positive Design Confidence score_materiality for that same pillar should usually be minimal or low unless the packet shows a resolved current-scenario weakness or new design-quality evidence not already captured by Completion Outlook.\n"
+        "Scenario edits are cumulative, but Design Confidence is recalculated fresh from the current full scenario state. "
+        "Use prior visible reviews for continuity and deltas only: identify concerns that remain unresolved, concerns that "
+        "were resolved by current fields, and newly introduced concerns. Do not keep penalizing or rewarding a prior issue "
+        "after the current packet evidence shows the underlying field-level weakness has been fixed.\n"
         "Return all four Design Confidence subcategories on every review: phase_intent_alignment, endpoint_evidence_strength, "
         "target_population_alignment, and operational_burden_balance.\n"
         "Follow the output_style_requirements exactly. Keep each rationale concise, bounded, and auditable. "
@@ -548,11 +586,20 @@ def build_provider_prompt(packet: dict[str, Any], *, prompt_mode: str | None = N
         "Avoid duplicating the same concern across multiple participant-facing sections; make one concise central trade-off, then use each question for a distinct current dilemma. "
         "Each participant debate question should be one open-ended question, 20-30 words, and not answerable "
         "with yes or no. Use the expert_question_requirements to make questions strategic and debate-worthy. "
-        "Generate questions that are materially fresh versus prior visible questions unless the latest change genuinely reopens the same dilemma.\n"
+        "For later visible iterations, use the two questions as a pair: one should focus on the newest material change in this scenario, and the other should raise a broader strategic development-design tension using the trial as a concrete example. "
+        "Questions must be materially fresh versus prior visible questions; if the same dilemma remains relevant, reframe it through the newest material change rather than repeating the prior question frame. "
+        "When the latest change only adjusts planning assumptions, at least one question should focus on operational proportionality or executability. "
+        "When the latest change creates a structured/free-text conflict, at least one question should focus on resolving that contradiction before relying on the scenario.\n"
         "Frame Completion Outlook as lower or higher early-termination risk or resemblance to historical completed/terminated-trial patterns. "
         "Never claim a field caused completion, and do not describe the score as a promised chance of completion. "
-        "Do not cite planned enrollment, planned site count, planned total duration, or operational benchmark metadata as Completion Outlook drivers. "
-        "primary_duration_months_ml may be discussed only when it appears as XGBoost/model evidence.\n"
+        "Do not cite planning-assumption fields as Completion Outlook drivers: planned enrollment, planned site count, planned total duration, or operational benchmark metadata. "
+        "Do not use broad phrases such as operational footprint, operational scale, site footprint, or recruitment footprint as a proxy for those three planning assumptions in Completion Outlook. "
+        "Max Endpoint Duration / primary_duration_months_ml is a Completion Outlook score input and may be discussed when it appears as Completion Outlook score evidence. "
+        "Planned Total Duration / planned_duration_months is an operational assumption: it may inform Design Confidence proportionality, but it must not explain Completion Outlook movement. "
+        "If score_delta is 0.0 and only operational assumptions changed, use this participant-facing wording: "
+        "\"The Completion Outlook is essentially unchanged because planning assumptions such as enrollment, site count, and total duration do not directly feed the score. They still matter for whether the scenario feels operationally proportionate and executable, so they are reflected in Design Confidence instead.\" "
+        "In that operational-only zero-delta case, do not add extra Completion Outlook commentary derived from those three planning assumptions, such as enrollment size, site count, total duration, or broad operational-footprint wording about those fields; discuss those only in Design Confidence.\n"
+        "When selected structured fields and free text conflict, narratives may explain the consistency note, but selected fields remain the scoring source of truth. Treat the mismatch as bounded interpretability/coherence context; it should not override selected-field evidence or become the main Design Confidence score driver unless selected structured fields or endpoint text independently support a stronger Design Confidence penalty.\n"
         "Use cautious regulatory and evidence wording: prefer may be less convincing, would need stronger justification, could be harder to defend, appears more aligned, or does not by itself establish. "
         "Avoid unsupported categorical phrases such as required for registration, registration-enabling evidence, or can provide the necessary evidence.\n"
         "Do not calculate, estimate, or return Design Confidence, Total Scenario Score, Design Confidence point values, "
