@@ -293,10 +293,10 @@ def _review(
         consistency_note = {
             "has_clear_mismatch": True,
             "message": (
-                "Some scenario details are not fully aligned across free-text fields and selected fields. "
-                "In this case the value in the selected fields drive the analysis, while the text is used as supporting context."
+                "Some scenario details are not fully aligned across Trial description fields and structured fields. "
+                "In this case the value in the structured fields drives the analysis, while the Trial description fields are used as supporting context."
             ),
-            "fields_in_tension": ["selected fields", "free-text fields"],
+            "fields_in_tension": ["structured fields", "Trial description fields"],
         }
     return {
         "review_metadata": {

@@ -70,8 +70,8 @@ OPERATIONAL_ASSUMPTION_LABELS = {
 }
 
 STRUCTURED_TEXT_CONFLICT_WARNING = (
-    "Some scenario details are not fully aligned across free-text fields and selected fields. In this case the value in "
-    "the selected fields drive the analysis, while the text is used as supporting context."
+    "Some scenario details are not fully aligned across Trial description fields and structured fields. In this case "
+    "the value in the structured fields drives the analysis, while the Trial description fields are used as supporting context."
 )
 
 OPERATIONAL_ONLY_COMPLETION_OUTLOOK_BOUNDARY = (

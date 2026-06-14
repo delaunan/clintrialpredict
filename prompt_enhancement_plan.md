@@ -505,7 +505,7 @@ Future optional condition packs may be useful, but therapeutic-area packs should
 Participant-facing consistency note:
 
 ```text
-Some scenario details are not fully aligned across free-text fields and selected fields. In this case the value in the selected fields drive the analysis, while the text is used as supporting context. (Intervention text, Therapeutic Modality)
+Some scenario details are not fully aligned across Trial description fields and structured fields. In this case the value in the structured fields drives the analysis, while the Trial description fields are used as supporting context. (Intervention text, Therapeutic Modality)
 ```
 
 Use this note only when a clear mismatch remains. The fields in parentheses should use participant-readable labels and should identify the relevant Trial description field and selected categorical/numeric field.
@@ -515,7 +515,7 @@ Planned response field:
 ```json
 "scenario_consistency_note": {
   "show": true,
-  "message": "Some scenario details are not fully aligned across free-text fields and selected fields. In this case the value in the selected fields drive the analysis, while the text is used as supporting context. (Intervention text, Therapeutic Modality)",
+  "message": "Some scenario details are not fully aligned across Trial description fields and structured fields. In this case the value in the structured fields drives the analysis, while the Trial description fields are used as supporting context. (Intervention text, Therapeutic Modality)",
   "fields": ["Intervention text", "Therapeutic Modality"]
 }
 ```
@@ -1019,7 +1019,7 @@ Preferred prompt wording direction:
 - If `text_context` and `structured_features` conflict, start with the approved participant consistency note:
 
 ```text
-Some scenario details are not fully aligned across free-text fields and selected fields. In this case the value in the selected fields drive the analysis, while the text is used as supporting context. (Intervention text, Therapeutic Modality)
+Some scenario details are not fully aligned across Trial description fields and structured fields. In this case the value in the structured fields drives the analysis, while the Trial description fields are used as supporting context. (Intervention text, Therapeutic Modality)
 ```
 
 - In Completion Outlook, prefer:
