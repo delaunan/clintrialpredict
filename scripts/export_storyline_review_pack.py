@@ -154,6 +154,14 @@ def export_review_pack(report_path: Path, out_path: Path) -> None:
     data = json.loads(report_path.read_text(encoding="utf-8"))
     summary = data.get("summary") or {}
     plan = data.get("scenario_plan") or {}
+    visible_iterations = _fmt(summary.get("visible_iterations"))
+    trial_count = len(data.get("trials") or [])
+    iteration_count_text = visible_iterations
+    try:
+        if trial_count:
+            iteration_count_text = str(int(summary.get("visible_iterations") or 0) // trial_count)
+    except (TypeError, ValueError, ZeroDivisionError):
+        iteration_count_text = visible_iterations
     lines = [
         f"# Storyline Review Pack: {_fmt(data.get('run_id') or report_path.stem)}",
         "",
@@ -166,7 +174,7 @@ def export_review_pack(report_path: Path, out_path: Path) -> None:
         f"- Warning checks: `{_fmt(summary.get('warning_checks'))}`",
         "",
         "Review each full storyline before selecting one-shot examples. Each trial includes hidden baseline narratives and "
-        "scores first, followed by the 4 visible iterations. Focus on the credibility of the full arc, Completion Outlook / "
+        f"scores first, followed by the {iteration_count_text} visible iterations. Focus on the credibility of the full arc, Completion Outlook / "
         "Design Confidence separation, subcategory scoring quality, narrative usefulness, and question quality.",
         "",
     ]

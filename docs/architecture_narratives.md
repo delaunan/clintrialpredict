@@ -12,7 +12,7 @@ Efficient update rule: change this file when narrative inputs/outputs, LLM contr
 
 This document defines the staged design for adding a serious-game narrative layer around single-trial simulation in ClinTrialPredict. Current implementation covers contract fixtures, deterministic packet building, validation/scoring, mock review, session-state storage/replay, minimal Quality Review UI, hidden baseline continuity, provider configuration, real OpenAI/Gemini provider boundaries, Gemini Flash-Lite live settings, prompt-mode scaffolding, and opt-in live-provider UI routing. The simulator still uses the deterministic mock provider by default unless `NARRATIVE_LIVE_REVIEW_ENABLED=1` explicitly enables the live provider chain. The active target architecture supersedes the earlier three-pillar Quality Assessment model with a four-pillar Design Confidence model aligned to the existing Completion Outlook pillars.
 
-Current planning checkpoint: `prompt_enhancement_plan.md` is the working implementation plan for the next prompt/schema migration. Its accepted durable decisions should be promoted into this architecture document before code changes. The next target contract keeps app-owned scoring but reshapes participant output around Completion Outlook Analysis, Design Confidence Analysis, and Key Questions; adds `review_metadata`; separates `hidden_baseline`, `first_visible_iteration`, and `later_visible_iteration`; treats Completion Outlook as early-termination risk-pattern interpretation; keeps operational assumptions out of Completion Outlook; adds optional therapeutic-area `.md` context by XGBoost canonical `therapeutic_area_ml`; and adds `scenario_consistency_note` plus `text_change_evidence`.
+Current planning checkpoint: `prompt_enhancement_plan.md` is the working implementation plan for the next prompt/schema migration. Its accepted durable decisions should be promoted into this architecture document before code changes. The next target contract keeps app-owned scoring but simplifies participant output around Completion Outlook Analysis, Design Confidence Analysis, Main Tension, and two Key Questions; adds deterministic Design Confidence continuity anchors; separates `hidden_baseline`, `first_visible_iteration`, and `later_visible_iteration`; treats Completion Outlook as early-termination risk-pattern interpretation; keeps operational assumptions out of Completion Outlook; adds optional therapeutic-area `.md` context by XGBoost canonical `therapeutic_area_ml`; and adds `scenario_consistency_note` plus `text_change_evidence`.
 
 The current edit/simulation workflow remains the foundation. A facilitator selects an existing trial, participants adjust structured Trial Features, and the application calls the existing prediction flow to produce a completion score with SHAP-derived impact decomposition.
 
@@ -63,7 +63,7 @@ Terminology:
 
 - `Completion Score` = existing XGBoost score shown from 0 to 100.
 - `Completion Outlook` = explanation of model-derived score movement using feature, subcategory, pillar, and score movement evidence, framed as lower/higher early-termination risk or resemblance to historically completed/terminated-trial patterns.
-- `Scenario Review` = participant-facing narrative explanation of Completion Outlook movement, Design Confidence evidence, trade-offs, and three expert questions.
+- `Scenario Review` = participant-facing narrative explanation of Completion Outlook movement, Design Confidence evidence, trade-offs, main tension, and two expert questions.
 - `Design Confidence` = application-calculated point adjustment derived from validated design subcategories with supported evidence.
 - `Total Scenario Score` = Completion Score plus Design Confidence, when the combined view is enabled.
 
@@ -178,7 +178,7 @@ Participant narrative sections:
 - `What the design may have gained`
 - `What the design may have sacrificed`
 - `Operational coherence note`
-- `Two questions for the team to debate`: one medical/development question and one clinops/execution question.
+- `Two questions to debate`: one medical/clinical-development question grounded in the current trial scenario and one strategic development question about the broader development path.
 
 Suggested participant UI wording:
 
@@ -281,6 +281,27 @@ The Scenario Review should reflect both current design defensibility and change 
 - Change integrity: whether the path from baseline to current design appears like meaningful strengthening, acceptable simplification, or score-seeking shortcut behavior.
 - Collateral impact: whether a move that improves one pillar plausibly weakens or strengthens another pillar.
 - Score boundary: whether a Completion Score movement is supported by Completion Outlook score inputs, clinically plausible, or only a hypothesis.
+
+### Design Confidence Continuity Target
+
+Scenario edits are cumulative, but `Design Confidence` is not a running sum of prior bonuses and penalties. Each visible review should score the current full scenario state while preserving interpretation continuity for unchanged evidence. Previous visible review context is the primary iteration-to-iteration anchor; hidden baseline remains qualitative context for the original trial and should not become a hard numeric comparator.
+
+The next prompt/schema migration should add a compact deterministic `design_confidence_continuity` packet object for the four Design Confidence subcategories. For each subcategory, include the previous visible rating, previous visible points, changed relevant fields, and one short continuity instruction. Example shape:
+
+```json
+{
+  "phase_intent_alignment": {
+    "previous_rating": "strong",
+    "previous_points": 4,
+    "changed_relevant_fields": [],
+    "instruction": "No phase or strategic-intent field changed. Keep the prior direction unless another current change materially affects phase/intent fit."
+  }
+}
+```
+
+The provider should use this object as a continuity anchor: if a subcategory's relevant evidence did not change, it should not reverse the rating direction unless it names current packet evidence that justifies the reversal. The scoring engine still calculates Design Confidence from the current review output; continuity anchors guide the LLM's qualitative judgment but do not mechanically carry forward points.
+
+This target addresses observed live-play drift where a persistent fact can be interpreted in opposite directions across adjacent iterations, such as an evidence-standard upgrade receiving strong `phase_intent_alignment` credit in one iteration and then flipping to a strong phase/intent penalty in the next even though phase and strategic-intent fields did not materially change.
 
 For V1, do not make a numeric `Coherence Score` or `Quality Score` the primary user-facing concept. Use:
 
@@ -785,8 +806,9 @@ Target contract:
     "most_impactful_pillar_1": "...",
     "most_impactful_pillar_2": "...",
     "interaction_summary": "...",
-    "medical_development_question": "...",
-    "clinops_execution_question": "..."
+    "main_tension": "...",
+    "medical_clinical_development_question": "...",
+    "strategic_development_question": "..."
   },
   "facilitator_view_optional": {
     "shortcut_risk": "low | moderate | high",
@@ -822,19 +844,36 @@ Phase 4 prompt refinement should keep the Scenario Review detailed enough for se
 
 Provider output style:
 
+- Target a lean participant-facing shape: `Completion Outlook` as one concise paragraph plus two key points, `Design Confidence` as one concise paragraph plus two key points, one `main_tension` sentence, and two questions.
 - Use concise clinical-development prose, not marketing language and not technical model jargon.
-- Use conditional language such as `may`, `could`, `appears`, and `would need support`; avoid absolute clinical claims.
-- Do not recommend exact next edits. End with questions that support discussion.
-- Do not mention SHAP, XGBoost, feature impact, model movement, or pillar delta in participant-facing fields.
-- Do not calculate, mention, or estimate Design Confidence points, Total Scenario Score, or subcategory point values.
+- Prefer positive provider instructions that describe the desired behavior. Use short `do` rules first, and reserve `do not` wording for only a few hard red lines.
+- Frame conclusions as hypotheses for discussion, not prescriptions. End with questions that support discussion.
 
 Expert analysis requirements:
 
 - The provider should write as a senior clinical-development and medical-strategy reviewer evaluating a scenario for serious-game discussion, not as a trial optimizer.
-- The output should make a clear expert judgment about what the scenario appears to strengthen, weaken, or leave uncertain, while preserving conditional language.
-- Participant-facing prose should usually follow `because / however / therefore` logic: identify the packet-supported signal, name the trade-off or limitation, then state the implication for discussion.
+- The output should make a clear expert judgment about what the scenario strengthens, weakens, or leaves uncertain while staying hypothesis-based.
 - The analysis should use relevant expert lenses when supported by packet evidence: evidence interpretability, development intent fit, target-population relevance, operational proportionality, shortcut risk, governance and oversight adequacy, and cross-pillar tension between Completion Outlook and Design Confidence.
-- The provider must not present the Completion Score as clinical truth, infer regulatory acceptability, efficacy, safety, or feasibility beyond packet evidence, imply that a higher Completion Score means a better trial design, or turn the review into a prescription for the next edit.
+
+Keep rich evidence in the packet even when participant-facing wording is simplified. Feature-level, pillar-level, variance, score movement, changed-field, operational-assumption, baseline, previous-review, and text-change evidence remain important for analysis, traceability, and expert reasoning. Simplification should target prompt/output shape first, not remove evidence needed for Completion Outlook interaction analysis or Design Confidence critical judgment.
+
+Internal structured output should remain detailed enough for scoring and audit: four Design Confidence subcategory ratings, evidence fields, score materiality, short rationale, full rationale, consistency note, continuity metadata, and trace fields. If planning assumptions changed, at least one Design Confidence key point should address operational proportionality unless another current-scenario issue is clearly more material. Planning assumptions still must not explain Completion Outlook movement.
+
+Question target:
+
+- Ask two open-ended questions only.
+- The first question should be medical or clinical-development oriented and grounded in the current trial scenario.
+- The second question should be strategic and focused on the broader development path or portfolio decision.
+- Both questions should be fresh versus the previous visible iteration and should not prescribe the answer.
+
+Hard red lines should stay short and concrete:
+
+- Completion Outlook uses structured score-input changes and early-termination risk patterns; planning assumptions belong in Design Confidence.
+- Structured fields drive analysis when they conflict with Trial description text; conflicting text becomes a scenario-readiness warning.
+- Design Confidence uses current-state scoring with continuity anchors.
+- Non-neutral Design Confidence ratings cite supported evidence.
+- Participant-facing text avoids internal model/debug wording and does not expose app-owned score calculations.
+- The review does not claim clinical, regulatory, operational, or commercial certainty beyond packet evidence.
 
 Compact examples:
 
@@ -864,9 +903,10 @@ The current implementation has contract fixtures in `src/narratives/contract_fix
 
 Near-term recommendation:
 
-- Create 3-5 golden prompt examples outside the live prompt first, for calibration and regression review.
-- Keep them in documentation or fixture-style artifacts until the target schema, prompt modes, and participant output format are stable.
-- Add full one-shot examples to the live provider prompt only if schema/rules/reference packs are not enough to produce consistent output.
+- Create one curated golden prompt example outside the live prompt first, for calibration and regression review.
+- Keep it in documentation or fixture-style artifacts until the target schema, prompt modes, participant output format, and continuity-anchor behavior are stable.
+- Add a compact one-shot example to the live provider prompt only if schema/rules/reference packs/continuity anchors are not enough to produce consistent output.
+- Do not copy raw provider output blindly. Curate the example manually or edit a strong storyline so it demonstrates correct boundaries and continuity without subtle leakage.
 
 Each golden example should include:
 
@@ -875,20 +915,17 @@ Each golden example should include:
 - Whether the mode is `hidden_baseline`, `first_visible_iteration`, or `later_visible_iteration`.
 - Expected Completion Outlook framing, including early-termination risk-pattern language and model-boundary wording.
 - Expected Design Confidence challenge, including whether it should moderate a clear Completion Outlook increase or decrease.
+- Expected Design Confidence continuity: evidence-standard or phase/intent credit persists across later iterations unless relevant current evidence changes; population and operational edits affect their own subcategories without erasing unrelated endpoint/phase credit.
 - Relevant Design Confidence subcategories and evidence fields.
 - Any text/structured-field consistency note expected.
 - Optional therapeutic-area context and whether a TA `.md` pack is present or missing.
 - Optional regulatory or finance/cost lens only when materially relevant.
 - Forbidden wording, especially causal field claims, hidden-baseline Design Confidence comparisons, unsupported disease/regulatory/cost claims, and planned enrollment/sites/total-duration claims as Completion Outlook drivers.
-- Ideal short participant output: Completion Outlook Analysis, Design Confidence Analysis, and Key Questions.
+- Ideal short participant output: Completion Outlook Analysis, Design Confidence Analysis, Main Tension, and two Key Questions.
 
-Recommended initial golden examples:
+Recommended first golden example:
 
-1. Completion Outlook improves but Design Confidence weakens because evidence value or interpretability is reduced.
-2. Completion Outlook worsens but Design Confidence strengthens because rigor, patient relevance, governance, or justified ambition improves.
-3. Text/structured contradiction where selected categorical/numeric fields prevail and a consistency note is shown.
-4. Operational burden increases without matching evidence gain.
-5. Therapeutic-area/pathway change requiring cautious interpretation without overclaiming mechanism, efficacy, safety, or regulatory significance.
+1. A compact cumulative storyline showing an evidence-standard upgrade, a later population refinement, an operational-only planning update, and a structured/text contradiction. It should show that endpoint/phase credit persists when those fields do not change, population and operational subcategories move when their evidence changes, Completion Outlook stays separate from planning assumptions, and the contradiction becomes a scenario-readiness issue rather than Completion Outlook evidence.
 
 Golden examples should be used as prompt-regression references and teaching artifacts first. If later embedded in the live prompt, they must be compact enough not to crowd the packet, must match the current response schema, and must be updated whenever the schema or participant UI contract changes.
 
@@ -914,11 +951,10 @@ Narrative detail target:
 - The participant panel should be readable in roughly 75-120 seconds.
 - The full provider JSON should contain enough rationale for audit, but the main participant review should stay concise.
 - Detailed evidence lives in `evidence_fields`, trace, and validation output; participant-facing narrative should explain the trade-off rather than list every field.
-- The participant answer should be organized in this order: overall Completion Outlook comment, overall Design Confidence comment, two most impactful pillar/interaction comments, then three debate questions.
-- The two pillar comments should focus on the most material dimensions, not all four pillars. They should surface interactions such as completion improved but evidence weakened, completion declined but design became more defensible, or operational burden increased without clear evidence gain.
-- `tradeoff_review.central_tension` should summarize the single most important Completion Outlook versus Design Confidence trade-off in one sentence. It is mainly for audit/storage and can later feed a facilitator or compact participant heading.
-- The debate questions should be open-ended, not answerable with yes/no, and should not ask whether a specific field should be changed. They should elevate the discussion by asking what evidence standard, strategic rationale, population trade-off, governance burden, field-level challenge, or operational proportionality would make the scenario defensible.
-- The medical/development question should focus on evidence value, development decision, endpoint interpretability, or patient relevance. The clinops/execution question should focus on feasibility, access, oversight, data reliability, participant/site burden, or risk-proportionate conduct.
+- The participant answer should be organized in this order: Completion Outlook summary plus two key points, Design Confidence summary plus two key points, one main tension, then two debate questions.
+- The key points should focus on the most material dimensions, not all four pillars. They should surface interactions such as completion improved but evidence weakened, completion declined but design became more defensible, or operational burden increased without clear evidence gain.
+- `main_tension` should summarize the single most important Completion Outlook versus Design Confidence trade-off in one sentence.
+- The two debate questions should be open-ended, not answerable with yes/no, and should not ask whether a specific field should be changed. One question should focus on the medical or clinical-development implication for the current trial scenario. The other should focus on the broader strategic development decision.
 - When `strategic_context_2026_v1` is available, questions may raise current strategic themes such as access, representativeness, decentralised or digital data collection, estimand clarity, data reliability, and governance proportionality, but only when supported by packet evidence.
 - The review should be substantial enough to support discussion but must not reveal an optimization recipe or tell participants exactly which field to change next.
 
@@ -1095,7 +1131,7 @@ Do not create fake SHAP attribution. Design Confidence values are not SHAP value
 
 Operational assumptions should not be redistributed into the XGBoost `Execution Framework` Completion Outlook value. In adjusted view, Planned Enrollment, Planned Sites, and Planned Duration can contribute only through `Operational Burden Balance`.
 
-The minimal participant panel does not need to expose all validation/debug fields. It should show Completion Score, Design Confidence, Total Scenario Score when enabled, the four familiar pillars, signed subcategory contribution direction, concise participant-review narrative, and three expert questions. It should not expose raw LLM rating labels such as `supportive`, `weak`, or `conflicting` in the participant panel; those categories are consumed by the application to calculate and audit the score. Future facilitator or debug views should consider exposing packet-supported versus unsupported `evidence_fields` and raw subcategory ratings from `design_confidence_subcategories` so facilitators can audit whether a review rating was grounded in packet evidence.
+The minimal participant panel does not need to expose all validation/debug fields. It should show Completion Score, Design Confidence, Total Scenario Score when enabled, the four familiar pillars, signed subcategory contribution direction, concise participant-review narrative, main tension, and two expert questions. It should not expose raw LLM rating labels such as `supportive`, `weak`, or `conflicting` in the participant panel; those categories are consumed by the application to calculate and audit the score. Future facilitator or debug views should consider exposing packet-supported versus unsupported `evidence_fields` and raw subcategory ratings from `design_confidence_subcategories` so facilitators can audit whether a review rating was grounded in packet evidence.
 
 Treemap signed-value rule:
 
@@ -1152,7 +1188,7 @@ Participant-facing writing rules:
 - Encourage discussion rather than provide the answer.
 - Maintain continuity with previous iterations.
 - Do not contradict previous feedback unless the current change resolves or changes the issue.
-- Generate fresh medical/development and ClinOps questions at each visible iteration. Assume participants discussed the previous questions, so new questions should respond to the latest value changes, current dilemma, or a high-value challenge raised by the trial context.
+- Generate two fresh questions at each visible iteration. Assume participants discussed the previous questions, so new questions should respond to the latest value changes, current dilemma, or a high-value challenge raised by the trial context.
 
 The narrative should say what a pattern may suggest, what trade-off may be present, and what question the team should debate. It should not claim clinical truth or prescribe the next design edit.
 
@@ -1271,14 +1307,14 @@ Provider selection and secret handling:
 - For hard product-boundary cases, the app may pass narrow `review_controls` to the provider. These controls should define the Completion Outlook mode, latest-change focus, forbidden latest fields for Completion Outlook, and required question focus. They should not reduce Design Confidence into a template; Design Confidence should continue to use evidence-first expert reasoning.
 - The deterministic Completion Outlook boundary is shared in `src/narratives/review_controls.py` and applies in both the eval harness and live Scenario Review storage path. For operational-only and stable non-score-input modes, only `completion_outlook_analysis` is normalized; Design Confidence narrative, subcategory ratings, rationales, questions, and scores remain provider-generated.
 - When `review_controls` are present, participant-facing narratives should explain the latest change without re-labeling older cumulative issues as newly changed. Older issues may remain relevant to the current full scenario, but they should not be described as if they were introduced by the latest edit.
-- For later visible iterations, the participant questions should work as a set: the medical/development question should focus on the medical or evidence implication of the newest material scenario change; the clinical-operations question should raise an operational-development debate using the trial or latest change as a concrete example; and the strategic/field question should step back to a broader Therapeutic Area or field-level challenge exposed by the scenario. If an older dilemma remains relevant, it should be reframed through the newest material change rather than repeated in the same question frame or opening stem. Questions should be framed as general discussion prompts without naming or addressing responsible parties or participants, and should not use `team`, `sponsor`, `sponsors`, `investigator`, `investigators`, `stakeholder`, `stakeholders`, `you`, or `your`; the prompt asks the model to rewrite any question containing those words into impersonal field-level wording before finalizing. The strategic/field question should vary its lens across evidence standard, access, governance, data reliability, representativeness, feasibility, and interpretability rather than repeatedly using the same opening frame. When the latest change is limited to planning assumptions, the medical/development question should explicitly mention the latest planning context, such as enrollment, site count, duration, planning burden, operational scale, or proportionality, while connecting current evidence ambition to whether the added burden is justified. When the latest change creates a `structured_features` / `text_context` conflict, at least one question should focus on resolving or reconciling the scenario before relying on it; questions should not ask participants how to operationalize stale contradictory Trial description detail.
+- For later visible iterations, the participant questions should work as a concise two-question set: one medical/clinical-development question grounded in the current trial scenario, and one strategic development question about the broader development path. The questions should be fresh versus the previous visible iteration and should not prescribe a specific redesign. Detailed question style should be taught primarily through the curated one-shot example rather than long prompt rules.
 - Trial description fields do not directly feed the Completion Outlook score. They may support the Completion Outlook narrative only when they align with, clarify, or add non-conflicting detail to selected Completion Outlook score inputs. This conflict rule applies across all Trial description fields in `text_context` and all relevant `structured_features`, not only intervention descriptions. Completion Outlook score inputs define the score-interpreted scenario when they directly conflict with Trial description fields. Only the conflicting Trial description field detail should be treated as stale scenario text superseded by the structured_features value; it should not be used as Completion Outlook evidence or as evidence that the selected structured design has the contradicted modality, delivery burden, endpoint, or population feature. Non-conflicting Trial description field details and latest `text_context` changes remain valid context when they clarify population, endpoints, intervention rationale, or trial context. In the participant warning, "text is used as supporting context" means aligned or non-conflicting Trial description field content; the directly conflicting detail remains stale scenario text superseded by the corresponding `structured_features` value.
 - `structured_features` / `text_context` conflict is a scenario-readiness warning. It may affect Design Confidence because the scenario is not internally aligned enough to rely on, but it should usually affect the most relevant Design Confidence subcategory and should not drive multiple strong negative subcategory ratings unless non-conflicting structured fields independently support those penalties.
 - When only the three planning-assumption fields changed and the Completion Outlook score delta is `0.0`, the app may deterministically set the participant-facing Completion Outlook boundary sentence before storing/reporting the trace. This fixed sentence is exclusive to the planning-assumption-only boundary mode and must not be reused for `structured_features` / `text_context` consistency cases or intervention-modality changes. This is a product boundary, not a clinical judgment, and should not alter Design Confidence ratings, score materiality, subcategory rationales, or Total Scenario Score calculation.
 - Do not add post-narrative deterministic cleanup for participant wording or question rewriting at this stage. Internal-language leaks and repeated/similar questions should be handled by prompt wording and eval findings only, except for the existing fixed planning-assumption Completion Outlook boundary sentence and provider-neutral unavailable-review error formatting.
 - Latest three-trial live Gemini run `first_wave_operational_shortcut_cap_3trials_1` returned 12/12 reviewed visible iterations, 0 failed checks, and 3 warning checks. The operational shortcut cap behaved as intended, with shortcut-driven simplification receiving only limited Operational Burden Balance credit. Remaining warnings were question opening-frame repetition and one scenario-readiness dominance review item, so no urgent prompt change is required before the next broader wave.
 - Broader five-trial live run `first_wave_broader_trials_5_1` returned 20/20 reviewed visible iterations, 3 failed checks, and 10 warning checks. Follow-up adjustments are eval/prompt-boundary only: avoid `model signals` by using score-pattern wording, skip the positive Target Population Alignment expectation when the synthetic population edit conflicts with a prevention/vaccine-style trial objective, and require operational-only medical questions to reference planning burden, scale, or proportionality.
-- After `first_wave_broader_trials_5_2`, the main residual quality issue is question generation rather than core narrative/scoring logic. The active contract now adds `key_questions.strategic_field_question` as a third participant question. It should raise a broader Therapeutic Area or field-level development-design challenge using the current scenario as the example, while the existing medical/development and clinical-operations questions remain focused on the newest scenario change and operational-development implications.
+- The older three-question contract tested after `first_wave_broader_trials_5_2` was useful diagnostically but is no longer the target. The active simplified contract uses two questions: one medical/clinical-development question grounded in the current trial scenario and one strategic development question that raises a broader development-path or field-level challenge.
 - Latest five-trial live run `first_wave_three_question_contract_5_1` returned 19/20 reviewed visible iterations, 4 failed checks, and 20 warning checks. One fail was a transient Gemini `ServerError`, not a prompt issue. Follow-up changes remain light: remove participant-facing `in the model` leakage by strengthening score-pattern replacement language, make the patient-relevance expectation skip broader prevention/vaccine contexts when refractory/metastatic edits conflict with the base objective, and vary the strategic/field question lens to reduce repeated `What evidence standard...` / `How should the field balance...` openings.
 - Any OpenAI model used in later validation should be pinned to an explicit snapshot rather than a floating alias. OpenAI Pro/high-reasoning profiles can be considered for slower, high-quality hidden baseline generation or offline review, but they are not the default live interactive path after the June 2026 Gemini Flash-Lite decision.
 - Any Gemini model used in production or fallback should be configured with an explicit model ID rather than hard-coded in product logic. The current live interactive candidate is `gemini-3.1-flash-lite`; a Pro-class Gemini model can be evaluated later for slower offline or fallback review quality.
@@ -1831,11 +1867,12 @@ V1 serious-game narrative layer:
 - In Total Scenario Score View, show the four familiar pillars with clear provenance for Completion Outlook subcategories versus Design Confidence subcategories.
 - Show a narrative panel explaining design trade-offs.
 - Store compact storyline memory so later predictions build on earlier changes.
+- Add deterministic Design Confidence continuity anchors so later reviews preserve the rating direction of unchanged subcategory evidence unless current packet evidence justifies a reversal.
 
 Implementation staging:
 
 1. Contract fixtures: replace or extend the current fixtures with scenarios that test the four Design Confidence subcategories. Include at least baseline, Completion Outlook score-input edit, operational-only edit, material Trial description edit, `structured_features` / `text_context` review, no-op/minor Trial description edit, score improves but evidence value weakens, score improves and Design Confidence remains neutral, score declines but Design Confidence improves, endpoint description contradiction, biomarker/population mismatch, phase/intent ambition versus weak endpoint or comparator support, modality/risk-governance mismatch, and no-adjustment despite large Completion Outlook movement. Current artifact to migrate: `src/narratives/contract_fixtures.py`, validated by `scripts/check_narrative_contract_fixtures.py`.
-2. Deterministic review packet builder: assemble baseline/current/previous snapshots, changed fields, explicit field-change deltas, operational metadata, score deltas, XGBoost impact movements, `text_context` Trial description fields, user clarification context, field dictionary version, canonical taxonomy option-key values, display labels, and compact storyline memory without calling an LLM. Current implementation artifact: `src/narratives/packet_builder.py`, validated by `scripts/check_narrative_packet_builder.py`.
+2. Deterministic review packet builder: assemble baseline/current/previous snapshots, changed fields, explicit field-change deltas, operational metadata, score deltas, XGBoost impact movements, `text_context` Trial description fields, user clarification context, field dictionary version, canonical taxonomy option-key values, display labels, compact storyline memory, and `design_confidence_continuity` anchors without calling an LLM. Current implementation artifact: `src/narratives/packet_builder.py`, validated by `scripts/check_narrative_packet_builder.py`.
 3. Validation and scoring engine: validate review JSON, enforce packet-supported `evidence_fields`, derive Design Confidence subcategory points from `rating + score_materiality + context guardrails`, enforce default-zero and supported-evidence gates, preserve 0.5 increments across the `-5.0..+5.0` subcategory scale, avoid fake balancing, require subcategory totals to reconcile to Design Confidence, and calculate Total Scenario Score when enabled. Current implementation artifact: `src/narratives/scoring.py`, validated by `scripts/check_narrative_scoring.py`.
 4. Mock reviewer: use deterministic fake JSON responses based on the fixtures to test validation, scoring math, no-op behavior, text-materiality behavior, and failure handling. Current implementation artifact: `src/narratives/mock_reviewer.py`, validated by `scripts/check_narrative_mock_reviewer.py`.
 5. Storage and replay: persist validated review traces in session state first, including input hash, validation status, Design Confidence, Total Scenario Score, design subcategory contributions, and compact storyline memory. Reuse cached reviews for identical input hashes. Current artifact to migrate: `src/narratives/review_store.py`, validated by `scripts/check_narrative_review_store.py`. It supports direct mock replay now and an optional provider-chain path for future live-provider activation without reusing mock cache entries as real-provider reviews. This is prototype storage only and does not yet satisfy the durable cross-team baseline requirement.
@@ -1847,8 +1884,9 @@ Implementation staging:
 11. Durable baseline store: add a database-backed baseline review repository keyed by trial/version and input hash. It should use create-if-missing semantics so the first team creates the hidden baseline and later teams reuse it.
 12. Two-branch adjusted treemap: add only after the simpler adjusted view is stable and understandable; defer to V1.1 if it slows the first implementation.
 13. Calibration/playtesting: review examples and tune rating-to-point mapping if Design Confidence is too strong or too weak.
-14. Golden / one-shot example calibration: create 3-5 external golden examples for prompt-quality review before deciding whether any compact one-shot examples should be embedded in the live provider prompt.
+14. Golden / one-shot example calibration: create one curated external golden example first, then A/B test whether it improves continuity, operational-only boundaries, structured/text contradiction behavior, and question freshness without making output formulaic. Add more examples only if one example is insufficient.
 15. Prompt enhancement migration checkpoint: before implementing the next prompt/schema migration, align this architecture document and `implementation_plan.md` with accepted durable decisions from `prompt_enhancement_plan.md`, then proceed through staged fixtures, packet builder, prompt/schema, mock/provider normalization, scoring/storage, prompt export review, UI integration, regression/live review, and only then provider settings tuning.
+16. Split major prompt/schema changes into small implementation pieces: schema and compatibility first; packet continuity anchors and field-to-subcategory relevance mapping second; prompt simplification third; validation/scoring diagnostics fourth; UI, Markdown report, Word export, and report-pack updates fifth; eval-harness updates sixth; small 1-2 trial live validation seventh; final five-trial validation only after those checks pass. Do not embed the one-shot example until schema, continuity anchors, prompt simplification, validation, UI/export, and eval checks are working without it.
 
 ## 21. Open Questions
 
@@ -1857,5 +1895,7 @@ Implementation staging:
 - Exact participant versus facilitator UI placement.
 - Exact number of previous iterations to keep raw before summarization.
 - Exact Design Confidence calibration examples after v1 playtesting.
+- Exact field-to-subcategory mapping for `design_confidence_continuity` anchors.
+- Whether continuity reversal checks should block scoring, warn in eval reports, or remain facilitator-only diagnostics.
 - Whether facilitator view is hidden behind an expander or separate mode.
 - Whether final governance recommendation is generated by participants, LLM, or both.

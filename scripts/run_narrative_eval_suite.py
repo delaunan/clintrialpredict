@@ -59,6 +59,7 @@ from src.narratives.review_controls import (  # noqa: E402
     attach_review_controls,
     review_controls_for_packet,
 )
+from frontend.utils.structured_incompatibility import structured_incompatibility_attention_fields  # noqa: E402
 
 REGISTRY_PATH = ROOT / "frontend" / "data" / "search_registry.csv"
 TAXONOMY_PATH = ROOT / "models" / "taxonomy_01.json"
@@ -512,6 +513,9 @@ STORYLINE_SCENARIO_STEPS = (
             "intervention_model_ml": "PARALLEL",
             "allocation_ml": "RANDOMIZED",
             "masking_ml": "DOUBLE",
+            "number_of_arms_ml": 2,
+            "comparator_benchmark_ml": "ACTIVE_MODERN_STANDARD",
+            "has_placebo_ml": "0",
             "endpoint_rigor_ml": "HARD_CLINICAL",
         },
         expectations={
@@ -567,20 +571,43 @@ STORYLINE_SCENARIO_STEPS = (
         },
     ),
     ScenarioStep(
-        step_id="scenario_readiness_alignment",
-        title="Scenario-readiness alignment",
-        completion_delta=0.2,
-        pillar_for_delta="Therapeutic Context",
+        step_id="storyline_structured_text_operational_stress",
+        title="Scenario-readiness stress test",
+        completion_delta=-0.3,
+        pillar_for_delta="Scientific Challenge",
+        structured_edits={
+            "target_pathway_class_ml": "GPCR_TARGET",
+            "therapeutic_modality_ml": "SMALL_MOLECULE",
+            "administration_complexity_ml": "SIMPLE_ORAL",
+        },
         text_edits={
+            "interventions_ui": (
+                "Scenario note: the intervention description still refers to an individualized cell-based therapy with "
+                "manufacturing release testing, chain-of-identity controls, and infusion-site coordination."
+            ),
             "summary_ui": (
-                "Scenario update: the study description now aligns the intended population, endpoint hierarchy, oversight "
-                "plan, and operational scale into one coherent development rationale."
+                "Scenario update: the study rationale now asks whether a more accessible selected regimen can preserve "
+                "the evidence standard while the operational plan expands modestly."
             ),
         },
+        operational_multipliers={
+            "planned_enrollment": 1.2,
+            "planned_sites": 1.25,
+        },
+        operational_additions={
+            "planned_duration_months": 6.0,
+        },
         expectations={
+            "requires_consistency_note": True,
+            "requires_exact_consistency_warning": True,
+            "expected_consistency_fields": ("Intervention text", "Therapeutic Modality"),
+            "structured_fields_prevail": True,
+            "forbid_completion_operational_drivers": True,
             "expected_quality": (
-                "This final candidate one-shot iteration should show whether the storyline closes with a coherent "
-                "cross-functional tension and useful debate questions, not a prescriptive solution."
+                "This final candidate one-shot iteration deliberately tests warning behavior. Selected structured fields "
+                "should prevail over contradictory Trial description text, the mismatch should appear as a scenario-readiness "
+                "warning, operational assumptions should remain Design Confidence context, and questions should focus on "
+                "resolving the scenario before relying on it."
             ),
         },
     ),
@@ -909,6 +936,25 @@ def _scenario_structured_edit_count(row: pd.Series, taxonomy: dict[str, Any], st
     return count
 
 
+def _scenario_has_structured_incompatibility(
+    row: pd.Series,
+    taxonomy: dict[str, Any],
+    steps: tuple[ScenarioStep, ...],
+    *,
+    cumulative: bool = True,
+) -> bool:
+    baseline = _baseline_structured_features(row, taxonomy)
+    structured = deepcopy(baseline)
+    for step in steps:
+        step_structured = deepcopy(structured if cumulative else baseline)
+        step_structured.update(step.structured_edits)
+        if structured_incompatibility_attention_fields(step_structured):
+            return True
+        if cumulative:
+            structured = step_structured
+    return False
+
+
 def _select_trials(
     registry: pd.DataFrame,
     taxonomy: dict[str, Any],
@@ -917,6 +963,7 @@ def _select_trials(
     targets: tuple[tuple[str, str], ...],
     steps: tuple[ScenarioStep, ...],
     preferred_sponsor_regex: str | None = None,
+    cumulative: bool = True,
 ) -> list[pd.Series]:
     selected: list[pd.Series] = []
     used_ncts: set[str] = set()
@@ -942,6 +989,13 @@ def _select_trials(
         editable_candidates = candidates[candidates["_initial_edit_count"] >= 3].copy()
         if not editable_candidates.empty:
             candidates = editable_candidates
+        candidates["_has_structured_incompatibility"] = candidates.apply(
+            lambda item: _scenario_has_structured_incompatibility(item, taxonomy, steps, cumulative=cumulative),
+            axis=1,
+        )
+        compatible_candidates = candidates[~candidates["_has_structured_incompatibility"]].copy()
+        if not compatible_candidates.empty:
+            candidates = compatible_candidates
         midpoint = (low + high) / 2.0
         candidates["_distance"] = (pd.to_numeric(candidates["Clinical_Score"], errors="coerce") - midpoint).abs()
         if preferred_sponsor_regex:
@@ -983,6 +1037,13 @@ def _select_trials(
                 )
             else:
                 candidates["_preferred_sponsor"] = False
+            candidates["_has_structured_incompatibility"] = candidates.apply(
+                lambda item: _scenario_has_structured_incompatibility(item, taxonomy, steps, cumulative=cumulative),
+                axis=1,
+            )
+            compatible_candidates = candidates[~candidates["_has_structured_incompatibility"]].copy()
+            if not compatible_candidates.empty:
+                candidates = compatible_candidates
             candidates["_score"] = pd.to_numeric(candidates["Clinical_Score"], errors="coerce").fillna(50.0)
             candidates["_distance"] = (candidates["_score"] - 55.0).abs()
             for _, row in candidates.sort_values(
@@ -1050,11 +1111,28 @@ def _review_controls_for_step(step: ScenarioStep) -> dict[str, Any]:
             "operations_question_focus": "operational_proportionality_or_executability",
             "at_least_one_question_must_address": "planning_assumption_proportionality",
         })
-    elif step.step_id in {"structured_text_intervention_conflict", "structured_text_general_conflict"}:
+    elif step.step_id in {
+        "structured_text_intervention_conflict",
+        "structured_text_general_conflict",
+        "storyline_structured_text_operational_stress",
+    }:
         controls.update({
-            "completion_outlook_mode": "consistency_note_only",
+            "completion_outlook_mode": "structured_score_inputs_only"
+            if step.step_id == "storyline_structured_text_operational_stress"
+            else "consistency_note_only",
             "latest_change_focus": "structured_features_text_context_conflict",
         })
+        if step.step_id == "storyline_structured_text_operational_stress":
+            controls.update({
+                "completion_outlook_forbidden_latest_fields": sorted(OPERATIONAL_ASSUMPTION_FIELDS),
+                "completion_outlook_boundary_instruction": (
+                    "Write the Completion Outlook narrative from changed structured Completion Outlook score inputs and "
+                    "aligned Trial description field context only. Do not name or use planned enrollment, planned sites, "
+                    "planned duration, or proxy phrases such as operational footprint, operational scale, site expansion, "
+                    "larger enrollment, scaled execution, or site performance as Completion Outlook evidence; they remain "
+                    "Design Confidence context."
+                ),
+            })
         controls["question_controls"].update({
             "medical_question_focus": "evidence_implications_of_resolving_the_modality_mismatch",
             "operations_question_focus": "resolve_structured_free_text_contradiction",
@@ -1506,6 +1584,7 @@ def _grade_trace(
     structured_text_conflict_steps = {
         "structured_text_intervention_conflict",
         "structured_text_general_conflict",
+        "storyline_structured_text_operational_stress",
     }
     if step and step.step_id not in planning_only_steps:
         if _contains_operational_only_boundary(texts["completion"]):
@@ -2113,7 +2192,11 @@ def _deterministic_check_labels(step: ScenarioStep | None) -> list[str]:
     if step.step_id == "trial_description_and_planning_assumptions":
         labels.append("completion_outlook_stable_non_score_input_boundary")
         labels.append("completion_outlook_stable_non_score_input_detail")
-    if step.step_id in {"structured_and_planning_assumptions", "all_input_types_mixed_consistent"}:
+    if step.step_id in {
+        "structured_and_planning_assumptions",
+        "all_input_types_mixed_consistent",
+        "storyline_structured_text_operational_stress",
+    }:
         labels.append("completion_outlook_structured_score_inputs_only")
     planning_only_steps = {
         "operational_burden_without_matching_evidence_gain",
@@ -2123,6 +2206,7 @@ def _deterministic_check_labels(step: ScenarioStep | None) -> list[str]:
     structured_text_conflict_steps = {
         "structured_text_intervention_conflict",
         "structured_text_general_conflict",
+        "storyline_structured_text_operational_stress",
     }
     if step.step_id not in planning_only_steps:
         labels.append("completion_outlook_stale_prior_change")
@@ -2473,6 +2557,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--provider", choices=["configured", PROVIDER_MOCK, PROVIDER_GEMINI, PROVIDER_OPENAI], default="configured")
     parser.add_argument("--max-trials", type=int, default=2, help="Number of trials to run for the selected scenario plan.")
+    parser.add_argument("--max-steps", type=int, default=None, help="Limit visible scenario iterations for the selected plan.")
     parser.add_argument(
         "--scenario-plan",
         choices=sorted(SCENARIO_PLANS),
@@ -2505,6 +2590,11 @@ def main() -> int:
     registry = pd.read_csv(REGISTRY_PATH)
     scenario_plan = SCENARIO_PLANS[args.scenario_plan]
     scenario_steps = tuple(scenario_plan["steps"])
+    if args.max_steps is not None:
+        if args.max_steps < 1:
+            print("--max-steps must be at least 1.", file=sys.stderr)
+            return 2
+        scenario_steps = scenario_steps[: args.max_steps]
     selected_trials = _select_trials(
         registry,
         taxonomy,
@@ -2512,6 +2602,7 @@ def main() -> int:
         targets=tuple(scenario_plan["targets"]),
         steps=scenario_steps,
         preferred_sponsor_regex=scenario_plan.get("preferred_sponsor_regex"),
+        cumulative=bool(scenario_plan.get("cumulative", True)),
     )
     env = _merged_env(load_dotenv=not args.no_dotenv)
     config = load_narrative_provider_config(env)
@@ -2563,6 +2654,7 @@ def main() -> int:
             "one_shot_candidate_run": bool(scenario_plan.get("one_shot_candidate")),
             "cumulative": bool(scenario_plan.get("cumulative", True)),
             "preferred_sponsor_regex": scenario_plan.get("preferred_sponsor_regex"),
+            "max_steps": args.max_steps,
         },
         "scenario_steps": [
             {
