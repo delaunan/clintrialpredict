@@ -33,6 +33,7 @@ from frontend.utils.scenario_review_plot_data import (
     design_subcategory_impacts,
     trace_allows_design_confidence_display as _trace_allows_design_confidence_display,
 )
+from frontend.utils.scenario_review_failure import participant_review_failure_reason
 from src.operational_benchmarks import (
     load_operational_benchmarks,
     planned_enrollment_default_from_operational_benchmark,
@@ -7650,7 +7651,6 @@ def render_transition_overlay_hook():
                     }
                     return ["Reviewing completion score...", 12000, COMPLETION_SCORE_READY_SELECTOR];
                 }
-                if (text === "Retry Scenario Review") return ["Evaluating scenario impact...", 3330];
                 if (text === "Simulation Mode (Editing Content)") {
                     return ["Preparing Simulation Mode...", null, TRIAL_FEATURES_READY_SELECTOR];
                 }
@@ -10208,9 +10208,7 @@ def render_scenario_review_report(row, trace=None, snapshot=None):
 
     status = str(trace.get("status") or "unavailable")
     if trace.get("design_confidence") is None or trace.get("total_scenario_score") is None:
-        reason = trace.get("failure_reason") or "; ".join(trace.get("validation_errors") or [])
-        if not reason and status == "no_fixture_match":
-            reason = "No mock Scenario Review fixture matched this live scenario."
+        reason = participant_review_failure_reason(trace)
         message = (
             "Scenario Review is not available for this scenario in the current mock-review phase."
             if trace.get("provider") == PROVIDER_MOCK
@@ -10219,14 +10217,9 @@ def render_scenario_review_report(row, trace=None, snapshot=None):
         _quality_review_unavailable_card(
             "Scenario Review",
             message,
-            reason or "Validation did not produce Design Confidence and Total Scenario Score.",
+            reason,
         )
         _quality_review_diagnostics(trace, row=row, snapshot=snapshot)
-        if trace.get("provider") != PROVIDER_MOCK:
-            if st.button("Retry Scenario Review", key=f"scenario_review_retry_{nct_id}_{current_snapshot_id}", type="secondary"):
-                st.session_state.pop(get_quality_review_trace_state_key(nct_id), None)
-                st.session_state.pop(get_hidden_baseline_review_trace_state_key(nct_id), None)
-                st.rerun()
         return
 
     completion_score = snapshot.get("score")
@@ -10349,12 +10342,7 @@ def scenario_score_trace_is_ready(trace):
 
 
 def scenario_review_unavailable_reason(trace):
-    if not trace:
-        return "Scenario Review did not return a usable response."
-    reason = trace.get("failure_reason") or "; ".join(trace.get("validation_errors") or [])
-    if not reason and str(trace.get("status") or "") == "no_fixture_match":
-        reason = "No mock Scenario Review fixture matched this live scenario."
-    return reason or "Validation did not produce Design Confidence and Total Scenario Score."
+    return participant_review_failure_reason(trace)
 
 
 def finalize_pending_scenario_review_before_tabs(row):

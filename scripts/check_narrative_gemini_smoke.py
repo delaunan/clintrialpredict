@@ -74,13 +74,15 @@ def main() -> int:
         print("ERROR: GEMINI_API_KEY or GOOGLE_API_KEY is required for Gemini smoke test.")
         return 1
 
-    generation_config = types.GenerateContentConfig(
-        temperature=config.temperature,
-        max_output_tokens=min(config.max_output_tokens, 1000),
-        seed=config.seed,
-        response_mime_type="application/json",
-        response_schema=RESPONSE_SCHEMA,
-    )
+    generation_config_kwargs = {
+        "max_output_tokens": min(config.max_output_tokens, 1000),
+        "seed": config.seed,
+        "response_mime_type": "application/json",
+        "response_schema": RESPONSE_SCHEMA,
+    }
+    if config.temperature is not None:
+        generation_config_kwargs["temperature"] = config.temperature
+    generation_config = types.GenerateContentConfig(**generation_config_kwargs)
     client = genai.Client(api_key=gemini_settings.api_key)
 
     try:

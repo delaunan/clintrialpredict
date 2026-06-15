@@ -26,6 +26,10 @@ from src.narratives.prompt_builder import (  # noqa: E402
     provider_response_contract,
 )
 from src.narratives.scoring import DESIGN_RATINGS, PARTICIPANT_REVIEW_KEYS, SCORE_MATERIALITY_LEVELS  # noqa: E402
+from scripts.run_narrative_eval_suite import (  # noqa: E402
+    _has_completion_movement_language,
+    _has_only_persistent_existing_risk_language,
+)
 
 
 def main() -> int:
@@ -73,6 +77,20 @@ def main() -> int:
         errors.append("response contract should declare app-owned forbidden score fields")
     if "select packet-supported evidence_fields" not in " ".join(contract.get("reasoning_sequence") or []):
         errors.append("response contract should expose evidence-first reasoning sequence")
+
+    stable_existing_risk_text = (
+        "The Completion Outlook score remains stable. The trial's resemblance to historical patterns of "
+        "increased early-termination risk persists because the structured score inputs did not change."
+    )
+    contradictory_movement_text = (
+        "The Completion Outlook score remains stable, but the scenario has a lower early-termination risk profile."
+    )
+    if not _has_completion_movement_language(stable_existing_risk_text):
+        errors.append("eval movement detector should still identify persistent risk wording")
+    if not _has_only_persistent_existing_risk_language(stable_existing_risk_text):
+        errors.append("eval calibration should allow persistent existing-risk wording")
+    if _has_only_persistent_existing_risk_language(contradictory_movement_text):
+        errors.append("eval calibration must not allow explicit movement just because stable wording is present")
     expert_requirements = contract.get("expert_analysis_requirements") or {}
     expert_text = " ".join(
         str(value)
@@ -117,8 +135,10 @@ def main() -> int:
         "newest material change",
         "strategic/field question",
         "Therapeutic Area or field-level challenge",
+        "Vary the strategic/field lens across evidence standard, access, governance, data reliability, representativeness, feasibility, and interpretability",
         "prior visible questions",
-        "do not address them to the team",
+        "do not name or address responsible parties or participants",
+        "Do not use team, sponsor, sponsors, investigator, investigators, stakeholder, stakeholders, you, or your in participant questions",
     ):
         if term not in question_text:
             errors.append(f"response contract missing expert-question rule: {term}")
@@ -263,6 +283,7 @@ def main() -> int:
         "Planning assumptions = operational_assumptions.planned_enrollment, operational_assumptions.planned_sites, and operational_assumptions.planned_duration_months",
         "Review controls = review_controls product instructions",
         "Design Confidence narrative = design_confidence_analysis participant-facing narrative",
+        "first sentence should state the main cross-functional decision tension",
         "Design Confidence subcategory ratings = design_confidence_subcategories",
         "Scenario-readiness warning = scenario_consistency_note",
         "Trial description fields do not directly feed the Completion Outlook score",
@@ -289,8 +310,9 @@ def main() -> int:
         "latest change is limited to planned enrollment, planned site count, and/or planned total duration",
         "If other Completion Outlook score inputs also changed, explain Completion Outlook narrative using those score-input changes only",
         "planning assumptions remain Design Confidence context",
-        "The Completion Outlook is essentially unchanged because planning assumptions such as enrollment, site count, and total duration do not directly feed the score.",
+        "The Completion Outlook remains unchanged because planning assumptions such as enrollment, site count, and total duration do not directly feed the score.",
         "feels operationally proportionate and executable",
+        "the impact of changes in these variables is reflected in Design Confidence instead",
         "reflected in Design Confidence instead",
         "therapeutic_area_context",
         "therapeutic_area_pack_used",
@@ -310,8 +332,8 @@ def main() -> int:
         "strategic/field question should step back to a broader Therapeutic Area or field-level challenge",
         "reframe it through the newest material change rather than repeating the prior question frame",
         "latest change is limited to planning assumptions",
-        "medical/development question should connect current evidence ambition",
-        "rather than repeating the prior endpoint-standard frame",
+        "medical/development question must explicitly mention the latest planning context",
+        "while connecting current evidence ambition to whether that added burden is justified",
         "structured_features/text_context conflict",
         "resolving or reconciling that contradiction",
         "do not ask participants how to operationalize the stale contradictory Trial description detail",
@@ -328,8 +350,16 @@ def main() -> int:
         "must not estimate monetary cost, affordability, or financial feasibility",
         "resource intensity is proportionate to the evidence, patient-relevance, governance, or interpretability value gained",
         "Operational simplification caused mainly by weaker comparator",
-        "should not receive strong positive Operational Burden Balance",
-        "Do not address participant questions to the team",
+        "may receive feasibility credit",
+        "strong positive Operational Burden Balance (+3 to +5) requires independent operational value",
+        "Removing randomization, masking, comparator structure, arms, or endpoint rigor is not independent operational value by itself",
+        "unless a separate access, safety-extension, oversight, patient-burden, or proportionality gain is present",
+        "coherent safety-extension/proportionality rationale",
+        "frame shortcut-driven feasibility as bounded and usually low or moderate materiality",
+        "does not overpower Endpoint Evidence Strength or Phase & Intent concerns",
+        "Do not directly address participant questions to responsible parties or participants",
+        "Before finalizing questions, rewrite any question containing those words into impersonal field-level wording",
+        "Use impersonal openings such as How should the field balance..., What threshold should define..., or Which evidence standard would",
         "current_full_scenario_not_accumulated_penalty",
         "structured_text_conflict",
         "The same conflict rule applies across all Trial description fields in text_context and all relevant structured_features.",
@@ -342,14 +372,17 @@ def main() -> int:
         "should not drive multiple strong negative subcategory ratings unless non-conflicting structured_features values independently support those penalties",
         "Question split: Completion Outlook narrative answers only whether the Completion Outlook score inputs or early-termination risk-pattern evidence moved",
         "Use participant-facing scoring language",
-        "Avoid internal phrases such as model-facing, model-supported, model signals, in the model, the model says, or model reflects",
-        "write score pattern suggests, Completion Outlook score reflects, Completion Outlook score inputs, or score-driving fields instead",
+        "Avoid internal phrases such as model-facing, model-supported, model signals, model signal, model-score inputs, model suggests, model indicates, model registers, model-derived, model interpretation, model's interpretation, model’s interpretation, model's, model’s, in the model, in the model's assessment, the model says, the model reflects, or model reflects",
+        "write score pattern suggests, Completion Outlook score reflects, Completion Outlook score inputs, score-driving fields, or early-termination risk pattern instead",
+        "Before finalizing participant-facing text, replace any remaining model-language phrase with score-pattern wording",
         "Design Confidence narrative may use all relevant packet evidence",
         "planning assumptions, aligned Trial description field content, scenario-readiness warnings, governance, proportionality, and interpretability",
         "completion_outlook_mode controls only the Completion Outlook narrative",
         "not the Design Confidence narrative or Design Confidence subcategory ratings",
         "packet.review_controls",
         "fixed_planning_assumption_boundary",
+        "stable_non_score_input_context",
+        "use required_completion_outlook_sentence as the complete Completion Outlook summary",
         "required_completion_outlook_sentence exactly",
         "Do not reuse this fixed planning-assumption sentence for other completion_outlook_mode values",
         "completion_outlook_forbidden_latest_fields",
@@ -357,6 +390,12 @@ def main() -> int:
         "latest change focus",
         "without re-labeling older cumulative issues as newly changed",
         "do not add extra Completion Outlook commentary derived from those three planning assumptions",
+        "combines Trial description fields with planning assumptions but no structured Completion Outlook score input changed",
+        "latest changes are not directly used to calculate the Completion Outlook score",
+        "Do not name or summarize planning-assumption details",
+        "enrollment, site count, total duration, planned duration, primary duration, resource allocation, or operational footprint",
+        "must explicitly mention the latest planning context",
+        "single most relevant Design Confidence subcategory",
         "discuss those only in Design Confidence",
         "first select packet-supported evidence_fields",
         "then write the rationale",

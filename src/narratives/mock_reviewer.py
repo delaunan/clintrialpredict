@@ -11,7 +11,7 @@ from copy import deepcopy
 from typing import Any
 
 from src.narratives.contract_fixtures import get_contract_fixtures
-from src.narratives.packet_builder import build_review_packet_from_fixture
+from src.narratives.packet_builder import build_review_packet_from_fixture, stable_packet_hash
 from src.narratives.scoring import validate_and_score_review
 
 FAILURE_PROVIDER_ERROR = "provider_error"
@@ -29,9 +29,13 @@ def _fixture_registry() -> dict[str, dict[str, Any]]:
 def find_fixture_for_packet(packet: dict[str, Any]) -> dict[str, Any] | None:
     """Return the matching contract fixture for a deterministic packet hash."""
     input_hash = packet.get("input_hash")
-    if not input_hash:
-        return None
-    return _fixture_registry().get(str(input_hash))
+    registry = _fixture_registry()
+    if input_hash and str(input_hash) in registry:
+        return registry[str(input_hash)]
+    if packet.get("review_controls"):
+        uncontrolled = {key: value for key, value in packet.items() if key not in {"input_hash", "review_controls"}}
+        return registry.get(stable_packet_hash(uncontrolled))
+    return None
 
 
 def review_packet_with_mock(

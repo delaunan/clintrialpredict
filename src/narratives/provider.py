@@ -32,7 +32,7 @@ from src.narratives.scoring import validate_and_score_review
 MOCK_MODEL_NAME = "fixture_hash_mock_v1"
 OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses"
 GEMINI_MIN_SCHEMA_OUTPUT_TOKENS = 12000
-GEMINI_PRIMARY_THINKING_LEVEL = "medium"
+GEMINI_PRIMARY_THINKING_LEVEL = "high"
 GEMINI_RETRY_THINKING_LEVEL = "low"
 GEMINI_RETRY_OUTPUT_TOKENS = 16000
 GEMINI_MALFORMED_JSON_RETRY_ATTEMPTS = 1
@@ -192,6 +192,26 @@ def _gemini_finished_max_tokens(metadata: dict[str, Any]) -> bool:
     return bool(finish_reason and finish_reason.upper().endswith("MAX_TOKENS"))
 
 
+def _gemini_generation_config_kwargs(
+    config: NarrativeProviderConfig,
+    *,
+    max_output_tokens: int,
+) -> dict[str, Any]:
+    kwargs = {
+        "max_output_tokens": max_output_tokens,
+        "seed": config.seed,
+        "response_mime_type": "application/json",
+        "response_schema": gemini_response_schema(),
+    }
+    if config.temperature is not None:
+        kwargs["temperature"] = config.temperature
+    return kwargs
+
+
+def _gemini_primary_thinking_level(config: NarrativeProviderConfig) -> str:
+    return config.gemini_thinking_level or GEMINI_PRIMARY_THINKING_LEVEL
+
+
 def _real_provider_metadata(
     *,
     provider: str,
@@ -203,6 +223,7 @@ def _real_provider_metadata(
         "configured_generation_controls": {
             "temperature": config.temperature,
             "seed": config.seed,
+            "gemini_thinking_level": config.gemini_thinking_level,
             "openai_reasoning_effort": config.openai_reasoning_effort,
             "max_output_tokens": config.max_output_tokens,
             "timeout_seconds": config.timeout_seconds,
@@ -429,13 +450,14 @@ def _call_gemini_provider(
     prompt_mode = infer_prompt_mode(packet)
     prompt = build_provider_prompt(packet, prompt_mode=prompt_mode)
     max_output_tokens = max(int(config.max_output_tokens), GEMINI_MIN_SCHEMA_OUTPUT_TOKENS)
+    primary_thinking_level = _gemini_primary_thinking_level(config)
     applied_controls = {
         "max_output_tokens": max_output_tokens,
         "temperature": config.temperature,
         "seed": config.seed,
         "openai_reasoning_effort": None,
         "response_schema": True,
-        "thinking_level": GEMINI_PRIMARY_THINKING_LEVEL,
+        "thinking_level": primary_thinking_level,
     }
     metadata = _real_provider_metadata(
         provider=PROVIDER_GEMINI,
@@ -456,12 +478,11 @@ def _call_gemini_provider(
 
     if last_error is None:
         generation_config = types.GenerateContentConfig(
-            temperature=config.temperature,
-            max_output_tokens=max_output_tokens,
-            seed=config.seed,
-            response_mime_type="application/json",
-            response_schema=gemini_response_schema(),
-            thinking_config=types.ThinkingConfig(thinking_level=GEMINI_PRIMARY_THINKING_LEVEL),
+            **_gemini_generation_config_kwargs(
+                config,
+                max_output_tokens=max_output_tokens,
+            ),
+            thinking_config=types.ThinkingConfig(thinking_level=primary_thinking_level),
         )
         http_options = _gemini_http_options(config, types)
         client = genai.Client(api_key=settings.api_key, http_options=http_options)
@@ -499,11 +520,10 @@ def _call_gemini_provider(
     should_retry = review is None or _gemini_finished_max_tokens(metadata)
     if should_retry and client is not None and generation_config is not None:
         retry_generation_config = types.GenerateContentConfig(
-            temperature=config.temperature,
-            max_output_tokens=max(GEMINI_RETRY_OUTPUT_TOKENS, max_output_tokens),
-            seed=config.seed,
-            response_mime_type="application/json",
-            response_schema=gemini_response_schema(),
+            **_gemini_generation_config_kwargs(
+                config,
+                max_output_tokens=max(GEMINI_RETRY_OUTPUT_TOKENS, max_output_tokens),
+            ),
             thinking_config=types.ThinkingConfig(thinking_level=GEMINI_RETRY_THINKING_LEVEL),
         )
         metadata["malformed_json_retry_controls"] = {
@@ -554,11 +574,10 @@ def _call_gemini_provider(
 
     metadata["validation_retry_reason"] = result.get("failure_reason")
     retry_generation_config = types.GenerateContentConfig(
-        temperature=config.temperature,
-        max_output_tokens=max(GEMINI_RETRY_OUTPUT_TOKENS, max_output_tokens),
-        seed=config.seed,
-        response_mime_type="application/json",
-        response_schema=gemini_response_schema(),
+        **_gemini_generation_config_kwargs(
+            config,
+            max_output_tokens=max(GEMINI_RETRY_OUTPUT_TOKENS, max_output_tokens),
+        ),
         thinking_config=types.ThinkingConfig(thinking_level=GEMINI_RETRY_THINKING_LEVEL),
     )
     metadata["validation_retry_controls"] = {

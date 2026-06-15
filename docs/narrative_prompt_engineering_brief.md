@@ -368,7 +368,7 @@ Current defaults:
 - fallback provider: `gemini`
 - OpenAI model default: `gpt-5.5-2026-04-23`
 - Gemini model default: `gemini-3.1-flash-lite`
-- temperature: `0.0`
+- temperature: omitted/default
 - max output tokens: `12000`
 - timeout: `60` seconds
 - max retries: `1`
@@ -377,7 +377,7 @@ Current defaults:
 Current Gemini live behavior in `src/narratives/provider.py`:
 
 - minimum output tokens: `12000`
-- primary thinking level: `medium`
+- primary thinking level: `high`
 - malformed/MAX_TOKENS retry thinking level: `low`
 - retry output tokens: `16000`
 - one malformed JSON retry
@@ -393,8 +393,8 @@ Provider-chain rule:
 Settings questions to resolve during prompt engineering:
 
 - whether live production should prefer Gemini or OpenAI for quality/cost/latency
-- whether temperature `0.0` is sufficient for reproducibility without making prose too rigid
-- whether Gemini `medium` thinking is the right default versus `low` for latency/cost
+- whether omitted/default temperature remains the best quality setting as prompts evolve
+- whether Gemini `high` thinking continues to justify its added latency/cost as prompts evolve
 - whether 12000 output tokens is still needed after prompt and output-length tightening
 - whether one validation retry is enough for live demos
 - whether prompt/schema version changes should invalidate all cached live traces

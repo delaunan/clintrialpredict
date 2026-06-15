@@ -13,6 +13,7 @@ from src.narratives.provider import (
     review_packet_with_provider_chain,
 )
 from src.narratives.provider_config import NarrativeProviderConfig, provider_config_cache_namespace
+from src.narratives.review_controls import apply_review_control_overrides, attach_review_controls
 
 NARRATIVE_REVIEW_STATE_KEY = "narrative_review_store_v1"
 
@@ -260,6 +261,7 @@ def replay_or_review_with_provider(
     use_provider_chain: bool = False,
 ) -> dict[str, Any]:
     """Reuse cached review traces for identical inputs, otherwise call provider."""
+    packet = attach_review_controls(packet)
     input_hash = packet.get("input_hash")
     cache_namespace = provider_config_cache_namespace(config) if use_provider_chain and config is not None else None
     if failure_mode is None:
@@ -321,6 +323,7 @@ def replay_or_review_with_provider(
                 "input_hash": packet.get("input_hash"),
             },
         }
+    review_result = apply_review_control_overrides(packet, review_result)
     return store_review_trace(
         state,
         packet=packet,

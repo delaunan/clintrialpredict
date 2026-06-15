@@ -49,6 +49,8 @@ def _check_defaults(errors: list[str]) -> None:
         errors.append("default max_retries mismatch")
     if config.openai_reasoning_effort != DEFAULT_OPENAI_REASONING_EFFORT:
         errors.append("default openai reasoning effort mismatch")
+    if config.temperature is not None:
+        errors.append("default temperature should be omitted")
 
 
 def _check_env_values(errors: list[str]) -> None:
@@ -78,7 +80,7 @@ def _check_env_values(errors: list[str]) -> None:
     if config.fallback_settings().model != "gemini-model":
         errors.append("gemini model should come from GEMINI_NARRATIVE_MODEL")
     if config.temperature != 0.0:
-        errors.append("temperature should parse as float")
+        errors.append("explicit temperature should parse as float")
     if config.seed != 20260607:
         errors.append("seed should parse as int")
     if config.max_output_tokens != 3000:
@@ -106,6 +108,36 @@ def _check_gemini_key_precedence(errors: list[str]) -> None:
         errors.append("GEMINI_API_KEY should take precedence over GOOGLE_API_KEY")
 
 
+def _check_temperature_omit(errors: list[str]) -> None:
+    config = load_narrative_provider_config({"NARRATIVE_LLM_TEMPERATURE": "omit"})
+    if config.validation_errors:
+        errors.append(f"temperature omit should not produce validation errors: {config.validation_errors}")
+    if config.temperature is not None:
+        errors.append("temperature omit should parse as None")
+    metadata = config.sanitized_trace_metadata()
+    if metadata.get("temperature") is not None:
+        errors.append("sanitized metadata should preserve omitted temperature as None")
+
+    explicit = load_narrative_provider_config({"NARRATIVE_LLM_TEMPERATURE": "0.3"})
+    if provider_config_cache_namespace(config) == provider_config_cache_namespace(explicit):
+        errors.append("provider cache namespace should distinguish omitted and explicit temperatures")
+
+
+def _check_gemini_thinking_level(errors: list[str]) -> None:
+    config = load_narrative_provider_config({"GEMINI_THINKING_LEVEL": "high"})
+    if config.validation_errors:
+        errors.append(f"valid Gemini thinking level should not produce validation errors: {config.validation_errors}")
+    if config.gemini_thinking_level != "high":
+        errors.append("Gemini thinking level should parse as high")
+    metadata = config.sanitized_trace_metadata()
+    if metadata.get("gemini_thinking_level") != "high":
+        errors.append("sanitized metadata should include Gemini thinking level")
+
+    default = load_narrative_provider_config({})
+    if provider_config_cache_namespace(config) == provider_config_cache_namespace(default):
+        errors.append("provider cache namespace should distinguish Gemini thinking level")
+
+
 def _check_invalid_values(errors: list[str]) -> None:
     env = {
         "NARRATIVE_LLM_PROVIDER": "bad-provider",
@@ -115,11 +147,12 @@ def _check_invalid_values(errors: list[str]) -> None:
         "NARRATIVE_LLM_MAX_OUTPUT_TOKENS": "0",
         "NARRATIVE_LLM_TIMEOUT_SECONDS": "-1",
         "NARRATIVE_LLM_MAX_RETRIES": "9",
+        "GEMINI_THINKING_LEVEL": "maximum",
         "OPENAI_REASONING_EFFORT": "too-high",
     }
     config = load_narrative_provider_config(env)
-    if len(config.validation_errors) != 8:
-        errors.append(f"invalid env should produce eight validation errors, got {config.validation_errors}")
+    if len(config.validation_errors) != 9:
+        errors.append(f"invalid env should produce nine validation errors, got {config.validation_errors}")
     if config.provider != PROVIDER_OPENAI:
         errors.append("invalid primary provider should fall back to openai")
     if config.fallback_provider != PROVIDER_GEMINI:
@@ -165,6 +198,8 @@ def main() -> int:
     _check_defaults(errors)
     _check_env_values(errors)
     _check_gemini_key_precedence(errors)
+    _check_temperature_omit(errors)
+    _check_gemini_thinking_level(errors)
     _check_invalid_values(errors)
     _check_same_provider_disables_fallback(errors)
     _check_cache_namespace_tracks_generation_controls(errors)

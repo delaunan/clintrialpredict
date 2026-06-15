@@ -168,8 +168,8 @@ def main() -> int:
     })
     if GEMINI_MIN_SCHEMA_OUTPUT_TOKENS < 12000:
         errors.append("Gemini schema output budget should leave margin for longer future reviews")
-    if GEMINI_PRIMARY_THINKING_LEVEL != "medium":
-        errors.append("Gemini primary thinking level should be medium for clinical-trial coherence reviews")
+    if GEMINI_PRIMARY_THINKING_LEVEL != "high":
+        errors.append("Gemini primary thinking level should be high for clinical-trial coherence reviews")
     if GEMINI_RETRY_THINKING_LEVEL != "low":
         errors.append("Gemini malformed/MAX_TOKENS retry should lower thinking level for completion reliability")
     if GEMINI_RETRY_OUTPUT_TOKENS < 16000:
