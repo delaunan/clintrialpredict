@@ -154,10 +154,13 @@ def main() -> int:
     }
     treemap_rows = design_subcategory_impacts(treemap_trace)
     if not treemap_rows or not any(
-        "Why: Comparator supports clearer endpoint interpretation." in detail
+        "Comparator supports clearer endpoint interpretation." in detail
         for detail in treemap_rows[0].get("FeatureDetails", [])
     ):
         errors.append("Design Confidence treemap details should include concise LLM short_rationale")
+    details_text = " ".join(str(detail) for detail in (treemap_rows[0].get("FeatureDetails", []) if treemap_rows else []))
+    if "Rating:" in details_text or "Score Materiality:" in details_text:
+        errors.append("Design Confidence treemap details should not expose internal rating or score_materiality labels")
 
     if errors:
         for error in errors:

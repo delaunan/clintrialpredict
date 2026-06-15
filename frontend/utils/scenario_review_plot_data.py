@@ -48,15 +48,10 @@ def design_subcategory_impacts(trace: dict[str, Any] | None) -> list[dict[str, A
             impact = pd.to_numeric(subcategory.get("points"), errors="coerce")
             if pd.isna(impact):
                 continue
-            details = [
-                f"Rating: {str(subcategory.get('rating') or 'not available').replace('_', ' ').title()}",
-            ]
-            score_materiality = str(subcategory.get("score_materiality") or "").strip()
-            if score_materiality:
-                details.append(f"Score Materiality: {score_materiality.replace('_', ' ').title()}")
+            details = []
             short_rationale = short_treemap_rationale(str(subcategory_name), subcategory)
             if short_rationale:
-                details.append(f"Why: {html.escape(short_rationale)}")
+                details.append(html.escape(short_rationale))
             rows.append({
                 "Pillar": pillar_label,
                 "Subcategory": DESIGN_SUBCATEGORY_LABELS.get(

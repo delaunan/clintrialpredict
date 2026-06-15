@@ -34,6 +34,7 @@ from frontend.utils.scenario_review_plot_data import (
     trace_allows_design_confidence_display as _trace_allows_design_confidence_display,
 )
 from frontend.utils.scenario_review_failure import participant_review_failure_reason
+from frontend.utils.structured_incompatibility import structured_incompatibility_attention_fields
 from src.operational_benchmarks import (
     load_operational_benchmarks,
     planned_enrollment_default_from_operational_benchmark,
@@ -8467,10 +8468,25 @@ def _current_option_key_from_state(field_id, row):
     )
 
 
-def _has_placebo_comparator_conflict(row):
-    comparator_key = _current_option_key_from_state("comparator_benchmark_ml", row)
-    placebo_key = _current_option_key_from_state("has_placebo_ml", row)
-    return comparator_key == "PLACEBO" and placebo_key == "0"
+def _current_numeric_feature_value(field_id, row):
+    trial_key = st.session_state.get("selected_nct_id", "no_trial")
+    state_key = get_simulation_feature_state_key(trial_key, field_id)
+    value = pd.to_numeric(
+        st.session_state.get(state_key, _get_initial_field_value(field_id, row)),
+        errors="coerce",
+    )
+    return None if pd.isna(value) else float(value)
+
+
+def _structured_incompatibility_attention_fields(row):
+    return structured_incompatibility_attention_fields({
+        "intervention_model_ml": _current_option_key_from_state("intervention_model_ml", row),
+        "allocation_ml": _current_option_key_from_state("allocation_ml", row),
+        "masking_ml": _current_option_key_from_state("masking_ml", row),
+        "comparator_benchmark_ml": _current_option_key_from_state("comparator_benchmark_ml", row),
+        "has_placebo_ml": _current_option_key_from_state("has_placebo_ml", row),
+        "number_of_arms_ml": _current_numeric_feature_value("number_of_arms_ml", row),
+    })
 
 
 def _feature_widget_override_key(field_id):
@@ -8734,15 +8750,13 @@ def _render_trial_feature_control(field_id, row):
     label = SIMULATION_FEATURE_LABEL_OVERRIDES.get(field_id, ui.get("label", field_id))
     label = _label_with_previous_value(label, field_id, row)
 
+    structured_attention_fields = _structured_incompatibility_attention_fields(row)
     needs_attention = (
         (
             field_id == "gbd_cause_id_3_ml"
             and bool(st.session_state.get(_indication_attention_key(), False))
         )
-        or (
-            field_id == "comparator_benchmark_ml"
-            and _has_placebo_comparator_conflict(row)
-        )
+        or field_id in structured_attention_fields
     )
     is_number_field = field_id != "gbd_cause_id_3_ml" and not options
     kind = "num" if is_number_field else "sel"

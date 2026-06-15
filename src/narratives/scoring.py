@@ -94,6 +94,9 @@ DOMAIN_RATING_POINTS = {
 
 DESIGN_SUBCATEGORY_MIN = -5.0
 DESIGN_SUBCATEGORY_MAX = 5.0
+STRONG_PILLAR_DELTA = 3.0
+SAME_DIRECTION_STRONG_CAP = 1.5
+SAME_DIRECTION_RESIDUAL_WEAKNESS_CAP = 2.5
 TOTAL_SCORE_MIN = 0
 TOTAL_SCORE_MAX = 100
 
@@ -224,37 +227,21 @@ def _supported_evidence(evidence_fields: list[str], packet: dict[str, Any]) -> t
     return supported, unsupported
 
 
-def _numeric_score_delta(packet: dict[str, Any]) -> float:
-    score_delta = (packet.get("model_interpretation") or {}).get("score_delta")
-    return float(score_delta) if isinstance(score_delta, (int, float)) else 0.0
-
-
-def _contains_any(evidence_fields: list[str], tokens: tuple[str, ...]) -> bool:
-    joined = " ".join(str(field).lower() for field in evidence_fields)
-    return any(token in joined for token in tokens)
-
-
-def _changed_fields(packet: dict[str, Any]) -> set[str]:
-    iteration = packet.get("iteration_context") or {}
-    return {str(field) for field in iteration.get("changed_fields") or []}
-
-
-def _changed_field_supports_evidence(packet: dict[str, Any], evidence_fields: list[str]) -> bool:
-    changed = _changed_fields(packet)
-    if not changed:
-        return False
-    for evidence in evidence_fields:
-        evidence_text = str(evidence)
-        if evidence_text in changed:
-            return True
-        if any(evidence_text.startswith(f"{field}.") or field.startswith(f"{evidence_text}.") for field in changed):
-            return True
-    return False
-
-
-def _is_operational_only_change(packet: dict[str, Any]) -> bool:
-    changed = _changed_fields(packet)
-    return bool(changed) and all(field.startswith("operational_assumptions.") for field in changed)
+def _completion_pillar_delta(packet: dict[str, Any], subcategory_name: str) -> float | None:
+    pillar_key = DESIGN_SUBCATEGORY_PILLARS.get(subcategory_name)
+    pillar_label = DESIGN_PILLAR_LABELS.get(pillar_key or "")
+    deltas = (packet.get("model_interpretation") or {}).get("pillar_deltas") or {}
+    value = None
+    if isinstance(deltas, dict):
+        value = deltas.get(pillar_label)
+    elif isinstance(deltas, list):
+        for delta in deltas:
+            if not isinstance(delta, dict):
+                continue
+            if delta.get("Pillar") == pillar_label:
+                value = delta.get("Delta", delta.get("delta"))
+                break
+    return float(value) if isinstance(value, (int, float)) else None
 
 
 def _completion_pillar_value(packet: dict[str, Any], subcategory_name: str) -> float | None:
@@ -274,34 +261,60 @@ def _completion_pillar_value(packet: dict[str, Any], subcategory_name: str) -> f
     return float(value) if isinstance(value, (int, float)) else None
 
 
-def _raw_design_points(
-    subcategory_name: str,
+def _base_design_points(
     rating: str,
     score_materiality: str,
-    evidence_fields: list[str],
-    packet: dict[str, Any],
 ) -> float:
-    """Map validated qualitative review fields to deterministic Design Confidence points."""
-    raw_points = DESIGN_RATING_MATERIALITY_POINTS.get(rating, {}).get(score_materiality, 0.0)
+    """Map validated qualitative review fields to deterministic raw Design Confidence points."""
+    return DESIGN_RATING_MATERIALITY_POINTS.get(rating, {}).get(score_materiality, 0.0)
 
-    if (
-        subcategory_name == "operational_burden_balance"
-        and raw_points > 0
-        and _is_operational_only_change(packet)
-    ):
-        return 0.0
 
+def _same_direction_cap(
+    raw_points: float,
+    packet: dict[str, Any],
+    subcategory_name: str,
+) -> tuple[float, str | None]:
+    pillar_delta = _completion_pillar_delta(packet, subcategory_name)
     pillar_value = _completion_pillar_value(packet, subcategory_name)
-    if (
-        raw_points > 1.0
-        and pillar_value is not None
-        and pillar_value >= 4.0
-        and _numeric_score_delta(packet) >= 0
-        and not _changed_field_supports_evidence(packet, evidence_fields)
-    ):
-        return 1.0
+    strong_positive = pillar_delta is not None and pillar_delta >= STRONG_PILLAR_DELTA
+    strong_negative = pillar_delta is not None and pillar_delta <= -STRONG_PILLAR_DELTA
+    positive_cap = (
+        SAME_DIRECTION_RESIDUAL_WEAKNESS_CAP
+        if pillar_value is not None and pillar_value < 0
+        else SAME_DIRECTION_STRONG_CAP
+    )
+    negative_cap = (
+        -SAME_DIRECTION_RESIDUAL_WEAKNESS_CAP
+        if pillar_value is not None and pillar_value > 0
+        else -SAME_DIRECTION_STRONG_CAP
+    )
+    if raw_points > positive_cap and strong_positive:
+        return (
+            positive_cap,
+            "positive Design Confidence softened because the matching Completion Outlook pillar already moved strongly positive",
+        )
+    if raw_points < negative_cap and strong_negative:
+        return (
+            negative_cap,
+            "negative Design Confidence softened because the matching Completion Outlook pillar already moved strongly negative",
+        )
+    return raw_points, None
 
-    return raw_points
+
+def _calibrated_design_points(
+    subcategory_name: str,
+    raw_points: float,
+    packet: dict[str, Any],
+) -> tuple[float, list[str]]:
+    """Apply conservative app-owned caps without changing the score direction."""
+    points = raw_points
+    notes: list[str] = []
+    capped_points, same_direction_note = _same_direction_cap(points, packet, subcategory_name)
+    if capped_points != points:
+        points = capped_points
+        notes.append(same_direction_note or "same-direction Design Confidence amplification softened")
+
+    return points, notes
 
 
 def _validated_subcategory(subcategory_name: str, subcategory: Any) -> tuple[dict[str, Any], list[str]]:
@@ -515,17 +528,21 @@ def _blocking_validation_errors(validated_review: dict[str, Any]) -> list[str]:
 def _score_subcategory(packet: dict[str, Any], subcategory_name: str, subcategory: dict[str, Any]) -> dict[str, Any]:
     evidence_fields = list(subcategory.get("evidence_fields") or [])
     supported, unsupported = _supported_evidence(evidence_fields, packet)
-    raw_points = _raw_design_points(
-        subcategory_name,
+    raw_points = _base_design_points(
         str(subcategory.get("rating")),
         str(subcategory.get("score_materiality")),
-        evidence_fields,
-        packet,
     )
-    points = raw_points if supported or raw_points == 0 else 0
     notes = list(subcategory.get("validation_notes") or [])
+    calibration_notes: list[str] = []
     if raw_points and not supported:
+        points = 0
         notes.append("rating has no point effect because evidence_fields do not reference packet evidence")
+    else:
+        points, calibration_notes = _calibrated_design_points(
+            subcategory_name,
+            raw_points,
+            packet,
+        )
     points = clamp(points, DESIGN_SUBCATEGORY_MIN, DESIGN_SUBCATEGORY_MAX)
     return {
         **deepcopy(subcategory),
@@ -533,6 +550,7 @@ def _score_subcategory(packet: dict[str, Any], subcategory_name: str, subcategor
         "unsupported_evidence_fields": unsupported,
         "raw_points": _clean_points(raw_points),
         "points": points,
+        "calibration_notes": calibration_notes,
         "validation_notes": notes,
     }
 
@@ -565,12 +583,15 @@ def _design_contributions(packet: dict[str, Any], validated_subcategories: dict[
             "short_rationale": scored.get("short_rationale"),
             "supported_evidence_fields": deepcopy(scored.get("supported_evidence_fields") or []),
             "unsupported_evidence_fields": deepcopy(scored.get("unsupported_evidence_fields") or []),
+            "calibration_notes": deepcopy(scored.get("calibration_notes") or []),
             "validation_notes": deepcopy(scored.get("validation_notes") or []),
         }
-        pillars[pillar_key]["raw_design_points"] += float(scored.get("points") or 0)
+        pillars[pillar_key]["raw_design_points"] += float(scored.get("raw_points") or 0)
+        pillars[pillar_key]["design_points"] += float(scored.get("points") or 0)
 
     for pillar in pillars.values():
-        pillar["design_points"] = _clean_points(pillar["raw_design_points"])
+        pillar["raw_design_points"] = _clean_points(pillar["raw_design_points"])
+        pillar["design_points"] = _clean_points(pillar["design_points"])
 
     design_confidence = _clean_points(sum(float(item.get("points") or 0) for item in subcategory_results.values()))
     return {

@@ -107,6 +107,7 @@ def main() -> int:
         "Use conditional regulatory and evidence language",
         "would need stronger justification",
         "not a specific redesign path",
+        "Preserve each Design Confidence subcategory's meaning",
     ):
         if term not in expert_text:
             errors.append(f"response contract missing expert-analysis rule: {term}")

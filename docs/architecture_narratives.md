@@ -354,6 +354,33 @@ The adjustment must not be fake balancing:
 - If Completion Outlook falls sharply, positive Design Confidence can moderate the decrease only when supported evidence suggests the added risk comes from better evidence, broader patient relevance, or proportionate governance.
 - `high` positive `score_materiality` is rare and should require a clear critical narrative showing why the scenario is more defensible, interpretable, patient-relevant, governed, or proportionate. A favorable Completion Outlook, benchmark-typical operational assumption, or unresolved text/field mismatch is not enough.
 
+Implemented scoring-calibration refinement:
+
+Design Confidence is a qualitative critical lens on Completion Outlook, not a second completion predictor and not a bonus multiplier. Completion Outlook mainly describes resemblance to historical completion versus early-termination risk. That movement can reflect quality, simplicity, operational burden, or risk patterns; higher Completion Outlook does not necessarily mean better design, and lower Completion Outlook does not necessarily mean worse design. The scoring layer should therefore preserve the LLM's qualitative judgment while limiting numeric over-amplification of signals already captured by Completion Outlook.
+
+This refinement supersedes the earlier stricter already-positive-pillar cap language. The governing model is matching-pillar same-direction double-counting control plus opposite-direction counterweight preservation.
+
+The provider contract remains unchanged: the LLM returns `rating`, `score_materiality`, evidence fields, rationale, and `short_rationale`; the application owns numeric points. Add only this compact prompt principle if needed:
+
+> Preserve each Design Confidence subcategory's meaning. When a change improves one design dimension but worsens another, reflect both effects in their relevant subcategories. Cross-functional trade-offs may be justified in the overall Design Confidence judgment, but a subcategory should be positive only when that subcategory itself improved.
+
+The deterministic layer remains simple and conservative:
+
+- Keep `rating + score_materiality -> raw_points`.
+- Add calibrated `points` and `calibration_notes` when final points differ from raw points.
+- Apply calibration at the Design Confidence subcategory level, not to Completion Outlook score or Completion Outlook pillars.
+- Use same-direction double-counting control as the primary rule, triggered only by strong matching Completion Outlook pillar movement at `>= +3.0` or `<= -3.0` points. If the matching pillar moved strongly positive and is now still negative, cap strongly positive mapped Design Confidence at `+2.5`; if it moved strongly positive and is now neutral or positive, cap at `+1.5`. If the matching pillar moved strongly negative and is now still positive, soften strongly negative mapped Design Confidence to `-2.5`; if it moved strongly negative and is now neutral or negative, soften to `-1.5`.
+- Preserve opposite-direction counterweight behavior: when Design Confidence challenges Completion Outlook movement, keep stronger supported points. Examples include Completion Outlook improving while evidence quality weakens, or Completion Outlook worsening because rigor, patient relevance, governance, or evidence interpretability improved.
+- Allow Design Confidence to speak when Completion Outlook movement is flat or small, especially for Trial description, scenario-readiness, operational-assumption, or cross-pillar quality changes that are not directly reflected in Completion Outlook.
+- Do not use total Completion Outlook score movement or previous-score thresholds as Design Confidence calibration triggers. Total score movement is an aggregate and can reflect other pillars; the total is where subcategory trade-offs reconcile, not the trigger for subcategory-level softening.
+- Preserve subcategory meaning. Positive points should stay in the subcategory that improved; negative or neutral counter-impact should remain visible in the relevant other subcategory. Compensation happens through the total Design Confidence sum, not by making unrelated subcategories positive.
+- Operational assumptions and all other supported packet evidence follow the same Design Confidence scoring and calibration rules. Planning assumptions may improve or worsen Operational Burden Balance because they affect whether the scenario feels operationally proportionate and executable. They may also create counter-effects in other Design Confidence subcategories, such as endpoint maturity or evidence sufficiency, when supported by the rationale. The special rule for planning assumptions is only that they must not explain Completion Outlook movement; within Design Confidence they are handled like other supported current-scenario evidence. Preserve subcategory meaning through the LLM rationale rather than through field-family-specific numeric caps.
+- Shortcut-driven ease should not create strong positive Operational Burden Balance or Design Confidence. If easier completion comes from weaker randomization, masking, comparator, endpoint rigor, arms, governance, or development ambition, cap positive feasibility credit and preserve evidence/phase critique.
+- Negative critiques should generally remain visible when supported. Soften negative points only when they duplicate strong same-direction negative Completion Outlook or pillar movement; do not soften them merely because another subcategory improved.
+- The deterministic layer should mostly cap or soften excessive same-pillar, same-direction amplification. It should not invent new positive or negative points and should not perform deep clinical interpretation beyond matching-pillar movement and provider evidence fields.
+
+Participant-facing Design Confidence treemap display shows signed subcategory points and the short rationale only. `rating` and `score_materiality` remain internal for scoring, validation, and audit; those labels are not shown as participant-facing treemap text.
+
 Text consistency should not be a standalone visual pillar in V1. It should be routed to the affected Design Confidence subcategory:
 
 - Endpoint text conflict -> `Endpoint & Evidence Strength`.
@@ -1315,6 +1342,7 @@ Gemini JSON reliability finding from the NCT02741128 live audit:
 - Later temperature/thinking evals on five-trial Scenario Review waves showed omitted/default temperature gave better visible quality than explicit `0` or `0.3`, while explicit high thinking reduced failed/warning checks versus default medium thinking. Higher thinking did not make outputs deterministic: duplicate runs still drifted in Design Confidence scoring and wording. Therefore high thinking is a quality setting, not a reproducibility guarantee; reproducibility-sensitive evals should keep using duplicate traces and drift inspection.
 - Final-settings quality/reproducibility assessment should use `scripts/run_final_narrative_quality_plan.py`. The default wave runs 10 live Gemini trials with omitted/default temperature and explicit high thinking to detect quality, adherence, and scoring patterns, then runs the first 3 trials twice under the same settings to inspect reproducibility drift. The helper also writes a generation-control comparison report so the review can separate systematic prompt issues from expected live-provider variability.
 - Final narrative validation should use `scripts/run_final_narrative_validation_plan.py`. This is separate from generation-control testing: it keeps omitted/default temperature and Gemini high thinking, then runs a boundary-behavior wave, a 12-trial credible-storyline candidate wave, and a duplicate reproducibility wave. The boundary wave is non-cumulative: each boundary iteration resets to the same baseline so it can isolate latest-change behavior. It covers the key input combinations: structured score-input only, Trial description only, planning assumptions only, structured + Trial description, Trial description + planning assumptions, structured + planning assumptions, all three input types together, `structured_features` / `text_context` contradiction, aligned non-conflict structured/text version, and shortcut simplification. The storyline wave remains cumulative because it is deliberately built as candidate material for later one-shot example selection; it targets Oncology plus UCB-relevant therapeutic areas and prefers UCB-sponsored candidates when available without making sponsor identity a hard filter. It should be reviewed for credibility, cross-functional tension, narrative coherence across 2-4 iterations, Design Confidence scoring quality, question quality, and whether the example is `presentation_ready`, `good_after_light_edit`, `useful_for_stress_test_only`, or `discard`. Do not embed one-shot examples into the live provider prompt until candidate examples are selected and an A/B check shows they improve quality without making output formulaic.
+- Final validation wave `final_validation_boundary_10_1`, `final_validation_storyline_candidates_12_1`, `final_validation_repro_3_a`, `final_validation_repro_3_b`, and `final_validation_repro_3_comparison` completed on 2026-06-15. Boundary behavior was stable at 110/110 reviewed visible iterations. Storyline candidates completed 48/48 reviewed visible iterations and are the source of truth for later one-shot selection. Duplicate storyline reproducibility was 12/12 exact iteration matches and 12/12 score matches. The next step is human qualitative inspection of full storylines, changed fields, narratives, subcategory rationales, score movements, and questions before any example is selected or embedded.
 - Real-provider diagnostics now record token usage metadata when available, including Gemini prompt, candidate, thought, cached-content, and total token counts; they also record finish metadata such as finish reason and safety-rating count when exposed by the SDK.
 
 Current structured/text consistency-check status:
@@ -1323,6 +1351,29 @@ Current structured/text consistency-check status:
 - `Predict Trial Completion` proceeds directly with edited structured fields, text fields, and operational assumptions.
 - The deterministic alignment module and checker are not part of the active workflow.
 - The active Scenario Review path should not return `clarification_needed` before scoring.
+
+Implemented structured-field red flags:
+
+These are UI coherence checks for impossible or internally incompatible structured Trial Feature combinations. They are not Design Confidence scoring rules and should stay separate from the later Design Confidence scoring-calibration work. Implementation should mirror the existing placebo consistency behavior: run immediately when fields change, highlight involved controls with red background, do not add amber states, do not add a compact warning card for now, and do not auto-correct except for the existing placebo sync behavior. Red-highlighted fields should remain highlighted until the incompatible combination is resolved, but they must not disable `Review Scenario` or block Scenario Review generation.
+
+Implementation artifacts: `frontend/utils/structured_incompatibility.py`, `frontend/views/trial_simulator.py`, and `scripts/check_structured_incompatibility.py`.
+
+- `Intervention Model = Parallel` with `Number of Arms <= 1`: highlight `Intervention Model` and `Number of Arms`.
+- `Allocation Method = Randomized` with `Intervention Model = Single Group`: highlight `Allocation Method` and `Intervention Model`.
+- `Allocation Method = Randomized` with `Number of Arms <= 1`: highlight `Allocation Method` and `Number of Arms`.
+- `Benchmark Comparator = Placebo` with `Placebo Control = No`: highlight `Benchmark Comparator` and `Placebo Control`.
+- `Placebo Control = Yes` with `Benchmark Comparator = No Control Group or Not Specified`: highlight `Placebo Control` and `Benchmark Comparator`.
+- `Placebo Control = Yes` with `Number of Arms <= 1`: highlight `Placebo Control` and `Number of Arms`.
+- `Intervention Model = Single Group` with `Placebo Control = Yes`: highlight `Intervention Model` and `Placebo Control`.
+- `Benchmark Comparator = Active / Legacy Standard` or `Active / Modern Standard` with `Intervention Model = Single Group`: highlight `Benchmark Comparator` and `Intervention Model`.
+- `Benchmark Comparator = Active / Legacy Standard` or `Active / Modern Standard` with `Number of Arms <= 1`: highlight `Benchmark Comparator` and `Number of Arms`.
+- `Bias Control = Double Blind`, `Triple Blind`, or `Quadruple Blind` with `Intervention Model = Single Group`, `Benchmark Comparator = No Control Group or Not Specified`, and `Placebo Control = No`: highlight `Bias Control`, `Intervention Model`, `Benchmark Comparator`, and `Placebo Control`.
+- `Bias Control = Double Blind`, `Triple Blind`, or `Quadruple Blind` with `Number of Arms <= 1`, `Benchmark Comparator = No Control Group or Not Specified`, and `Placebo Control = No`: highlight `Bias Control`, `Number of Arms`, `Benchmark Comparator`, and `Placebo Control`.
+- `Intervention Model = Factorial` with `Number of Arms <= 1`: highlight `Intervention Model` and `Number of Arms`.
+- `Intervention Model = Crossover` with `Number of Arms <= 1`: highlight `Intervention Model` and `Number of Arms`.
+- `Intervention Model = Sequential` with `Number of Arms <= 1`: highlight `Intervention Model` and `Number of Arms`.
+
+Do not include the following as red flags in this first pass because they can be unusual but not impossible: `Phase 3` with `Single Group`, `Confirmatory / Registration` with `Single Group`, `Hard Clinical (Survival/Death)` with short endpoint duration, `Advanced / Metastatic` with `Adjuvant / Neoadjuvant`, `Prevention` with patients only, `Healthy Volunteers = Yes` with non-healthy patient fields, or `Data Monitoring Committee = No` in high-risk or pivotal trials. These may remain Design Confidence considerations or future amber warnings, but not hard red structured-field incompatibility flags.
 
 Recommended trace fields to store for each narrative pass:
 

@@ -78,7 +78,9 @@ EXPERT_ANALYSIS_REQUIREMENTS = {
     ),
     "judgment_standard": (
         "Make a clear expert judgment about what the scenario appears to strengthen, weaken, or leave uncertain, "
-        "while preserving conditional language and avoiding exact design recommendations."
+        "while preserving conditional language and avoiding exact design recommendations. Preserve each Design "
+        "Confidence subcategory's meaning: when a change improves one design dimension but worsens another, "
+        "reflect both effects in their relevant subcategories."
     ),
     "reasoning_shape": (
         "Prefer because / however / therefore logic: identify the supported signal, name the trade-off or limitation, "
@@ -580,7 +582,8 @@ def build_provider_prompt(packet: dict[str, Any], *, prompt_mode: str | None = N
         "then assign score_materiality from the strength of the supported evidence and context guardrails. "
         "Allowed score_materiality values are minimal, low, moderate, high, and very_high. Default to minimal unless the rationale identifies a concrete reason for larger score movement. "
         "High or very_high positive score_materiality is rare and requires new or resolved design-quality evidence, not merely a favorable Completion Outlook. "
-        "Do not choose a rating or score_materiality first and search for justification afterward.\n"
+        "Do not choose a rating or score_materiality first and search for justification afterward. "
+        "Preserve each Design Confidence subcategory's meaning: when a change improves one design dimension but worsens another, reflect both effects in their relevant subcategories; cross-functional trade-offs may be justified in the overall Design Confidence judgment, but a subcategory should be positive only when that subcategory itself improved.\n"
         "Question split: Completion Outlook narrative answers only whether the Completion Outlook score inputs or early-termination risk-pattern evidence moved, and why. "
         "Design Confidence narrative may use all relevant packet evidence, including Completion Outlook score inputs, planning assumptions, aligned Trial description field content, scenario-readiness warnings, governance, proportionality, and interpretability, to judge the current design quality.\n"
         "When packet.review_controls is present, follow it as product-level control logic. "
