@@ -17,6 +17,17 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+LEGACY_PROMPT_INSPECTION_DISABLED_MESSAGE = (
+    "scripts/export_narrative_prompt_inspection_pack.py is disabled for the Strategic Review migration. "
+    "It exports superseded Design Confidence prompt-inspection packs. "
+    "Rebuild prompt inspection around strategic_review_schema_v1 before use."
+)
+
+if __name__ == "__main__":
+    print(LEGACY_PROMPT_INSPECTION_DISABLED_MESSAGE, file=sys.stderr)
+    raise SystemExit(2)
+raise RuntimeError(LEGACY_PROMPT_INSPECTION_DISABLED_MESSAGE)
+
 from scripts.export_storyline_review_docx import convert_markdown_to_docx  # noqa: E402
 from src.narratives.contract_fixtures import get_contract_fixtures  # noqa: E402
 from src.narratives.packet_builder import build_review_packet, build_review_packet_from_fixture  # noqa: E402

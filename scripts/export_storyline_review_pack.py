@@ -11,6 +11,11 @@ from typing import Any
 
 DEFAULT_REPORT = Path("reports/narrative_evals/final_validation_storyline_candidates_12_1.json")
 DEFAULT_OUT = Path("reports/narrative_evals/final_validation_storyline_review_pack.md")
+LEGACY_EXPORT_DISABLED_MESSAGE = (
+    "scripts/export_storyline_review_pack.py is disabled for the Strategic Review migration. "
+    "It formats superseded Design Confidence / Total Scenario Score eval reports. "
+    "Rebuild the export around Strategic Review and Trial Score before use."
+)
 
 SUBCATEGORY_ORDER = (
     "phase_intent_alignment",
@@ -193,6 +198,9 @@ def export_review_pack(report_path: Path, out_path: Path) -> None:
 
 
 def main() -> int:
+    print(LEGACY_EXPORT_DISABLED_MESSAGE)
+    return 2
+
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--report", type=Path, default=DEFAULT_REPORT)
     parser.add_argument("--out", type=Path, default=DEFAULT_OUT)

@@ -19,6 +19,15 @@ def _load_report(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def _disabled() -> int:
+    print(
+        "scripts/compare_narrative_temperature_reports.py is disabled for the Strategic Review migration. "
+        "It compares superseded Design Confidence / Total Scenario Score report fields. "
+        "Rebuild report comparison around Strategic Review and Trial Score before use."
+    )
+    return 2
+
+
 def _parse_labeled_report(value: str) -> tuple[str, Path]:
     if "=" not in value:
         raise argparse.ArgumentTypeError("--report must use label=path")
@@ -255,6 +264,8 @@ def _write_markdown(path: Path, comparison: dict[str, Any]) -> None:
 
 
 def main() -> int:
+    return _disabled()
+
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--report", action="append", type=_parse_labeled_report, default=[], help="Temperature report as label=path.")
     parser.add_argument("--repro-a", type=Path, default=None, help="First duplicate-run report for reproducibility comparison.")

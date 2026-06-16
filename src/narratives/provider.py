@@ -48,6 +48,9 @@ def _unavailable_scoring(packet: dict[str, Any], message: str) -> dict[str, Any]
     return {
         "validation_status": "unavailable",
         "validation_errors": [message],
+        "strategic_review": None,
+        "trial_score": None,
+        "strategic_review_assessment": {},
         "design_confidence": None,
         "total_scenario_score": None,
         "design_confidence_assessment": {},
@@ -247,10 +250,17 @@ def _score_provider_review(
 ) -> dict[str, Any]:
     scored = validate_and_score_review(packet, review)
     scoring = scored["scoring"]
-    is_valid = scoring.get("validation_status") == "valid" and scoring.get("design_confidence") is not None
+    prompt_mode = str((scored["validated_review"].get("review_metadata") or {}).get("review_mode") or "")
+    hidden_baseline = prompt_mode == "hidden_baseline"
+    is_valid = scoring.get("validation_status") == "valid" and (
+        hidden_baseline or scoring.get("strategic_review") is not None
+    )
     if not is_valid:
         scoring = {
             **scoring,
+            "strategic_review": None,
+            "trial_score": None,
+            "strategic_review_assessment": {},
             "design_confidence": None,
             "total_scenario_score": None,
             "design_confidence_assessment": {},

@@ -24,6 +24,14 @@ def _run(command: list[str], *, execute: bool) -> int:
 
 
 def main() -> int:
+    print(
+        "scripts/run_final_narrative_quality_plan.py is disabled for the Strategic Review migration. "
+        "It wraps the superseded Design Confidence / Total Scenario Score eval harness. "
+        "Rebuild this plan around docs/strategic_review_phase1.md before running quality validation.",
+        file=sys.stderr,
+    )
+    return 2
+
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--provider", default="gemini", choices=("configured", "mock", "gemini", "openai"))
     parser.add_argument("--temperature", default="omit", help="Temperature override passed to run_narrative_eval_suite.py.")

@@ -15,6 +15,11 @@ from docx.shared import Inches, Pt
 
 DEFAULT_MARKDOWN = Path("reports/narrative_evals/final_validation_storyline_review_pack.md")
 DEFAULT_OUT = Path("reports/narrative_evals/final_validation_storyline_review_pack.docx")
+LEGACY_DOCX_DISABLED_MESSAGE = (
+    "scripts/export_storyline_review_docx.py is disabled for the Strategic Review migration. "
+    "It formats superseded Design Confidence / Total Scenario Score review packs. "
+    "Rebuild the DOCX export around Strategic Review and Trial Score before use."
+)
 
 LABEL_LINES = {
     "Reviewer notes:",
@@ -186,6 +191,9 @@ def convert_markdown_to_docx(markdown_path: Path, out_path: Path) -> None:
 
 
 def main() -> int:
+    print(LEGACY_DOCX_DISABLED_MESSAGE)
+    return 2
+
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--markdown", type=Path, default=DEFAULT_MARKDOWN)
     parser.add_argument("--out", type=Path, default=DEFAULT_OUT)

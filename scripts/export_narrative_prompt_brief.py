@@ -19,6 +19,17 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+LEGACY_PROMPT_BRIEF_DISABLED_MESSAGE = (
+    "scripts/export_narrative_prompt_brief.py is disabled for the Strategic Review migration. "
+    "It exports superseded Design Confidence prompt context. "
+    "Rebuild the brief around strategic_review_schema_v1 before use."
+)
+
+if __name__ == "__main__":
+    print(LEGACY_PROMPT_BRIEF_DISABLED_MESSAGE)
+    raise SystemExit(2)
+raise RuntimeError(LEGACY_PROMPT_BRIEF_DISABLED_MESSAGE)
+
 try:
     from dotenv import load_dotenv
 except ImportError:  # pragma: no cover - export still works with process env only.

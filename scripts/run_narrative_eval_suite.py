@@ -25,6 +25,17 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+LEGACY_EVAL_DISABLED_MESSAGE = (
+    "scripts/run_narrative_eval_suite.py is disabled for the Strategic Review migration. "
+    "It still encodes the superseded Design Confidence / Total Scenario Score eval contract. "
+    "Rebuild the harness around docs/strategic_review_phase1.md before using live or batch evals."
+)
+
+if __name__ == "__main__":
+    print(LEGACY_EVAL_DISABLED_MESSAGE, file=sys.stderr)
+    raise SystemExit(2)
+raise RuntimeError(LEGACY_EVAL_DISABLED_MESSAGE)
+
 from src.narratives.packet_builder import (  # noqa: E402
     ACTIVE_OPERATIONAL_ASSUMPTION_KEYS,
     STRUCTURED_FEATURE_KEYS,

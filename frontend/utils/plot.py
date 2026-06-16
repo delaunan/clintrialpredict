@@ -462,6 +462,7 @@ def plot_treemap(subcat_impacts, pillar_impacts, show_values=True, height=600):
         subtopic = item['Subcategory']
         impact = item['Impact']
         feat_details = item.get('FeatureDetails', [])
+        show_impact_value = item.get("ShowImpactValue", True)
 
         if not show_values:
             # Strip the value part (": <b>...</b>") using regex or splitting
@@ -475,11 +476,16 @@ def plot_treemap(subcat_impacts, pillar_impacts, show_values=True, height=600):
 
         bullet_separator = "<br>• "
         feat_html = "• " + bullet_separator.join(feat_details) if feat_details else ""
+        impact_html = (
+            f"<br><b style='font-size:{TREEMAP_IMPACT_FONT_SIZE}px; color:#F4F7FB;'>{impact:+.1f} pts</b>"
+            if show_impact_value
+            else ""
+        )
 
         label_html = (
             f"<span style='font-family:{STYLE_CONFIG['font_family']}; line-height:1.05;'>"
             f"<b style='font-size:{TREEMAP_SUBTOPIC_FONT_SIZE}px; color:#F4F7FB;'>{subtopic}</b>"
-            f"<br><b style='font-size:{TREEMAP_IMPACT_FONT_SIZE}px; color:#F4F7FB;'>{impact:+.1f} pts</b>"
+            f"{impact_html}"
             f"<br><br><span style='font-size:{TREEMAP_DETAIL_FONT_SIZE}px; font-weight:500; color:#F4F7FB;'>{feat_html}</span>"
             f"</span>"
         )
@@ -490,7 +496,7 @@ def plot_treemap(subcat_impacts, pillar_impacts, show_values=True, height=600):
             "parent": parent_id,
             "label": label_html,
             "color": get_rgb_str(color),
-            "value": max(0.5, abs(impact))
+            "value": item.get("TreemapValue", max(0.5, abs(impact)))
         })
 
     for item in leaf_data:

@@ -1,5 +1,13 @@
 # Implementation Plan: Narrative Design Confidence Migration
 
+> Superseded on 2026-06-16 by `docs/strategic_review_phase1.md`.
+> This file is historical implementation provenance for the old
+> `Design Confidence` / `Total Scenario Score` direction. Do not use it as the
+> active implementation plan. The active score stack is
+> `Completion Outlook + Strategic Review = Trial Score`, with provider output
+> limited to Strategic Review classification/rationale and application-owned
+> numeric scoring.
+
 ## Scope
 
 Architecture scope: `architecture_narratives`

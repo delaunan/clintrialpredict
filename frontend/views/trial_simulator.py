@@ -45,7 +45,7 @@ from src.operational_benchmarks import (
     planned_sites_default_from_operational_benchmark,
 )
 from src.narratives.packet_builder import build_review_packet
-from src.narratives.prompt_builder import infer_prompt_mode
+from src.narratives.prompt_builder import PROMPT_TEMPLATE_VERSION, infer_prompt_mode
 from src.narratives.review_store import (
     compact_storyline_from_trace,
     get_review_store,
@@ -313,8 +313,8 @@ DETAIL_TAB_FEATURES = "Trial Features"
 DETAIL_TAB_SCORE = "Trial Score"
 
 SCORE_VIEW_COMPLETION = "Completion Outlook"
-SCORE_VIEW_DESIGN = "Design Confidence"
-SCORE_VIEW_TOTAL = "Total Scenario Score"
+SCORE_VIEW_DESIGN = "Strategic Review"
+SCORE_VIEW_TOTAL = "Trial Score"
 SCORE_VIEW_OPTIONS = (
     SCORE_VIEW_COMPLETION,
     SCORE_VIEW_DESIGN,
@@ -6298,7 +6298,7 @@ def narrative_review_runtime():
             "provider": PROVIDER_MOCK,
             "config": None,
             "use_provider_chain": False,
-            "runtime_key": "mock:fixture_hash_mock_v1",
+            "runtime_key": f"mock:fixture_hash_mock_v1:prompt:{PROMPT_TEMPLATE_VERSION}",
         }
 
     config = load_narrative_provider_config(os.environ)
@@ -6318,7 +6318,7 @@ def narrative_review_runtime():
         "provider": config.provider,
         "config": config,
         "use_provider_chain": True,
-        "runtime_key": f"chain:{primary_key}:fallback:{fallback_key}:{provider_config_cache_namespace(config)}",
+        "runtime_key": f"chain:{primary_key}:fallback:{fallback_key}:{provider_config_cache_namespace(config)}:prompt:{PROMPT_TEMPLATE_VERSION}",
     }
 
 
@@ -9759,7 +9759,7 @@ def _previous_visible_scenario_review_trace(nct_id, current_trace):
         iteration = _scenario_review_iteration_number(trace)
         if iteration is None or iteration >= current_iteration:
             continue
-        if trace.get("design_confidence") is None or trace.get("total_scenario_score") is None:
+        if trace.get("strategic_review", trace.get("design_confidence")) is None or trace.get("trial_score", trace.get("total_scenario_score")) is None:
             continue
         return trace
     return None
@@ -9792,8 +9792,8 @@ def _score_view_delta_html(score_view, scenario_trace, snapshot, nct_id):
         if not previous_trace:
             return ""
         return _score_delta_badge_html(
-            previous_trace.get("design_confidence"),
-            scenario_trace.get("design_confidence"),
+            previous_trace.get("strategic_review", previous_trace.get("design_confidence")),
+            scenario_trace.get("strategic_review", scenario_trace.get("design_confidence")),
             delta_unit="points",
             midpoint=0.0,
             signed_values=True,
@@ -9805,13 +9805,13 @@ def _score_view_delta_html(score_view, scenario_trace, snapshot, nct_id):
         else:
             previous_trace = _previous_visible_scenario_review_trace(nct_id, scenario_trace)
             previous_total_reference = (
-                previous_trace.get("total_scenario_score")
+                previous_trace.get("trial_score", previous_trace.get("total_scenario_score"))
                 if previous_trace
                 else None
             )
         return _score_delta_badge_html(
             previous_total_reference,
-            scenario_trace.get("total_scenario_score"),
+            scenario_trace.get("trial_score", scenario_trace.get("total_scenario_score")),
             delta_unit="percent",
         )
 
@@ -9930,7 +9930,7 @@ def _design_confidence_visual_html(assessment):
         sections.append(
             "<div class='quality-contribution-group'>"
             "<div class='quality-contribution-group-head'>"
-            f"<span>{html.escape(str(pillar.get('label') or 'Design Confidence'))}</span>"
+            f"<span>{html.escape(str(pillar.get('label') or 'Strategic Review'))}</span>"
             f"<span style='color:{_quality_points_color(pillar_points)};'>"
             f"{html.escape(_format_quality_points(pillar_points))}</span>"
             "</div>"
@@ -9943,7 +9943,7 @@ def _design_confidence_visual_html(assessment):
 
     return (
         "<div class='quality-contribution-chart'>"
-        "<div class='quality-contribution-title'>Design Confidence Contributions</div>"
+        "<div class='quality-contribution-title'>Strategic Review Contributions</div>"
         f"{''.join(sections)}"
         "</div>"
     )
@@ -9957,6 +9957,71 @@ def _scenario_review_text_block(title, text):
         f"{html.escape(title)}</div>"
         f"<div class='quality-review-text'>{html.escape(text.strip())}</div>"
     )
+
+
+def _scenario_review_structured_html(strategic_analysis, key_questions):
+    if not isinstance(strategic_analysis, dict):
+        return ""
+    overall = strategic_analysis.get("overall_score_explanation")
+    pillar_readout = strategic_analysis.get("pillar_readout")
+    strategic_bullet = strategic_analysis.get("strategic_review_bullet")
+    tension_question = strategic_analysis.get("tension_question")
+    broader_question = (
+        strategic_analysis.get("broader_strategic_question")
+        or (key_questions or {}).get("strategic_development_question")
+    )
+    has_structured = any([
+        isinstance(overall, str) and overall.strip(),
+        isinstance(pillar_readout, list) and pillar_readout,
+        isinstance(strategic_bullet, str) and strategic_bullet.strip(),
+        isinstance(tension_question, str) and tension_question.strip(),
+        isinstance(broader_question, str) and broader_question.strip(),
+    ])
+    if not has_structured:
+        return ""
+
+    sections = []
+    if isinstance(overall, str) and overall.strip():
+        sections.append(_scenario_review_text_block("Overall Score Explanation", overall))
+
+    bullet_items = []
+    for item in pillar_readout if isinstance(pillar_readout, list) else []:
+        if not isinstance(item, dict):
+            continue
+        label = str(item.get("label") or "").strip()
+        interpretation = str(item.get("interpretation") or "").strip()
+        if not label and not interpretation:
+            continue
+        bullet_items.append(
+            "<li>"
+            f"<strong>{html.escape(label)}</strong>"
+            f"{': ' if label and interpretation else ''}"
+            f"{html.escape(interpretation)}"
+            "</li>"
+        )
+    if bullet_items:
+        sections.append(
+            "<div class='quality-review-section-title'>Pillar-Level Readout</div>"
+            "<div class='quality-review-text'><ul>"
+            f"{''.join(bullet_items)}"
+            "</ul></div>"
+        )
+
+    if isinstance(strategic_bullet, str) and strategic_bullet.strip():
+        sections.append(
+            "<div class='quality-review-section-title'>Strategic Review</div>"
+            "<div class='quality-review-text'><ul><li>"
+            f"<strong>{html.escape(strategic_bullet.strip())}</strong>"
+            "</li></ul></div>"
+        )
+
+    if isinstance(tension_question, str) and tension_question.strip():
+        sections.append(_scenario_review_text_block("Tension & Question", tension_question))
+
+    if isinstance(broader_question, str) and broader_question.strip():
+        sections.append(_scenario_review_text_block("Broader Strategic Question", broader_question))
+
+    return "".join(sections)
 
 
 def _quality_review_unavailable_card(title, message, muted):
@@ -9981,16 +10046,23 @@ def _trace_allows_total_scenario_display(trace):
         return False
     if trace.get("hidden_baseline") or trace.get("participant_visible") is False:
         return False
-    return trace.get("total_scenario_score") is not None
+    return trace.get("trial_score", trace.get("total_scenario_score")) is not None
 
 
 def _design_pillar_impacts(trace):
     if not _trace_allows_design_confidence_display(trace):
         return []
+    strategic_assessment = (trace or {}).get("strategic_review_assessment") or {}
+    strategic_points = pd.to_numeric(
+        (trace or {}).get("strategic_review", strategic_assessment.get("points")),
+        errors="coerce",
+    )
+    if strategic_assessment and pd.notna(strategic_points):
+        return [{"Pillar": "Strategic Review", "Impact": float(strategic_points)}]
     assessment = (trace or {}).get("design_confidence_assessment") or {}
     rows = []
     for pillar in (assessment.get("pillars") or {}).values():
-        label = str(pillar.get("label") or "Design Confidence")
+        label = str(pillar.get("label") or "Strategic Review")
         impact = pd.to_numeric(pillar.get("design_points"), errors="coerce")
         if pd.notna(impact):
             rows.append({"Pillar": label, "Impact": float(impact)})
@@ -10081,7 +10153,7 @@ def _combined_subcategory_impacts(completion_subcats, design_subcats):
     for item in design_subcats or []:
         rows.append({
             **dict(item),
-            "Subcategory": f"Design: {item.get('Subcategory')}",
+            "Subcategory": f"Strategic Review: {item.get('Subcategory')}",
         })
     return rows
 
@@ -10209,9 +10281,9 @@ def render_scenario_review_report(row, trace=None, snapshot=None):
             "pending_operational_assumptions": get_pending_operational_assumption_keys(row),
         }
         _quality_review_unavailable_card(
-            "Scenario Review",
-            "Click Review Scenario to update the Scenario Review for the current scenario.",
-            "The displayed Completion Score and previous review still reflect the last submitted prediction.",
+            "Strategic Review",
+            "Click Review Scenario to update the Strategic Review for the current scenario.",
+            "The displayed Completion Outlook and previous review still reflect the last submitted prediction.",
         )
         with st.expander("Pending scenario diagnostics", expanded=False):
             st.json(pending_diagnostics)
@@ -10221,15 +10293,15 @@ def render_scenario_review_report(row, trace=None, snapshot=None):
         return
 
     status = str(trace.get("status") or "unavailable")
-    if trace.get("design_confidence") is None or trace.get("total_scenario_score") is None:
+    if trace.get("strategic_review", trace.get("design_confidence")) is None or trace.get("trial_score", trace.get("total_scenario_score")) is None:
         reason = participant_review_failure_reason(trace)
         message = (
-            "Scenario Review is not available for this scenario in the current mock-review phase."
+            "Strategic Review is unavailable for this scenario. Completion Outlook is still shown."
             if trace.get("provider") == PROVIDER_MOCK
-            else "Scenario Review is not available for this scenario."
+            else "Strategic Review is unavailable for this scenario. Completion Outlook is still shown."
         )
         _quality_review_unavailable_card(
-            "Scenario Review",
+            "Strategic Review",
             message,
             reason,
         )
@@ -10237,32 +10309,40 @@ def render_scenario_review_report(row, trace=None, snapshot=None):
         return
 
     completion_score = snapshot.get("score")
-    design_confidence = trace.get("design_confidence")
-    total_scenario_score = trace.get("total_scenario_score")
+    strategic_review = trace.get("strategic_review", trace.get("design_confidence"))
+    trial_score = trace.get("trial_score", trace.get("total_scenario_score"))
     validated_review = trace.get("validated_review") or {}
     participant = validated_review.get("participant_review") or {}
     completion_analysis = validated_review.get("completion_outlook_analysis") or {}
-    design_analysis = validated_review.get("design_confidence_analysis") or {}
+    strategic_analysis = (
+        validated_review.get("strategic_review_analysis")
+        or validated_review.get("design_confidence_analysis")
+        or {}
+    )
+    strategic_object = validated_review.get("strategic_review") or trace.get("strategic_review_object") or {}
     consistency_note = validated_review.get("scenario_consistency_note") or {}
     key_questions = validated_review.get("key_questions") or {}
 
     metric_html = "".join([
         _quality_review_metric("Completion", f"{float(completion_score):.1f}" if completion_score is not None else "N/A"),
         _quality_review_metric(
-            "Design",
-            _format_quality_points(design_confidence),
-            _quality_points_color(design_confidence),
+            "Strategic",
+            _format_quality_points(strategic_review),
+            _quality_points_color(strategic_review),
         ),
-        _quality_review_metric("Total", _format_candidate_score(total_scenario_score)),
+        _quality_review_metric("Trial",
+            _format_candidate_score(trial_score)),
     ])
 
     central_tension = (
         trace.get("central_tension")
         or validated_review.get("main_tension")
-        or design_analysis.get("confidence_rationale")
+        or strategic_object.get("current_tension")
+        or strategic_analysis.get("review_rationale")
+        or strategic_analysis.get("confidence_rationale")
         or ((trace.get("validated_review") or {}).get("tradeoff_review") or {}).get("central_tension")
     )
-    report_title = "Baseline Scenario Review" if trace.get("hidden_baseline") else "Scenario Review"
+    report_title = "Baseline Strategic Review" if trace.get("hidden_baseline") else "Strategic Review"
     pending_review_html = (
         "<div class='simulation-stale-notice scenario-review-pending-notice'>"
         "Review update pending"
@@ -10274,10 +10354,12 @@ def render_scenario_review_report(row, trace=None, snapshot=None):
         completion_analysis.get("risk_pattern_summary")
         or participant.get("overall_completion_comment")
     )
-    design_text = (
-        design_analysis.get("summary")
+    strategic_text = (
+        strategic_analysis.get("summary")
+        or strategic_object.get("rationale")
         or participant.get("overall_design_comment")
     )
+    structured_strategic_html = _scenario_review_structured_html(strategic_analysis, key_questions)
     consistency_text = (
         consistency_note.get("message")
         if consistency_note.get("has_clear_mismatch")
@@ -10298,10 +10380,11 @@ def render_scenario_review_report(row, trace=None, snapshot=None):
     narrative_html = "".join([
         _scenario_review_text_block("Scenario Consistency", consistency_text),
         _scenario_review_text_block("Completion Outlook Analysis", completion_text),
-        _scenario_review_text_block("Design Confidence Analysis", design_text),
-        _scenario_review_text_block("Central Tension", central_tension),
+        structured_strategic_html or _scenario_review_text_block("Strategic Review", strategic_text),
+        "" if structured_strategic_html else _scenario_review_text_block("Current Tension", central_tension),
+        "" if structured_strategic_html else _scenario_review_text_block("Next Consideration", strategic_object.get("next_consideration")),
         _scenario_review_text_block("Medical / Clinical Development Question", medical_question),
-        _scenario_review_text_block("Strategic Development Question", strategic_question),
+        "" if structured_strategic_html else _scenario_review_text_block("Strategic Development Question", strategic_question),
     ])
 
     cached_note = narrative_trace_provider_note(trace)
@@ -10352,8 +10435,8 @@ def get_simulation_pillar_delta_map():
 def scenario_score_trace_is_ready(trace):
     return bool(
         trace
-        and trace.get("design_confidence") is not None
-        and trace.get("total_scenario_score") is not None
+        and trace.get("strategic_review", trace.get("design_confidence")) is not None
+        and trace.get("trial_score", trace.get("total_scenario_score")) is not None
     )
 
 
@@ -10935,24 +11018,24 @@ def render_completion_prediction_tab(row):
                     tier_tooltip = COMPLETION_TIER_SCALE_TOOLTIP
                     tier_aria_label = "Completion score scale"
                     if score_view == SCORE_VIEW_DESIGN:
-                        design_confidence = (scenario_trace or {}).get("design_confidence")
-                        if design_confidence is None:
+                        strategic_review = (scenario_trace or {}).get("strategic_review", (scenario_trace or {}).get("design_confidence"))
+                        if strategic_review is None:
                             render_box_spacer(gauge_plot_h)
-                            tier = "Design Confidence unavailable"
+                            tier = "Strategic Review unavailable"
                         else:
                             st.plotly_chart(
-                                plot_adjustment_gauge(design_confidence, limit=50, height=gauge_plot_h),
+                                plot_adjustment_gauge(strategic_review, limit=50, height=gauge_plot_h),
                                 width="stretch",
                                 config={"displayModeBar": False}
                             )
-                            tier = get_design_confidence_tier(float(design_confidence))
+                            tier = get_design_confidence_tier(float(strategic_review))
                             tier_tooltip = DESIGN_CONFIDENCE_TIER_SCALE_TOOLTIP
-                            tier_aria_label = "Design Confidence scale"
+                            tier_aria_label = "Strategic Review scale"
                     elif score_view == SCORE_VIEW_TOTAL:
-                        total_score = (scenario_trace or {}).get("total_scenario_score")
+                        total_score = (scenario_trace or {}).get("trial_score", (scenario_trace or {}).get("total_scenario_score"))
                         if total_score is None:
                             render_box_spacer(gauge_plot_h)
-                            tier = "Total Scenario Score unavailable"
+                            tier = "Trial Score unavailable"
                         else:
                             st.plotly_chart(
                                 plot_success_gauge(float(total_score), height=gauge_plot_h),

@@ -14,6 +14,7 @@ from src.narratives.provider import (
 )
 from src.narratives.provider_config import NarrativeProviderConfig, provider_config_cache_namespace
 from src.narratives.review_controls import apply_review_control_overrides, attach_review_controls
+from src.narratives.storyline import build_storyline_state
 
 NARRATIVE_REVIEW_STATE_KEY = "narrative_review_store_v1"
 
@@ -92,17 +93,24 @@ def _build_trace(
     iteration_context = packet.get("iteration_context") or {}
     scoring = review_result.get("scoring") or {}
     validated_review = review_result.get("validated_review")
-    design_confidence = scoring.get("design_confidence")
-    total_scenario_score = scoring.get("total_scenario_score")
+    strategic_review = scoring.get("strategic_review", scoring.get("design_confidence"))
+    trial_score = scoring.get("trial_score", scoring.get("total_scenario_score"))
+    strategic_review_assessment = deepcopy(scoring.get("strategic_review_assessment") or {})
+    design_confidence = scoring.get("design_confidence", strategic_review)
+    total_scenario_score = scoring.get("total_scenario_score", trial_score)
     design_confidence_assessment = deepcopy(scoring.get("design_confidence_assessment") or {})
     provider_trace = (validated_review or {}).get("trace") or {}
+    strategic_review_analysis = (validated_review or {}).get("strategic_review_analysis") or {}
+    strategic_review_object = (validated_review or {}).get("strategic_review") or {}
     design_confidence_analysis = (validated_review or {}).get("design_confidence_analysis") or {}
     tradeoff_review = (validated_review or {}).get("tradeoff_review") or {}
     main_tension = (
-        (validated_review or {}).get("main_tension")
+        strategic_review_object.get("current_tension")
+        or (validated_review or {}).get("main_tension")
         or design_confidence_analysis.get("confidence_rationale")
         or tradeoff_review.get("central_tension")
     )
+    storyline_state = build_storyline_state(validated_review)
     reference_pack_ids_available = [
         pack.get("pack_id")
         for pack in packet.get("reference_packs") or []
@@ -148,6 +156,12 @@ def _build_trace(
         "validated_review": deepcopy(validated_review),
         "validation_status": scoring.get("validation_status"),
         "validation_errors": deepcopy(scoring.get("validation_errors") or []),
+        "strategic_review": strategic_review,
+        "trial_score": trial_score,
+        "strategic_review_assessment": strategic_review_assessment,
+        "strategic_review_object": deepcopy(strategic_review_object),
+        "strategic_review_analysis": deepcopy(strategic_review_analysis),
+        "storyline_state": deepcopy(storyline_state),
         "design_confidence": design_confidence,
         "total_scenario_score": total_scenario_score,
         "design_confidence_assessment": design_confidence_assessment,
@@ -320,6 +334,11 @@ def replay_or_review_with_provider(
             "scoring": {
                 "validation_status": previous_session_trace.get("validation_status"),
                 "validation_errors": deepcopy(previous_session_trace.get("validation_errors") or []),
+                "strategic_review": previous_session_trace.get("strategic_review"),
+                "trial_score": previous_session_trace.get("trial_score"),
+                "strategic_review_assessment": deepcopy(
+                    previous_session_trace.get("strategic_review_assessment") or {}
+                ),
                 "design_confidence": previous_session_trace.get("design_confidence"),
                 "total_scenario_score": previous_session_trace.get("total_scenario_score"),
                 "design_confidence_assessment": deepcopy(

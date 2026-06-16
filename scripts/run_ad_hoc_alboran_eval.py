@@ -5,6 +5,18 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 import json
+import sys
+
+LEGACY_ALBORAN_DISABLED_MESSAGE = (
+    "scripts/run_ad_hoc_alboran_eval.py is disabled for the Strategic Review migration. "
+    "It imports the superseded Design Confidence / Total Scenario Score eval harness. "
+    "Rebuild the ad hoc scenario around docs/strategic_review_phase1.md before use."
+)
+
+if __name__ == "__main__":
+    print(LEGACY_ALBORAN_DISABLED_MESSAGE, file=sys.stderr)
+    raise SystemExit(2)
+raise RuntimeError(LEGACY_ALBORAN_DISABLED_MESSAGE)
 
 import pandas as pd
 

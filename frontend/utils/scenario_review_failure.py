@@ -15,7 +15,7 @@ def participant_review_failure_reason(trace: dict[str, Any] | None) -> str:
     if not reason and str(trace.get("status") or "") == "no_fixture_match":
         reason = "No mock Scenario Review fixture matched this live scenario."
     if not reason:
-        return "Validation did not produce Design Confidence and Total Scenario Score."
+        return "Validation did not produce Strategic Review and Trial Score."
 
     reason_text = str(reason).strip()
     provider_call_error = re.match(

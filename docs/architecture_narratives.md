@@ -2,7 +2,9 @@
 
 ## Document Role
 
-This file owns the future serious-game narrative layer: LLM commentary, Scenario Review, Design Confidence, Total Scenario Score, facilitator/participant outputs, and narrative payload contracts.
+This file owns the future serious-game narrative layer: LLM commentary, Scenario Review, Strategic Review, Trial Score, facilitator/participant outputs, and narrative payload contracts.
+
+Current active direction as of 2026-06-16 is defined in `docs/strategic_review_phase1.md`: `Completion Outlook + Strategic Review = Trial Score`. Older sections in this document that describe `Design Confidence`, `Total Scenario Score`, quality adjustments, or four visible design subcategory scoring are historical unless explicitly restated as Strategic Review behavior. The active implementation uses `strategic_review_provider_prompt_v1` / `strategic_review_schema_v1`; provider JSON classifies and explains the latest move, while application code calculates the single Strategic Review modifier and Trial Score.
 
 It should not own the existing XGBoost Completion Score, SHAP impact mechanics, or simulation UI state; use `docs/architecture_edit.md` for those. It should consume operational benchmark metadata from `docs/architecture_estimation.md` rather than redefining benchmark construction.
 
@@ -10,9 +12,9 @@ Efficient update rule: change this file when narrative inputs/outputs, LLM contr
 
 ## 1. Purpose Of The Narrative Architecture
 
-This document defines the staged design for adding a serious-game narrative layer around single-trial simulation in ClinTrialPredict. Current implementation covers contract fixtures, deterministic packet building, Design Confidence continuity anchors, validation/scoring, mock review, session-state storage/replay, minimal Quality Review UI, hidden baseline continuity, provider configuration, real OpenAI/Gemini provider boundaries, Gemini Flash-Lite live settings, prompt-mode scaffolding, and opt-in live-provider UI routing. The simulator still uses the deterministic mock provider by default unless `NARRATIVE_LIVE_REVIEW_ENABLED=1` explicitly enables the live provider chain. The active target architecture supersedes the earlier three-pillar Quality Assessment model with a four-pillar Design Confidence model aligned to the existing Completion Outlook pillars.
+This document defines the serious-game narrative layer around single-trial simulation in ClinTrialPredict. The active implementation now centers on Strategic Review: deterministic packet building, `strategic_review_schema_v1` validation, app-owned Strategic Review scoring, storyline continuity, session-state storage/replay, provider boundaries, simulator rendering, and disabled legacy eval/report entry points that still encode the old Design Confidence contract. The simulator still uses the deterministic mock provider by default unless `NARRATIVE_LIVE_REVIEW_ENABLED=1` explicitly enables the live provider chain.
 
-Current planning checkpoint: `prompt_enhancement_plan.md` is the working implementation plan for the next prompt/schema migration. Its accepted durable decisions should be promoted into this architecture document before code changes. The next target contract keeps app-owned scoring but simplifies participant output around Completion Outlook Analysis, Design Confidence Analysis, Main Tension, and two Key Questions; adds deterministic Design Confidence continuity anchors; separates `hidden_baseline`, `first_visible_iteration`, and `later_visible_iteration`; treats Completion Outlook as early-termination risk-pattern interpretation; keeps operational assumptions out of Completion Outlook; adds optional therapeutic-area `.md` context by XGBoost canonical `therapeutic_area_ml`; and adds `scenario_consistency_note` plus `text_change_evidence`.
+The active product contract is `docs/strategic_review_phase1.md`. Legacy planning files `implementation_plan.md` and `prompt_enhancement_plan.md` are now historical provenance and should not be used as implementation plans. If future work needs live batch evaluation, rebuild the old narrative eval harness around Strategic Review and Trial Score rather than reusing Design Confidence checks.
 
 The current edit/simulation workflow remains the foundation. A facilitator selects an existing trial, participants adjust structured Trial Features, and the application calls the existing prediction flow to produce a completion score with SHAP-derived impact decomposition.
 
@@ -24,52 +26,53 @@ The narrative layer should help participants reason about this trade-off without
 
 The LLM layer is separate from the existing prediction system. The serious-game score stack has three layers:
 
-1. `Completion Score`: the existing XGBoost, SHAP, therapeutic-area calibrated score from `/predict`, shown in points from 0 to 100.
-2. `Scenario Review`: a constrained LLM structured reviewer that explains Completion Outlook movement and evaluates Design Confidence without calculating final score values.
-3. `Total Scenario Score`: a deterministic application calculation: `Completion Score + Design Confidence`.
+1. `Completion Outlook`: the existing XGBoost, SHAP, therapeutic-area calibrated score from `/predict`, shown in points from 0 to 100.
+2. `Strategic Review`: a constrained LLM structured reviewer classifies the latest move with categorical effect labels, tension status, operational materiality, evidence fields, and concise rationale. It does not calculate score values.
+3. `Trial Score`: a deterministic application calculation: `Completion Outlook + Strategic Review`.
 
-The LLM must not generate the final score. The LLM returns structured current-state, movement, evidence, narrative, and continuity fields. The application then performs two deterministic calculations:
+The LLM must not generate the final score. The LLM returns structured classification, evidence, narrative, and continuity fields. The application then performs the deterministic calculation:
 
-1. Convert validated Design Confidence subcategory movement into app-owned point adjustments.
-2. Add the Design Confidence adjustment to the XGBoost `Completion Score` to calculate `Total Scenario Score` when the combined view is enabled.
+1. Size the Strategic Review budget from latest Completion Outlook movement, or from operational-only materiality when planned enrollment, planned sites, or planned total timeline are the only changes.
+2. Convert validated Strategic Review effect label plus tension-status factor into one app-owned modifier.
+3. Add the Strategic Review modifier to the XGBoost `Completion Outlook` to calculate `Trial Score`.
 
 ```text
-design_confidence = sum(app_mapped_design_subcategory_points)
+strategic_review_budget = max(2, 0.40 * abs(score_delta))
+strategic_review = strategic_review_budget * (latest_move_factor + tension_status_factor)
 
-total_scenario_score = clamp(
-    completion_score + design_confidence,
+trial_score = clamp(
+    completion_outlook + strategic_review,
     0,
     100
 )
 ```
 
-The V1 scoring display should reconcile exactly: Design Confidence subcategory contributions add up bottom-up into their associated participant-facing pillar, and the four design subcategories add up to total Design Confidence. There is no hidden subcategory, pillar, or total Design Confidence cap. The display score is still clamped to the 0-100 range only at the final Total Scenario Score layer.
+Strategic Review is one visible numeric modifier. Its treemap sublevels are qualitative explanation labels only: `Current Tension`, `Carryover Check`, and `Tradeoff Resolution`. Hidden baseline reviews may create qualitative continuity context but must not calculate or expose baseline Strategic Review or Trial Score.
 
 Example:
 
-- Completion Score: `72`
-- Design Confidence: `+4`
-- Total Scenario Score: `76`
+- Completion Outlook: `72`
+- Strategic Review: `-2.5`
+- Trial Score: `69.5`
 
 Interpretation:
 
-- The Completion Score remains the existing XGBoost score; participant-facing narrative should treat it as an early-termination risk-pattern signal, not as a promise of completion.
-- Design Confidence is a serious-game modifier for design defensibility, decision usefulness, patient relevance, and proportionate execution choices.
-- The Total Scenario Score can recognize a risky but well-strengthened design without replacing or rewriting XGBoost.
-- A trial below `50` on Completion Score can improve if the design choices meaningfully explain why some completion risk reflects rigor, ambition, patient relevance, or prudent governance rather than poor design.
-- A high Completion Score should not automatically receive positive Design Confidence. Positive adjustment requires specific evidence of design confidence, not model-favorable simplicity.
+- The Completion Outlook remains the existing XGBoost score; participant-facing narrative should treat it as an early-termination risk-pattern signal, not as a promise of completion.
+- Strategic Review is a serious-game modifier for whether the latest move makes the score movement strategically defensible, one-sided, contradictory, proportionate, or unresolved.
+- The Trial Score combines historical completion resemblance with the latest strategic tradeoff review without replacing or rewriting XGBoost.
+- A negative Completion Outlook move can receive a positive Strategic Review when the added difficulty is strategically justified.
+- A positive Completion Outlook move can receive a negative Strategic Review when the gain appears to come from oversimplification, incoherence, or reopening a protected tension.
 
 Terminology:
 
-- `Completion Score` = existing XGBoost score shown from 0 to 100.
-- `Completion Outlook` = explanation of model-derived score movement using feature, subcategory, pillar, and score movement evidence, framed as lower/higher early-termination risk or resemblance to historically completed/terminated-trial patterns.
-- `Scenario Review` = participant-facing narrative explanation of Completion Outlook movement, Design Confidence evidence, trade-offs, main tension, and two expert questions.
-- `Design Confidence` = application-calculated point adjustment derived from validated design subcategories with supported evidence.
-- `Total Scenario Score` = Completion Score plus Design Confidence, when the combined view is enabled.
+- `Completion Outlook score` = existing XGBoost score shown from 0 to 100.
+- `Completion Outlook narrative` = explanation of model-derived score movement using feature, subcategory, pillar, and score movement evidence, framed as lower/higher early-termination risk or resemblance to historically completed/terminated-trial patterns.
+- `Strategic Review` = application-calculated point adjustment derived from validated Strategic Review effect labels, tension status, operational materiality, and packet-supported evidence.
+- `Trial Score` = Completion Outlook plus Strategic Review.
 
-In plain scoring terms, `Total Scenario Score = Completion Score + Design Confidence`, with application-level bounds applied only to the final display score.
+In plain scoring terms, `Trial Score = Completion Outlook + Strategic Review`, with application-level bounds applied only to the final display score.
 
-The application, not the LLM, calculates Design Confidence points and Total Scenario Score. The LLM must never modify the XGBoost completion score, SHAP values, pillar impacts, therapeutic-area calibration, prediction pipeline, or audit/demo parity behavior.
+The application, not the LLM, calculates Strategic Review points and Trial Score. The LLM must never modify the XGBoost completion score, SHAP values, pillar impacts, therapeutic-area calibration, prediction pipeline, or audit/demo parity behavior.
 
 Core boundary:
 
@@ -77,8 +80,8 @@ Core boundary:
 - The LLM never modifies SHAP values.
 - The LLM never modifies therapeutic-area calibration.
 - The LLM never rewrites the prediction score.
-- The LLM returns structured Scenario Review ratings, evidence fields, explanation, and continuity fields.
-- The application maps validated design review ratings into Design Confidence and Total Scenario Score.
+- The LLM returns structured Strategic Review effect labels, evidence fields, explanation, and continuity fields.
+- The application maps validated Strategic Review labels into Strategic Review and Trial Score.
 
 ## 3. Current Technical Foundation
 
@@ -107,8 +110,8 @@ Intended flow:
 5. Participants change structured dropdown fields and editable short text fields.
 6. Participants click `Predict Trial Completion`.
 7. XGBoost returns the new completion score, pillar impacts, and impact decomposition through the existing prediction path.
-8. The narrative layer receives baseline context, previous prediction, current prediction, changed fields, score deltas, feature/subcategory/pillar movement, operational benchmark metadata, `text_context` Trial description fields, clarification context, and prior storyline memory.
-9. The application validates the structured Scenario Review, calculates Design Confidence and Total Scenario Score when enabled, and stores a compact storyline update.
+8. The narrative layer receives baseline context, previous prediction, current prediction, changed fields, score deltas, feature/subcategory/pillar movement, operational benchmark metadata, `text_context` Trial description fields, clarification context, and prior Strategic Review storyline memory.
+9. The application validates the structured Scenario Review, calculates Strategic Review and Trial Score for participant-visible scenarios, and stores compact storyline state.
 10. The UI displays the Scenario Review below or near the score and charts.
 11. Participants iterate.
 

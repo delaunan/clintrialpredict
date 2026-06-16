@@ -116,7 +116,82 @@ DESIGN_CONFIDENCE_EXCEPTIONAL_CAP = 6.0
 TOTAL_SCORE_MIN = 0
 TOTAL_SCORE_MAX = 100
 
+STRATEGIC_REVIEW_EFFECT_LABELS = {
+    "supports_score_gain",
+    "lightly_supports_score_gain",
+    "neutral",
+    "partly_offsets_score_gain",
+    "strongly_offsets_score_gain",
+    "critical_reversal",
+    "softens_score_decline",
+    "lightly_softens_decline",
+    "reinforces_score_decline",
+    "critical_negative_review",
+    "supports_tradeoff_balance",
+    "lightly_supports_tradeoff_balance",
+    "worsens_active_tension",
+    "strongly_worsens_active_tension",
+    "reopens_protected_tension",
+}
+
+POSITIVE_COMPLETION_REVIEW_FACTORS = {
+    "supports_score_gain": 0.25,
+    "lightly_supports_score_gain": 0.10,
+    "neutral": 0.0,
+    "partly_offsets_score_gain": -0.50,
+    "strongly_offsets_score_gain": -1.00,
+    "critical_reversal": -1.50,
+}
+
+NEGATIVE_COMPLETION_REVIEW_FACTORS = {
+    "softens_score_decline": 0.25,
+    "lightly_softens_decline": 0.10,
+    "neutral": 0.0,
+    "reinforces_score_decline": -0.75,
+    "critical_negative_review": -1.50,
+}
+
+FLAT_COMPLETION_REVIEW_FACTORS = {
+    "supports_tradeoff_balance": 0.25,
+    "lightly_supports_tradeoff_balance": 0.10,
+    "neutral": 0.0,
+    "worsens_active_tension": -0.50,
+    "strongly_worsens_active_tension": -1.00,
+    "reopens_protected_tension": -1.50,
+}
+
+TENSION_STATUS_FACTORS = {
+    "resolved": 0.0,
+    "obsolete": 0.0,
+    "superseded": -0.10,
+    "partially_active": -0.15,
+    "still_active_secondary": -0.25,
+    "still_active_primary": -0.50,
+    "regressed": -1.00,
+    "newly_resolved": 0.0,
+    "protected_gain_preserved": 0.10,
+    "further_improved": 0.20,
+    "stable_background_strength": 0.0,
+    "not_applicable": 0.0,
+}
+
+OPERATIONAL_MATERIALITY_BUDGETS = {
+    "minor": 2.0,
+    "moderate": 3.0,
+    "major": 4.0,
+    "extreme": 5.0,
+}
+
+STRATEGIC_REVIEW_SUBLEVELS = {
+    "current_tension": "Current Tension",
+    "carryover_check": "Carryover Check",
+    "tradeoff_resolution": "Tradeoff Resolution",
+}
+
 APP_OWNED_SCORE_FIELDS = {
+    "strategic_review_points",
+    "trial_score",
+    "strategic_review_assessment",
     "design_confidence",
     "total_scenario_score",
     "design_confidence_assessment",
@@ -153,6 +228,18 @@ COMPLETION_OUTLOOK_ANALYSIS_KEYS = {
 DESIGN_CONFIDENCE_ANALYSIS_KEYS = {
     "summary",
     "confidence_rationale",
+    "supporting_evidence",
+    "limiting_evidence",
+}
+
+STRATEGIC_REVIEW_ANALYSIS_KEYS = {
+    "summary",
+    "overall_score_explanation",
+    "pillar_readout",
+    "strategic_review_bullet",
+    "tension_question",
+    "broader_strategic_question",
+    "review_rationale",
     "supporting_evidence",
     "limiting_evidence",
 }
@@ -483,6 +570,48 @@ def _validate_analysis_object(
     return obj, errors
 
 
+def _validate_strategic_review_analysis(value: Any) -> tuple[dict[str, Any], list[str]]:
+    obj, errors = _validate_object(value, "strategic_review_analysis")
+    if errors:
+        return {}, errors
+
+    # Legacy cached/provider traces had only the four fallback fields. Keep them
+    # displayable, but require the structured fields for new provider responses.
+    legacy_only = not any(key in obj for key in STRATEGIC_REVIEW_ANALYSIS_KEYS - {
+        "summary",
+        "review_rationale",
+        "supporting_evidence",
+        "limiting_evidence",
+    })
+    required_fields = (
+        {"summary", "review_rationale", "supporting_evidence", "limiting_evidence"}
+        if legacy_only
+        else STRATEGIC_REVIEW_ANALYSIS_KEYS
+    )
+    for key in sorted(required_fields):
+        if key not in obj:
+            errors.append(f"strategic_review_analysis.{key} is required")
+            continue
+        if key in {"supporting_evidence", "limiting_evidence"}:
+            errors.extend(_validate_string_array(obj.get(key), f"strategic_review_analysis.{key}"))
+        elif key == "pillar_readout":
+            items = obj.get(key)
+            if not isinstance(items, list):
+                errors.append("strategic_review_analysis.pillar_readout must be an array")
+                continue
+            for index, item in enumerate(items):
+                if not isinstance(item, dict):
+                    errors.append(f"strategic_review_analysis.pillar_readout[{index}] must be an object")
+                    continue
+                if not isinstance(item.get("label"), str):
+                    errors.append(f"strategic_review_analysis.pillar_readout[{index}].label must be a string")
+                if not isinstance(item.get("interpretation"), str):
+                    errors.append(f"strategic_review_analysis.pillar_readout[{index}].interpretation must be a string")
+        elif not isinstance(obj.get(key), str):
+            errors.append(f"strategic_review_analysis.{key} must be a string")
+    return obj, errors
+
+
 def _validate_completion_outlook_analysis(value: Any, field_name: str) -> tuple[dict[str, Any], list[str]]:
     obj, errors = _validate_object(value, field_name)
     if errors:
@@ -538,8 +667,34 @@ def _validate_scenario_consistency_note(value: Any) -> tuple[dict[str, Any], lis
     return obj, errors
 
 
+def _validate_continuity(value: Any) -> tuple[dict[str, Any], list[str]]:
+    obj, errors = _validate_object(value, "continuity")
+    if errors:
+        return {}, errors
+    normalized = deepcopy(obj)
+    for key in (
+        "prior_concerns_resolved",
+        "prior_concerns_worsened",
+        "prior_concerns_unchanged",
+        "new_concerns",
+    ):
+        if key not in normalized:
+            normalized[key] = []
+        errors.extend(_validate_string_array(normalized.get(key), f"continuity.{key}"))
+        if not isinstance(normalized.get(key), list):
+            normalized[key] = []
+    if "storyline_update" not in normalized:
+        normalized["storyline_update"] = ""
+    if not isinstance(normalized.get("storyline_update"), str):
+        errors.append("continuity.storyline_update must be a string")
+        normalized["storyline_update"] = ""
+    return normalized, errors
+
+
 def _validate_main_tension(review: dict[str, Any], design_confidence_analysis: dict[str, Any]) -> tuple[str, list[str]]:
     value = review.get("main_tension")
+    if value is None:
+        value = (review.get("strategic_review") or {}).get("current_tension")
     if value is None:
         value = (review.get("tradeoff_review") or {}).get("central_tension")
     if value is None:
@@ -547,6 +702,207 @@ def _validate_main_tension(review: dict[str, Any], design_confidence_analysis: d
     if not isinstance(value, str):
         return "", ["main_tension must be a string"]
     return value, []
+
+
+def _validate_strategic_review(value: Any) -> tuple[dict[str, Any], list[str]]:
+    obj, errors = _validate_object(value, "strategic_review")
+    if errors:
+        return {}, errors
+
+    required_string_fields = {
+        "effect_label",
+        "tension_status",
+        "current_tension",
+        "tradeoff_resolution",
+        "rationale",
+        "next_consideration",
+    }
+    for field_name in sorted(required_string_fields):
+        if not isinstance(obj.get(field_name), str):
+            errors.append(f"strategic_review.{field_name} must be a string")
+
+    carryover = obj.get("carryover_check", "")
+    if carryover is not None and not isinstance(carryover, str):
+        errors.append("strategic_review.carryover_check must be a string")
+
+    effect_label = obj.get("effect_label")
+    if isinstance(effect_label, str) and effect_label not in STRATEGIC_REVIEW_EFFECT_LABELS:
+        errors.append(f"strategic_review.effect_label must be one of {sorted(STRATEGIC_REVIEW_EFFECT_LABELS)}")
+
+    tension_status = obj.get("tension_status")
+    if isinstance(tension_status, str) and tension_status not in TENSION_STATUS_FACTORS:
+        errors.append(f"strategic_review.tension_status must be one of {sorted(TENSION_STATUS_FACTORS)}")
+
+    operational_materiality = obj.get("operational_materiality", "minor")
+    if operational_materiality is None:
+        operational_materiality = "minor"
+    if not isinstance(operational_materiality, str):
+        errors.append("strategic_review.operational_materiality must be a string")
+        operational_materiality = "minor"
+    elif operational_materiality not in OPERATIONAL_MATERIALITY_BUDGETS:
+        errors.append(
+            "strategic_review.operational_materiality must be one of "
+            f"{sorted(OPERATIONAL_MATERIALITY_BUDGETS)}"
+        )
+
+    evidence_fields = obj.get("evidence_fields", [])
+    if not isinstance(evidence_fields, list) or any(not isinstance(item, str) for item in evidence_fields):
+        errors.append("strategic_review.evidence_fields must be an array of strings")
+        evidence_fields = []
+
+    move_classification = obj.get("move_classification", [])
+    if not isinstance(move_classification, list) or any(not isinstance(item, str) for item in move_classification):
+        errors.append("strategic_review.move_classification must be an array of strings")
+        move_classification = []
+
+    return {
+        **deepcopy(obj),
+        "effect_label": effect_label if isinstance(effect_label, str) else "",
+        "tension_status": tension_status if isinstance(tension_status, str) else "",
+        "operational_materiality": operational_materiality,
+        "evidence_fields": [str(field) for field in evidence_fields],
+        "move_classification": [str(item) for item in move_classification],
+        "carryover_check": carryover if isinstance(carryover, str) else "",
+    }, errors
+
+
+def _is_operational_only_packet(packet: dict[str, Any]) -> bool:
+    changed_fields = [
+        str(field)
+        for field in ((packet.get("iteration_context") or {}).get("changed_fields") or [])
+    ]
+    if not changed_fields:
+        return False
+    return all(field.startswith("operational_assumptions.") for field in changed_fields)
+
+
+def _completion_delta(packet: dict[str, Any]) -> float:
+    model = packet.get("model_interpretation") or {}
+    score_delta = model.get("score_delta")
+    if isinstance(score_delta, (int, float)):
+        return float(score_delta)
+    current = model.get("completion_score")
+    previous = model.get("previous_completion_score")
+    if isinstance(current, (int, float)) and isinstance(previous, (int, float)):
+        return float(current) - float(previous)
+    return 0.0
+
+
+def _strategic_review_budget(packet: dict[str, Any], strategic_review: dict[str, Any]) -> tuple[float, str]:
+    if _is_operational_only_packet(packet):
+        materiality = str(strategic_review.get("operational_materiality") or "minor")
+        return OPERATIONAL_MATERIALITY_BUDGETS.get(materiality, 2.0), f"operational_{materiality}"
+    movement_size = abs(_completion_delta(packet))
+    return max(2.0, 0.40 * movement_size), "completion_outlook_delta"
+
+
+def _latest_move_factor(packet: dict[str, Any], strategic_review: dict[str, Any]) -> float:
+    effect_label = str(strategic_review.get("effect_label") or "neutral")
+    if _is_operational_only_packet(packet):
+        return FLAT_COMPLETION_REVIEW_FACTORS.get(effect_label, 0.0)
+    delta = _completion_delta(packet)
+    if delta > 0:
+        return POSITIVE_COMPLETION_REVIEW_FACTORS.get(effect_label, 0.0)
+    if delta < 0:
+        return NEGATIVE_COMPLETION_REVIEW_FACTORS.get(effect_label, 0.0)
+    return FLAT_COMPLETION_REVIEW_FACTORS.get(effect_label, 0.0)
+
+
+def _effect_label_movement_error(packet: dict[str, Any], strategic_review: dict[str, Any]) -> str | None:
+    effect_label = str(strategic_review.get("effect_label") or "neutral")
+    if _is_operational_only_packet(packet):
+        allowed = set(FLAT_COMPLETION_REVIEW_FACTORS)
+        movement_name = "operational-only or flat Completion Outlook movement"
+    else:
+        delta = _completion_delta(packet)
+        if delta > 0:
+            allowed = set(POSITIVE_COMPLETION_REVIEW_FACTORS)
+            movement_name = "positive Completion Outlook movement"
+        elif delta < 0:
+            allowed = set(NEGATIVE_COMPLETION_REVIEW_FACTORS)
+            movement_name = "negative Completion Outlook movement"
+        else:
+            allowed = set(FLAT_COMPLETION_REVIEW_FACTORS)
+            movement_name = "flat Completion Outlook movement"
+    if effect_label not in allowed:
+        return (
+            f"strategic_review.effect_label {effect_label!r} is incompatible with "
+            f"{movement_name}; expected one of {sorted(allowed)}"
+        )
+    return None
+
+
+def _is_hidden_baseline_review(packet: dict[str, Any], validated_review: dict[str, Any]) -> bool:
+    metadata = validated_review.get("review_metadata") or {}
+    if metadata.get("review_mode") == "hidden_baseline":
+        return True
+    iteration = packet.get("iteration_context") or {}
+    changed_fields = iteration.get("changed_fields") or []
+    return (
+        not changed_fields
+        and iteration.get("previous_snapshot_id") is None
+        and iteration.get("current_snapshot_id") == iteration.get("baseline_snapshot_id")
+    )
+
+
+def _strategic_review_contributions(
+    packet: dict[str, Any],
+    strategic_review: dict[str, Any],
+) -> dict[str, Any]:
+    evidence_fields = list(strategic_review.get("evidence_fields") or [])
+    supported, unsupported = _supported_evidence(evidence_fields, packet)
+    budget, budget_source = _strategic_review_budget(packet, strategic_review)
+    latest_factor = _latest_move_factor(packet, strategic_review)
+    tension_status = str(strategic_review.get("tension_status") or "not_applicable")
+    tension_factor = TENSION_STATUS_FACTORS.get(tension_status, 0.0)
+    combined_factor = latest_factor + tension_factor
+    raw_points = budget * combined_factor
+    if raw_points and not supported:
+        points = 0.0
+        validation_notes = ["strategic review has no point effect because evidence_fields do not reference packet evidence"]
+    else:
+        points = raw_points
+        validation_notes = []
+
+    sublevels = {
+        "current_tension": {
+            "label": STRATEGIC_REVIEW_SUBLEVELS["current_tension"],
+            "text": strategic_review.get("current_tension", ""),
+            "factor": _clean_points(latest_factor),
+        },
+        "tradeoff_resolution": {
+            "label": STRATEGIC_REVIEW_SUBLEVELS["tradeoff_resolution"],
+            "text": strategic_review.get("tradeoff_resolution", ""),
+            "factor": _clean_points(latest_factor),
+        },
+    }
+    carryover_text = str(strategic_review.get("carryover_check") or "").strip()
+    if carryover_text or tension_factor:
+        sublevels["carryover_check"] = {
+            "label": STRATEGIC_REVIEW_SUBLEVELS["carryover_check"],
+            "text": carryover_text,
+            "factor": _clean_points(tension_factor),
+        }
+
+    return {
+        "effect_label": strategic_review.get("effect_label"),
+        "tension_status": tension_status,
+        "operational_materiality": strategic_review.get("operational_materiality"),
+        "move_classification": deepcopy(strategic_review.get("move_classification") or []),
+        "budget": _clean_points(budget),
+        "budget_source": budget_source,
+        "latest_move_factor": _clean_points(latest_factor),
+        "tension_status_factor": _clean_points(tension_factor),
+        "combined_review_factor": _clean_points(combined_factor),
+        "raw_points": _clean_points(raw_points),
+        "points": _clean_points(points),
+        "supported_evidence_fields": supported,
+        "unsupported_evidence_fields": unsupported,
+        "validation_notes": validation_notes,
+        "sublevels": sublevels,
+        "rationale": strategic_review.get("rationale", ""),
+        "next_consideration": strategic_review.get("next_consideration", ""),
+    }
 
 
 def _has_complete_design_subcategories(validated_review: dict[str, Any]) -> bool:
@@ -722,6 +1078,8 @@ def validate_review_json(review: dict[str, Any]) -> dict[str, Any]:
             "validation_errors": ["review must be an object"],
             "review_metadata": {},
             "completion_outlook_analysis": {},
+            "strategic_review": {},
+            "strategic_review_analysis": {},
             "design_confidence_subcategories": {},
             "design_confidence_analysis": {},
             "main_tension": "",
@@ -734,10 +1092,16 @@ def validate_review_json(review: dict[str, Any]) -> dict[str, Any]:
     for field_name in sorted(APP_OWNED_SCORE_FIELDS.intersection(review)):
         errors.append(f"{field_name} is application-owned and ignored if returned by provider")
 
+    strategic_review, strategic_review_errors = _validate_strategic_review(review.get("strategic_review"))
+
     subcategories = review.get("design_confidence_subcategories")
     validated_subcategories: dict[str, dict[str, Any]] = {}
-    if not isinstance(subcategories, dict):
-        errors.append("design_confidence_subcategories must be an object")
+    if strategic_review and subcategories is None:
+        pass
+    elif not isinstance(subcategories, dict):
+        # Legacy subcategories are tolerated only as ignored context when absent from the
+        # new Strategic Review contract. They no longer unlock a score.
+        pass
     else:
         missing = REQUIRED_DESIGN_SUBCATEGORIES.difference(subcategories)
         extra = set(subcategories).difference(REQUIRED_DESIGN_SUBCATEGORIES)
@@ -774,6 +1138,14 @@ def validate_review_json(review: dict[str, Any]) -> dict[str, Any]:
         completion_field_name,
     )
     design_confidence_source = review.get("design_confidence_analysis")
+    strategic_review_analysis_source = review.get("strategic_review_analysis")
+    if strategic_review_analysis_source is None and strategic_review:
+        strategic_review_analysis_source = {
+            "summary": strategic_review.get("rationale", ""),
+            "review_rationale": strategic_review.get("rationale", ""),
+            "supporting_evidence": strategic_review.get("evidence_fields", []),
+            "limiting_evidence": [],
+        }
     if design_confidence_source is None and isinstance(review.get("tradeoff_review"), dict):
         tradeoff = review.get("tradeoff_review") or {}
         old_participant = review.get("participant_review") or {}
@@ -783,22 +1155,40 @@ def validate_review_json(review: dict[str, Any]) -> dict[str, Any]:
             "supporting_evidence": [],
             "limiting_evidence": [],
         }
-    design_confidence_analysis, design_analysis_errors = _validate_analysis_object(
-        design_confidence_source,
-        "design_confidence_analysis",
-        DESIGN_CONFIDENCE_ANALYSIS_KEYS,
-        {"supporting_evidence", "limiting_evidence"},
-    )
+    if design_confidence_source is None and strategic_review_analysis_source is not None:
+        strategic_review_analysis, strategic_analysis_errors = _validate_strategic_review_analysis(
+            strategic_review_analysis_source
+        )
+        design_confidence_analysis = {
+            "summary": strategic_review_analysis.get("summary", ""),
+            "confidence_rationale": strategic_review_analysis.get("review_rationale", ""),
+            "supporting_evidence": strategic_review_analysis.get("supporting_evidence", []),
+            "limiting_evidence": strategic_review_analysis.get("limiting_evidence", []),
+        }
+        design_analysis_errors = []
+    else:
+        strategic_review_analysis = {}
+        strategic_analysis_errors = []
+        design_confidence_analysis, design_analysis_errors = _validate_analysis_object(
+            design_confidence_source,
+            "design_confidence_analysis",
+            DESIGN_CONFIDENCE_ANALYSIS_KEYS,
+            {"supporting_evidence", "limiting_evidence"},
+        )
     main_tension, main_tension_errors = _validate_main_tension(review, design_confidence_analysis)
+    if not main_tension and strategic_review:
+        main_tension = str(strategic_review.get("current_tension") or "")
     key_questions, question_errors = _validate_key_questions(review)
     consistency_note, consistency_errors = _validate_scenario_consistency_note(
         review.get("scenario_consistency_note")
     )
-    continuity, continuity_errors = _validate_object(review.get("continuity"), "continuity")
+    continuity, continuity_errors = _validate_continuity(review.get("continuity"))
     trace, trace_errors = _validate_object(review.get("trace"), "trace")
 
     errors.extend(metadata_errors)
+    errors.extend(strategic_review_errors)
     errors.extend(completion_errors)
+    errors.extend(strategic_analysis_errors)
     errors.extend(design_analysis_errors)
     errors.extend(main_tension_errors)
     errors.extend(question_errors)
@@ -811,6 +1201,8 @@ def validate_review_json(review: dict[str, Any]) -> dict[str, Any]:
         "validation_errors": errors,
         "review_metadata": review_metadata,
         "completion_outlook_analysis": completion_outlook_analysis,
+        "strategic_review": strategic_review,
+        "strategic_review_analysis": strategic_review_analysis,
         "design_confidence_subcategories": validated_subcategories,
         "design_confidence_analysis": design_confidence_analysis,
         "main_tension": main_tension,
@@ -822,13 +1214,16 @@ def validate_review_json(review: dict[str, Any]) -> dict[str, Any]:
 
 
 def score_validated_review(packet: dict[str, Any], validated_review: dict[str, Any]) -> dict[str, Any]:
-    """Calculate app-owned Design Confidence and Total Scenario Score."""
+    """Calculate app-owned Strategic Review and Trial Score."""
     completion_score = (packet.get("model_interpretation") or {}).get("completion_score")
     input_hash = packet.get("input_hash") or stable_packet_hash(packet)
     if not isinstance(completion_score, (int, float)):
         return {
             "validation_status": "invalid",
             "validation_errors": ["model_interpretation.completion_score must be numeric"],
+            "strategic_review": None,
+            "trial_score": None,
+            "strategic_review_assessment": {},
             "design_confidence": None,
             "total_scenario_score": None,
             "design_confidence_assessment": {},
@@ -836,29 +1231,85 @@ def score_validated_review(packet: dict[str, Any], validated_review: dict[str, A
         }
 
     blocking_errors = _blocking_validation_errors(validated_review)
-    if blocking_errors or not _has_complete_design_subcategories(validated_review):
+    if _is_hidden_baseline_review(packet, validated_review):
         return {
             "validation_status": validated_review.get("validation_status", "partial"),
             "validation_errors": list(validated_review.get("validation_errors") or []),
+            "strategic_review": None,
+            "trial_score": None,
+            "strategic_review_assessment": {},
             "design_confidence": None,
             "total_scenario_score": None,
             "design_confidence_assessment": {},
             "input_hash": input_hash,
         }
-
-    contributions = _design_contributions(packet, validated_review.get("design_confidence_subcategories") or {})
-    total_scenario_score = clamp(
-        float(completion_score) + float(contributions["design_confidence"]),
-        TOTAL_SCORE_MIN,
-        TOTAL_SCORE_MAX,
-    )
+    if validated_review.get("strategic_review"):
+        effect_label_error = _effect_label_movement_error(
+            packet,
+            validated_review.get("strategic_review") or {},
+        )
+        if effect_label_error:
+            blocking_errors = [*blocking_errors, effect_label_error]
+        if blocking_errors:
+            validation_status = (
+                "partial"
+                if effect_label_error and validated_review.get("validation_status") == "valid"
+                else validated_review.get("validation_status", "partial")
+            )
+            return {
+                "validation_status": validation_status,
+                "validation_errors": [
+                    *list(validated_review.get("validation_errors") or []),
+                    *[
+                        error
+                        for error in blocking_errors
+                        if error not in list(validated_review.get("validation_errors") or [])
+                    ],
+                ],
+                "strategic_review": None,
+                "trial_score": None,
+                "strategic_review_assessment": {},
+                "design_confidence": None,
+                "total_scenario_score": None,
+                "design_confidence_assessment": {},
+                "input_hash": input_hash,
+            }
+        assessment = _strategic_review_contributions(packet, validated_review.get("strategic_review") or {})
+        strategic_review = assessment["points"]
+        trial_score = clamp(
+            float(completion_score) + float(strategic_review),
+            TOTAL_SCORE_MIN,
+            TOTAL_SCORE_MAX,
+        )
+        return {
+            "validation_status": validated_review.get("validation_status", "partial"),
+            "validation_errors": list(validated_review.get("validation_errors") or []),
+            "strategic_review": strategic_review,
+            "trial_score": trial_score,
+            "strategic_review_assessment": assessment,
+            # Compatibility aliases for modules that are migrating from the old labels.
+            "design_confidence": strategic_review,
+            "total_scenario_score": trial_score,
+            "design_confidence_assessment": {
+                "strategic_review": assessment,
+                "sublevels": assessment.get("sublevels") or {},
+                "design_confidence": strategic_review,
+            },
+            "input_hash": input_hash,
+        }
 
     return {
         "validation_status": validated_review.get("validation_status", "partial"),
-        "validation_errors": list(validated_review.get("validation_errors") or []),
-        "design_confidence": contributions["design_confidence"],
-        "total_scenario_score": total_scenario_score,
-        "design_confidence_assessment": contributions,
+        "validation_errors": [
+            *list(validated_review.get("validation_errors") or []),
+            *([] if validated_review.get("strategic_review") else ["strategic_review is required for scoring"]),
+        ],
+        "strategic_review": None,
+        "trial_score": None,
+        "strategic_review_assessment": {},
+        "design_confidence": None,
+        "total_scenario_score": None,
+        "design_confidence_assessment": {},
         "input_hash": input_hash,
     }
 

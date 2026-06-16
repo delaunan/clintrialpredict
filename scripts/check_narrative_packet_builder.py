@@ -18,7 +18,6 @@ from src.narratives.packet_builder import (  # noqa: E402
     STRUCTURED_FEATURE_KEYS,
     build_review_packet,
     build_review_packet_from_fixture,
-    design_confidence_relevant_changed_fields,
     stable_packet_hash,
 )
 
@@ -155,6 +154,8 @@ def _check_review_continuity_context(errors: list[str]) -> None:
         **baseline_trace,
         "input_hash": "previous-input-hash",
         "iteration_id": 1,
+        "strategic_review": -2,
+        "trial_score": 66,
         "design_confidence": -2,
         "total_scenario_score": 66,
         "changed_fields": ["operational_assumptions.planned_enrollment"],
@@ -175,6 +176,43 @@ def _check_review_continuity_context(errors: list[str]) -> None:
         "validated_review": {
             **baseline_trace["validated_review"],
             "main_tension": "Previous main tension from dedicated field.",
+            "strategic_review": {
+                "effect_label": "partly_offsets_score_gain",
+                "tension_status": "partially_active",
+                "operational_materiality": "minor",
+                "evidence_fields": ["endpoint_rigor_ml"],
+                "move_classification": ["oversimplification"],
+                "current_tension": "Feasibility vs Evidence Strength",
+                "carryover_check": "Endpoint credibility remains partly active.",
+                "tradeoff_resolution": "The latest move only partly resolved the evidence tradeoff.",
+                "rationale": "The prior move simplified evidence.",
+                "next_consideration": "Restore evidence credibility without returning fully to baseline burden.",
+            },
+            "strategic_review_analysis": {
+                "summary": "Previous Strategic Review summary.",
+                "review_rationale": "Previous Strategic Review rationale.",
+                "supporting_evidence": ["endpoint_rigor_ml"],
+                "limiting_evidence": [],
+            },
+            "continuity": {
+                "prior_concerns_resolved": ["reduced execution burden"],
+                "prior_concerns_worsened": ["endpoint credibility"],
+                "prior_concerns_unchanged": ["evidence burden"],
+                "new_concerns": ["population focus"],
+                "storyline_update": "Previous strategic storyline memory.",
+            },
+        },
+        "storyline_state": {
+            "active_tension": "Feasibility vs Evidence Strength",
+            "active_tension_status": "partially_active",
+            "last_effect_label": "partly_offsets_score_gain",
+            "last_move_classification": ["oversimplification"],
+            "protected_gains": ["reduced execution burden"],
+            "regression_watch": ["endpoint credibility"],
+            "active_carryover": ["evidence burden"],
+            "new_concerns": ["population focus"],
+            "next_consideration": "Restore evidence credibility without returning fully to baseline burden.",
+            "storyline_update": "Previous strategic storyline memory.",
         },
         "compact_storyline_memory": "Previous iteration memory",
     }
@@ -201,10 +239,6 @@ def _check_review_continuity_context(errors: list[str]) -> None:
         errors.append("continuity packet missing baseline review context")
     if context.get("previous_review", {}).get("input_hash") != "previous-input-hash":
         errors.append("continuity packet missing previous review context")
-    if context.get("baseline_review", {}).get("design_confidence") is not None:
-        errors.append("hidden baseline review context should not expose design_confidence")
-    if context.get("baseline_review", {}).get("total_scenario_score") is not None:
-        errors.append("hidden baseline review context should not expose total_scenario_score")
     if context.get("baseline_review", {}).get("design_numeric_context") != "hidden_baseline_qualitative_only":
         errors.append("hidden baseline review context should be marked qualitative-only")
     if (
@@ -212,15 +246,10 @@ def _check_review_continuity_context(errors: list[str]) -> None:
         != "Baseline score reflects an acceptable original design profile."
     ):
         errors.append("hidden baseline review context should preserve completion outlook summary")
-    baseline_subcategories = context.get("baseline_review", {}).get("baseline_design_subcategory_ratings") or {}
-    if baseline_subcategories.get("endpoint_evidence_strength", {}).get("rating") != "supportive":
-        errors.append("hidden baseline review context should preserve design subcategory ratings")
-    if not context.get("baseline_review", {}).get("baseline_strengths"):
-        errors.append("hidden baseline review context should include compact baseline strengths")
-    if context.get("previous_review", {}).get("design_confidence") != -2:
-        errors.append("previous visible review context should preserve design_confidence")
-    if context.get("previous_review", {}).get("total_scenario_score") != 66:
-        errors.append("previous visible review context should preserve total_scenario_score")
+    if context.get("previous_review", {}).get("strategic_review") != -2:
+        errors.append("previous visible review context should preserve strategic_review")
+    if context.get("previous_review", {}).get("trial_score") != 66:
+        errors.append("previous visible review context should preserve trial_score")
     if context.get("baseline_review", {}).get("central_tension") != "Baseline central tension.":
         errors.append("hidden baseline review context should preserve trace central_tension when present")
     if context.get("previous_review", {}).get("central_tension") != "Previous main tension from dedicated field.":
@@ -237,20 +266,27 @@ def _check_review_continuity_context(errors: list[str]) -> None:
         != "Previous iteration memory"
     ):
         errors.append("continuity packet missing compact storyline memory")
-    design_continuity = continuity_packet.get("iteration_context", {}).get("design_confidence_continuity") or {}
-    if design_continuity.get("available") is not True:
-        errors.append("later visible continuity packet should include Design Confidence continuity anchors")
-    continuity_subcategories = design_continuity.get("subcategories") or {}
-    endpoint_continuity = continuity_subcategories.get("endpoint_evidence_strength") or {}
-    if endpoint_continuity.get("previous_rating") != "supportive":
-        errors.append("Design Confidence continuity should carry previous subcategory rating")
-    if endpoint_continuity.get("previous_points") != -2:
-        errors.append("Design Confidence continuity should carry previous app-calculated points")
-    if endpoint_continuity.get("current_relevant_changed_fields"):
-        errors.append("endpoint continuity should not mark unrelated operational changes as relevant")
-    operational_continuity = continuity_subcategories.get("operational_burden_balance") or {}
-    if operational_continuity.get("current_relevant_changed_fields") != ["operational_assumptions.planned_enrollment"]:
-        errors.append("operational continuity should identify relevant operational-assumption changes")
+    strategic_continuity = continuity_packet.get("iteration_context", {}).get("strategic_review_continuity") or {}
+    if strategic_continuity.get("available") is not True:
+        errors.append("later visible continuity packet should include Strategic Review continuity anchors")
+    if strategic_continuity.get("active_tension") != "Feasibility vs Evidence Strength":
+        errors.append("Strategic Review continuity should carry active_tension")
+    if strategic_continuity.get("active_tension_status") != "partially_active":
+        errors.append("Strategic Review continuity should carry active_tension_status")
+    if strategic_continuity.get("last_effect_label") != "partly_offsets_score_gain":
+        errors.append("Strategic Review continuity should carry last effect label")
+    if strategic_continuity.get("protected_gains") != ["reduced execution burden"]:
+        errors.append("Strategic Review continuity should carry protected gains")
+    if strategic_continuity.get("regression_watch") != ["endpoint credibility"]:
+        errors.append("Strategic Review continuity should carry regression watch")
+    if strategic_continuity.get("active_carryover") != ["evidence burden"]:
+        errors.append("Strategic Review continuity should carry active carryover concerns")
+    if strategic_continuity.get("new_concerns") != ["population focus"]:
+        errors.append("Strategic Review continuity should carry new concerns")
+    if strategic_continuity.get("next_consideration") != "Restore evidence credibility without returning fully to baseline burden.":
+        errors.append("Strategic Review continuity should carry next consideration")
+    if "design_confidence_continuity" in (continuity_packet.get("iteration_context") or {}):
+        errors.append("packet should not send legacy Design Confidence continuity to the provider")
     operational_change_labels = {
         change.get("field"): change.get("display_label")
         for change in continuity_packet.get("iteration_context", {}).get("field_changes") or []
@@ -261,26 +297,10 @@ def _check_review_continuity_context(errors: list[str]) -> None:
         "Planned Total Timeline",
     }:
         errors.append("planned duration operational change should use Planned Total Timeline display label")
-    population_fields = ["is_rare_disease_ml", "line_of_therapy_ml", "patient_severity_ml"]
-    if design_confidence_relevant_changed_fields("operational_burden_balance", population_fields) != population_fields:
-        errors.append("population changes should be valid operational-burden continuity evidence")
-    if design_confidence_relevant_changed_fields("phase_intent_alignment", population_fields) != population_fields:
-        errors.append("population changes should be valid phase/intent continuity evidence")
-    if design_confidence_relevant_changed_fields(
-        "endpoint_evidence_strength",
-        ["operational_assumptions.planned_enrollment", "operational_assumptions.planned_sites"],
-    ):
-        errors.append("planned enrollment/sites should not explain Endpoint Evidence continuity flips")
-    if design_confidence_relevant_changed_fields(
-        "endpoint_evidence_strength",
-        ["operational_assumptions.planned_duration_months"],
-    ):
-        errors.append("planned total timeline should not explain Endpoint Evidence continuity flips")
     if built.get("review_context", {}).get("previous_review") is not None:
         errors.append("fixture packet without review traces should not invent previous review context")
-    fixture_continuity = built.get("iteration_context", {}).get("design_confidence_continuity") or {}
-    if fixture_continuity.get("available") is not False:
-        errors.append("fixture packet without previous visible trace should mark Design Confidence continuity unavailable")
+    if "design_confidence_continuity" in (built.get("iteration_context") or {}):
+        errors.append("fixture packet should not include legacy Design Confidence continuity")
     hidden_baseline_packet = build_review_packet(
         current_snapshot={
             "snapshot_id": "baseline-snapshot",
@@ -295,11 +315,8 @@ def _check_review_continuity_context(errors: list[str]) -> None:
         baseline_review_trace=baseline_trace,
         previous_review_trace=None,
     )
-    hidden_continuity = hidden_baseline_packet.get("iteration_context", {}).get("design_confidence_continuity") or {}
-    if hidden_continuity.get("available") is not False:
-        errors.append("hidden baseline packet should mark Design Confidence continuity unavailable")
-    if hidden_continuity.get("subcategories") != {}:
-        errors.append("hidden baseline packet should not include visible Design Confidence continuity subcategory anchors")
+    if "design_confidence_continuity" in (hidden_baseline_packet.get("iteration_context") or {}):
+        errors.append("hidden baseline packet should not include legacy Design Confidence continuity")
 
 
 def _check_canonical_values_prefer_compare_values(errors: list[str]) -> None:

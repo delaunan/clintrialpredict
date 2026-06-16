@@ -37,18 +37,23 @@ def main() -> int:
     first = replay_or_review_with_mock(state, packet=packet, session_id=session_id)
     if first.get("cached") is not False:
         errors.append("first review should not be cached")
-    if first.get("design_confidence") != review_fixture["expected_behavior"]["expected_design_confidence"]:
-        errors.append("stored trace did not preserve Design Confidence")
-    if first.get("total_scenario_score") != review_fixture["expected_behavior"]["expected_total_scenario_score"]:
-        errors.append("stored trace did not preserve Total Scenario Score")
-    if first.get("quality_adjustment") != first.get("design_confidence"):
-        errors.append("temporary Quality Adjustment alias should mirror Design Confidence until UI migration")
-    if first.get("final_candidate_score") != first.get("total_scenario_score"):
-        errors.append("temporary Final Candidate Score alias should mirror Total Scenario Score until UI migration")
-    if not first.get("design_confidence_assessment", {}).get("subcategories"):
-        errors.append("stored trace should preserve Design Confidence assessment")
+    if first.get("strategic_review") is None:
+        errors.append("stored trace did not preserve Strategic Review")
+    if first.get("trial_score") is None:
+        errors.append("stored trace did not preserve Trial Score")
+    if first.get("quality_adjustment") != first.get("strategic_review"):
+        errors.append("temporary Quality Adjustment alias should mirror Strategic Review until alias cleanup")
+    if first.get("final_candidate_score") != first.get("trial_score"):
+        errors.append("temporary Final Candidate Score alias should mirror Trial Score until alias cleanup")
+    if not first.get("strategic_review_assessment"):
+        errors.append("stored trace should preserve Strategic Review assessment")
     if not first.get("central_tension"):
         errors.append("stored trace should preserve central_tension")
+    storyline_state = first.get("storyline_state") or {}
+    if not storyline_state:
+        errors.append("stored trace should expose app-owned storyline_state")
+    if storyline_state.get("active_tension") != first.get("central_tension"):
+        errors.append("storyline_state active_tension should mirror stored central_tension")
     expected_main_tension = (first.get("validated_review") or {}).get("main_tension")
     if first.get("central_tension") != expected_main_tension:
         errors.append("stored trace central_tension should prefer validated_review.main_tension")
@@ -93,8 +98,8 @@ def main() -> int:
         session_id="failure-session",
         failure_mode=FAILURE_PROVIDER_ERROR,
     )
-    if failure_trace.get("design_confidence") is not None:
-        errors.append("provider failure should not store Design Confidence")
+    if failure_trace.get("strategic_review") is not None:
+        errors.append("provider failure should not store Strategic Review")
     if failure_trace.get("failure_reason") is None:
         errors.append("provider failure should store a failure reason")
     cached_failure = cached_review_trace(state, failure_trace.get("input_hash"))
@@ -123,9 +128,9 @@ def main() -> int:
         "scoring": {
             "validation_status": first.get("validation_status"),
             "validation_errors": first.get("validation_errors") or [],
-            "design_confidence": first.get("design_confidence"),
-            "total_scenario_score": first.get("total_scenario_score"),
-            "design_confidence_assessment": first.get("design_confidence_assessment") or {},
+            "strategic_review": first.get("strategic_review"),
+            "trial_score": first.get("trial_score"),
+            "strategic_review_assessment": first.get("strategic_review_assessment") or {},
             "input_hash": packet.get("input_hash"),
         },
     }

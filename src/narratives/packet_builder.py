@@ -1,7 +1,7 @@
 """Deterministic input-packet builder for narrative review.
 
 The builder owns data assembly only. It does not call an LLM, validate LLM
-output, calculate Quality Adjustment, or mutate Streamlit session state.
+output, calculate Strategic Review, or mutate Streamlit session state.
 """
 
 from __future__ import annotations
@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from src.narratives.contract_fixtures import PROMPT_VERSION, RUBRIC_VERSION
+from src.narratives.storyline import merge_storyline_state
 
 MODE_EXISTING_STUDY = "existing_study"
 FIELD_DICTIONARY_VERSION = "taxonomy_01_narrative_v1"
@@ -160,105 +161,6 @@ COMPACT_FIELD_MEANINGS = {
     "interventions_ui": "Intervention text: modality, mechanism, delivery complexity, comparator coherence.",
     "primary_outcomes_ui": "Primary outcome text: endpoint coherence, structure, timing, interpretability.",
 }
-DESIGN_CONFIDENCE_SUBCATEGORY_LABELS = {
-    "phase_intent_alignment": "Phase & Intent Alignment",
-    "endpoint_evidence_strength": "Endpoint & Evidence Strength",
-    "target_population_alignment": "Target Population Alignment",
-    "operational_burden_balance": "Operational Burden Balance",
-}
-DESIGN_CONFIDENCE_RELEVANT_FIELDS = {
-    "phase_intent_alignment": {
-        "biomarker_stratification_ml",
-        "phase_ml",
-        "strategic_ambition_ml",
-        "is_rare_disease_ml",
-        "line_of_therapy_ml",
-        "patient_severity_ml",
-        "target_precedent_ml",
-        "target_pathway_class_ml",
-        "therapeutic_modality_ml",
-        "administration_complexity_ml",
-        "innovation_tier_ml",
-        "primary_purpose_ml",
-        "has_dmc_ml",
-        "comparator_benchmark_ml",
-        "endpoint_rigor_ml",
-        "text_context.title",
-        "text_context.summary_ui",
-    },
-    "endpoint_evidence_strength": {
-        "adaptive_design_ml",
-        "allocation_ml",
-        "biomarker_stratification_ml",
-        "comparator_benchmark_ml",
-        "endpoint_rigor_ml",
-        "endpoint_structure_ml",
-        "has_placebo_ml",
-        "has_dmc_ml",
-        "masking_ml",
-        "number_of_arms_ml",
-        "primary_duration_months_ml",
-        "therapeutic_modality_ml",
-        "administration_complexity_ml",
-        "text_context.primary_outcomes_ui",
-        "text_context.summary_ui",
-    },
-    "target_population_alignment": {
-        "adult_ml",
-        "child_ml",
-        "gender_ml",
-        "gbd_cause_id_3_ml",
-        "healthy_volunteers_ml",
-        "is_rare_disease_ml",
-        "line_of_therapy_ml",
-        "older_adult_ml",
-        "patient_severity_ml",
-        "biomarker_stratification_ml",
-        "text_context.conditions_ui",
-        "text_context.summary_ui",
-    },
-    "operational_burden_balance": {
-        "administration_complexity_ml",
-        "adaptive_design_ml",
-        "allocation_ml",
-        "biomarker_stratification_ml",
-        "comparator_benchmark_ml",
-        "endpoint_rigor_ml",
-        "endpoint_structure_ml",
-        "has_dmc_ml",
-        "is_rare_disease_ml",
-        "intervention_model_ml",
-        "line_of_therapy_ml",
-        "masking_ml",
-        "number_of_arms_ml",
-        "patient_severity_ml",
-        "primary_duration_months_ml",
-        "sponsor_tier_ml",
-        "therapeutic_modality_ml",
-        "operational_assumptions.planned_enrollment",
-        "operational_assumptions.planned_sites",
-        "operational_assumptions.planned_duration_months",
-        "text_context.interventions_ui",
-        "text_context.primary_outcomes_ui",
-        "text_context.summary_ui",
-    },
-}
-
-
-def design_confidence_relevant_changed_fields(
-    subcategory_name: str,
-    changed_fields: list[str],
-) -> list[str]:
-    """Return changed packet fields that are directly relevant to one Design Confidence subcategory."""
-    relevant = DESIGN_CONFIDENCE_RELEVANT_FIELDS.get(subcategory_name, set())
-    matched: list[str] = []
-    for field in changed_fields:
-        field = str(field)
-        if field in relevant or any(field.startswith(f"{prefix}.") for prefix in relevant):
-            matched.append(field)
-    return matched
-
-
 def json_safe(value: Any) -> Any:
     """Return a deterministic JSON-serializable copy of common app values."""
     if isinstance(value, dict):
@@ -852,19 +754,36 @@ def _compact_review_context(
     continuity = validated.get("continuity") or {}
     participant = validated.get("key_questions") or validated.get("participant_review") or {}
     completion_outlook = validated.get("completion_outlook_analysis") or validated.get("completion_outlook_review") or {}
-    design_subcategories = validated.get("design_confidence_subcategories") or {}
-    design_confidence_analysis = validated.get("design_confidence_analysis") or {}
     tradeoff_review = validated.get("tradeoff_review") or {}
     design_confidence = trace.get("design_confidence", trace.get("quality_adjustment"))
     total_scenario_score = trace.get("total_scenario_score", trace.get("final_candidate_score"))
-    design_assessment = trace.get("design_confidence_assessment") or trace.get("quality_assessment") or {}
+    strategic_review = trace.get("strategic_review", design_confidence)
+    trial_score = trace.get("trial_score", total_scenario_score)
+    strategic_review_object = (
+        validated.get("strategic_review")
+        or trace.get("strategic_review_object")
+        or {}
+    )
+    strategic_review_analysis = (
+        validated.get("strategic_review_analysis")
+        or trace.get("strategic_review_analysis")
+        or {}
+    )
+    storyline_state = merge_storyline_state(trace)
     compact = {
         "input_hash": trace.get("input_hash"),
         "iteration_id": trace.get("iteration_id"),
         "status": trace.get("status"),
         "validation_status": trace.get("validation_status"),
-        "design_confidence": design_confidence if include_quality_scores else None,
-        "total_scenario_score": total_scenario_score if include_quality_scores else None,
+        "strategic_review": strategic_review if include_quality_scores else None,
+        "trial_score": trial_score if include_quality_scores else None,
+        "strategic_review_object": deepcopy(strategic_review_object),
+        "strategic_review_summary": strategic_review_analysis.get("summary"),
+        "strategic_review_rationale": (
+            strategic_review_analysis.get("review_rationale")
+            or strategic_review_object.get("rationale")
+        ),
+        "storyline_state": deepcopy(storyline_state),
         "design_numeric_context": "visible_review" if include_quality_scores else "hidden_baseline_qualitative_only",
         "changed_fields": trace.get("changed_fields") or [],
         "score_delta": trace.get("score_delta", trace.get("score_movement")),
@@ -875,31 +794,11 @@ def _compact_review_context(
         "central_tension": (
             trace.get("central_tension")
             or validated.get("main_tension")
-            or design_confidence_analysis.get("confidence_rationale")
             or tradeoff_review.get("central_tension")
-        ),
-        "design_confidence_subcategory_ratings": {
-            subcategory_name: {
-                "current_state": subcategory.get("current_state"),
-                "movement_direction": subcategory.get("movement_direction"),
-                "movement_materiality": subcategory.get("movement_materiality"),
-                "effect_role": subcategory.get("effect_role"),
-                "rating": subcategory.get("rating"),
-                "score_materiality": subcategory.get("score_materiality"),
-                "rationale": subcategory.get("rationale"),
-                "evidence_fields": subcategory.get("evidence_fields") or [],
-            }
-            for subcategory_name, subcategory in sorted(design_subcategories.items())
-            if isinstance(subcategory, dict)
-        },
-        "design_confidence_contributions": (
-            deepcopy(design_assessment.get("subcategories") or {})
-            if include_quality_scores
-            else {}
         ),
         "key_questions": {
             "completion_outlook_summary": completion_outlook.get("risk_pattern_summary"),
-            "design_confidence_summary": design_confidence_analysis.get("summary"),
+            "strategic_review_summary": strategic_review_analysis.get("summary"),
             "medical_clinical_development_question": (
                 participant.get("medical_clinical_development_question")
                 or participant.get("medical_development_question")
@@ -936,74 +835,49 @@ def _compact_review_context(
             completion_outlook.get("risk_pattern_summary")
             or completion_outlook.get("score_delta_summary")
         )
-        compact["baseline_design_subcategory_ratings"] = compact["design_confidence_subcategory_ratings"]
-        compact["baseline_strengths"] = [
-            subcategory.get("rationale")
-            for subcategory in design_subcategories.values()
-            if isinstance(subcategory, dict)
-            and subcategory.get("rating")
-            in {
-                "strong",
-                "supportive",
-            }
-        ]
-        compact["baseline_concerns"] = [
-            subcategory.get("rationale")
-            for subcategory in design_subcategories.values()
-            if isinstance(subcategory, dict)
-            and subcategory.get("rating") in {
-                "weak",
-                "conflicting",
-            }
-        ]
         compact["baseline_consistency_flags"] = {}
 
     return json_safe(compact)
 
 
-def _design_confidence_continuity(
-    previous_review_trace: dict[str, Any] | None,
-    changed_fields: list[str],
-) -> dict[str, Any]:
+def _strategic_review_continuity(previous_review_trace: dict[str, Any] | None) -> dict[str, Any]:
     previous = _compact_review_context(previous_review_trace)
     if not previous:
         return {
             "available": False,
             "reason": "first_visible_iteration_or_no_prior_visible_review",
-            "subcategories": {},
+            "active_tension": None,
+            "active_tension_status": None,
+            "protected_gains": [],
+            "regression_watch": [],
         }
 
-    previous_ratings = previous.get("design_confidence_subcategory_ratings") or {}
-    previous_contributions = previous.get("design_confidence_contributions") or {}
-    subcategories: dict[str, Any] = {}
-    for subcategory_name, label in DESIGN_CONFIDENCE_SUBCATEGORY_LABELS.items():
-        rating = previous_ratings.get(subcategory_name) or {}
-        contribution = previous_contributions.get(subcategory_name) or {}
-        relevant_changes = design_confidence_relevant_changed_fields(subcategory_name, changed_fields)
-        subcategories[subcategory_name] = {
-            "label": label,
-            "previous_current_state": rating.get("current_state"),
-            "previous_movement_direction": rating.get("movement_direction"),
-            "previous_movement_materiality": rating.get("movement_materiality"),
-            "previous_effect_role": rating.get("effect_role"),
-            "previous_rating": rating.get("rating"),
-            "previous_score_materiality": rating.get("score_materiality"),
-            "previous_points": contribution.get("points"),
-            "previous_raw_points": contribution.get("raw_points"),
-            "previous_rationale": rating.get("rationale"),
-            "previous_evidence_fields": rating.get("evidence_fields") or [],
-            "current_relevant_changed_fields": relevant_changes,
-        }
+    previous_object = previous.get("strategic_review_object") or {}
+    continuity = previous.get("continuity") or {}
+    storyline_state = previous.get("storyline_state") or {}
     return json_safe({
         "available": True,
         "source_iteration_id": previous.get("iteration_id"),
         "source_input_hash": previous.get("input_hash"),
-        "changed_fields": changed_fields,
-        "instruction": (
-            "Use this object as deterministic continuity context for Design Confidence subcategories. "
-            "The current scenario is still scored fresh, but large subcategory shifts need current relevant evidence."
+        "active_tension": (
+            storyline_state.get("active_tension")
+            or previous_object.get("current_tension")
+            or previous.get("central_tension")
         ),
-        "subcategories": subcategories,
+        "active_tension_status": storyline_state.get("active_tension_status") or previous_object.get("tension_status"),
+        "last_effect_label": storyline_state.get("last_effect_label") or previous_object.get("effect_label"),
+        "last_move_classification": storyline_state.get("last_move_classification") or previous_object.get("move_classification") or [],
+        "protected_gains": storyline_state.get("protected_gains") or continuity.get("prior_concerns_resolved") or [],
+        "regression_watch": storyline_state.get("regression_watch") or continuity.get("prior_concerns_worsened") or [],
+        "active_carryover": storyline_state.get("active_carryover") or continuity.get("prior_concerns_unchanged") or [],
+        "new_concerns": storyline_state.get("new_concerns") or continuity.get("new_concerns") or [],
+        "next_consideration": storyline_state.get("next_consideration") or previous_object.get("next_consideration"),
+        "storyline_update": storyline_state.get("storyline_update"),
+        "previous_rationale": previous.get("strategic_review_rationale"),
+        "instruction": (
+            "Use this compact state to decide whether the latest move resolves, preserves, "
+            "reopens, supersedes, or leaves active prior strategic tensions."
+        ),
     })
 
 
@@ -1086,7 +960,7 @@ def build_review_packet(
             "changed_fields": changed_fields,
             "field_changes": _field_changes(current_snapshot, previous_snapshot, baseline_snapshot),
             "text_change_evidence": _text_change_evidence(current_snapshot, previous_snapshot, baseline_snapshot),
-            "design_confidence_continuity": _design_confidence_continuity(previous_review_trace, changed_fields),
+            "strategic_review_continuity": _strategic_review_continuity(previous_review_trace),
             "compact_storyline_memory": compact_storyline_memory,
         },
     }

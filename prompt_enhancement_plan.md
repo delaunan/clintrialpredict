@@ -1,5 +1,12 @@
 # Prompt Enhancement Plan
 
+> Superseded on 2026-06-16 by `docs/strategic_review_phase1.md`.
+> This file preserves historical prompt-engineering work for the old
+> `Design Confidence` / `Total Scenario Score` contract. The active provider
+> contract is `strategic_review_schema_v1` in `src/narratives/prompt_builder.py`:
+> the LLM returns qualitative Strategic Review labels/rationale only, and the
+> application calculates `Strategic Review` and `Trial Score`.
+
 ## Scope
 
 Architecture scope: `architecture_narratives`

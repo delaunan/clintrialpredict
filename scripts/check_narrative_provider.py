@@ -13,6 +13,7 @@ if str(ROOT) not in sys.path:
 import src.narratives.provider as provider_module  # noqa: E402
 from src.narratives.contract_fixtures import get_contract_fixtures  # noqa: E402
 from src.narratives.packet_builder import build_review_packet_from_fixture  # noqa: E402
+from src.narratives.mock_reviewer import _synthesized_strategic_review  # noqa: E402
 from src.narratives.provider import (  # noqa: E402
     FAILURE_MALFORMED_RESPONSE,
     FAILURE_PROVIDER_UNAVAILABLE,
@@ -57,12 +58,13 @@ def _check_openai_validation_retry(packet: dict, fixture: dict, errors: list[str
 
     def run_case(first_payload: dict, expected_reason_fragment: str) -> dict:
         calls = {"count": 0}
+        retry_review = _synthesized_strategic_review(packet, fixture)
 
         def fake_post(*args, **kwargs):
             calls["count"] += 1
             if calls["count"] == 1:
                 return _FakeResponse(first_payload)
-            return _FakeResponse({"output_text": provider_module.json.dumps(fixture["mock_review"])})
+            return _FakeResponse({"output_text": provider_module.json.dumps(retry_review)})
 
         provider_module.requests.post = fake_post
         try:
@@ -81,8 +83,8 @@ def _check_openai_validation_retry(packet: dict, fixture: dict, errors: list[str
     non_json_result = run_case({"output_text": "not json"}, "not a JSON object")
     if non_json_result.get("status") != provider_module.STATUS_REVIEWED:
         errors.append("OpenAI non-JSON response should recover when validation retry returns valid review")
-    if non_json_result.get("scoring", {}).get("design_confidence") != fixture["expected_behavior"]["expected_design_confidence"]:
-        errors.append("OpenAI non-JSON retry should preserve valid retry scoring")
+    if non_json_result.get("scoring", {}).get("strategic_review") is None:
+        errors.append("OpenAI non-JSON retry should preserve valid Strategic Review scoring")
 
     invalid_json_result = run_case(
         {"output_text": provider_module.json.dumps({"design_confidence_subcategories": {}})},
@@ -90,8 +92,8 @@ def _check_openai_validation_retry(packet: dict, fixture: dict, errors: list[str
     )
     if invalid_json_result.get("status") != provider_module.STATUS_REVIEWED:
         errors.append("OpenAI invalid JSON contract response should recover when validation retry returns valid review")
-    if invalid_json_result.get("scoring", {}).get("design_confidence") != fixture["expected_behavior"]["expected_design_confidence"]:
-        errors.append("OpenAI invalid-contract retry should preserve valid retry scoring")
+    if invalid_json_result.get("scoring", {}).get("strategic_review") is None:
+        errors.append("OpenAI invalid-contract retry should preserve valid Strategic Review scoring")
 
 
 def main() -> int:
@@ -109,8 +111,8 @@ def main() -> int:
         errors.append("mock provider result did not set normalized model_name")
     if mock_result.get("provider_metadata", {}).get("deterministic") is not True:
         errors.append("mock provider result did not expose deterministic metadata")
-    if mock_result.get("scoring", {}).get("design_confidence") != fixture["expected_behavior"]["expected_design_confidence"]:
-        errors.append("mock provider did not preserve scoring result")
+    if mock_result.get("scoring", {}).get("strategic_review") is None:
+        errors.append("mock provider did not preserve Strategic Review scoring result")
 
     baseline_fixture = next(
         item for item in get_contract_fixtures()
@@ -120,6 +122,10 @@ def main() -> int:
     baseline_result = review_packet_with_provider(baseline_packet, provider=PROVIDER_MOCK)
     if baseline_result.get("status") != "reviewed":
         errors.append("provider should review hidden baseline packet through the normal Scenario Review path")
+    if baseline_result.get("scoring", {}).get("strategic_review") is not None:
+        errors.append("hidden baseline provider result should not calculate Strategic Review")
+    if baseline_result.get("scoring", {}).get("trial_score") is not None:
+        errors.append("hidden baseline provider result should not calculate Trial Score")
 
     context_fixture = next(
         item for item in get_contract_fixtures()
@@ -129,14 +135,14 @@ def main() -> int:
     context_result = review_packet_with_provider(context_packet, provider=PROVIDER_MOCK)
     if context_result.get("status") != "reviewed":
         errors.append("provider should review structured/text context fixture without a clarification gate")
-    if context_result.get("scoring", {}).get("design_confidence") != context_fixture["expected_behavior"]["expected_design_confidence"]:
-        errors.append("structured/text context fixture did not preserve scoring result")
+    if context_result.get("scoring", {}).get("strategic_review") is None:
+        errors.append("structured/text context fixture did not preserve Strategic Review scoring result")
 
     unsupported = review_packet_with_provider(packet, provider="not_configured")
     if unsupported.get("status") != FAILURE_UNSUPPORTED_PROVIDER:
         errors.append("unsupported provider should return unsupported_provider status")
-    if unsupported.get("scoring", {}).get("design_confidence") is not None:
-        errors.append("unsupported provider should not return Design Confidence")
+    if unsupported.get("scoring", {}).get("strategic_review") is not None:
+        errors.append("unsupported provider should not return Strategic Review")
     if unsupported.get("review") is not None:
         errors.append("unsupported provider should not return review JSON")
 
@@ -218,13 +224,13 @@ def main() -> int:
     )
     if invalid_real_review.get("status") != FAILURE_MALFORMED_RESPONSE:
         errors.append("contract-invalid real provider review should be malformed_response")
-    if invalid_real_review.get("scoring", {}).get("design_confidence") is not None:
-        errors.append("contract-invalid real provider review should not return Design Confidence")
+    if invalid_real_review.get("scoring", {}).get("strategic_review") is not None:
+        errors.append("contract-invalid real provider review should not return Strategic Review")
 
     review_with_app_score = {
-        **fixture["mock_review"],
-        "design_confidence": 99,
-        "total_scenario_score": 99,
+        **_synthesized_strategic_review(packet, fixture),
+        "strategic_review_points": 99,
+        "trial_score": 99,
     }
     app_score_result = _score_provider_review(
         packet,
@@ -235,10 +241,10 @@ def main() -> int:
     )
     if app_score_result.get("status") != FAILURE_MALFORMED_RESPONSE:
         errors.append("provider-returned app score field should make result malformed_response")
-    if app_score_result.get("scoring", {}).get("design_confidence") is not None:
-        errors.append("provider-returned app score field should suppress Design Confidence")
-    if app_score_result.get("scoring", {}).get("total_scenario_score") is not None:
-        errors.append("provider-returned app score field should suppress Total Scenario Score")
+    if app_score_result.get("scoring", {}).get("strategic_review") is not None:
+        errors.append("provider-returned app score field should suppress Strategic Review")
+    if app_score_result.get("scoring", {}).get("trial_score") is not None:
+        errors.append("provider-returned app score field should suppress Trial Score")
 
     _check_openai_validation_retry(packet, fixture, errors)
 
