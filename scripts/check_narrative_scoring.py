@@ -534,12 +534,16 @@ def _check_legacy_participant_review_questions(errors: list[str]) -> None:
     questions = validated.get("key_questions") or {}
     if result["scoring"].get("validation_status") != "valid":
         errors.append("legacy participant_review questions should remain valid after strategic question migration")
+    if questions.get("medical_clinical_development_question") != legacy_medical:
+        errors.append("legacy participant_review medical question should map to the new medical/clinical-development question")
     if questions.get("medical_development_question") != legacy_medical:
-        errors.append("legacy participant_review medical question should be preserved")
+        errors.append("legacy participant_review medical alias should be preserved during migration")
     if questions.get("clinical_operations_question") != legacy_clinops:
         errors.append("legacy participant_review clinops question should be preserved")
-    if questions.get("strategic_field_question") != "":
-        errors.append("legacy participant_review should default missing strategic_field_question to an empty string")
+    if questions.get("strategic_development_question") != legacy_clinops:
+        errors.append("legacy participant_review clinops question should map to the new strategic development question when no strategic question exists")
+    if questions.get("strategic_field_question") != legacy_clinops:
+        errors.append("legacy participant_review strategic alias should mirror the normalized strategic development question")
 
 
 def main() -> int:

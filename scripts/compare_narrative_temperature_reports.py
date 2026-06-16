@@ -94,7 +94,6 @@ def _narrative_signature(iteration: dict[str, Any]) -> dict[str, str]:
             "completion",
             "design",
             "medical_question",
-            "operations_question",
             "strategic_question",
         )
     }

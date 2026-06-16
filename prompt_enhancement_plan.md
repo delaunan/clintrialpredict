@@ -44,7 +44,7 @@ Canonical provider-facing structure:
 {
   "review_metadata": {
     "review_mode": "first_visible_iteration",
-    "participant_visible": true
+    "visible": true
   },
   "completion_outlook_analysis": {
     "risk_pattern_summary": "...",
@@ -118,7 +118,7 @@ The structured Design Confidence subcategories should remain available for valid
 Implementation decision:
 
 - Use one shared response schema with mode-specific constraints.
-- Add top-level `review_metadata.review_mode` and `review_metadata.participant_visible` so the same schema can support hidden baseline, first visible iteration, and later visible iteration behavior.
+- Add top-level `review_metadata.review_mode` and `review_metadata.visible` so the same schema can support hidden baseline, first visible iteration, and later visible iteration behavior. Keep `participant_visible` only as a temporary legacy fallback during migration.
 - Mode-specific rules should control required and forbidden wording rather than creating three unrelated schemas.
 
 Suggested participant text length:
@@ -190,7 +190,7 @@ Candidate response shape:
 ```json
 "completion_outlook_analysis": {
   "review_mode": "first_visible_iteration",
-  "participant_visible": true,
+  "visible": true,
   "risk_pattern_summary": "...",
   "driver_summary": "...",
   "main_model_signals": ["..."],
@@ -633,7 +633,7 @@ Trace policy:
 
 ```json
 {
-  "participant_visible": false,
+  "visible": false,
   "numeric_design_context_policy": "hidden_qualitative_only",
   "design_confidence": null,
   "total_scenario_score": null
@@ -1490,7 +1490,7 @@ Current prompt strengths to preserve:
 Target enhancements to add:
 
 - Four concise participant-facing sections: Completion Outlook Analysis, Design Confidence Analysis, Main Tension, and two Key Questions.
-- Top-level `review_metadata` with `review_mode` and `participant_visible`.
+- Top-level `review_metadata` with `review_mode` and `visible`, while accepting `participant_visible` only as a legacy fallback.
 - Three prompt modes: `hidden_baseline`, `first_visible_iteration`, and `later_visible_iteration`.
 - Completion Outlook framed as early-termination risk-pattern interpretation.
 - Completion Outlook interpretive hypotheses with model signal, possible pattern, context modifiers, and boundary.
@@ -1549,6 +1549,8 @@ Recommended order:
    - Move to the lean participant output shape.
    - Prefer positive `do` instructions and keep only short hard red lines.
    - Keep current-state Design Confidence scoring plus continuity-anchor guidance.
+   - Current working label: `Prompt implementation point 3 / Phase 3`. In this plan, "Phase 3" means this prompt-simplification point, not the older scoring Phase 3 in `implementation_plan.md`.
+   - Optional prompt-volume reductions may be added here when they preserve packet evidence, reproducibility, scoring boundaries, and auditability.
 
 4. Validation, scoring diagnostics, and storage.
    - Preserve app-owned scoring.
@@ -1778,6 +1780,60 @@ Verification:
 - Eval checker flags unexplained subcategory direction flips when no relevant field changed.
 - A/B run compares current prompt versus continuity-anchor plus one curated example before embedding any one-shot into the live provider prompt.
 
+Implementation status - 2026-06-15:
+
+- Phase 1 schema and compatibility is complete. `main_tension`, `review_metadata.visible`, and the two-question target are in the provider schema/contract, validation, fixtures, storage, compact continuity context, simulator display, eval-report extraction, review-pack export, and temperature-report comparison. Legacy question aliases and `participant_visible` remain accepted only for migration compatibility.
+- Point 3 / Phase 3 prompt simplification has moved beyond the original simplification scope into targeted post-smoke consistency reinforcement. The provider contract uses the simplified visible output shape: `completion_outlook_analysis`, `design_confidence_analysis`, top-level `main_tension`, and two key questions (`medical_clinical_development_question`, `strategic_development_question`).
+- App-owned scoring is preserved. The provider still returns ratings, evidence fields, rationale, questions, continuity, and trace fields; the application calculates Design Confidence, Total Scenario Score, and subcategory points.
+- The prompt was simplified toward positive instructions. Provider-facing examples now use preferred examples only; risky negative examples were removed from the provider contract.
+- Long style-control lists were reduced where they were likely to prime the model with unwanted wording. Model-explanation fields remain available as packet evidence, while visible review wording is steered toward score-input and score-pattern language.
+- Added an unplanned but accepted Phase 3 prompt-volume reduction after the main simplification: repeated per-subcategory continuity instruction was collapsed to one continuity-object instruction, structured/text field meanings were compacted, and duplicate prose already present in the response contract was shortened. This was not part of the original point-3 plan, but it supports the same goal without removing feature-level, pillar-level, changed-field, operational-assumption, baseline, previous-review, text-change, scoring, or trace evidence.
+- Current prompt-volume checkpoint after that reduction: hidden baseline is about `11.1k` prompt tokens; first-visible cases are about `11.8k-12.0k`; the later-visible continuity inspection case is about `13.4k`, down from about `15.1k`.
+- Domain/source vocabulary was not globally removed from dictionaries, packet evidence, or structured field names. The cleanup targets provider instructions, visible examples, visible fixtures, and visible UI labels.
+- The old three-question output was reduced to two questions in the schema and simulator display. Legacy aliases remain temporarily in validation/scoring for cached or older reviews.
+- `review_metadata.visible` was added while keeping legacy `participant_visible` fallback.
+- `main_tension` now propagates through validation, review storage, compact continuity context, and simulator display.
+- Visible fixture prose and simulator helper text were cleaned where they used `XGBoost`, `model score`, `model-facing`, or `model movement` wording in places where score-input language is safer.
+- Prompt-builder checks now guard against reintroducing risky negative-example terms such as `weak_comment`, `bad_example`, `The score went up and the design is better`, and `change the endpoint and population this way next`.
+- Packet-builder checks now guard the storyline review-pack exporter and temperature comparison helper against silently returning to the old three-question visible output.
+- Phase 2 continuity anchors are implemented. Later visible review packets now include `iteration_context.design_confidence_continuity` with prior visible subcategory rating, prior visible app-calculated points, current relevant changed fields, previous evidence fields/rationale, and a short continuity instruction for each Design Confidence subcategory. First-visible or no-prior packets mark this object unavailable.
+- Eval diagnostics now warn on large unexplained Design Confidence subcategory shifts or sign flips when no current changed field maps to that subcategory.
+- After the first Phase 3 live 5x4 run, the continuity relevance map was calibrated as a many-to-many explanation-permission map, not a scoring map. Population fields such as rare-disease status, line of therapy, severity, and biomarker strategy may legitimately explain Operational Burden or Phase/Intent movement as well as Target Population movement. Endpoint/comparator/masking/allocation/adaptive fields may explain Operational Burden movement. Planned Total Timeline, planned enrollment, and planned sites remain Operational Burden context rather than Endpoint Evidence continuity evidence.
+- Duration naming decision after the first Phase 3 live 5x4 run: keep `Max Endpoint Duration` for `primary_duration_months_ml`, and call `operational_assumptions.planned_duration_months` `Planned Total Timeline` in provider-facing prompt/report context. This avoids the LLM confusing the endpoint assessment horizon with the operational planning timeline. The internal JSON key remains `planned_duration_months`.
+- Post-smoke consistency lock additions are implemented. The prompt now demotes `top_positive_feature_drivers` and `top_negative_feature_drivers` to current-state Completion Outlook support/risk context; latest movement should come from `field_changes`, `score_delta`, changed score inputs, `top_feature_impact_changes`, and pillar/subcategory `xgboost_impact_changes`. `xgboost_impact_changes` is explicitly pillar/subcategory movement context, not field-identity evidence.
+- Completion Outlook now has a lightweight storyline lock: compare previous/current score, `score_delta`, changed score inputs, `xgboost_impact_changes`, and prior visible Completion Outlook summary; keep the storyline stable when score is stable and no structured score input changed; reverse the storyline only when score direction and score-input evidence support it.
+- Design Confidence now has a continuity/resolution lock: compare prior rating, prior points, prior evidence fields, prior rationale, current relevant changed fields, and current `field_changes`; classify movement as unchanged, prior weakness unresolved/resolved/offset/worsened, new strength, or new weakness before choosing rating/materiality. If a field returns closer to baseline or offsets a prior weakness, the prior penalty should reduce rather than carry forward mechanically.
+- Structured/text conflicts now have a stale-conflict rule: unchanged conflicts remain visible as consistency warnings and unresolved prior concerns, but they should not create a new or expanded Design Confidence penalty in later unrelated iterations.
+- Completion Outlook and Design Confidence definitions were added to the prompt for final validation. Completion Outlook explains the estimated likelihood that the scenario reaches completion or faces early termination based on previously observed trial patterns; Design Confidence evaluates whether the scenario is coherent, interpretable, patient-relevant, and operationally proportionate. Compact Completion Outlook pillar definitions and Design Confidence subcategory definitions are included.
+- Language reinforcement was added with positive replacements rather than a long negative list. Visible wording should use `score pattern reflects`, `Completion Outlook score reflects`, or `current score inputs suggest` for score interpretation, and should frame unresolved concerns as discussion tensions rather than direct redesign instructions. Eval checks now catch concrete leak phrases such as `the model continues`, `model continues`, `must be updated`, and `requires careful re-evaluation`.
+- New diagnostics now warn on Completion Outlook direction/storyline inconsistencies and material Design Confidence movement without cited current changed evidence or strong resolution/restoration/offset/worsening reasoning. These remain warnings, not deterministic caps.
+- One-trial live smoke `phase3_consistency_lock_live_smoke_1` completed with `0` failed checks, `4/4` visible iterations reviewed, and `1` warning. Manual review found the original consistency issues materially improved: planning-only updates stayed out of Completion Outlook and Endpoint Evidence, Planned Total Timeline no longer drove endpoint scoring, target-population re-credit did not recur, and structured/text contradictions behaved as scenario-readiness warnings.
+
+Prompt export status:
+
+- Prompt exports and Word inspection files have been regenerated for representative fixtures plus a schema-only synthetic later-visible continuity case.
+- A compact manual triage summary is now generated alongside the full prompt pack. Human review should start from the compact summary and open full prompt files only for flagged cases or spot checks.
+- The synthetic later-visible case is for packet/prompt shape inspection only. It should not be used to judge clinical realism, narrative quality, score behavior, or final validation readiness.
+- No new live validation wave should be treated as final until the regenerated prompt exports are inspected with the new continuity anchors.
+
+Verification completed for the partial implementation:
+
+- `python scripts/check_narrative_prompt_builder.py`
+- `python scripts/check_narrative_scoring.py`
+- `python scripts/check_narrative_contract_fixtures.py`
+- `python scripts/check_narrative_mock_reviewer.py`
+- `python scripts/check_narrative_packet_builder.py`
+- `python scripts/check_narrative_review_store.py`
+- `python scripts/check_narrative_live_snapshot_flow.py`
+- targeted `python -m py_compile` for changed narrative/UI modules and checkers
+- `git diff --check`
+
+Current position and next step:
+
+- Point 3 / Phase 3 should be treated as locally ready for broader live validation. The prompt export inspection and one-trial smoke have served their purpose; do not keep refining wording before seeing broader live behavior.
+- Next run the fresh `5`-trial baseline + `4` visible-iteration live validation wave and export the Markdown/Word review pack. Review the results for recurring rather than one-off issues: Completion Outlook/Design Confidence separation, iteration consistency, stale structured/text conflict handling, question freshness, model-language leakage, and prescriptive wording.
+- Defer one-shot example embedding until after the 5x4 review. Use examples to teach narrative style, question freshness, and non-prescriptive tone; do not use examples to compensate for missing packet evidence or unresolved prompt contradictions.
+
 ### Step 8: UI Integration
 
 Update `frontend/views/trial_simulator.py` only after the provider/mock path is stable:
@@ -1822,6 +1878,7 @@ Then run manual/golden-example review:
 - Early candidates to inspect first: `NCT04393298` UCB Oncology (0 fails, 1 warning; strong evidence-standard trade-off), `NCT05590793` Oncology (0 fails, 0 warnings; clean but not UCB), `NCT06315322` UCB Neurology (0 fails, 3 warnings), `NCT04009499` UCB Musculoskeletal (0 fails, 1 warning), and `NCT04643457` UCB Dermatology (0 fails, 2 warnings; more negative/stress-test style).
 - Candidates needing caution before one-shot use: `NCT05124925` has a verbatim repeated strategic question, `NCT05076617` has a direct-address strategic question, and `NCT03650400` has an operational-only question-focus failure. These may still be useful for stress testing but should not be selected as presentation examples without review/editing.
 - Implemented UI coherence behavior, not a prompt rule: red structured-field flags now highlight validated impossible structured Trial Feature combinations, while keeping the Design Confidence scoring-calibration discussion separate. The UI red-highlights involved controls on field change until the incompatibility is resolved, without amber warnings, compact warning cards, new auto-correction beyond existing placebo sync, or blocking `Review Scenario` / Scenario Review generation. Validated red flags are: parallel with one arm; randomized single-group; randomized with one arm; placebo comparator with no placebo control; placebo control with no control group; placebo control with one arm; single-group with placebo control; active comparator with single-group; active comparator with one arm; double/triple/quadruple blind with single-group/no comparator/no placebo; double/triple/quadruple blind with one arm/no comparator/no placebo; factorial with one arm; crossover with one arm; sequential with one arm. Do not red-flag unusual-but-possible combinations such as Phase 3 single-group, confirmatory single-group, hard clinical endpoint with short endpoint duration, advanced/metastatic plus adjuvant/neoadjuvant, prevention in patients only, healthy-volunteer mismatch, or no DMC in high-risk/pivotal trials in this first pass. Implementation artifacts: `frontend/utils/structured_incompatibility.py`, `frontend/views/trial_simulator.py`, and `scripts/check_structured_incompatibility.py`.
+- Implemented Phase 3 consistency reinforcement after live storyline review: provider prompts now demote `top_positive_feature_drivers` and `top_negative_feature_drivers` to current-state Completion Outlook support/risk context; add a Completion Outlook consistency lock around `score_delta`, changed score inputs, `xgboost_impact_changes`, and prior visible storyline; add compact Design Confidence subcategory definitions; add a Design Confidence continuity/resolution lock that recognizes unchanged, unresolved, resolved, offset, worsened, new-strength, and new-weakness effects; and require Design Confidence summary / `main_tension` to synthesize cross-pillar effects. Eval reports now warn on Completion Outlook direction/storyline inconsistencies and on material Design Confidence movement without cited current changed evidence or continuity-resolution reasoning. These are diagnostics, not deterministic caps.
 - no hidden-baseline Design Confidence comparison in first visible iteration
 - no causal field claims
 - supported evidence for non-neutral Design Confidence

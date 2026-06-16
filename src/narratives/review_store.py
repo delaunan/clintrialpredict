@@ -98,6 +98,11 @@ def _build_trace(
     provider_trace = (validated_review or {}).get("trace") or {}
     design_confidence_analysis = (validated_review or {}).get("design_confidence_analysis") or {}
     tradeoff_review = (validated_review or {}).get("tradeoff_review") or {}
+    main_tension = (
+        (validated_review or {}).get("main_tension")
+        or design_confidence_analysis.get("confidence_rationale")
+        or tradeoff_review.get("central_tension")
+    )
     reference_pack_ids_available = [
         pack.get("pack_id")
         for pack in packet.get("reference_packs") or []
@@ -156,7 +161,7 @@ def _build_trace(
         "key_questions": deepcopy((validated_review or {}).get("key_questions") or {}),
         "scenario_consistency_note": deepcopy((validated_review or {}).get("scenario_consistency_note") or {}),
         "design_confidence_contributions": deepcopy(design_confidence_assessment.get("subcategories") or {}),
-        "central_tension": design_confidence_analysis.get("confidence_rationale") or tradeoff_review.get("central_tension"),
+        "central_tension": main_tension,
         "reference_pack_ids_available": reference_pack_ids_available,
         "reference_pack_ids_used": supported_reference_pack_ids_used,
         "unsupported_reference_pack_ids_used": unsupported_reference_pack_ids_used,

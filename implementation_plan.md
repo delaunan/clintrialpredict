@@ -107,9 +107,11 @@ Current symptom:
 
 ## Next Work
 
-### Phase 3: Migrate Scoring First
+### Historical Phase 3: Migrate Scoring First
 
 Status: done
+
+Note: this is the older scoring-migration phase. Current references to "Phase 3" in the active prompt work mean point 3 of `prompt_enhancement_plan.md` (`Prompt simplification`), not this completed scoring phase.
 
 Why first: scoring defines the contract that prompt, provider, mock reviewer, store, and UI must all obey.
 

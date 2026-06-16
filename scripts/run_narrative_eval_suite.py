@@ -31,6 +31,7 @@ from src.narratives.packet_builder import (  # noqa: E402
     TEXT_CONTEXT_KEYS,
     build_review_packet,
     build_review_packet_from_fixture,
+    design_confidence_relevant_changed_fields,
 )
 from src.narratives.provider import (  # noqa: E402
     PROVIDER_GEMINI,
@@ -75,7 +76,7 @@ PILLAR_COLUMNS = (
 OPERATIONAL_ASSUMPTION_LABELS = {
     "planned_enrollment": "Planned Enrollment",
     "planned_sites": "Planned Sites",
-    "planned_duration_months": "Duration (months)",
+    "planned_duration_months": "Planned Total Timeline",
 }
 
 STRUCTURED_TEXT_CONFLICT_WARNING = (
@@ -1221,9 +1222,22 @@ def _review_texts(trace: dict[str, Any]) -> dict[str, str]:
     return {
         "completion": str(completion.get("risk_pattern_summary") or ""),
         "design": str(design.get("summary") or ""),
-        "medical_question": str(questions.get("medical_development_question") or ""),
-        "operations_question": str(questions.get("clinical_operations_question") or ""),
-        "strategic_question": str(questions.get("strategic_field_question") or ""),
+        "medical_question": str(
+            questions.get("medical_clinical_development_question")
+            or questions.get("medical_development_question")
+            or ""
+        ),
+        "operations_question": str(
+            questions.get("clinical_operations_question")
+            or questions.get("clinops_execution_question")
+            or ""
+        ),
+        "strategic_question": str(
+            questions.get("strategic_development_question")
+            or questions.get("strategic_field_question")
+            or questions.get("clinical_operations_question")
+            or ""
+        ),
         "consistency_note": str(consistency.get("message") or ""),
     }
 
@@ -1303,7 +1317,7 @@ def _has_operational_boundary_language(text: str) -> bool:
         "outside the model",
         "does not explain completion outlook movement",
         "do not explain completion outlook movement",
-        "planning assumptions such as enrollment, site count, and total duration do not directly feed the score",
+        "planning assumptions such as enrollment, site count, and planned total timeline do not directly feed the score",
         "reflected in design confidence instead",
     )
     return any(term in lower for term in boundary_terms)
@@ -1376,7 +1390,7 @@ def _has_population_objective_conflict(trace: dict[str, Any], texts: dict[str, s
     fields_text = " ".join(str(field).lower() for field in consistency.get("fields_in_tension") or ())
     narrative_text = " ".join(
         texts.get(key, "").lower()
-        for key in ("completion", "design", "medical_question", "operations_question")
+        for key in ("completion", "design", "medical_question", "strategic_question")
     )
     trial_context_text = " ".join(
         str(text_context.get(key) or "").lower()
@@ -1437,6 +1451,128 @@ def _design_confidence_subcategories(trace: dict[str, Any]) -> dict[str, Any]:
     return validated.get("design_confidence_subcategories") or {}
 
 
+def _subcategory_points(trace: dict[str, Any], subcategory_name: str) -> float | None:
+    value = (_design_confidence_subcategories(trace).get(subcategory_name) or {}).get("points")
+    numeric = pd.to_numeric(value, errors="coerce")
+    return float(numeric) if pd.notna(numeric) else None
+
+
+def _is_direction_flip(previous_points: float, current_points: float) -> bool:
+    return (previous_points > 0 and current_points < 0) or (previous_points < 0 and current_points > 0)
+
+
+def _current_changed_fields(trace: dict[str, Any]) -> list[str]:
+    iteration = (trace.get("input_packet") or {}).get("iteration_context") or {}
+    return [str(field) for field in iteration.get("changed_fields") or []]
+
+
+def _continuity_relevant_fields(trace: dict[str, Any], subcategory_name: str) -> list[str]:
+    iteration = (trace.get("input_packet") or {}).get("iteration_context") or {}
+    continuity = iteration.get("design_confidence_continuity") or {}
+    subcategory = (continuity.get("subcategories") or {}).get(subcategory_name) or {}
+    fields = subcategory.get("current_relevant_changed_fields")
+    if isinstance(fields, list):
+        return [str(field) for field in fields]
+    return design_confidence_relevant_changed_fields(subcategory_name, _current_changed_fields(trace))
+
+
+def _subcategory_evidence_fields(trace: dict[str, Any], subcategory_name: str) -> list[str]:
+    validated = trace.get("validated_review") or {}
+    subcategory = (validated.get("design_confidence_subcategories") or {}).get(subcategory_name) or {}
+    evidence = subcategory.get("evidence_fields") or []
+    return [str(field) for field in evidence]
+
+
+def _subcategory_rationale(trace: dict[str, Any], subcategory_name: str) -> str:
+    validated = trace.get("validated_review") or {}
+    subcategory = (validated.get("design_confidence_subcategories") or {}).get(subcategory_name) or {}
+    return " ".join(
+        str(subcategory.get(key) or "")
+        for key in ("rationale", "short_rationale", "regulatory_or_finance_note")
+    )
+
+
+def _field_refs_overlap(evidence_fields: list[str], changed_fields: list[str]) -> bool:
+    evidence = {str(field).lower() for field in evidence_fields}
+    changed = {str(field).lower() for field in changed_fields}
+    if evidence & changed:
+        return True
+    for evidence_field in evidence:
+        evidence_tail = evidence_field.split(".")[-1]
+        for changed_field in changed:
+            changed_tail = changed_field.split(".")[-1]
+            if evidence_tail == changed_tail:
+                return True
+            if evidence_field.endswith(f".{changed_tail}") or changed_field.endswith(f".{evidence_tail}"):
+                return True
+    return False
+
+
+def _has_material_move_justification_language(text: str) -> bool:
+    lower = str(text or "").lower()
+    terms = (
+        "resolved",
+        "reduced",
+        "offset",
+        "offsetting",
+        "balances",
+        "balanced by",
+        "worsened",
+        "worsens",
+        "new strength",
+        "new weakness",
+        "newly strengthens",
+        "newly weakens",
+        "restores",
+        "restored",
+        "reverses",
+        "reversed",
+        "no longer",
+        "returned to",
+        "returns to",
+        "closer to baseline",
+        "closer to the baseline",
+        "back to baseline",
+    )
+    return any(term in lower for term in terms)
+
+
+def _completion_direction_from_text(text: str) -> str | None:
+    lower = str(text or "").lower()
+    favorable_terms = (
+        "more favorable",
+        "appears to improve",
+        "completion outlook improves",
+        "lower early-termination risk",
+        "lower risk profile",
+        "less early-termination risk",
+    )
+    unfavorable_terms = (
+        "less favorable",
+        "appears to decline",
+        "completion outlook declines",
+        "higher early-termination risk",
+        "increased early-termination risk",
+        "increased risk profile",
+        "harder to sustain",
+    )
+    has_favorable = any(term in lower for term in favorable_terms)
+    has_unfavorable = any(term in lower for term in unfavorable_terms)
+    if has_favorable and not has_unfavorable:
+        return "positive"
+    if has_unfavorable and not has_favorable:
+        return "negative"
+    return None
+
+
+def _changed_score_input_fields(trace: dict[str, Any]) -> list[str]:
+    packet = trace.get("input_packet") or {}
+    model = packet.get("model_interpretation") or {}
+    direct_fields = {str(field) for field in model.get("direct_xgboost_shap_fields") or []}
+    changed_fields = _current_changed_fields(trace)
+    return [field for field in changed_fields if field in direct_fields]
+
+
 def _grade_trace(
     trace: dict[str, Any],
     step: ScenarioStep | None,
@@ -1461,7 +1597,7 @@ def _grade_trace(
     operational_terms = (
         "planned enrollment",
         "planned site",
-        "planned total duration",
+        "planned total timeline",
         "operational benchmark",
     )
     if any(term in completion_lower for term in operational_terms) and not _has_operational_boundary_language(texts["completion"]):
@@ -1488,6 +1624,8 @@ def _grade_trace(
             "planned duration",
             "primary duration",
             "total duration",
+            "planned total timeline",
+            "total timeline",
             "resource allocation",
             "operational footprint",
             "site footprint",
@@ -1505,8 +1643,9 @@ def _grade_trace(
             "planned site",
             "site count",
             "planned duration",
-            "planned total duration",
+            "planned total timeline",
             "total planned duration",
+            "total timeline",
             "operational assumptions",
             "operational footprint",
             "operational scale",
@@ -1548,6 +1687,8 @@ def _grade_trace(
             "planned site",
             "site count",
             "total duration",
+            "planned total timeline",
+            "total timeline",
             "duration reflects",
             "operational footprint",
             "operational scale",
@@ -1614,9 +1755,36 @@ def _grade_trace(
     if any(term in completion_lower for term in causal_terms):
         findings.append({"severity": "warn", "check": "completion_outlook_overclaim", "detail": "Completion Outlook may be too causal or promise-like."})
 
+    score_delta_for_direction = pd.to_numeric(((trace.get("input_packet") or {}).get("model_interpretation") or {}).get("score_delta"), errors="coerce")
+    completion_direction = _completion_direction_from_text(texts["completion"])
+    if pd.notna(score_delta_for_direction) and completion_direction:
+        if float(score_delta_for_direction) > 0.05 and completion_direction == "negative":
+            findings.append({
+                "severity": "warn",
+                "check": "completion_outlook_direction_consistency",
+                "detail": "Completion Outlook narrative direction appears less favorable despite a positive score_delta.",
+            })
+        if float(score_delta_for_direction) < -0.05 and completion_direction == "positive":
+            findings.append({
+                "severity": "warn",
+                "check": "completion_outlook_direction_consistency",
+                "detail": "Completion Outlook narrative direction appears more favorable despite a negative score_delta.",
+            })
+        if (
+            abs(float(score_delta_for_direction)) <= 0.05
+            and completion_direction
+            and not _changed_score_input_fields(trace)
+            and not _has_only_persistent_existing_risk_language(texts["completion"])
+        ):
+            findings.append({
+                "severity": "warn",
+                "check": "completion_outlook_storyline_continuity",
+                "detail": "Completion Outlook uses directional movement language although score_delta is stable and no structured score input changed.",
+            })
+
     participant_text = " ".join(
         texts[key]
-        for key in ("completion", "design", "medical_question", "operations_question", "strategic_question")
+        for key in ("completion", "design", "medical_question", "strategic_question")
     ).lower()
     internal_model_terms = (
         "model-facing",
@@ -1642,7 +1810,11 @@ def _grade_trace(
         "according to the model",
         "in the model",
         "the model says",
+        "the model flags",
+        "the model continues",
         "the model reflects",
+        "model flags",
+        "model continues",
         "model reflects",
     )
     if any(term in participant_text for term in internal_model_terms):
@@ -1679,6 +1851,8 @@ def _grade_trace(
         "needs to add a comparator",
         "must add a comparator",
         "should add a comparator",
+        "must be updated",
+        "requires careful re-evaluation",
     )
     if any(term in participant_text for term in prescriptive_redesign_terms):
         findings.append({
@@ -1805,7 +1979,6 @@ def _grade_trace(
                 })
     for label, question in (
         ("medical_question", texts["medical_question"]),
-        ("operations_question", texts["operations_question"]),
         ("strategic_question", texts["strategic_question"]),
     ):
         if not question.strip().endswith("?"):
@@ -1821,8 +1994,65 @@ def _grade_trace(
             })
 
     if previous_visible_trace:
+        for subcategory_name in (
+            "phase_intent_alignment",
+            "endpoint_evidence_strength",
+            "target_population_alignment",
+            "operational_burden_balance",
+        ):
+            previous_points = _subcategory_points(previous_visible_trace, subcategory_name)
+            current_points = _subcategory_points(trace, subcategory_name)
+            if previous_points is None or current_points is None:
+                continue
+            point_delta = current_points - previous_points
+            relevant_changes = _continuity_relevant_fields(trace, subcategory_name)
+            large_shift = abs(point_delta) >= 3.0
+            direction_flip = _is_direction_flip(previous_points, current_points)
+            if (large_shift or direction_flip) and not relevant_changes:
+                evidence_fields = _subcategory_evidence_fields(trace, subcategory_name)
+                findings.append({
+                    "severity": "warn",
+                    "check": "design_confidence_continuity_flip",
+                    "detail": (
+                        f"{subcategory_name} moved from {previous_points:g} to {current_points:g} points "
+                        "without a current changed field mapped to that subcategory. "
+                        f"Current evidence_fields: {', '.join(evidence_fields) or 'none'}."
+                    ),
+                })
+            material_move = abs(point_delta) >= 2.0
+            if material_move:
+                evidence_fields = _subcategory_evidence_fields(trace, subcategory_name)
+                rationale = _subcategory_rationale(trace, subcategory_name)
+                if (
+                    relevant_changes
+                    and not _field_refs_overlap(evidence_fields, relevant_changes)
+                    and not _has_material_move_justification_language(rationale)
+                ):
+                    findings.append({
+                        "severity": "warn",
+                        "check": "design_confidence_material_move_without_cited_change",
+                        "detail": (
+                            f"{subcategory_name} moved from {previous_points:g} to {current_points:g} points, "
+                            f"but evidence_fields do not cite current relevant changed fields "
+                            f"({', '.join(relevant_changes)})."
+                        ),
+                    })
+                if (
+                    not relevant_changes
+                    and not _field_refs_overlap(evidence_fields, _current_changed_fields(trace))
+                    and not _has_material_move_justification_language(rationale)
+                ):
+                    findings.append({
+                        "severity": "warn",
+                        "check": "design_confidence_material_move_without_cited_change",
+                        "detail": (
+                            f"{subcategory_name} moved from {previous_points:g} to {current_points:g} points "
+                            "without cited current changed evidence or continuity-resolution reasoning."
+                        ),
+                    })
+
         previous_texts = _review_texts(previous_visible_trace)
-        for label in ("medical_question", "operations_question", "strategic_question"):
+        for label in ("medical_question", "strategic_question"):
             if _normalize_question(texts[label]) == _normalize_question(previous_texts[label]):
                 findings.append({
                     "severity": "fail",
@@ -1849,7 +2079,7 @@ def _grade_trace(
                     "detail": "Question repeats the prior visible question opening frame; review whether the newest change is being used to reframe the discussion.",
                 })
 
-    combined_questions = f"{texts['medical_question']} {texts['operations_question']} {texts['strategic_question']}".lower()
+    combined_questions = f"{texts['medical_question']} {texts['strategic_question']}".lower()
     if step and step.step_id in planning_only_steps:
         # Accepted terms for detecting latest-change focus in the question set.
         # This is not a Completion Outlook forbidden-term list.
@@ -2149,6 +2379,9 @@ def _trace_summary(
         "design_confidence": trace.get("design_confidence"),
         "total_scenario_score": trace.get("total_scenario_score"),
         "scenario_consistency_note": trace.get("scenario_consistency_note") or {},
+        "design_confidence_continuity": (
+            ((input_packet.get("iteration_context") or {}).get("design_confidence_continuity") or {})
+        ),
         "design_confidence_subcategories": _subcategory_summary(trace),
         "narrative": texts,
         "findings": findings or [],
@@ -2168,7 +2401,17 @@ def _trace_summary(
 def _deterministic_check_labels(step: ScenarioStep | None) -> list[str]:
     if not step:
         return ["provider_status", "validation_status", "participant_model_language"]
-    labels = ["provider_status", "validation_status", "participant_model_language", "question_form", "question_freshness"]
+    labels = [
+        "provider_status",
+        "validation_status",
+        "participant_model_language",
+        "question_form",
+        "question_freshness",
+        "completion_outlook_direction_consistency",
+        "completion_outlook_storyline_continuity",
+        "design_confidence_continuity_flip",
+        "design_confidence_material_move_without_cited_change",
+    ]
     expectations = step.expectations
     if "design_confidence_min" in expectations or "design_confidence_max" in expectations:
         labels.append("design_confidence_direction")
@@ -2358,9 +2601,8 @@ def _markdown_trace_block(item: dict[str, Any]) -> list[str]:
         ("Consistency Note", "consistency_note"),
         ("Completion Outlook", "completion"),
         ("Design Confidence", "design"),
-        ("Medical Development Question", "medical_question"),
-        ("Clinical Operations Question", "operations_question"),
-        ("Strategic Field Question", "strategic_question"),
+        ("Medical / Clinical Development Question", "medical_question"),
+        ("Strategic Development Question", "strategic_question"),
     ):
         value = str(narrative.get(key) or "").strip()
         if value:

@@ -49,6 +49,9 @@ def main() -> int:
         errors.append("stored trace should preserve Design Confidence assessment")
     if not first.get("central_tension"):
         errors.append("stored trace should preserve central_tension")
+    expected_main_tension = (first.get("validated_review") or {}).get("main_tension")
+    if first.get("central_tension") != expected_main_tension:
+        errors.append("stored trace central_tension should prefer validated_review.main_tension")
     if "strategic_context_2026_v1" not in set(first.get("reference_pack_ids_available") or []):
         errors.append("stored trace should preserve available reference pack IDs")
     if first.get("unsupported_reference_pack_ids_used"):

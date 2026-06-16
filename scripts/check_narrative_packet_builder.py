@@ -18,6 +18,7 @@ from src.narratives.packet_builder import (  # noqa: E402
     STRUCTURED_FEATURE_KEYS,
     build_review_packet,
     build_review_packet_from_fixture,
+    design_confidence_relevant_changed_fields,
     stable_packet_hash,
 )
 
@@ -121,6 +122,7 @@ def _check_review_continuity_context(errors: list[str]) -> None:
         "central_tension": "Baseline central tension.",
         "validated_review": {
             "review_metadata": {"review_mode": "hidden_baseline", "participant_visible": False},
+            "main_tension": "Baseline main tension from dedicated field.",
             "completion_outlook_analysis": {
                 "risk_pattern_summary": "Baseline score reflects an acceptable original design profile.",
             },
@@ -157,6 +159,23 @@ def _check_review_continuity_context(errors: list[str]) -> None:
         "total_scenario_score": 66,
         "changed_fields": ["operational_assumptions.planned_enrollment"],
         "score_delta": 0,
+        "central_tension": "",
+        "design_confidence_assessment": {
+            "subcategories": {
+                "endpoint_evidence_strength": {
+                    "points": -2,
+                    "raw_points": -2,
+                },
+                "operational_burden_balance": {
+                    "points": 0,
+                    "raw_points": 0,
+                },
+            },
+        },
+        "validated_review": {
+            **baseline_trace["validated_review"],
+            "main_tension": "Previous main tension from dedicated field.",
+        },
         "compact_storyline_memory": "Previous iteration memory",
     }
     packet = fixture["input_packet"]
@@ -167,7 +186,8 @@ def _check_review_continuity_context(errors: list[str]) -> None:
             "structured_features": packet.get("structured_features", {}),
             "operational_assumptions": packet.get("operational_assumptions", {}),
             "model_interpretation": packet.get("model_interpretation", {}),
-            "changed_fields": packet["iteration_context"].get("changed_fields", []),
+            "changed_fields": [],
+            "changed_operational_assumptions": ["planned_enrollment"],
         },
         previous_snapshot={"snapshot_id": packet["iteration_context"].get("previous_snapshot_id"), "score": 68},
         baseline_snapshot={"snapshot_id": packet["iteration_context"].get("baseline_snapshot_id")},
@@ -201,13 +221,85 @@ def _check_review_continuity_context(errors: list[str]) -> None:
         errors.append("previous visible review context should preserve design_confidence")
     if context.get("previous_review", {}).get("total_scenario_score") != 66:
         errors.append("previous visible review context should preserve total_scenario_score")
+    if context.get("baseline_review", {}).get("central_tension") != "Baseline central tension.":
+        errors.append("hidden baseline review context should preserve trace central_tension when present")
+    if context.get("previous_review", {}).get("central_tension") != "Previous main tension from dedicated field.":
+        errors.append("previous visible review context should fall back to validated_review.main_tension")
+    previous_questions = context.get("previous_review", {}).get("key_questions") or {}
+    if previous_questions.get("medical_clinical_development_question") != "What evidence standard matters most?":
+        errors.append("previous visible review context should expose new medical/clinical-development question field")
+    if previous_questions.get("strategic_development_question") != "What broader field challenge does this scenario expose?":
+        errors.append("previous visible review context should expose new strategic development question field")
+    if previous_questions.get("medical_development_question") != "What evidence standard matters most?":
+        errors.append("previous visible review context should preserve legacy medical question alias")
     if (
         continuity_packet.get("iteration_context", {}).get("compact_storyline_memory")
         != "Previous iteration memory"
     ):
         errors.append("continuity packet missing compact storyline memory")
+    design_continuity = continuity_packet.get("iteration_context", {}).get("design_confidence_continuity") or {}
+    if design_continuity.get("available") is not True:
+        errors.append("later visible continuity packet should include Design Confidence continuity anchors")
+    continuity_subcategories = design_continuity.get("subcategories") or {}
+    endpoint_continuity = continuity_subcategories.get("endpoint_evidence_strength") or {}
+    if endpoint_continuity.get("previous_rating") != "supportive":
+        errors.append("Design Confidence continuity should carry previous subcategory rating")
+    if endpoint_continuity.get("previous_points") != -2:
+        errors.append("Design Confidence continuity should carry previous app-calculated points")
+    if endpoint_continuity.get("current_relevant_changed_fields"):
+        errors.append("endpoint continuity should not mark unrelated operational changes as relevant")
+    operational_continuity = continuity_subcategories.get("operational_burden_balance") or {}
+    if operational_continuity.get("current_relevant_changed_fields") != ["operational_assumptions.planned_enrollment"]:
+        errors.append("operational continuity should identify relevant operational-assumption changes")
+    operational_change_labels = {
+        change.get("field"): change.get("display_label")
+        for change in continuity_packet.get("iteration_context", {}).get("field_changes") or []
+        if change.get("change_type") == "operational_assumption"
+    }
+    if operational_change_labels.get("operational_assumptions.planned_duration_months") not in {
+        None,
+        "Planned Total Timeline",
+    }:
+        errors.append("planned duration operational change should use Planned Total Timeline display label")
+    population_fields = ["is_rare_disease_ml", "line_of_therapy_ml", "patient_severity_ml"]
+    if design_confidence_relevant_changed_fields("operational_burden_balance", population_fields) != population_fields:
+        errors.append("population changes should be valid operational-burden continuity evidence")
+    if design_confidence_relevant_changed_fields("phase_intent_alignment", population_fields) != population_fields:
+        errors.append("population changes should be valid phase/intent continuity evidence")
+    if design_confidence_relevant_changed_fields(
+        "endpoint_evidence_strength",
+        ["operational_assumptions.planned_enrollment", "operational_assumptions.planned_sites"],
+    ):
+        errors.append("planned enrollment/sites should not explain Endpoint Evidence continuity flips")
+    if design_confidence_relevant_changed_fields(
+        "endpoint_evidence_strength",
+        ["operational_assumptions.planned_duration_months"],
+    ):
+        errors.append("planned total timeline should not explain Endpoint Evidence continuity flips")
     if built.get("review_context", {}).get("previous_review") is not None:
         errors.append("fixture packet without review traces should not invent previous review context")
+    fixture_continuity = built.get("iteration_context", {}).get("design_confidence_continuity") or {}
+    if fixture_continuity.get("available") is not False:
+        errors.append("fixture packet without previous visible trace should mark Design Confidence continuity unavailable")
+    hidden_baseline_packet = build_review_packet(
+        current_snapshot={
+            "snapshot_id": "baseline-snapshot",
+            "source": "prerecorded_baseline",
+            "structured_features": packet.get("structured_features", {}),
+            "operational_assumptions": packet.get("operational_assumptions", {}),
+            "model_interpretation": packet.get("model_interpretation", {}),
+            "changed_fields": [],
+        },
+        previous_snapshot=None,
+        baseline_snapshot={"snapshot_id": "baseline-snapshot"},
+        baseline_review_trace=baseline_trace,
+        previous_review_trace=None,
+    )
+    hidden_continuity = hidden_baseline_packet.get("iteration_context", {}).get("design_confidence_continuity") or {}
+    if hidden_continuity.get("available") is not False:
+        errors.append("hidden baseline packet should mark Design Confidence continuity unavailable")
+    if hidden_continuity.get("subcategories") != {}:
+        errors.append("hidden baseline packet should not include visible Design Confidence continuity subcategory anchors")
 
 
 def _check_canonical_values_prefer_compare_values(errors: list[str]) -> None:
@@ -385,6 +477,23 @@ def _check_field_and_impact_changes(errors: list[str]) -> None:
         errors.append("XGBoost impact changes should include baseline, previous, current, and deltas")
 
 
+def _check_storyline_report_compatibility(errors: list[str]) -> None:
+    exporter = (ROOT / "scripts" / "export_storyline_review_pack.py").read_text(encoding="utf-8")
+    if "Clinical operations:" in exporter or "Strategic/field:" in exporter:
+        errors.append("storyline review pack exporter should use the new two-question framing")
+    if "Medical / clinical development:" not in exporter or "Strategic development:" not in exporter:
+        errors.append("storyline review pack exporter should label the two visible questions")
+
+    temperature_compare = (ROOT / "scripts" / "compare_narrative_temperature_reports.py").read_text(
+        encoding="utf-8"
+    )
+    signature_start = temperature_compare.find("def _narrative_signature")
+    subcategory_start = temperature_compare.find("def _subcategory_signature")
+    signature_body = temperature_compare[signature_start:subcategory_start]
+    if '"operations_question"' in signature_body:
+        errors.append("temperature narrative signature should ignore the retired operations question")
+
+
 def main() -> int:
     errors: list[str] = []
     fixtures = get_contract_fixtures()
@@ -393,6 +502,7 @@ def main() -> int:
     _check_review_continuity_context(errors)
     _check_canonical_values_prefer_compare_values(errors)
     _check_field_and_impact_changes(errors)
+    _check_storyline_report_compatibility(errors)
 
     if errors:
         for error in errors:

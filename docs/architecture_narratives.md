@@ -10,7 +10,7 @@ Efficient update rule: change this file when narrative inputs/outputs, LLM contr
 
 ## 1. Purpose Of The Narrative Architecture
 
-This document defines the staged design for adding a serious-game narrative layer around single-trial simulation in ClinTrialPredict. Current implementation covers contract fixtures, deterministic packet building, validation/scoring, mock review, session-state storage/replay, minimal Quality Review UI, hidden baseline continuity, provider configuration, real OpenAI/Gemini provider boundaries, Gemini Flash-Lite live settings, prompt-mode scaffolding, and opt-in live-provider UI routing. The simulator still uses the deterministic mock provider by default unless `NARRATIVE_LIVE_REVIEW_ENABLED=1` explicitly enables the live provider chain. The active target architecture supersedes the earlier three-pillar Quality Assessment model with a four-pillar Design Confidence model aligned to the existing Completion Outlook pillars.
+This document defines the staged design for adding a serious-game narrative layer around single-trial simulation in ClinTrialPredict. Current implementation covers contract fixtures, deterministic packet building, Design Confidence continuity anchors, validation/scoring, mock review, session-state storage/replay, minimal Quality Review UI, hidden baseline continuity, provider configuration, real OpenAI/Gemini provider boundaries, Gemini Flash-Lite live settings, prompt-mode scaffolding, and opt-in live-provider UI routing. The simulator still uses the deterministic mock provider by default unless `NARRATIVE_LIVE_REVIEW_ENABLED=1` explicitly enables the live provider chain. The active target architecture supersedes the earlier three-pillar Quality Assessment model with a four-pillar Design Confidence model aligned to the existing Completion Outlook pillars.
 
 Current planning checkpoint: `prompt_enhancement_plan.md` is the working implementation plan for the next prompt/schema migration. Its accepted durable decisions should be promoted into this architecture document before code changes. The next target contract keeps app-owned scoring but simplifies participant output around Completion Outlook Analysis, Design Confidence Analysis, Main Tension, and two Key Questions; adds deterministic Design Confidence continuity anchors; separates `hidden_baseline`, `first_visible_iteration`, and `later_visible_iteration`; treats Completion Outlook as early-termination risk-pattern interpretation; keeps operational assumptions out of Completion Outlook; adds optional therapeutic-area `.md` context by XGBoost canonical `therapeutic_area_ml`; and adds `scenario_consistency_note` plus `text_change_evidence`.
 
@@ -286,15 +286,26 @@ The Scenario Review should reflect both current design defensibility and change 
 
 Scenario edits are cumulative, but `Design Confidence` is not a running sum of prior bonuses and penalties. Each visible review should score the current full scenario state while preserving interpretation continuity for unchanged evidence. Previous visible review context is the primary iteration-to-iteration anchor; hidden baseline remains qualitative context for the original trial and should not become a hard numeric comparator.
 
-The next prompt/schema migration should add a compact deterministic `design_confidence_continuity` packet object for the four Design Confidence subcategories. For each subcategory, include the previous visible rating, previous visible points, changed relevant fields, and one short continuity instruction. Example shape:
+The packet builder adds a compact deterministic `iteration_context.design_confidence_continuity` object for the four Design Confidence subcategories on later visible reviews. For each subcategory, it includes the previous visible rating, previous visible app-calculated points, current relevant changed fields, previous rationale/evidence fields, and one short continuity instruction. First-visible or no-prior packets mark this object unavailable. Example shape:
 
 ```json
 {
-  "phase_intent_alignment": {
-    "previous_rating": "strong",
-    "previous_points": 4,
-    "changed_relevant_fields": [],
-    "instruction": "No phase or strategic-intent field changed. Keep the prior direction unless another current change materially affects phase/intent fit."
+  "available": true,
+  "source_iteration_id": 1,
+  "source_input_hash": "previous-input-hash",
+  "changed_fields": ["operational_assumptions.planned_enrollment"],
+  "instruction": "Use this object as deterministic continuity context for Design Confidence subcategories. The current scenario is still scored fresh, but large subcategory shifts need current relevant evidence.",
+  "subcategories": {
+    "phase_intent_alignment": {
+      "label": "Phase & Intent Alignment",
+      "previous_rating": "strong",
+      "previous_score_materiality": "moderate",
+      "previous_points": 4,
+      "previous_raw_points": 4,
+      "previous_rationale": "Prior phase/intent rationale.",
+      "previous_evidence_fields": ["phase_ml", "strategic_ambition_ml"],
+      "current_relevant_changed_fields": []
+    }
   }
 }
 ```
@@ -302,6 +313,18 @@ The next prompt/schema migration should add a compact deterministic `design_conf
 The provider should use this object as a continuity anchor: if a subcategory's relevant evidence did not change, it should not reverse the rating direction unless it names current packet evidence that justifies the reversal. The scoring engine still calculates Design Confidence from the current review output; continuity anchors guide the LLM's qualitative judgment but do not mechanically carry forward points.
 
 This target addresses observed live-play drift where a persistent fact can be interpreted in opposite directions across adjacent iterations, such as an evidence-standard upgrade receiving strong `phase_intent_alignment` credit in one iteration and then flipping to a strong phase/intent penalty in the next even though phase and strategic-intent fields did not materially change.
+
+The field-to-subcategory relevance map for `design_confidence_continuity` is many-to-many and diagnostic-only. It is not a scoring map and does not automatically create positive or negative points. A field can be relevant to several Design Confidence lenses when a clinical reviewer could plausibly use it to explain movement: population fields can affect Target Population, Operational Burden, and Phase/Intent; endpoint/comparator/masking/allocation fields can affect Endpoint Evidence and Operational Burden. Planned Total Timeline is operational-context evidence for proportionality and executability, not Endpoint Evidence continuity evidence.
+
+Provider prompts use a continuity-resolution lock for Design Confidence. For each subcategory, the reviewer compares the prior visible rating, prior points, prior evidence fields, prior rationale, current relevant changed fields, and current `field_changes` before selecting the new rating and materiality. The current effect is treated as unchanged, prior weakness unresolved, prior weakness resolved, prior weakness offset, prior weakness worsened, new strength, or new weakness. When a changed field appears in prior evidence fields, the reviewer should compare previous/current/baseline values and labels to recognize restoration or reversal instead of mechanically carrying forward a prior penalty. If a structured/text conflict is unchanged from the prior visible iteration, it should remain visible as a consistency warning and unresolved prior concern rather than becoming a new or expanded penalty. Persistent strengths should not be re-credited as new improvement merely because they remain true.
+
+Completion Outlook has a lighter consistency lock. Movement follows `score_delta`, changed structured Completion Outlook score inputs, and `xgboost_impact_changes`; prior visible Completion Outlook summary is storyline continuity only. If `score_delta` is stable and no structured score input changed, the prior Completion Outlook storyline should remain stable and non-score-input implications belong in Design Confidence. Static `top_positive_feature_drivers` and `top_negative_feature_drivers` remain in the packet as current-state support/risk context, but they should not explain latest movement unless the same field also appears in `field_changes` or `top_feature_impact_changes`. `xgboost_impact_changes` remains pillar/subcategory movement context, not field-identity evidence.
+
+Provider prompts define the top-level boundary positively: Completion Outlook explains the estimated likelihood that the scenario reaches completion or faces early termination, based on previously observed trial patterns. Design Confidence evaluates whether the scenario is a coherent, interpretable, patient-relevant, and operationally proportionate design for the intended development decision. Completion Outlook pillar definitions are kept compact: Therapeutic Context covers disease and treatment context; Scientific Challenge covers difficulty of generating clear evidence; Patient Profile covers population focus and patient-selection difficulty; Execution Framework covers trial structure and conduct burden.
+
+Narrative validation reports warn when Completion Outlook direction conflicts with `score_delta`, when stable-score Completion Outlook uses unsupported movement language, or when a Design Confidence subcategory moves materially without citing current relevant changed evidence or explaining resolution, offset, worsening, restoration, reversal, new strength, or new weakness. These warnings are diagnostics, not deterministic score caps.
+
+Provider-facing duration labels should keep endpoint timing separate from operational planning. Use `Max Endpoint Duration` for `primary_duration_months_ml` and `Planned Total Timeline` for `operational_assumptions.planned_duration_months`. The internal operational key remains `planned_duration_months`; the label exists to prevent the LLM from treating an operational timeline change as a changed primary endpoint duration.
 
 For V1, do not make a numeric `Coherence Score` or `Quality Score` the primary user-facing concept. Use:
 
@@ -1886,7 +1909,7 @@ Implementation staging:
 13. Calibration/playtesting: review examples and tune rating-to-point mapping if Design Confidence is too strong or too weak.
 14. Golden / one-shot example calibration: create one curated external golden example first, then A/B test whether it improves continuity, operational-only boundaries, structured/text contradiction behavior, and question freshness without making output formulaic. Add more examples only if one example is insufficient.
 15. Prompt enhancement migration checkpoint: before implementing the next prompt/schema migration, align this architecture document and `implementation_plan.md` with accepted durable decisions from `prompt_enhancement_plan.md`, then proceed through staged fixtures, packet builder, prompt/schema, mock/provider normalization, scoring/storage, prompt export review, UI integration, regression/live review, and only then provider settings tuning.
-16. Split major prompt/schema changes into small implementation pieces: schema and compatibility first; packet continuity anchors and field-to-subcategory relevance mapping second; prompt simplification third; validation/scoring diagnostics fourth; UI, Markdown report, Word export, and report-pack updates fifth; eval-harness updates sixth; small 1-2 trial live validation seventh; final five-trial validation only after those checks pass. Do not embed the one-shot example until schema, continuity anchors, prompt simplification, validation, UI/export, and eval checks are working without it.
+16. Split major prompt/schema changes into small implementation pieces: schema and compatibility first; packet continuity anchors and field-to-subcategory relevance mapping second; prompt simplification third; validation/scoring diagnostics fourth; UI, Markdown report, Word export, and report-pack updates fifth; eval-harness updates sixth; small 1-2 trial live validation seventh; final five-trial validation only after those checks pass. In the active prompt implementation plan, `Phase 3` means the third point, prompt simplification; it does not refer to the older completed scoring Phase 3 in `implementation_plan.md`. Do not embed the one-shot example until schema, continuity anchors, prompt simplification, validation, UI/export, and eval checks are working without it.
 
 ## 21. Open Questions
 
@@ -1895,7 +1918,7 @@ Implementation staging:
 - Exact participant versus facilitator UI placement.
 - Exact number of previous iterations to keep raw before summarization.
 - Exact Design Confidence calibration examples after v1 playtesting.
-- Exact field-to-subcategory mapping for `design_confidence_continuity` anchors.
+- Whether the current field-to-subcategory mapping for `design_confidence_continuity` needs calibration after live playtesting.
 - Whether continuity reversal checks should block scoring, warn in eval reports, or remain facilitator-only diagnostics.
 - Whether facilitator view is hidden behind an expander or separate mode.
 - Whether final governance recommendation is generated by participants, LLM, or both.

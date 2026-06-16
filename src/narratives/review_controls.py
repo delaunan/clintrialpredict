@@ -10,7 +10,7 @@ from src.narratives.scoring import validate_and_score_review
 
 OPERATIONAL_ONLY_COMPLETION_OUTLOOK_BOUNDARY = (
     "The Completion Outlook remains unchanged because planning assumptions such as enrollment, site count, and "
-    "total duration do not directly feed the score. They still matter for whether the scenario feels operationally "
+    "Planned Total Timeline do not directly feed the score. They still matter for whether the scenario feels operationally "
     "proportionate and executable. Therefore, the impact of changes in these variables is reflected in Design "
     "Confidence instead."
 )

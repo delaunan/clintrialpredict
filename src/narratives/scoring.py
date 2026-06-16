@@ -111,11 +111,13 @@ APP_OWNED_SCORE_FIELDS = {
     "quality_assessment",
 }
 
-PARTICIPANT_REVIEW_KEYS = {
-    "medical_development_question",
-    "clinical_operations_question",
-    "strategic_field_question",
+KEY_QUESTION_FIELDS = {
+    "medical_clinical_development_question",
+    "strategic_development_question",
 }
+
+# Temporary compatibility alias for prompt/schema code during the two-question migration.
+PARTICIPANT_REVIEW_KEYS = KEY_QUESTION_FIELDS
 
 SUPPORTED_REVIEW_MODES = {
     "hidden_baseline",
@@ -388,23 +390,59 @@ def _validate_key_questions(review: dict[str, Any]) -> tuple[dict[str, Any], lis
         old_participant = review.get("participant_review")
         if isinstance(old_participant, dict):
             questions = {
-                "medical_development_question": old_participant.get("medical_development_question"),
-                "clinical_operations_question": old_participant.get("clinops_execution_question"),
-                "strategic_field_question": old_participant.get("strategic_field_question", ""),
+                "medical_clinical_development_question": (
+                    old_participant.get("medical_clinical_development_question")
+                    or old_participant.get("medical_development_question")
+                ),
+                "clinical_operations_question": (
+                    old_participant.get("clinical_operations_question")
+                    or old_participant.get("clinops_execution_question")
+                ),
+                "strategic_development_question": (
+                    old_participant.get("strategic_development_question")
+                    or old_participant.get("strategic_field_question")
+                    or old_participant.get("clinical_operations_question")
+                    or old_participant.get("clinops_execution_question")
+                ),
             }
         else:
             return {}, ["key_questions must be an object"]
 
+    normalized = {
+        "medical_clinical_development_question": (
+            questions.get("medical_clinical_development_question")
+            or questions.get("medical_development_question")
+        ),
+        "strategic_development_question": (
+            questions.get("strategic_development_question")
+            or questions.get("strategic_field_question")
+            or questions.get("clinical_operations_question")
+        ),
+    }
     errors = [
         f"key_questions.{key} must be a string"
-        for key in sorted(PARTICIPANT_REVIEW_KEYS)
-        if not isinstance(questions.get(key), str)
+        for key in sorted(KEY_QUESTION_FIELDS)
+        if not isinstance(normalized.get(key), str)
     ]
+    if errors:
+        return {
+            key: value
+            for key, value in normalized.items()
+            if isinstance(value, str)
+        }, errors
+
+    # Keep legacy aliases during migration so existing UI, reports, and cached traces degrade gracefully.
     return {
-        key: questions.get(key, "")
-        for key in sorted(PARTICIPANT_REVIEW_KEYS)
-        if isinstance(questions.get(key), str)
-    }, errors
+        "medical_clinical_development_question": normalized["medical_clinical_development_question"],
+        "strategic_development_question": normalized["strategic_development_question"],
+        "medical_development_question": normalized["medical_clinical_development_question"],
+        "clinical_operations_question": (
+            questions.get("clinical_operations_question")
+            or questions.get("clinops_execution_question")
+            or ""
+        ),
+        "strategic_field_question": normalized["strategic_development_question"],
+    }, []
 
 
 def _validate_object(value: Any, field_name: str, required: bool = True) -> tuple[dict[str, Any], list[str]]:
@@ -420,12 +458,18 @@ def _validate_review_metadata(value: Any) -> tuple[dict[str, Any], list[str]]:
     if errors:
         return {}, errors
     review_mode = metadata.get("review_mode")
-    participant_visible = metadata.get("participant_visible")
+    visible = metadata.get("visible")
+    if visible is None:
+        visible = metadata.get("participant_visible")
     if review_mode not in SUPPORTED_REVIEW_MODES:
         errors.append(f"review_metadata.review_mode must be one of {sorted(SUPPORTED_REVIEW_MODES)}")
-    if not isinstance(participant_visible, bool):
-        errors.append("review_metadata.participant_visible must be a boolean")
-    return metadata, errors
+    if not isinstance(visible, bool):
+        errors.append("review_metadata.visible must be a boolean")
+    normalized = deepcopy(metadata)
+    if isinstance(visible, bool):
+        normalized["visible"] = visible
+        normalized.setdefault("participant_visible", visible)
+    return normalized, errors
 
 
 def _validate_string_array(value: Any, field_name: str) -> list[str]:
@@ -507,6 +551,17 @@ def _validate_scenario_consistency_note(value: Any) -> tuple[dict[str, Any], lis
     if "fields_in_tension" in obj:
         errors.extend(_validate_string_array(obj.get("fields_in_tension"), "scenario_consistency_note.fields_in_tension"))
     return obj, errors
+
+
+def _validate_main_tension(review: dict[str, Any], design_confidence_analysis: dict[str, Any]) -> tuple[str, list[str]]:
+    value = review.get("main_tension")
+    if value is None:
+        value = (review.get("tradeoff_review") or {}).get("central_tension")
+    if value is None:
+        value = design_confidence_analysis.get("confidence_rationale", "")
+    if not isinstance(value, str):
+        return "", ["main_tension must be a string"]
+    return value, []
 
 
 def _has_complete_design_subcategories(validated_review: dict[str, Any]) -> bool:
@@ -612,6 +667,7 @@ def validate_review_json(review: dict[str, Any]) -> dict[str, Any]:
             "completion_outlook_analysis": {},
             "design_confidence_subcategories": {},
             "design_confidence_analysis": {},
+            "main_tension": "",
             "key_questions": {},
             "scenario_consistency_note": {},
             "continuity": {},
@@ -676,6 +732,7 @@ def validate_review_json(review: dict[str, Any]) -> dict[str, Any]:
         DESIGN_CONFIDENCE_ANALYSIS_KEYS,
         {"supporting_evidence", "limiting_evidence"},
     )
+    main_tension, main_tension_errors = _validate_main_tension(review, design_confidence_analysis)
     key_questions, question_errors = _validate_key_questions(review)
     consistency_note, consistency_errors = _validate_scenario_consistency_note(
         review.get("scenario_consistency_note")
@@ -686,6 +743,7 @@ def validate_review_json(review: dict[str, Any]) -> dict[str, Any]:
     errors.extend(metadata_errors)
     errors.extend(completion_errors)
     errors.extend(design_analysis_errors)
+    errors.extend(main_tension_errors)
     errors.extend(question_errors)
     errors.extend(consistency_errors)
     errors.extend(continuity_errors)
@@ -698,6 +756,7 @@ def validate_review_json(review: dict[str, Any]) -> dict[str, Any]:
         "completion_outlook_analysis": completion_outlook_analysis,
         "design_confidence_subcategories": validated_subcategories,
         "design_confidence_analysis": design_confidence_analysis,
+        "main_tension": main_tension,
         "key_questions": key_questions,
         "scenario_consistency_note": consistency_note,
         "continuity": continuity,

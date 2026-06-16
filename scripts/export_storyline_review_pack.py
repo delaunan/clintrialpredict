@@ -108,9 +108,8 @@ def _item_block(item: dict[str, Any], *, baseline: bool = False) -> list[str]:
     lines.extend(
         [
             "Questions:",
-            f"- Medical/development: {_narrative(item, 'medical_question')}",
-            f"- Clinical operations: {_narrative(item, 'operations_question')}",
-            f"- Strategic/field: {_narrative(item, 'strategic_question')}",
+            f"- Medical / clinical development: {_narrative(item, 'medical_question')}",
+            f"- Strategic development: {_narrative(item, 'strategic_question')}",
             "",
             "Findings:",
         ]

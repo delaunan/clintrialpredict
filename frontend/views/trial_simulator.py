@@ -9403,7 +9403,7 @@ def render_enrollment_assumption_card(row):
             source_line,
             "<div class='enrollment-assumption-line'>Click Review Scenario to update enrollment assumption.</div>",
         ]
-        muted = "Completion Score and XGBoost charts remain unchanged until model-facing Trial Features are predicted."
+        muted = "Completion Score and score charts remain unchanged until score-driving Trial Features are predicted."
     elif metadata.get("enrollment_status") == "not_available" or not metadata:
         body_lines = [
             f"<div class='enrollment-assumption-line'><strong>Current:</strong> {html.escape(current_text)}</div>",
@@ -9484,7 +9484,7 @@ def render_site_assumption_card(row):
             source_line,
             "<div class='enrollment-assumption-line'>Click Review Scenario to update site-count benchmark position.</div>",
         ]
-        muted = "Completion Score and XGBoost charts remain unchanged until model-facing Trial Features are predicted."
+        muted = "Completion Score and score charts remain unchanged until score-driving Trial Features are predicted."
     elif metadata.get("site_count_status") == "not_available" or not metadata:
         body_lines = [
             f"<div class='enrollment-assumption-line'><strong>Current:</strong> {html.escape(current_text)}</div>",
@@ -9587,7 +9587,7 @@ def render_duration_assumption_card(row):
             source_line,
             "<div class='enrollment-assumption-line'>Click Review Scenario to update duration benchmark position.</div>",
         ]
-        muted = "Completion Score and XGBoost charts remain unchanged until model-facing Trial Features are predicted."
+        muted = "Completion Score and score charts remain unchanged until score-driving Trial Features are predicted."
     elif metadata.get("duration_status") == "not_available" or not metadata:
         body_lines = [
             f"<div class='enrollment-assumption-line'><strong>Current:</strong> {html.escape(current_text)}</div>",
@@ -10256,9 +10256,12 @@ def render_scenario_review_report(row, trace=None, snapshot=None):
         _quality_review_metric("Total", _format_candidate_score(total_scenario_score)),
     ])
 
-    central_tension = trace.get("central_tension") or (
-        (trace.get("validated_review") or {}).get("tradeoff_review") or {}
-    ).get("central_tension")
+    central_tension = (
+        trace.get("central_tension")
+        or validated_review.get("main_tension")
+        or design_analysis.get("confidence_rationale")
+        or ((trace.get("validated_review") or {}).get("tradeoff_review") or {}).get("central_tension")
+    )
     report_title = "Baseline Scenario Review" if trace.get("hidden_baseline") else "Scenario Review"
     pending_review_html = (
         "<div class='simulation-stale-notice scenario-review-pending-notice'>"
@@ -10281,15 +10284,15 @@ def render_scenario_review_report(row, trace=None, snapshot=None):
         else ""
     )
     medical_question = (
-        key_questions.get("medical_development_question")
+        key_questions.get("medical_clinical_development_question")
+        or participant.get("medical_clinical_development_question")
+        or key_questions.get("medical_development_question")
         or participant.get("medical_development_question")
     )
-    operations_question = (
-        key_questions.get("clinical_operations_question")
-        or participant.get("clinops_execution_question")
-    )
     strategic_question = (
-        key_questions.get("strategic_field_question")
+        key_questions.get("strategic_development_question")
+        or participant.get("strategic_development_question")
+        or key_questions.get("strategic_field_question")
         or participant.get("strategic_field_question")
     )
     narrative_html = "".join([
@@ -10297,9 +10300,8 @@ def render_scenario_review_report(row, trace=None, snapshot=None):
         _scenario_review_text_block("Completion Outlook Analysis", completion_text),
         _scenario_review_text_block("Design Confidence Analysis", design_text),
         _scenario_review_text_block("Central Tension", central_tension),
-        _scenario_review_text_block("Medical Development Question", medical_question),
-        _scenario_review_text_block("Clinical Operations Question", operations_question),
-        _scenario_review_text_block("Strategic Field Question", strategic_question),
+        _scenario_review_text_block("Medical / Clinical Development Question", medical_question),
+        _scenario_review_text_block("Strategic Development Question", strategic_question),
     ])
 
     cached_note = narrative_trace_provider_note(trace)

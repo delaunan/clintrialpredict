@@ -84,6 +84,11 @@ ACTIVE_OPERATIONAL_ASSUMPTION_KEYS = (
     "planned_sites",
     "planned_duration_months",
 )
+OPERATIONAL_ASSUMPTION_DISPLAY_LABELS = {
+    "planned_enrollment": "Planned Enrollment",
+    "planned_sites": "Planned Sites",
+    "planned_duration_months": "Planned Total Timeline",
+}
 
 REFERENCE_PACK_DIR = Path(__file__).resolve().parents[2] / "frontend" / "data" / "docs" / "narrative_reference_packs"
 REFERENCE_PACK_MANIFEST = REFERENCE_PACK_DIR / "pack_manifest_v1.json"
@@ -117,6 +122,141 @@ ENDPOINT_STATISTICAL_REFERENCE_FIELDS = {
     "primary_duration_months_ml",
     "text_context.primary_outcomes_ui",
 }
+COMPACT_FIELD_MEANINGS = {
+    "therapeutic_area_ml": "Clinical domain: disease context, endpoint norms, operational benchmarks, calibration limits.",
+    "gbd_cause_id_3_ml": "Disease category: clinical context, patient relevance, feasibility, similar-trial comparisons.",
+    "is_rare_disease_ml": "Rare-condition flag: feasible population size, recruitment difficulty, evidence expectations.",
+    "phase_ml": "Development phase: evidence ambition, endpoint maturity, comparator strength, population scope.",
+    "strategic_ambition_ml": "Development objective: learning, signal detection, or confirmatory evidence standard.",
+    "target_precedent_ml": "Target precedent: biological risk and evidentiary burden.",
+    "target_pathway_class_ml": "Pathway/mechanism class: plausibility, novelty, modality risk, endpoint fit.",
+    "therapeutic_modality_ml": "Product modality: mechanism, delivery burden, safety oversight, site capability.",
+    "innovation_tier_ml": "Innovation level: uncertainty, precedent, evidence burden, safeguard needs.",
+    "intervention_model_ml": "Arm structure: comparison credibility, bias risk, burden, operational complexity.",
+    "primary_purpose_ml": "Study purpose: treatment, prevention, supportive-care, or other decision question.",
+    "adaptive_design_ml": "Adaptive/static design: flexibility, governance burden, inference complexity.",
+    "endpoint_rigor_ml": "Endpoint rigor: clinical meaningfulness, bias risk, maturity, decision interpretability.",
+    "endpoint_structure_ml": "Endpoint structure: primary-question clarity, multiplicity, component relevance.",
+    "biomarker_stratification_ml": "Biomarker strategy: enrichment, treatment-effect clarity, recruitment feasibility.",
+    "patient_severity_ml": "Patient severity: risk tolerance, endpoint relevance, ethical threshold.",
+    "line_of_therapy_ml": "Treatment line: unmet need, comparator expectations, patient-selection fit.",
+    "gender_ml": "Gender scope: target-population fit, generalizability, justified restrictions.",
+    "healthy_volunteers_ml": "Healthy-volunteer flag: phase fit, safety tolerance, endpoint relevance.",
+    "adult_ml": "Adult eligibility: population fit, generalizability, ethical threshold.",
+    "child_ml": "Pediatric eligibility: safeguards, dosing uncertainty, endpoint relevance.",
+    "older_adult_ml": "Older-adult eligibility: representativeness, comorbidity relevance, safety monitoring.",
+    "masking_ml": "Masking: bias control, endpoint subjectivity, operational feasibility.",
+    "allocation_ml": "Allocation: comparison credibility, selection bias, causal inference support.",
+    "has_dmc_ml": "DMC/oversight: safety governance, risk proportionality, vulnerable-population protection.",
+    "has_placebo_ml": "Placebo control: assay sensitivity, ethics, comparator credibility.",
+    "comparator_benchmark_ml": "Comparator strategy: treatment-effect interpretability versus current care or control.",
+    "administration_complexity_ml": "Administration complexity: site capability, participant burden, oversight needs.",
+    "number_of_arms_ml": "Arm count: evidentiary breadth, multiplicity, recruitment and site burden.",
+    "sponsor_tier_ml": "Sponsor scale proxy: execution capability and trial-footprint context only.",
+    "primary_duration_months_ml": "Max Endpoint Duration: primary endpoint assessment time horizon, endpoint maturity, attrition risk.",
+    "title": "Trial title: concise identity and high-level objective context.",
+    "summary_ui": "Study summary: design rationale, intent, and structured-field coherence.",
+    "conditions_ui": "Condition text: indication and population coherence.",
+    "interventions_ui": "Intervention text: modality, mechanism, delivery complexity, comparator coherence.",
+    "primary_outcomes_ui": "Primary outcome text: endpoint coherence, structure, timing, interpretability.",
+}
+DESIGN_CONFIDENCE_SUBCATEGORY_LABELS = {
+    "phase_intent_alignment": "Phase & Intent Alignment",
+    "endpoint_evidence_strength": "Endpoint & Evidence Strength",
+    "target_population_alignment": "Target Population Alignment",
+    "operational_burden_balance": "Operational Burden Balance",
+}
+DESIGN_CONFIDENCE_RELEVANT_FIELDS = {
+    "phase_intent_alignment": {
+        "biomarker_stratification_ml",
+        "phase_ml",
+        "strategic_ambition_ml",
+        "is_rare_disease_ml",
+        "line_of_therapy_ml",
+        "patient_severity_ml",
+        "target_precedent_ml",
+        "target_pathway_class_ml",
+        "therapeutic_modality_ml",
+        "administration_complexity_ml",
+        "innovation_tier_ml",
+        "primary_purpose_ml",
+        "has_dmc_ml",
+        "comparator_benchmark_ml",
+        "endpoint_rigor_ml",
+        "text_context.title",
+        "text_context.summary_ui",
+    },
+    "endpoint_evidence_strength": {
+        "adaptive_design_ml",
+        "allocation_ml",
+        "biomarker_stratification_ml",
+        "comparator_benchmark_ml",
+        "endpoint_rigor_ml",
+        "endpoint_structure_ml",
+        "has_placebo_ml",
+        "has_dmc_ml",
+        "masking_ml",
+        "number_of_arms_ml",
+        "primary_duration_months_ml",
+        "therapeutic_modality_ml",
+        "administration_complexity_ml",
+        "text_context.primary_outcomes_ui",
+        "text_context.summary_ui",
+    },
+    "target_population_alignment": {
+        "adult_ml",
+        "child_ml",
+        "gender_ml",
+        "gbd_cause_id_3_ml",
+        "healthy_volunteers_ml",
+        "is_rare_disease_ml",
+        "line_of_therapy_ml",
+        "older_adult_ml",
+        "patient_severity_ml",
+        "biomarker_stratification_ml",
+        "text_context.conditions_ui",
+        "text_context.summary_ui",
+    },
+    "operational_burden_balance": {
+        "administration_complexity_ml",
+        "adaptive_design_ml",
+        "allocation_ml",
+        "biomarker_stratification_ml",
+        "comparator_benchmark_ml",
+        "endpoint_rigor_ml",
+        "endpoint_structure_ml",
+        "has_dmc_ml",
+        "is_rare_disease_ml",
+        "intervention_model_ml",
+        "line_of_therapy_ml",
+        "masking_ml",
+        "number_of_arms_ml",
+        "patient_severity_ml",
+        "primary_duration_months_ml",
+        "sponsor_tier_ml",
+        "therapeutic_modality_ml",
+        "operational_assumptions.planned_enrollment",
+        "operational_assumptions.planned_sites",
+        "operational_assumptions.planned_duration_months",
+        "text_context.interventions_ui",
+        "text_context.primary_outcomes_ui",
+        "text_context.summary_ui",
+    },
+}
+
+
+def design_confidence_relevant_changed_fields(
+    subcategory_name: str,
+    changed_fields: list[str],
+) -> list[str]:
+    """Return changed packet fields that are directly relevant to one Design Confidence subcategory."""
+    relevant = DESIGN_CONFIDENCE_RELEVANT_FIELDS.get(subcategory_name, set())
+    matched: list[str] = []
+    for field in changed_fields:
+        field = str(field)
+        if field in relevant or any(field.startswith(f"{prefix}.") for prefix in relevant):
+            matched.append(field)
+    return matched
 
 
 def json_safe(value: Any) -> Any:
@@ -166,7 +306,11 @@ def _taxonomy_field_meanings() -> dict[str, str]:
 
 def _select_field_meanings(keys: tuple[str, ...]) -> dict[str, str]:
     meanings = _taxonomy_field_meanings()
-    return {key: meanings[key] for key in keys if key in meanings}
+    return {
+        key: COMPACT_FIELD_MEANINGS.get(key, meanings[key])
+        for key in keys
+        if key in meanings or key in COMPACT_FIELD_MEANINGS
+    }
 
 
 def _extract_prompt_safe_summary(text: str) -> str:
@@ -546,8 +690,9 @@ def _changed_field_entry(
     current_label: Any = None,
     previous_label: Any = None,
     baseline_label: Any = None,
+    display_label: str | None = None,
 ) -> dict[str, Any]:
-    return {
+    entry = {
         "field": field_id,
         "change_type": change_type,
         "baseline_value": json_safe(baseline_value),
@@ -558,6 +703,9 @@ def _changed_field_entry(
         "current_label": json_safe(_first_present(current_label, current_value)),
         "changed_by_user": True,
     }
+    if display_label:
+        entry["display_label"] = display_label
+    return entry
 
 
 def _changed_terms(previous_value: Any, current_value: Any) -> tuple[list[str], list[str]]:
@@ -652,6 +800,7 @@ def _field_changes(
                 current_value=current_operational.get(assumption_key),
                 previous_value=previous_operational.get(assumption_key),
                 baseline_value=baseline_operational.get(assumption_key),
+                display_label=OPERATIONAL_ASSUMPTION_DISPLAY_LABELS.get(assumption_key),
                 previous_label=((previous_snapshot or {}).get("previous_operational_display_values") or {}).get(
                     assumption_key
                 ),
@@ -725,6 +874,7 @@ def _compact_review_context(
         ),
         "central_tension": (
             trace.get("central_tension")
+            or validated.get("main_tension")
             or design_confidence_analysis.get("confidence_rationale")
             or tradeoff_review.get("central_tension")
         ),
@@ -746,10 +896,26 @@ def _compact_review_context(
         "key_questions": {
             "completion_outlook_summary": completion_outlook.get("risk_pattern_summary"),
             "design_confidence_summary": design_confidence_analysis.get("summary"),
-            "medical_development_question": participant.get("medical_development_question"),
+            "medical_clinical_development_question": (
+                participant.get("medical_clinical_development_question")
+                or participant.get("medical_development_question")
+            ),
+            "strategic_development_question": (
+                participant.get("strategic_development_question")
+                or participant.get("strategic_field_question")
+                or participant.get("clinical_operations_question")
+                or participant.get("clinops_execution_question")
+            ),
+            "medical_development_question": (
+                participant.get("medical_development_question")
+                or participant.get("medical_clinical_development_question")
+            ),
             "clinical_operations_question": participant.get("clinical_operations_question")
             or participant.get("clinops_execution_question"),
-            "strategic_field_question": participant.get("strategic_field_question"),
+            "strategic_field_question": (
+                participant.get("strategic_field_question")
+                or participant.get("strategic_development_question")
+            ),
         },
         "continuity": {
             "prior_concerns_resolved": continuity.get("prior_concerns_resolved") or [],
@@ -789,6 +955,48 @@ def _compact_review_context(
         compact["baseline_consistency_flags"] = {}
 
     return json_safe(compact)
+
+
+def _design_confidence_continuity(
+    previous_review_trace: dict[str, Any] | None,
+    changed_fields: list[str],
+) -> dict[str, Any]:
+    previous = _compact_review_context(previous_review_trace)
+    if not previous:
+        return {
+            "available": False,
+            "reason": "first_visible_iteration_or_no_prior_visible_review",
+            "subcategories": {},
+        }
+
+    previous_ratings = previous.get("design_confidence_subcategory_ratings") or {}
+    previous_contributions = previous.get("design_confidence_contributions") or {}
+    subcategories: dict[str, Any] = {}
+    for subcategory_name, label in DESIGN_CONFIDENCE_SUBCATEGORY_LABELS.items():
+        rating = previous_ratings.get(subcategory_name) or {}
+        contribution = previous_contributions.get(subcategory_name) or {}
+        relevant_changes = design_confidence_relevant_changed_fields(subcategory_name, changed_fields)
+        subcategories[subcategory_name] = {
+            "label": label,
+            "previous_rating": rating.get("rating"),
+            "previous_score_materiality": rating.get("score_materiality"),
+            "previous_points": contribution.get("points"),
+            "previous_raw_points": contribution.get("raw_points"),
+            "previous_rationale": rating.get("rationale"),
+            "previous_evidence_fields": rating.get("evidence_fields") or [],
+            "current_relevant_changed_fields": relevant_changes,
+        }
+    return json_safe({
+        "available": True,
+        "source_iteration_id": previous.get("iteration_id"),
+        "source_input_hash": previous.get("input_hash"),
+        "changed_fields": changed_fields,
+        "instruction": (
+            "Use this object as deterministic continuity context for Design Confidence subcategories. "
+            "The current scenario is still scored fresh, but large subcategory shifts need current relevant evidence."
+        ),
+        "subcategories": subcategories,
+    })
 
 
 def build_review_packet(
@@ -870,6 +1078,7 @@ def build_review_packet(
             "changed_fields": changed_fields,
             "field_changes": _field_changes(current_snapshot, previous_snapshot, baseline_snapshot),
             "text_change_evidence": _text_change_evidence(current_snapshot, previous_snapshot, baseline_snapshot),
+            "design_confidence_continuity": _design_confidence_continuity(previous_review_trace, changed_fields),
             "compact_storyline_memory": compact_storyline_memory,
         },
     }

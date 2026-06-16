@@ -247,7 +247,7 @@ def _domain(
     }
 
 
-def _participant_review(
+def _visible_review(
     what_changed: str,
     moved: str,
     signal: str,
@@ -259,9 +259,11 @@ def _participant_review(
     return {
         "completion_outlook_summary": " ".join(part for part in [what_changed, moved] if part).strip(),
         "design_confidence_summary": " ".join(part for part in [signal, tradeoff] if part).strip(),
+        "medical_clinical_development_question": medical_question,
+        "strategic_development_question": strategic_question or clinops_question,
         "medical_development_question": medical_question,
         "clinical_operations_question": clinops_question,
-        "strategic_field_question": strategic_question,
+        "strategic_field_question": strategic_question or clinops_question,
     }
 
 
@@ -269,7 +271,7 @@ def _review(
     *,
     movement_summary: str,
     design_subcategories: dict[str, dict[str, Any]],
-    participant_review: dict[str, str],
+    visible_review: dict[str, str],
     storyline_update: str,
     review_mode: str = "first_visible_iteration",
     new_concerns: list[str] | None = None,
@@ -298,10 +300,11 @@ def _review(
             ),
             "fields_in_tension": ["structured fields", "Trial description fields"],
         }
+    main_tension = "The main tension is whether completion favorability and design defensibility move in the same direction."
     return {
         "review_metadata": {
             "review_mode": review_mode,
-            "participant_visible": review_mode != "hidden_baseline",
+            "visible": review_mode != "hidden_baseline",
         },
         "completion_outlook_analysis": {
             "risk_pattern_summary": movement_summary,
@@ -320,17 +323,21 @@ def _review(
         },
         "design_confidence_subcategories": design_subcategories,
         "design_confidence_analysis": {
-            "summary": participant_review.get("design_confidence_summary", ""),
-            "confidence_rationale": (
-                "The main tension is whether completion favorability and design defensibility move in the same direction."
-            ),
+            "summary": visible_review.get("design_confidence_summary", ""),
+            "confidence_rationale": main_tension,
             "supporting_evidence": [design_gain] if design_gain else [],
             "limiting_evidence": [design_sacrifice] if design_sacrifice else [],
         },
+        "main_tension": main_tension,
         "key_questions": {
-            "medical_development_question": participant_review.get("medical_development_question", ""),
-            "clinical_operations_question": participant_review.get("clinical_operations_question", ""),
-            "strategic_field_question": participant_review.get("strategic_field_question", ""),
+            "medical_clinical_development_question": visible_review.get(
+                "medical_clinical_development_question",
+                visible_review.get("medical_development_question", ""),
+            ),
+            "strategic_development_question": visible_review.get(
+                "strategic_development_question",
+                visible_review.get("strategic_field_question", ""),
+            ),
         },
         "scenario_consistency_note": consistency_note,
         "continuity": {
@@ -366,13 +373,13 @@ def _expected(
     total_scenario_score: float,
     subcategories: dict[str, float],
     review_needed: bool = True,
-    visible_to_participant_initially: bool = True,
+    visible_initially: bool = True,
     storyline_behavior: str,
     reuse_previous_review: bool = False,
 ) -> dict[str, Any]:
     return {
         "review_needed": review_needed,
-        "visible_to_participant_initially": visible_to_participant_initially,
+        "visible_initially": visible_initially,
         "reuse_previous_review": reuse_previous_review,
         "expected_design_confidence": design_confidence,
         "expected_total_scenario_score": total_scenario_score,
@@ -416,7 +423,7 @@ def _packet(
             "current_snapshot_id": "fixture-current",
             "iteration_number": 1 if previous_completion_score is not None else 0,
             "changed_fields": changed_fields or [],
-            "compact_storyline_memory": "Baseline was balanced; no prior participant concern.",
+            "compact_storyline_memory": "Baseline was balanced; no prior visible concern.",
         }
     )
     return base
@@ -438,7 +445,7 @@ def _fixture(
     description: str,
     packet: dict[str, Any],
     design_subcategories: dict[str, dict[str, Any]] | None,
-    participant_review: dict[str, str] | None,
+    visible_review: dict[str, str] | None,
     expected: dict[str, Any],
     movement_summary: str,
     storyline_update: str = "",
@@ -447,11 +454,11 @@ def _fixture(
     review_mode: str = "first_visible_iteration",
 ) -> dict[str, Any]:
     review = None
-    if design_subcategories is not None and participant_review is not None:
+    if design_subcategories is not None and visible_review is not None:
         review = _review(
             movement_summary=movement_summary,
             design_subcategories=design_subcategories,
-            participant_review=participant_review,
+            visible_review=visible_review,
             storyline_update=storyline_update,
             new_concerns=new_concerns,
             operational_statuses=operational_statuses,
@@ -474,13 +481,13 @@ CONTRACT_FIXTURES: list[dict[str, Any]] = [
         description="Hidden existing-study baseline review generated once from the original selected trial.",
         packet=_packet(previous_completion_score=None, changed_fields=[]),
         design_subcategories=_neutral_design(),
-        participant_review=_participant_review(
+        visible_review=_visible_review(
             "This is the original selected-trial baseline.",
             "No model-score movement is reviewed at baseline.",
             "The baseline is balanced and creates qualitative memory only.",
-            "No participant trade-off has been introduced yet.",
-            "Which baseline design concern should the team watch as the scenario evolves?",
-            "Which operational assumption would be most fragile if the team increases design ambition?",
+            "No visible trade-off has been introduced yet.",
+            "Which baseline design concern is most likely to matter as the scenario evolves?",
+            "Which operational assumption would be most fragile if design ambition increases?",
         ),
         expected=_expected(
             design_confidence=0,
@@ -491,11 +498,11 @@ CONTRACT_FIXTURES: list[dict[str, Any]] = [
                 "target_population_alignment": 0,
                 "operational_burden_balance": 0,
             },
-            visible_to_participant_initially=False,
+            visible_initially=False,
             storyline_behavior="create_hidden_baseline_memory_only",
         ),
-        movement_summary="Baseline review anchors later comparisons; no participant change has occurred.",
-        storyline_update="Baseline anchored with balanced Design Confidence and no participant-introduced concern.",
+        movement_summary="Baseline review anchors later comparisons; no visible scenario edit has occurred.",
+        storyline_update="Baseline anchored with balanced Design Confidence and no visible edit concern.",
         operational_statuses=["typical"],
         review_mode="hidden_baseline",
     ),
@@ -527,7 +534,7 @@ CONTRACT_FIXTURES: list[dict[str, Any]] = [
             "phase_intent_alignment": _domain("weak", "Confirmatory intent is less well matched to weakened evidence choices.", ["strategic_ambition_ml", "endpoint_rigor_ml"]),
             "endpoint_evidence_strength": _domain("conflicting", "Endpoint rigor, comparator strength, and endpoint timing weaken together.", ["endpoint_rigor_ml", "comparator_benchmark_ml", "primary_duration_months_ml"], "moderate"),
         },
-        participant_review=_participant_review(
+        visible_review=_visible_review(
             "Endpoint rigor, comparator framing, and primary endpoint duration changed.",
             "The score could have moved upward because the design may be simpler and shorter.",
             "Design Confidence is challenged by weaker endpoint and comparator evidence.",
@@ -565,13 +572,13 @@ CONTRACT_FIXTURES: list[dict[str, Any]] = [
             top_feature_impact_changes=["number_of_arms_ml"],
         ),
         design_subcategories=_neutral_design(),
-        participant_review=_participant_review(
+        visible_review=_visible_review(
             "The number of arms changed.",
             "The score may have improved because the execution footprint is simpler.",
             "No supported Design Confidence adjustment is triggered by simplicity alone.",
             "A simpler footprint is not automatically better or worse without evidence of design impact.",
             "What decision would the simplified arm structure still support?",
-            "Does the simpler footprint preserve the minimum operational information the team needs?",
+            "Does the simpler footprint preserve the minimum operational information needed for the intended decision?",
         ),
         expected=_expected(
             design_confidence=0,
@@ -607,7 +614,7 @@ CONTRACT_FIXTURES: list[dict[str, Any]] = [
             "endpoint_evidence_strength": _domain("supportive", "Comparator and masking support interpretability.", ["comparator_benchmark_ml", "masking_ml"]),
             "operational_burden_balance": _domain("supportive", "Oversight is proportionate to the confirmatory setting.", ["has_dmc_ml", "patient_severity_ml"]),
         },
-        participant_review=_participant_review(
+        visible_review=_visible_review(
             "Comparator, masking, and oversight changed.",
             "The score may have improved through a more coherent execution and evidence pattern.",
             "Design Confidence improves modestly because evidence controls and governance align.",
@@ -651,7 +658,7 @@ CONTRACT_FIXTURES: list[dict[str, Any]] = [
             "target_population_alignment": _domain("supportive", "Older adults and biomarker strategy improve relevance to the intended population.", ["older_adult_ml", "biomarker_stratification_ml"], "moderate"),
             "operational_burden_balance": _domain("supportive", "Oversight is proportionate to added population and duration complexity.", ["has_dmc_ml", "patient_severity_ml"], "moderate"),
         },
-        participant_review=_participant_review(
+        visible_review=_visible_review(
             "Population, biomarker, oversight, and duration choices became more demanding.",
             "The score may have declined because the design is harder to execute.",
             "Design Confidence improves because the added difficulty is tied to relevance, endpoint maturity, and governance.",
@@ -699,11 +706,11 @@ CONTRACT_FIXTURES: list[dict[str, Any]] = [
             **_neutral_design(),
             "operational_burden_balance": _domain("weak", "Enrollment is above benchmark high and only partly supported by the biomarker-defined design.", ["operational_assumptions.planned_enrollment.enrollment_status", "operational_assumptions.planned_enrollment.support_level"], "high"),
         },
-        participant_review=_participant_review(
+        visible_review=_visible_review(
             "Only enrollment and site assumptions changed.",
-            "The model score did not move because operational assumptions are outside XGBoost.",
+            "The Completion Outlook did not move because operational assumptions are outside the score-input fields.",
             "Design Confidence decreases because the operational footprint is only partly supported.",
-            "The scenario stress-tests feasibility without changing model-facing evidence fields.",
+            "The scenario stress-tests feasibility without changing Completion Outlook score-input fields.",
             "What clinical rationale makes this enrollment target necessary?",
             "What site activation or recruitment evidence would make this footprint credible?",
         ),
@@ -718,7 +725,7 @@ CONTRACT_FIXTURES: list[dict[str, Any]] = [
             },
             storyline_behavior="append_iteration_without_model_score_delta",
         ),
-        movement_summary="The Completion Score did not move because model-facing fields did not change.",
+        movement_summary="The Completion Score did not move because Completion Outlook score-input fields did not change.",
         new_concerns=["ambitious_enrollment_support"],
         operational_statuses=["above_benchmark_high", "ambitious"],
     ),
@@ -738,9 +745,9 @@ CONTRACT_FIXTURES: list[dict[str, Any]] = [
             "phase_intent_alignment": _domain("weak", "Confirmatory durable-control intent conflicts with short-term endpoint text.", ["summary_ui", "primary_outcomes_ui", "strategic_ambition_ml"]),
             "endpoint_evidence_strength": _domain("weak", "Endpoint text and structured endpoint duration are misaligned.", ["primary_outcomes_ui", "primary_duration_months_ml"]),
         },
-        participant_review=_participant_review(
+        visible_review=_visible_review(
             "The endpoint text changed while structured Trial Features stayed the same.",
-            "The Completion Score did not move because XGBoost input fields did not change.",
+            "The Completion Score did not move because Completion Outlook score-input fields did not change.",
             "Design Confidence decreases because text now weakens endpoint and intent coherence.",
             "The trade-off is narrative clarity versus contradiction with the structured scenario.",
             "Is the endpoint text intended to replace or only clarify the endpoint strategy?",
@@ -778,7 +785,7 @@ CONTRACT_FIXTURES: list[dict[str, Any]] = [
             **_neutral_design(),
             "endpoint_evidence_strength": _domain("weak", "Structured endpoint complexity and endpoint text disagree.", ["endpoint_structure_ml", "primary_outcomes_ui"]),
         },
-        participant_review=_participant_review(
+        visible_review=_visible_review(
             "Endpoint structure and endpoint text changed together.",
             "The score may have moved because the structured endpoint setting changed.",
             "Design Confidence decreases because the evidence hierarchy is unclear.",
@@ -815,7 +822,7 @@ CONTRACT_FIXTURES: list[dict[str, Any]] = [
             **_neutral_design(),
             "target_population_alignment": _domain("conflicting", "Structured biomarker restriction conflicts with all-comer conditions text.", ["biomarker_stratification_ml", "conditions_ui"]),
         },
-        participant_review=_participant_review(
+        visible_review=_visible_review(
             "Biomarker strategy and indication text no longer match.",
             "The score may have declined because the population is more selective.",
             "Design Confidence decreases because the intended population is ambiguous.",
@@ -857,13 +864,13 @@ CONTRACT_FIXTURES: list[dict[str, Any]] = [
             "phase_intent_alignment": _domain("conflicting", "Pivotal ambition is not supported by exploratory endpoint and weak comparator choices.", ["strategic_ambition_ml", "endpoint_rigor_ml", "comparator_benchmark_ml"]),
             "endpoint_evidence_strength": _domain("conflicting", "Endpoint and comparator choices weaken decision strength.", ["endpoint_rigor_ml", "comparator_benchmark_ml"]),
         },
-        participant_review=_participant_review(
+        visible_review=_visible_review(
             "Development intent, endpoint rigor, and comparator choices changed.",
             "The score may have improved despite a weaker evidence posture.",
             "Design Confidence decreases because ambition and evidence support diverge.",
             "The scenario may be easier to complete but less defensible for the stated decision.",
             "What decision can this evidence package credibly support?",
-            "Would the team run the same operational plan for an exploratory rather than pivotal question?",
+            "Would the same operational plan remain proportionate for an exploratory rather than pivotal question?",
         ),
         expected=_expected(
             design_confidence=-6.0,
@@ -898,7 +905,7 @@ CONTRACT_FIXTURES: list[dict[str, Any]] = [
             "phase_intent_alignment": _domain("weak", "Complex modality increases the need for explicit development rationale.", ["therapeutic_modality_ml", "phase_ml"]),
             "operational_burden_balance": _domain("conflicting", "Complex administration without DMC creates a governance mismatch.", ["therapeutic_modality_ml", "administration_complexity_ml", "has_dmc_ml"]),
         },
-        participant_review=_participant_review(
+        visible_review=_visible_review(
             "Modality, administration complexity, and DMC status changed.",
             "The score may have declined because modality and execution complexity increased.",
             "Design Confidence decreases because governance is not proportionate to the complexity.",
@@ -931,12 +938,12 @@ CONTRACT_FIXTURES: list[dict[str, Any]] = [
             top_feature_impact_changes=["sponsor_tier_ml"],
         ),
         design_subcategories=_neutral_design(),
-        participant_review=_participant_review(
-            "Sponsor tier changed and Completion Outlook moved materially.",
-            "The model may associate the revised sponsor tier with stronger completion patterns.",
-            "Design Confidence remains neutral because sponsor tier alone is not a design-strengthening action.",
-            "A large model movement does not automatically justify a design adjustment.",
-            "What design feature, separate from sponsor capability, actually changes the evidence value?",
+        visible_review=_visible_review(
+            "Organization tier changed and Completion Outlook moved materially.",
+            "The score pattern may associate the revised organization tier with stronger completion patterns.",
+            "Design Confidence remains neutral because organization tier alone is not a design-strengthening action.",
+            "A large Completion Outlook movement does not automatically justify a design adjustment.",
+            "What design feature, separate from organization capability, actually changes the evidence value?",
             "What execution assumption changed, if any, beyond organizational capability?",
         ),
         expected=_expected(
@@ -966,7 +973,7 @@ CONTRACT_FIXTURES: list[dict[str, Any]] = [
             },
         ),
         design_subcategories=None,
-        participant_review=None,
+        visible_review=None,
         expected=_expected(
             design_confidence=0,
             total_scenario_score=68,
@@ -1113,8 +1120,8 @@ def validate_contract_fixtures(fixtures: list[dict[str, Any]] | None = None) -> 
         expected_mode = "hidden_baseline" if scenario_type == "baseline" else "first_visible_iteration"
         if metadata.get("review_mode") != expected_mode:
             errors.append(f"{fixture_id}: review_metadata.review_mode should be {expected_mode}")
-        if metadata.get("participant_visible") is not (expected_mode != "hidden_baseline"):
-            errors.append(f"{fixture_id}: review_metadata.participant_visible mismatch for {expected_mode}")
+        if metadata.get("visible") is not (expected_mode != "hidden_baseline"):
+            errors.append(f"{fixture_id}: review_metadata.visible mismatch for {expected_mode}")
 
         subcategories = review.get("design_confidence_subcategories")
         if not isinstance(subcategories, dict):
@@ -1152,6 +1159,7 @@ def validate_contract_fixtures(fixtures: list[dict[str, Any]] | None = None) -> 
             "completion_outlook_analysis",
             "design_confidence_subcategories",
             "design_confidence_analysis",
+            "main_tension",
             "key_questions",
             "scenario_consistency_note",
             "continuity",
