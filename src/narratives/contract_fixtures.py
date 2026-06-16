@@ -235,10 +235,38 @@ def _domain(
     rationale: str,
     evidence_fields: list[str],
     score_materiality: str | None = None,
+    movement_direction: str | None = None,
+    movement_materiality: str | None = None,
+    effect_role: str | None = None,
 ) -> dict[str, Any]:
+    materiality = score_materiality or _default_score_materiality(rating)
+    if movement_direction is None:
+        movement_direction = {
+            "strong": "improved",
+            "supportive": "improved",
+            "balanced": "unchanged",
+            "weak": "weakened",
+            "conflicting": "worsened",
+        }.get(rating, "unchanged")
+    if movement_materiality is None:
+        movement_materiality = {
+            "minimal": "minor",
+            "low": "minor",
+            "moderate": "moderate",
+            "high": "major",
+            "very_high": "major",
+        }.get(materiality, "none")
+        if movement_direction == "unchanged":
+            movement_materiality = "none"
+    if effect_role is None:
+        effect_role = "unchanged" if movement_direction == "unchanged" else "independent"
     return {
+        "current_state": rating,
+        "movement_direction": movement_direction,
+        "movement_materiality": movement_materiality,
+        "effect_role": effect_role,
         "rating": rating,
-        "score_materiality": score_materiality or _default_score_materiality(rating),
+        "score_materiality": materiality,
         "rationale": rationale,
         "evidence_fields": evidence_fields,
         "short_rationale": rationale.split(".", 1)[0][:80],
@@ -543,11 +571,11 @@ CONTRACT_FIXTURES: list[dict[str, Any]] = [
             "Would the shorter, simpler design still justify the same operational commitment?",
         ),
         expected=_expected(
-            design_confidence=-5.5,
-            total_scenario_score=68.5,
+            design_confidence=-2,
+            total_scenario_score=72,
             subcategories={
-                "phase_intent_alignment": -1.5,
-                "endpoint_evidence_strength": -4.0,
+                "phase_intent_alignment": -1,
+                "endpoint_evidence_strength": -1,
                 "target_population_alignment": 0,
                 "operational_burden_balance": 0,
             },
@@ -667,13 +695,13 @@ CONTRACT_FIXTURES: list[dict[str, Any]] = [
             "Which execution controls would be needed to make the added burden credible?",
         ),
         expected=_expected(
-            design_confidence=4.5,
-            total_scenario_score=66.5,
+            design_confidence=3,
+            total_scenario_score=65,
             subcategories={
                 "phase_intent_alignment": 0,
-                "endpoint_evidence_strength": 1.5,
-                "target_population_alignment": 1.5,
-                "operational_burden_balance": 1.5,
+                "endpoint_evidence_strength": 1,
+                "target_population_alignment": 1,
+                "operational_burden_balance": 1,
             },
             storyline_behavior="append_iteration_where_design_confidence_moderates_score_decline",
         ),
@@ -754,11 +782,11 @@ CONTRACT_FIXTURES: list[dict[str, Any]] = [
             "Should the operational duration still be interpreted against the original endpoint maturity?",
         ),
         expected=_expected(
-            design_confidence=-3.0,
-            total_scenario_score=65,
+            design_confidence=-2,
+            total_scenario_score=66,
             subcategories={
-                "phase_intent_alignment": -1.5,
-                "endpoint_evidence_strength": -1.5,
+                "phase_intent_alignment": -1,
+                "endpoint_evidence_strength": -1,
                 "target_population_alignment": 0,
                 "operational_burden_balance": 0,
             },
@@ -794,11 +822,11 @@ CONTRACT_FIXTURES: list[dict[str, Any]] = [
             "Would operational planning change if the endpoint structure is composite rather than single?",
         ),
         expected=_expected(
-            design_confidence=-1.5,
-            total_scenario_score=68.5,
+            design_confidence=-1,
+            total_scenario_score=69,
             subcategories={
                 "phase_intent_alignment": 0,
-                "endpoint_evidence_strength": -1.5,
+                "endpoint_evidence_strength": -1,
                 "target_population_alignment": 0,
                 "operational_burden_balance": 0,
             },
@@ -831,12 +859,12 @@ CONTRACT_FIXTURES: list[dict[str, Any]] = [
             "How would recruitment assumptions change if the biomarker restriction is real?",
         ),
         expected=_expected(
-            design_confidence=-3.0,
-            total_scenario_score=62,
+            design_confidence=-0.5,
+            total_scenario_score=64.5,
             subcategories={
                 "phase_intent_alignment": 0,
                 "endpoint_evidence_strength": 0,
-                "target_population_alignment": -3.0,
+                "target_population_alignment": -0.5,
                 "operational_burden_balance": 0,
             },
             storyline_behavior="append_population_text_mismatch_concern",
@@ -873,11 +901,11 @@ CONTRACT_FIXTURES: list[dict[str, Any]] = [
             "Would the same operational plan remain proportionate for an exploratory rather than pivotal question?",
         ),
         expected=_expected(
-            design_confidence=-6.0,
-            total_scenario_score=65,
+            design_confidence=-1,
+            total_scenario_score=70,
             subcategories={
-                "phase_intent_alignment": -3.0,
-                "endpoint_evidence_strength": -3.0,
+                "phase_intent_alignment": -0.5,
+                "endpoint_evidence_strength": -0.5,
                 "target_population_alignment": 0,
                 "operational_burden_balance": 0,
             },
@@ -914,13 +942,13 @@ CONTRACT_FIXTURES: list[dict[str, Any]] = [
             "What governance structure would make the operational burden proportionate?",
         ),
         expected=_expected(
-            design_confidence=-4.5,
-            total_scenario_score=59.5,
+            design_confidence=-1.5,
+            total_scenario_score=62.5,
             subcategories={
-                "phase_intent_alignment": -1.5,
+                "phase_intent_alignment": -1,
                 "endpoint_evidence_strength": 0,
                 "target_population_alignment": 0,
-                "operational_burden_balance": -3.0,
+                "operational_burden_balance": -0.5,
             },
             storyline_behavior="append_modality_governance_mismatch",
         ),
@@ -1136,12 +1164,35 @@ def validate_contract_fixtures(fixtures: list[dict[str, Any]] | None = None) -> 
             errors.append(f"{fixture_id}: unexpected design subcategories {sorted(extra_subcategories)}")
 
         for subcategory_name, subcategory in subcategories.items():
-            if "rating" not in subcategory:
-                errors.append(f"{fixture_id}: {subcategory_name} missing rating")
-            if "score_materiality" not in subcategory:
-                errors.append(f"{fixture_id}: {subcategory_name} missing score_materiality")
-            elif subcategory.get("score_materiality") not in SCORE_MATERIALITY_LEVELS:
-                errors.append(f"{fixture_id}: {subcategory_name} invalid score_materiality")
+            if "current_state" not in subcategory:
+                errors.append(f"{fixture_id}: {subcategory_name} missing current_state")
+            elif subcategory.get("current_state") not in {"strong", "supportive", "balanced", "weak", "conflicting"}:
+                errors.append(f"{fixture_id}: {subcategory_name} invalid current_state")
+            if "movement_direction" not in subcategory:
+                errors.append(f"{fixture_id}: {subcategory_name} missing movement_direction")
+            elif subcategory.get("movement_direction") not in {
+                "resolved",
+                "improved",
+                "partially_resolved",
+                "unchanged",
+                "offset",
+                "weakened",
+                "worsened",
+                "newly_introduced",
+            }:
+                errors.append(f"{fixture_id}: {subcategory_name} invalid movement_direction")
+            if "movement_materiality" not in subcategory:
+                errors.append(f"{fixture_id}: {subcategory_name} missing movement_materiality")
+            elif subcategory.get("movement_materiality") not in {"none", "minor", "moderate", "major"}:
+                errors.append(f"{fixture_id}: {subcategory_name} invalid movement_materiality")
+            if "effect_role" not in subcategory:
+                errors.append(f"{fixture_id}: {subcategory_name} missing effect_role")
+            elif subcategory.get("effect_role") not in {"counterweight", "confirming", "independent", "unchanged"}:
+                errors.append(f"{fixture_id}: {subcategory_name} invalid effect_role")
+            if "rating" in subcategory and subcategory.get("rating") not in {"strong", "supportive", "balanced", "weak", "conflicting"}:
+                errors.append(f"{fixture_id}: {subcategory_name} invalid legacy rating")
+            if "score_materiality" in subcategory and subcategory.get("score_materiality") not in SCORE_MATERIALITY_LEVELS:
+                errors.append(f"{fixture_id}: {subcategory_name} invalid legacy score_materiality")
             if "rationale" not in subcategory:
                 errors.append(f"{fixture_id}: {subcategory_name} missing rationale")
             if "short_rationale" not in subcategory:

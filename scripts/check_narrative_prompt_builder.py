@@ -25,7 +25,13 @@ from src.narratives.prompt_builder import (  # noqa: E402
     infer_prompt_mode,
     provider_response_contract,
 )
-from src.narratives.scoring import DESIGN_RATINGS, PARTICIPANT_REVIEW_KEYS, SCORE_MATERIALITY_LEVELS  # noqa: E402
+from src.narratives.scoring import (  # noqa: E402
+    DESIGN_RATINGS,
+    EFFECT_ROLES,
+    MOVEMENT_DIRECTIONS,
+    MOVEMENT_MATERIALITY_LEVELS,
+    PARTICIPANT_REVIEW_KEYS,
+)
 from scripts.run_narrative_eval_suite import (  # noqa: E402
     _has_completion_movement_language,
     _has_material_move_justification_language,
@@ -56,22 +62,24 @@ def main() -> int:
     expected_subcategory_fields = [
         "evidence_fields",
         "rationale",
-        "rating",
-        "score_materiality",
+        "current_state",
+        "movement_direction",
+        "movement_materiality",
+        "effect_role",
         "short_rationale",
         "optional_lenses_used",
         "regulatory_or_finance_note",
     ]
     if contract.get("required_subcategory_fields") != expected_subcategory_fields:
         errors.append("response contract should require enhanced evidence-first subcategory fields")
-    allowed = contract.get("allowed_ratings_by_subcategory") or {}
-    if set(allowed) != REQUIRED_DESIGN_SUBCATEGORIES:
-        errors.append("response contract should include rating enums for all subcategories")
-    for subcategory, ratings in allowed.items():
-        if set(ratings) != DESIGN_RATINGS:
-            errors.append(f"response contract rating enum mismatch for {subcategory}")
-    if set(contract.get("allowed_score_materiality") or []) != SCORE_MATERIALITY_LEVELS:
-        errors.append("response contract should include all score_materiality levels")
+    if set(contract.get("allowed_current_state") or []) != DESIGN_RATINGS:
+        errors.append("response contract should include all current_state levels")
+    if set(contract.get("allowed_movement_direction") or []) != MOVEMENT_DIRECTIONS:
+        errors.append("response contract should include all movement_direction levels")
+    if set(contract.get("allowed_movement_materiality") or []) != MOVEMENT_MATERIALITY_LEVELS:
+        errors.append("response contract should include all movement_materiality levels")
+    if set(contract.get("allowed_effect_role") or []) != EFFECT_ROLES:
+        errors.append("response contract should include all effect_role levels")
     if set(contract.get("required_key_question_fields") or []) != PARTICIPANT_REVIEW_KEYS:
         errors.append("response contract should include all key-question fields")
     if set(contract.get("forbidden_provider_fields") or []) != set(FORBIDDEN_PROVIDER_SCORE_FIELDS):
@@ -226,16 +234,24 @@ def main() -> int:
             "short_rationale",
             "optional_lenses_used",
             "regulatory_or_finance_note",
-            "rating",
-            "score_materiality",
+            "current_state",
+            "movement_direction",
+            "movement_materiality",
+            "effect_role",
         ]:
             errors.append(f"{subcategory_name}: schema should present enhanced subcategory field order")
-        rating_schema = (subcategory.get("properties") or {}).get("rating") or {}
-        if set(rating_schema.get("enum") or []) != DESIGN_RATINGS:
-            errors.append(f"Gemini response schema rating enum mismatch for {subcategory_name}")
-        materiality_schema = (subcategory.get("properties") or {}).get("score_materiality") or {}
-        if set(materiality_schema.get("enum") or []) != SCORE_MATERIALITY_LEVELS:
-            errors.append(f"Gemini response schema score_materiality enum mismatch for {subcategory_name}")
+        current_state_schema = (subcategory.get("properties") or {}).get("current_state") or {}
+        if set(current_state_schema.get("enum") or []) != DESIGN_RATINGS:
+            errors.append(f"Gemini response schema current_state enum mismatch for {subcategory_name}")
+        movement_schema = (subcategory.get("properties") or {}).get("movement_direction") or {}
+        if set(movement_schema.get("enum") or []) != MOVEMENT_DIRECTIONS:
+            errors.append(f"Gemini response schema movement_direction enum mismatch for {subcategory_name}")
+        movement_materiality_schema = (subcategory.get("properties") or {}).get("movement_materiality") or {}
+        if set(movement_materiality_schema.get("enum") or []) != MOVEMENT_MATERIALITY_LEVELS:
+            errors.append(f"Gemini response schema movement_materiality enum mismatch for {subcategory_name}")
+        effect_schema = (subcategory.get("properties") or {}).get("effect_role") or {}
+        if set(effect_schema.get("enum") or []) != EFFECT_ROLES:
+            errors.append(f"Gemini response schema effect_role enum mismatch for {subcategory_name}")
     if set(completion_schema.get("required") or []) != {
         "risk_pattern_summary",
         "driver_summary",
@@ -418,19 +434,23 @@ def main() -> int:
         "keep extra commentary derived from those three planning assumptions",
         "first select packet-supported evidence_fields",
         "then write the rationale",
-        "then assign rating and score_materiality",
-        "score_materiality",
-        "Default to minimal",
-        "High or very_high positive score_materiality is rare",
+        "then separate current_state from movement",
+        "movement_direction and movement_materiality describe what the latest visible edit changed",
+        "effect_role to mark whether the movement is a counterweight",
+        "The Design Confidence score effect follows movement, not absolute current_state",
         "Scenario edits are cumulative",
         "Design Confidence is recalculated fresh from the current full scenario state",
         "Use prior visible reviews for continuity and deltas only",
         "concerns that were resolved by current fields",
         "Stop penalizing or rewarding a prior issue",
         "scenario weakness has been fixed",
+        "hidden baseline Design Confidence subcategory ratings are qualitative context only",
+        "Use them to identify original strengths, original concerns",
+        "Assign movement_materiality only when the first visible edit changes evidence in that subcategory",
+        "unchanged baseline strengths or weaknesses should usually be unchanged movement with none materiality",
         "iteration_context.design_confidence_continuity.available",
         "previous_rating, previous_points, previous_evidence_fields, previous_rationale, current_relevant_changed_fields",
-        "Classify the current effect before assigning rating/materiality",
+        "Classify the current effect before assigning movement",
         "prior weakness offset means the prior weakness remains but new relevant evidence partly balances it",
         "compare current_value/current_label with previous_value/previous_label and baseline_value/baseline_label from field_changes",
         "If a structured_features/text_context conflict is unchanged from the prior visible iteration",

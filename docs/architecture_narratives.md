@@ -28,9 +28,9 @@ The LLM layer is separate from the existing prediction system. The serious-game 
 2. `Scenario Review`: a constrained LLM structured reviewer that explains Completion Outlook movement and evaluates Design Confidence without calculating final score values.
 3. `Total Scenario Score`: a deterministic application calculation: `Completion Score + Design Confidence`.
 
-The LLM must not generate the final score. The LLM returns structured ratings, evidence fields, narrative, and continuity fields. The application then performs two deterministic calculations:
+The LLM must not generate the final score. The LLM returns structured current-state, movement, evidence, narrative, and continuity fields. The application then performs two deterministic calculations:
 
-1. Convert validated Design Confidence subcategory ratings into app-owned point adjustments.
+1. Convert validated Design Confidence subcategory movement into app-owned point adjustments.
 2. Add the Design Confidence adjustment to the XGBoost `Completion Score` to calculate `Total Scenario Score` when the combined view is enabled.
 
 ```text
@@ -286,7 +286,7 @@ The Scenario Review should reflect both current design defensibility and change 
 
 Scenario edits are cumulative, but `Design Confidence` is not a running sum of prior bonuses and penalties. Each visible review should score the current full scenario state while preserving interpretation continuity for unchanged evidence. Previous visible review context is the primary iteration-to-iteration anchor; hidden baseline remains qualitative context for the original trial and should not become a hard numeric comparator.
 
-The packet builder adds a compact deterministic `iteration_context.design_confidence_continuity` object for the four Design Confidence subcategories on later visible reviews. For each subcategory, it includes the previous visible rating, previous visible app-calculated points, current relevant changed fields, previous rationale/evidence fields, and one short continuity instruction. First-visible or no-prior packets mark this object unavailable. Example shape:
+The packet builder adds a compact deterministic `iteration_context.design_confidence_continuity` object for the four Design Confidence subcategories on later visible reviews. For each subcategory, it includes the previous visible current state, movement fields, previous visible app-calculated points, current relevant changed fields, previous rationale/evidence fields, and one short continuity instruction. First-visible or no-prior packets mark this object unavailable. Example shape:
 
 ```json
 {
@@ -296,27 +296,29 @@ The packet builder adds a compact deterministic `iteration_context.design_confid
   "changed_fields": ["operational_assumptions.planned_enrollment"],
   "instruction": "Use this object as deterministic continuity context for Design Confidence subcategories. The current scenario is still scored fresh, but large subcategory shifts need current relevant evidence.",
   "subcategories": {
-    "phase_intent_alignment": {
-      "label": "Phase & Intent Alignment",
-      "previous_rating": "strong",
-      "previous_score_materiality": "moderate",
-      "previous_points": 4,
-      "previous_raw_points": 4,
-      "previous_rationale": "Prior phase/intent rationale.",
-      "previous_evidence_fields": ["phase_ml", "strategic_ambition_ml"],
-      "current_relevant_changed_fields": []
+	    "phase_intent_alignment": {
+	      "label": "Phase & Intent Alignment",
+	      "previous_current_state": "strong",
+	      "previous_movement_direction": "improved",
+	      "previous_movement_materiality": "moderate",
+	      "previous_effect_role": "counterweight",
+	      "previous_points": 1,
+	      "previous_raw_points": 1,
+	      "previous_rationale": "Prior phase/intent rationale.",
+	      "previous_evidence_fields": ["phase_ml", "strategic_ambition_ml"],
+	      "current_relevant_changed_fields": []
     }
   }
 }
 ```
 
-The provider should use this object as a continuity anchor: if a subcategory's relevant evidence did not change, it should not reverse the rating direction unless it names current packet evidence that justifies the reversal. The scoring engine still calculates Design Confidence from the current review output; continuity anchors guide the LLM's qualitative judgment but do not mechanically carry forward points.
+The provider should use this object as a continuity anchor: if a subcategory's relevant evidence did not change, current_state should usually remain stable and movement should usually be unchanged unless current packet evidence justifies a change. The scoring engine still calculates Design Confidence from the current review output; continuity anchors guide the LLM's qualitative judgment but do not mechanically carry forward points.
 
 This target addresses observed live-play drift where a persistent fact can be interpreted in opposite directions across adjacent iterations, such as an evidence-standard upgrade receiving strong `phase_intent_alignment` credit in one iteration and then flipping to a strong phase/intent penalty in the next even though phase and strategic-intent fields did not materially change.
 
 The field-to-subcategory relevance map for `design_confidence_continuity` is many-to-many and diagnostic-only. It is not a scoring map and does not automatically create positive or negative points. A field can be relevant to several Design Confidence lenses when a clinical reviewer could plausibly use it to explain movement: population fields can affect Target Population, Operational Burden, and Phase/Intent; endpoint/comparator/masking/allocation fields can affect Endpoint Evidence and Operational Burden. Planned Total Timeline is operational-context evidence for proportionality and executability, not Endpoint Evidence continuity evidence.
 
-Provider prompts use a continuity-resolution lock for Design Confidence. For each subcategory, the reviewer compares the prior visible rating, prior points, prior evidence fields, prior rationale, current relevant changed fields, and current `field_changes` before selecting the new rating and materiality. The current effect is treated as unchanged, prior weakness unresolved, prior weakness resolved, prior weakness offset, prior weakness worsened, new strength, or new weakness. When a changed field appears in prior evidence fields, the reviewer should compare previous/current/baseline values and labels to recognize restoration or reversal instead of mechanically carrying forward a prior penalty. If a structured/text conflict is unchanged from the prior visible iteration, it should remain visible as a consistency warning and unresolved prior concern rather than becoming a new or expanded penalty. Persistent strengths should not be re-credited as new improvement merely because they remain true.
+Provider prompts use a continuity-resolution lock for Design Confidence. For each subcategory, the reviewer compares prior current_state, prior movement fields, prior points, prior evidence fields, prior rationale, current relevant changed fields, and current `field_changes` before selecting the new current_state and movement fields. The current effect is treated as unchanged, prior weakness unresolved, prior weakness resolved, prior weakness offset, prior weakness worsened, new strength, or new weakness. When a changed field appears in prior evidence fields, the reviewer should compare previous/current/baseline values and labels to recognize restoration or reversal instead of mechanically carrying forward a prior penalty. If a structured/text conflict is unchanged from the prior visible iteration, it should remain visible as a consistency warning and unresolved prior concern rather than becoming a new or expanded penalty. Persistent strengths should not be re-credited as new improvement merely because they remain true.
 
 Completion Outlook has a lighter consistency lock. Movement follows `score_delta`, changed structured Completion Outlook score inputs, and `xgboost_impact_changes`; prior visible Completion Outlook summary is storyline continuity only. If `score_delta` is stable and no structured score input changed, the prior Completion Outlook storyline should remain stable and non-score-input implications belong in Design Confidence. Static `top_positive_feature_drivers` and `top_negative_feature_drivers` remain in the packet as current-state support/risk context, but they should not explain latest movement unless the same field also appears in `field_changes` or `top_feature_impact_changes`. `xgboost_impact_changes` remains pillar/subcategory movement context, not field-identity evidence.
 
@@ -374,56 +376,53 @@ Recommended scoring discipline:
 ```text
 Default design adjustment = 0.0
 Non-zero adjustment requires supported packet evidence
-Implemented design subcategory range = -5.0 to +5.0 in 0.5 increments, app-owned
-Typical subcategory movement = -2.5 to +2.5
+Implemented design subcategory movement range = -2.0 to +2.0 in 0.5 increments, app-owned
+Typical subcategory movement = -1.0 to +1.0
 Total Design Confidence = sum of four design subcategories
-No hidden total cap
+Proportional net cap from Completion Score movement and changed-field materiality
 ```
 
-The implemented `-5.0..+5.0` range preserves app-owned scoring. The provider must not return numeric subcategory points. Instead, the provider returns qualitative `rating` plus qualitative `score_materiality` for each subcategory after selecting supported evidence fields and writing the rationale. The app maps `rating + score_materiality + context guardrails` into points, preserving 0.5 increments and supported-evidence gates.
+The provider must not return numeric subcategory points. Instead, the provider separates current-state judgment from movement judgment for each subcategory after selecting supported evidence fields and writing the rationale. `current_state` describes the current full scenario; `movement_direction`, `movement_materiality`, and `effect_role` drive app-owned points.
 
-Target qualitative `score_materiality` mapping:
+Target movement mapping:
 
-- `strong`: minimal `+3.0`, low `+3.5`, moderate `+4.0`, high `+4.5`, very_high `+5.0`.
-- `supportive`: minimal `+0.5`, low `+1.0`, moderate `+1.5`, high `+2.0`, very_high `+2.5`.
-- `balanced`: always `0.0`.
-- `weak`: minimal `-0.5`, low `-1.0`, moderate `-1.5`, high `-2.0`, very_high `-2.5`.
-- `conflicting`: minimal `-3.0`, low `-3.5`, moderate `-4.0`, high `-4.5`, very_high `-5.0`.
+- `movement_materiality`: `none = 0.0`, `minor = 0.5`, `moderate = 1.0`, `major = 2.0`.
+- Positive movement: `resolved`, `improved`, `partially_resolved`, `offset`.
+- Negative movement: `weakened`, `worsened`, `newly_introduced`.
+- Neutral movement: `unchanged`.
+- `effect_role=confirming` halves the effect to reduce double counting with Completion Outlook.
+- `effect_role=counterweight` and `effect_role=independent` keep full movement weight.
+- `effect_role=unchanged` scores `0.0`.
 
 The adjustment must not be fake balancing:
 
-- If a Completion Outlook pillar is already strongly positive, positive Design Confidence for that same pillar should usually remain `0.0`, `+0.5`, or at most `+1.0` unless the packet shows a specific unresolved current-scenario weakness was improved or adds new design-quality evidence not already captured by Completion Outlook.
-- If a Completion Outlook pillar is neutral or negative, positive Design Confidence can be larger only when supported evidence shows the risk is caused by rigor, patient relevance, scientific ambition, or prudent governance.
-- If Completion Outlook rises sharply, negative Design Confidence can moderate the increase only when supported evidence suggests shortcut behavior or weakened design confidence.
-- If Completion Outlook falls sharply, positive Design Confidence can moderate the decrease only when supported evidence suggests the added risk comes from better evidence, broader patient relevance, or proportionate governance.
-- `high` positive `score_materiality` is rare and should require a clear critical narrative showing why the scenario is more defensible, interpretable, patient-relevant, governed, or proportionate. A favorable Completion Outlook, benchmark-typical operational assumption, or unresolved text/field mismatch is not enough.
+- If Design Confidence confirms the same field direction already reflected in Completion Outlook, use `effect_role=confirming` so the app reduces double counting.
+- If Design Confidence challenges Completion Outlook movement, use `effect_role=counterweight` so the contradiction remains visible.
+- If the Design Confidence movement is independent of Completion Outlook movement, use `effect_role=independent`.
+- If a baseline or prior strength remains true but was not changed by the current edit, use `movement_direction=unchanged`, `movement_materiality=none`, and `effect_role=unchanged`.
 
 Implemented scoring-calibration refinement:
 
 Design Confidence is a qualitative critical lens on Completion Outlook, not a second completion predictor and not a bonus multiplier. Completion Outlook mainly describes resemblance to historical completion versus early-termination risk. That movement can reflect quality, simplicity, operational burden, or risk patterns; higher Completion Outlook does not necessarily mean better design, and lower Completion Outlook does not necessarily mean worse design. The scoring layer should therefore preserve the LLM's qualitative judgment while limiting numeric over-amplification of signals already captured by Completion Outlook.
 
-This refinement supersedes the earlier stricter already-positive-pillar cap language. The governing model is matching-pillar same-direction double-counting control plus opposite-direction counterweight preservation.
-
-The provider contract remains unchanged: the LLM returns `rating`, `score_materiality`, evidence fields, rationale, and `short_rationale`; the application owns numeric points. Add only this compact prompt principle if needed:
+This refinement supersedes the earlier absolute `rating + score_materiality` scoring and matching-pillar cap language. The governing model is movement-based scoring, confirming-role double-counting reduction, and proportional net caps.
 
 > Preserve each Design Confidence subcategory's meaning. When a change improves one design dimension but worsens another, reflect both effects in their relevant subcategories. Cross-functional trade-offs may be justified in the overall Design Confidence judgment, but a subcategory should be positive only when that subcategory itself improved.
 
 The deterministic layer remains simple and conservative:
 
-- Keep `rating + score_materiality -> raw_points`.
-- Add calibrated `points` and `calibration_notes` when final points differ from raw points.
-- Apply calibration at the Design Confidence subcategory level, not to Completion Outlook score or Completion Outlook pillars.
-- Use same-direction double-counting control as the primary rule, triggered only by strong matching Completion Outlook pillar movement at `>= +3.0` or `<= -3.0` points. If the matching pillar moved strongly positive and is now still negative, cap strongly positive mapped Design Confidence at `+2.5`; if it moved strongly positive and is now neutral or positive, cap at `+1.5`. If the matching pillar moved strongly negative and is now still positive, soften strongly negative mapped Design Confidence to `-2.5`; if it moved strongly negative and is now neutral or negative, soften to `-1.5`.
-- Preserve opposite-direction counterweight behavior: when Design Confidence challenges Completion Outlook movement, keep stronger supported points. Examples include Completion Outlook improving while evidence quality weakens, or Completion Outlook worsening because rigor, patient relevance, governance, or evidence interpretability improved.
-- Allow Design Confidence to speak when Completion Outlook movement is flat or small, especially for Trial description, scenario-readiness, operational-assumption, or cross-pillar quality changes that are not directly reflected in Completion Outlook.
-- Do not use total Completion Outlook score movement or previous-score thresholds as Design Confidence calibration triggers. Total score movement is an aggregate and can reflect other pillars; the total is where subcategory trade-offs reconcile, not the trigger for subcategory-level softening.
+- Map `movement_direction + movement_materiality + effect_role -> raw_points`.
+- Add calibrated `points` and `calibration_notes` when proportional net scaling changes a subcategory point.
+- Apply calibration to Design Confidence only, not to Completion Outlook score or Completion Outlook pillars.
+- Allow Design Confidence to move when Completion Outlook movement is flat or small, especially for Trial description, scenario-readiness, operational-assumption, or cross-pillar quality changes that are not directly reflected in Completion Outlook, but keep the net movement bounded by changed-field materiality.
+- Use Completion Score movement and changed-field materiality only to set the net cap, not to decide clinical direction.
 - Preserve subcategory meaning. Positive points should stay in the subcategory that improved; negative or neutral counter-impact should remain visible in the relevant other subcategory. Compensation happens through the total Design Confidence sum, not by making unrelated subcategories positive.
 - Operational assumptions and all other supported packet evidence follow the same Design Confidence scoring and calibration rules. Planning assumptions may improve or worsen Operational Burden Balance because they affect whether the scenario feels operationally proportionate and executable. They may also create counter-effects in other Design Confidence subcategories, such as endpoint maturity or evidence sufficiency, when supported by the rationale. The special rule for planning assumptions is only that they must not explain Completion Outlook movement; within Design Confidence they are handled like other supported current-scenario evidence. Preserve subcategory meaning through the LLM rationale rather than through field-family-specific numeric caps.
 - Shortcut-driven ease should not create strong positive Operational Burden Balance or Design Confidence. If easier completion comes from weaker randomization, masking, comparator, endpoint rigor, arms, governance, or development ambition, cap positive feasibility credit and preserve evidence/phase critique.
 - Negative critiques should generally remain visible when supported. Soften negative points only when they duplicate strong same-direction negative Completion Outlook or pillar movement; do not soften them merely because another subcategory improved.
 - The deterministic layer should mostly cap or soften excessive same-pillar, same-direction amplification. It should not invent new positive or negative points and should not perform deep clinical interpretation beyond matching-pillar movement and provider evidence fields.
 
-Participant-facing Design Confidence treemap display shows signed subcategory points and the short rationale only. `rating` and `score_materiality` remain internal for scoring, validation, and audit; those labels are not shown as participant-facing treemap text.
+Participant-facing Design Confidence treemap display shows signed subcategory points and the short rationale only. Movement fields remain internal for scoring, validation, and audit; those labels are not shown as participant-facing treemap text.
 
 Text consistency should not be a standalone visual pillar in V1. It should be routed to the affected Design Confidence subcategory:
 
@@ -880,7 +879,7 @@ Expert analysis requirements:
 
 Keep rich evidence in the packet even when participant-facing wording is simplified. Feature-level, pillar-level, variance, score movement, changed-field, operational-assumption, baseline, previous-review, and text-change evidence remain important for analysis, traceability, and expert reasoning. Simplification should target prompt/output shape first, not remove evidence needed for Completion Outlook interaction analysis or Design Confidence critical judgment.
 
-Internal structured output should remain detailed enough for scoring and audit: four Design Confidence subcategory ratings, evidence fields, score materiality, short rationale, full rationale, consistency note, continuity metadata, and trace fields. If planning assumptions changed, at least one Design Confidence key point should address operational proportionality unless another current-scenario issue is clearly more material. Planning assumptions still must not explain Completion Outlook movement.
+Internal structured output should remain detailed enough for scoring and audit: four Design Confidence subcategories, current-state and movement fields, evidence fields, short rationale, full rationale, consistency note, continuity metadata, and trace fields. If planning assumptions changed, at least one Design Confidence key point should address operational proportionality unless another current-scenario issue is clearly more material. Planning assumptions still must not explain Completion Outlook movement.
 
 Question target:
 
@@ -987,10 +986,10 @@ Phase 4 prompt/schema work must make the provider reason in this order for every
 
 1. Select packet-supported `evidence_fields`.
 2. Write the subcategory `rationale` from those evidence fields.
-3. Assign the subcategory `rating` that follows from the evidence and rationale.
-4. Assign qualitative `score_materiality` from supported-evidence strength and context guardrails.
+3. Assign `current_state` for the current full scenario.
+4. Assign `movement_direction`, `movement_materiality`, and `effect_role` from what the latest visible edit changed versus the relevant anchor.
 
-The provider should not choose a rating or score materiality first and then search for a justification. This evidence-first sequence is required for output quality and auditability. It makes the rating and materiality inspectable: a facilitator or developer can open the stored trace, see which packet fields were cited, read the rationale, and understand why the rating was valid or why the application gave it zero score effect.
+The provider should not choose movement labels first and then search for a justification. This evidence-first sequence is required for output quality and auditability. It makes movement inspectable: a facilitator or developer can open the stored trace, see which packet fields were cited, read the rationale, and understand why the movement was valid or why the application gave it zero score effect.
 
 The JSON object may be parsed without relying on key order, but prompt examples and response schemas should present fields in the same conceptual order where possible:
 
@@ -998,17 +997,20 @@ The JSON object may be parsed without relying on key order, but prompt examples 
 {
   "evidence_fields": ["endpoint_rigor_ml", "comparator_benchmark_ml"],
   "rationale": "The endpoint and comparator choices weaken decision interpretability for the stated intent.",
-  "rating": "weak",
-  "score_materiality": "moderate"
+  "current_state": "weak",
+  "movement_direction": "weakened",
+  "movement_materiality": "moderate",
+  "effect_role": "counterweight"
 }
 ```
 
 Audit rules:
 
 - `evidence_fields` must cite packet fields or allowed packet evidence references.
-- `rationale` must explain how those fields support the rating in clinical-development terms.
-- `rating` must be one of the allowed labels and must not mention point values.
-- `score_materiality` must be one of `minimal`, `low`, `moderate`, `high`, or `very_high`; it controls app-owned point magnitude but is still qualitative provider evidence, not provider-owned scoring.
+- `rationale` must explain how those fields support current_state and movement in clinical-development terms.
+- `current_state` must describe current scenario defensibility, not score movement.
+- `movement_direction` and `movement_materiality` must describe the latest visible edit versus the relevant anchor.
+- `effect_role` must identify whether the movement is confirming, counterweight, independent, or unchanged relative to Completion Outlook.
 - Unsupported evidence references are preserved in trace/debug output but have zero scoring effect.
 - A malformed, missing, or incomplete subcategory should suppress Design Confidence and Total Scenario Score for that review rather than silently counting as neutral.
 - Provider traces should store the original output JSON, normalized validated review, validation errors, supported/unsupported evidence fields, app-calculated subcategory points, Design Confidence, Total Scenario Score, prompt/rubric versions, provider/model namespace, and input hash so score rationale can be audited later.
@@ -1023,7 +1025,7 @@ Malformed or incomplete provider responses should be prevented and handled as fo
 - The application should not show a partial Design Confidence score and should not treat a missing subcategory as neutral.
 - A future response-repair step is allowed only if it is deterministic, auditable, uses the same provider output and packet evidence, and cannot invent missing clinical reasoning.
 
-The provider prompt should also include qualitative `rating_guidance_by_subcategory` for the allowed rating labels. This guidance explains labels such as `supportive`, `balanced`, `weak`, and `conflicting` in clinical-development terms so the LLM can choose the right category. It is not model-owned scoring, and it should not expose or ask the provider to calculate point values.
+The provider prompt should also include qualitative guidance for current_state labels and movement labels. This guidance helps the LLM separate the current full scenario's defensibility from the latest edit's movement. It is not model-owned scoring, and it should not expose or ask the provider to calculate point values.
 
 Participant-facing narrative should translate `model_interpretation` evidence into clinical trial / pharma development language. The provider may use `field_changes`, `xgboost_impact_changes`, `score_delta`, and pillar/subcategory movement internally, but visible explanations should avoid technical model terms such as SHAP, feature impact, XGBoost movement, or pillar delta unless the facilitator view explicitly asks for model diagnostics. Preferred language should discuss endpoint maturity, evidence strength, comparator credibility, blinding/control implications, recruitment burden, trial duration, patient population fit, operational complexity, execution feasibility, development strategy, design shortcut risk, and regulatory persuasiveness.
 
@@ -1032,10 +1034,10 @@ The LLM does not return `Design Confidence`, `Total Scenario Score`, or final De
 The application calculates:
 
 ```text
-phase_intent_alignment_points = deterministic_map(validated_phase_intent_alignment_rating, score_materiality, context_guardrails)
-endpoint_evidence_strength_points = deterministic_map(validated_endpoint_evidence_strength_rating, score_materiality, context_guardrails)
-target_population_alignment_points = deterministic_map(validated_target_population_alignment_rating, score_materiality, context_guardrails)
-operational_burden_balance_points = deterministic_map(validated_operational_burden_balance_rating, score_materiality, context_guardrails)
+phase_intent_alignment_points = deterministic_map(movement_direction, movement_materiality, effect_role)
+endpoint_evidence_strength_points = deterministic_map(movement_direction, movement_materiality, effect_role)
+target_population_alignment_points = deterministic_map(movement_direction, movement_materiality, effect_role)
+operational_burden_balance_points = deterministic_map(movement_direction, movement_materiality, effect_role)
 
 design_confidence =
     phase_intent_alignment_points
@@ -1053,16 +1055,17 @@ total_scenario_score = clamp(
 Implemented mapping envelope:
 
 ```text
-Each Design Confidence subcategory = -5.0 to +5.0
+Each Design Confidence subcategory = -2.0 to +2.0
 Allowed increments = 0.5
 Default = 0.0
-Typical movement = -2.5 to +2.5
-Strong movement = requires multiple explicit, supported signals
+Typical movement = -1.0 to +1.0
+Major movement = requires explicit, supported changed evidence
+Net Design Confidence = proportionally capped by score movement and changed-field materiality
 ```
 
-The provider supplies qualitative `rating` and `score_materiality`; it does not supply numeric points. The middle rating, `supportive`, allows the review to recognize directionally favorable design quality without forcing every positive observation into the top rating. `balanced` should map to `0.0` regardless of materiality.
+The provider supplies qualitative `current_state`, `movement_direction`, `movement_materiality`, and `effect_role`; it does not supply numeric points. Current-state labels describe the current scenario, while movement fields drive app-owned scoring.
 
-The final score should preserve half-point values when they occur and display one decimal only when needed. A design subcategory rating should affect Design Confidence only when the LLM provides supporting `evidence_fields`; otherwise the point effect should be zero and the issue can remain narrative-only. Evidence fields must also reference evidence available in the review packet. Unsupported evidence references are preserved for auditability but do not move Design Confidence.
+The final score should preserve half-point values when they occur and display one decimal only when needed. A design subcategory movement should affect Design Confidence only when the LLM provides supporting `evidence_fields`; otherwise the point effect should be zero and the issue can remain narrative-only. Evidence fields must also reference evidence available in the review packet. Unsupported evidence references are preserved for auditability but do not move Design Confidence.
 
 Allowed evidence references may cite:
 
@@ -1319,7 +1322,7 @@ Provider selection and secret handling:
   - `NARRATIVE_LLM_TIMEOUT_SECONDS`
   - `NARRATIVE_LLM_MAX_RETRIES`
 - Current setup status: local `.env` can hold these values, and `src/narratives/provider_config.py` reads and validates them without making any LLM API call. `scripts/check_narrative_openai_smoke.py` and `scripts/check_narrative_gemini_smoke.py` can run opt-in API smoke tests when `RUN_NARRATIVE_OPENAI_SMOKE=1` or `RUN_NARRATIVE_GEMINI_SMOKE=1` is set; they skip by default to avoid accidental network calls or API spend. `src/narratives/provider.py` contains real OpenAI and Gemini invocation helpers behind the same normalized provider result shape. `frontend/views/trial_simulator.py` uses the deterministic mock provider by default and routes both hidden baseline and visible Scenario Review calls through the live provider chain only when `NARRATIVE_LIVE_REVIEW_ENABLED=1`. Live wrapper checks have validated full fixture reviews using the normalized provider boundary.
-- Provider config, prompt/schema fixtures, opt-in OpenAI/Gemini smoke testing, and opt-in simulator UI routing now target the active Scenario Review contract with `completion_outlook_analysis`, `design_confidence_subcategories`, required qualitative `score_materiality`, `review_metadata`, `scenario_consistency_note`, and text-change evidence in the packet context. If live routing is enabled and all configured providers fail or validation does not produce a complete Scenario Review, the participant panel shows Completion Score only and marks Scenario Review unavailable for the current scenario; participants should use the normal Review Scenario action again after addressing the issue or retrying later. It does not reuse stale Design Confidence for a new packet.
+- Provider config, prompt/schema fixtures, opt-in OpenAI/Gemini smoke testing, and opt-in simulator UI routing now target the active Scenario Review contract with `completion_outlook_analysis`, `design_confidence_subcategories`, qualitative current-state and movement fields, `review_metadata`, `scenario_consistency_note`, and text-change evidence in the packet context. If live routing is enabled and all configured providers fail or validation does not produce a complete Scenario Review, the participant panel shows Completion Score only and marks Scenario Review unavailable for the current scenario; participants should use the normal Review Scenario action again after addressing the issue or retrying later. It does not reuse stale Design Confidence for a new packet.
 - Active provider prompts use packet-section names consistently. `Completion Outlook score` is `model_interpretation.completion_score`; `Completion Outlook score inputs` are selected categorical/numeric fields in `structured_features` that feed the score, identified through `model_interpretation.direct_xgboost_shap_fields` and `model_interpretation` score evidence, with readable labels in `structured_feature_display_values` and meanings in `structured_feature_meanings`; `Trial description fields` are `text_context` fields with meanings in `text_context_field_meanings`, UI labels `Title` (top study title), `Summary`, `Conditions`, `Interventions`, and `Primary Outcomes`, and JSON keys `title`, `summary_ui`, `conditions_ui`, `interventions_ui`, and `primary_outcomes_ui`; `Planning assumptions` are `operational_assumptions.planned_enrollment`, `operational_assumptions.planned_sites`, and `operational_assumptions.planned_duration_months`; `Review controls` are `review_controls`; `Completion Outlook narrative` is `completion_outlook_analysis`; `Design Confidence narrative` is `design_confidence_analysis`; and `Design Confidence subcategory ratings` are `design_confidence_subcategories`.
 - Participant-facing Completion Outlook wording should avoid internal model vocabulary. Use plain phrases such as `Completion Outlook score inputs`, `score inputs`, `score pattern`, `score-driving fields`, or `early-termination risk pattern` when explaining the scoring boundary; avoid phrases such as `model-facing`, `model signal`, `model-score inputs`, `model suggests`, `model indicates`, `model registers`, `model-derived`, `model interpretation`, `in the model`, `model's...`, or `the model reflects`. The provider prompt asks the model to replace any remaining internal model-language phrase before finalizing participant-facing text.
 - Planning-assumption fields are outside Completion Outlook: planned enrollment, planned site count, and planned total duration. If the latest change is limited to these fields, the Completion Outlook score is unchanged because they do not feed the Completion Outlook score. If the latest change is limited to Trial description fields, or combines Trial description fields with planning assumptions, and no structured Completion Outlook score input changed, the Completion Outlook narrative should use the provided stable-mode sentence when `review_controls.required_completion_outlook_sentence` is present: `The Completion Outlook score remains stable because the latest changes are not directly used to calculate the Completion Outlook score. Nevertheless, the updated scenario details are considered in Design Confidence.` It should not name or summarize planning-assumption details such as enrollment, site count, total duration, planned duration, primary duration, resource allocation, or operational footprint. Those planning assumptions remain Design Confidence context for proportionality and executability. If other Completion Outlook score inputs also changed, the Completion Outlook narrative should be explained by those score-input changes only. Other operational trial features may still be discussed in Completion Outlook when they are actual Completion Outlook score inputs and packet evidence supports them.
@@ -1896,7 +1899,7 @@ Implementation staging:
 
 1. Contract fixtures: replace or extend the current fixtures with scenarios that test the four Design Confidence subcategories. Include at least baseline, Completion Outlook score-input edit, operational-only edit, material Trial description edit, `structured_features` / `text_context` review, no-op/minor Trial description edit, score improves but evidence value weakens, score improves and Design Confidence remains neutral, score declines but Design Confidence improves, endpoint description contradiction, biomarker/population mismatch, phase/intent ambition versus weak endpoint or comparator support, modality/risk-governance mismatch, and no-adjustment despite large Completion Outlook movement. Current artifact to migrate: `src/narratives/contract_fixtures.py`, validated by `scripts/check_narrative_contract_fixtures.py`.
 2. Deterministic review packet builder: assemble baseline/current/previous snapshots, changed fields, explicit field-change deltas, operational metadata, score deltas, XGBoost impact movements, `text_context` Trial description fields, user clarification context, field dictionary version, canonical taxonomy option-key values, display labels, compact storyline memory, and `design_confidence_continuity` anchors without calling an LLM. Current implementation artifact: `src/narratives/packet_builder.py`, validated by `scripts/check_narrative_packet_builder.py`.
-3. Validation and scoring engine: validate review JSON, enforce packet-supported `evidence_fields`, derive Design Confidence subcategory points from `rating + score_materiality + context guardrails`, enforce default-zero and supported-evidence gates, preserve 0.5 increments across the `-5.0..+5.0` subcategory scale, avoid fake balancing, require subcategory totals to reconcile to Design Confidence, and calculate Total Scenario Score when enabled. Current implementation artifact: `src/narratives/scoring.py`, validated by `scripts/check_narrative_scoring.py`.
+3. Validation and scoring engine: validate review JSON, enforce packet-supported `evidence_fields`, derive Design Confidence subcategory points from `movement_direction + movement_materiality + effect_role`, enforce default-zero and supported-evidence gates, preserve 0.5 increments across the `-2.0..+2.0` subcategory movement scale, apply proportional net caps, require subcategory totals to reconcile to Design Confidence, and calculate Total Scenario Score when enabled. Current implementation artifact: `src/narratives/scoring.py`, validated by `scripts/check_narrative_scoring.py`.
 4. Mock reviewer: use deterministic fake JSON responses based on the fixtures to test validation, scoring math, no-op behavior, text-materiality behavior, and failure handling. Current implementation artifact: `src/narratives/mock_reviewer.py`, validated by `scripts/check_narrative_mock_reviewer.py`.
 5. Storage and replay: persist validated review traces in session state first, including input hash, validation status, Design Confidence, Total Scenario Score, design subcategory contributions, and compact storyline memory. Reuse cached reviews for identical input hashes. Current artifact to migrate: `src/narratives/review_store.py`, validated by `scripts/check_narrative_review_store.py`. It supports direct mock replay now and an optional provider-chain path for future live-provider activation without reusing mock cache entries as real-provider reviews. This is prototype storage only and does not yet satisfy the durable cross-team baseline requirement.
 6. Pre-prediction consistency check: removed from the active simulator. Do not reintroduce `Check Scenario`, deterministic structured/text gates, or a lightweight LLM consistency pass without a new explicit product decision.

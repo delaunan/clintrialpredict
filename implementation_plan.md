@@ -38,8 +38,11 @@ Scoring guardrails:
 - The provider must not return final app-owned scores.
 - The app validates review JSON and calculates Design Confidence deterministically.
 - Non-zero Design Confidence requires supported packet evidence.
-- Each design subcategory uses `-5.0..+5.0` in `0.5` increments, derived by the app from qualitative `rating + score_materiality + context guardrails`, not from provider-owned numeric point fields.
-- There is no hidden Design Confidence total cap; only Total Scenario Score is clamped to `0..100`.
+- Each design subcategory now separates current design state from movement. `current_state` describes the current full scenario; `movement_direction`, `movement_materiality`, and `effect_role` drive app-owned points.
+- Movement scoring uses a small bottom-up scale: `minor = 0.5`, `moderate = 1`, `major = 2`; unchanged movement scores `0`.
+- `effect_role=confirming` halves the point effect to reduce double counting with Completion Outlook; `counterweight` and `independent` keep full movement weight; `unchanged` scores `0`.
+- The app applies a proportional net Design Confidence cap from Completion Score movement and changed-field materiality. This preserves subcategory trade-offs while preventing a second-score jump such as `+12` on a flat Completion Outlook.
+- Total Scenario Score is clamped to `0..100`.
 - Operational assumptions remain outside XGBoost and feed only Scenario Review / Design Confidence.
 
 ## What Is Done

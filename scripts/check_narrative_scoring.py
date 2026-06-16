@@ -24,8 +24,35 @@ def _subcategory(
     rationale: str,
     evidence_fields: list[str],
     score_materiality: str = "minimal",
+    movement_direction: str | None = None,
+    movement_materiality: str | None = None,
+    effect_role: str | None = None,
 ) -> dict:
+    if movement_direction is None:
+        movement_direction = {
+            "strong": "improved",
+            "supportive": "improved",
+            "balanced": "unchanged",
+            "weak": "weakened",
+            "conflicting": "worsened",
+        }.get(rating, "unchanged")
+    if movement_materiality is None:
+        movement_materiality = {
+            "minimal": "minor",
+            "low": "minor",
+            "moderate": "moderate",
+            "high": "major",
+            "very_high": "major",
+        }.get(score_materiality, "none")
+        if movement_direction == "unchanged":
+            movement_materiality = "none"
+    if effect_role is None:
+        effect_role = "unchanged" if movement_direction == "unchanged" else "independent"
     return {
+        "current_state": rating,
+        "movement_direction": movement_direction,
+        "movement_materiality": movement_materiality,
+        "effect_role": effect_role,
         "rating": rating,
         "score_materiality": score_materiality,
         "rationale": rationale,
@@ -143,6 +170,9 @@ def _check_score_reconciliation(errors: list[str]) -> None:
         "Single-subcategory mapping test.",
         ["endpoint_rigor_ml", "comparator_benchmark_ml", "primary_duration_months_ml"],
         "moderate",
+        movement_direction="worsened",
+        movement_materiality="moderate",
+        effect_role="counterweight",
     )
     result = validate_and_score_review(packet, review)
     endpoint = (
@@ -150,30 +180,30 @@ def _check_score_reconciliation(errors: list[str]) -> None:
         .get("subcategories", {})
         .get("endpoint_evidence_strength", {})
     )
-    if endpoint.get("points") != -4:
-        errors.append("subcategory mapping failed: conflicting moderate should map to -4")
+    if endpoint.get("points") != -1:
+        errors.append("movement mapping failed: worsened moderate counterweight should map to -1")
 
     packet, review = _review_template()
-    packet["model_interpretation"]["completion_score"] = 3
+    packet["model_interpretation"]["completion_score"] = 98
+    packet["model_interpretation"]["score_delta"] = 0
     review["design_confidence_subcategories"] = {
-        "phase_intent_alignment": {
-            **_subcategory("conflicting", "Total reconciliation test.", ["phase_ml"]),
-        },
+        "phase_intent_alignment": _subcategory("strong", "Cap test.", ["phase_ml"], "very_high", movement_materiality="major"),
         "endpoint_evidence_strength": _subcategory(
-            "conflicting",
-            "Total reconciliation test.",
+            "strong",
+            "Cap test.",
             ["endpoint_rigor_ml", "comparator_benchmark_ml", "primary_duration_months_ml"],
-            "moderate",
+            "very_high",
+            movement_materiality="major",
         ),
-        "target_population_alignment": _subcategory("conflicting", "Total reconciliation test.", ["adult_ml"]),
-        "operational_burden_balance": _subcategory("conflicting", "Total reconciliation test.", ["has_dmc_ml"]),
+        "target_population_alignment": _subcategory("strong", "Cap test.", ["adult_ml"], "very_high", movement_materiality="major"),
+        "operational_burden_balance": _subcategory("strong", "Cap test.", ["has_dmc_ml"], "very_high", movement_materiality="major"),
     }
     result = validate_and_score_review(packet, review)
     scoring = result["scoring"]
-    if scoring.get("design_confidence") != -13:
-        errors.append("total reconciliation failed: Design Confidence should preserve uncapped subcategory total")
-    if scoring.get("total_scenario_score") != 0:
-        errors.append("total score cap failed: Total Scenario Score should clamp to 0")
+    if scoring.get("design_confidence") != 2:
+        errors.append("net cap failed: flat-score four-major positive movement should scale to +2")
+    if scoring.get("total_scenario_score") != 100:
+        errors.append("total score cap failed: Total Scenario Score should clamp to 100")
 
     packet, review = _review_template()
     packet["model_interpretation"]["score_delta"] = -2
@@ -182,40 +212,47 @@ def _check_score_reconciliation(errors: list[str]) -> None:
         "Half-point-preserving positive mapping test.",
         ["older_adult_ml"],
         "moderate",
+        movement_direction="improved",
+        movement_materiality="moderate",
+        effect_role="independent",
     )
     review["design_confidence_subcategories"]["operational_burden_balance"] = _subcategory(
         "weak",
         "Half-point-preserving negative mapping test.",
         ["has_dmc_ml"],
         "moderate",
+        movement_direction="weakened",
+        movement_materiality="moderate",
+        effect_role="independent",
     )
     result = validate_and_score_review(packet, review)
     scoring = result["scoring"]
     if scoring.get("design_confidence") != 0:
-        errors.append("half-point reconciliation failed: +1.5 and -1.5 should sum to 0")
+        errors.append("movement reconciliation failed: +1 and -1 should sum to 0")
     subcategories = scoring.get("design_confidence_assessment", {}).get("subcategories", {})
-    if subcategories.get("target_population_alignment", {}).get("points") != 1.5:
-        errors.append("supportive moderate mapping should contribute +1.5")
-    if subcategories.get("operational_burden_balance", {}).get("points") != -1.5:
-        errors.append("weak non-operational-evidence mapping should contribute -1.5")
+    if subcategories.get("target_population_alignment", {}).get("points") != 1:
+        errors.append("improved moderate mapping should contribute +1")
+    if subcategories.get("operational_burden_balance", {}).get("points") != -1:
+        errors.append("weakened moderate mapping should contribute -1")
 
     packet, review = _review_template()
-    packet["model_interpretation"]["completion_score"] = 98
-    packet["model_interpretation"]["score_delta"] = -1
-    for subcategory_name in REQUIRED_DESIGN_SUBCATEGORIES:
-        evidence_fields = ["has_dmc_ml"] if subcategory_name == "operational_burden_balance" else ["phase_ml"]
-        review["design_confidence_subcategories"][subcategory_name] = _subcategory(
-            "strong",
-            "Positive ceiling test.",
-            evidence_fields,
-            "minimal",
-        )
+    review["design_confidence_subcategories"]["endpoint_evidence_strength"] = _subcategory(
+        "supportive",
+        "Offset movement should score as partial positive balancing evidence.",
+        ["endpoint_rigor_ml"],
+        "moderate",
+        movement_direction="offset",
+        movement_materiality="moderate",
+        effect_role="independent",
+    )
     result = validate_and_score_review(packet, review)
-    scoring = result["scoring"]
-    if scoring.get("design_confidence") != 12:
-        errors.append("positive reconciliation failed: four strong minimal subcategories should add to +12")
-    if scoring.get("total_scenario_score") != 100:
-        errors.append("positive final score cap failed: Total Scenario Score should clamp to 100")
+    endpoint = (
+        result["scoring"].get("design_confidence_assessment", {})
+        .get("subcategories", {})
+        .get("endpoint_evidence_strength", {})
+    )
+    if endpoint.get("points") != 1:
+        errors.append("offset mapping failed: offset moderate independent should contribute +1")
 
 
 def _check_score_materiality_outer_bounds(errors: list[str]) -> None:
@@ -225,21 +262,27 @@ def _check_score_materiality_outer_bounds(errors: list[str]) -> None:
         "Very high positive materiality should reach the upper subcategory bound.",
         ["endpoint_rigor_ml"],
         "very_high",
+        movement_direction="improved",
+        movement_materiality="major",
+        effect_role="independent",
     )
     review["design_confidence_subcategories"]["target_population_alignment"] = _subcategory(
         "conflicting",
         "Very high negative materiality should reach the lower subcategory bound.",
         ["older_adult_ml"],
         "very_high",
+        movement_direction="worsened",
+        movement_materiality="major",
+        effect_role="independent",
     )
     result = validate_and_score_review(packet, review)
     subcategories = result["scoring"].get("design_confidence_assessment", {}).get("subcategories", {})
-    if subcategories.get("endpoint_evidence_strength", {}).get("points") != 5:
-        errors.append("score_materiality upper bound failed: strong very_high should map to +5")
-    if subcategories.get("target_population_alignment", {}).get("points") != -5:
-        errors.append("score_materiality lower bound failed: conflicting very_high should map to -5")
+    if subcategories.get("endpoint_evidence_strength", {}).get("points") != 2:
+        errors.append("movement_materiality upper bound failed: improved major should map to +2")
+    if subcategories.get("target_population_alignment", {}).get("points") != -2:
+        errors.append("movement_materiality lower bound failed: worsened major should map to -2")
     if result["scoring"].get("design_confidence") != 0:
-        errors.append("score_materiality reconciliation failed: +5 and -5 should sum to 0 with neutral subcategories")
+        errors.append("movement_materiality reconciliation failed: +2 and -2 should sum to 0 with neutral subcategories")
 
 
 def _check_score_materiality_guardrails(errors: list[str]) -> None:
@@ -254,6 +297,9 @@ def _check_score_materiality_guardrails(errors: list[str]) -> None:
         "Supported operational evidence can create positive Operational Burden Balance points.",
         ["operational_assumptions.planned_enrollment.enrollment_status"],
         "very_high",
+        movement_direction="improved",
+        movement_materiality="major",
+        effect_role="independent",
     )
     result = validate_and_score_review(packet, review)
     operational = (
@@ -261,15 +307,18 @@ def _check_score_materiality_guardrails(errors: list[str]) -> None:
         .get("subcategories", {})
         .get("operational_burden_balance", {})
     )
-    if operational.get("points") != 5:
+    if operational.get("points") != 2:
         errors.append("operational-only guardrail failed: supported operational evidence should be allowed to score normally in Design Confidence")
 
     packet, review = _review_template()
     review["design_confidence_subcategories"]["phase_intent_alignment"] = _subcategory(
         "strong",
-        "Already-positive Completion Outlook pillars need changed evidence before large positive design points.",
+        "Confirming movement should be softened to avoid double counting.",
         ["phase_ml"],
         "very_high",
+        movement_direction="improved",
+        movement_materiality="major",
+        effect_role="confirming",
     )
     result = validate_and_score_review(packet, review)
     phase = (
@@ -277,41 +326,46 @@ def _check_score_materiality_guardrails(errors: list[str]) -> None:
         .get("subcategories", {})
         .get("phase_intent_alignment", {})
     )
-    if phase.get("points") != 5:
-        errors.append("retired always-positive-pillar guardrail failed: no previous score or strong movement should leave raw positive points unchanged")
-
-    packet, review = _review_template()
-    packet["model_interpretation"]["pillar_impacts"] = [
-        {"Pillar": "Therapeutic Context", "Impact": 4.2},
-        {"Pillar": "Scientific Challenge", "Impact": -1.6},
-        {"Pillar": "Patient Profile", "Impact": 2.4},
-        {"Pillar": "Execution Framework", "Impact": 1.0},
-    ]
-    review["design_confidence_subcategories"]["phase_intent_alignment"] = _subcategory(
-        "strong",
-        "Live-style list pillar impacts should still trigger the anti-overreward guardrail.",
-        ["phase_ml"],
-        "very_high",
-    )
-    result = validate_and_score_review(packet, review)
-    phase = (
-        result["scoring"].get("design_confidence_assessment", {})
-        .get("subcategories", {})
-        .get("phase_intent_alignment", {})
-    )
-    if phase.get("points") != 5:
-        errors.append("retired always-positive-pillar guardrail failed for live-style list pillar impacts")
+    if phase.get("points") != 1:
+        errors.append("confirming effect-role failed: major confirming movement should score half credit")
 
 
 def _check_design_confidence_calibration(errors: list[str]) -> None:
     packet, review = _review_template()
-    packet["model_interpretation"]["score_delta"] = 4
-    packet["model_interpretation"]["pillar_deltas"] = {"Scientific Challenge": 3.5}
+    packet["model_interpretation"]["score_delta"] = 0
+    packet["iteration_context"]["changed_fields"] = [
+        "allocation_ml",
+        "masking_ml",
+        "comparator_benchmark_ml",
+        "intervention_model_ml",
+    ]
+    for subcategory_name in REQUIRED_DESIGN_SUBCATEGORIES:
+        review["design_confidence_subcategories"][subcategory_name] = _subcategory(
+            "strong",
+            "Major redesign movement test.",
+            ["phase_ml"],
+            "very_high",
+            movement_direction="improved",
+            movement_materiality="major",
+            effect_role="independent",
+        )
+    result = validate_and_score_review(packet, review)
+    scoring = result["scoring"]
+    if scoring.get("design_confidence") != 4.8:
+        errors.append("major-redesign cap failed: flat Completion delta with four structured changes should scale close to +5 net")
+    if (scoring.get("design_confidence_assessment") or {}).get("design_confidence_cap") != 5:
+        errors.append("major-redesign cap should be reported in design_confidence_assessment")
+
+    packet, review = _review_template()
+    packet["model_interpretation"]["score_delta"] = 0
     review["design_confidence_subcategories"]["endpoint_evidence_strength"] = _subcategory(
         "strong",
-        "Same-pillar positive movement can keep meaningful credit when the current pillar remains negative.",
+        "Unchanged strong current state should not add Design Confidence.",
         ["endpoint_rigor_ml"],
         "very_high",
+        movement_direction="unchanged",
+        movement_materiality="none",
+        effect_role="unchanged",
     )
     result = validate_and_score_review(packet, review)
     endpoint = (
@@ -319,160 +373,8 @@ def _check_design_confidence_calibration(errors: list[str]) -> None:
         .get("subcategories", {})
         .get("endpoint_evidence_strength", {})
     )
-    if endpoint.get("raw_points") != 5:
-        errors.append("calibration should preserve raw_points before same-direction cap")
-    if endpoint.get("points") != 2.5:
-        errors.append("same-direction positive cap failed: strong positive matching-pillar movement with residual weakness should cap to +2.5")
-    if not endpoint.get("calibration_notes"):
-        errors.append("same-direction positive cap should record calibration_notes")
-    scientific_pillar = (
-        result["scoring"].get("design_confidence_assessment", {})
-        .get("pillars", {})
-        .get("scientific_challenge", {})
-    )
-    if scientific_pillar.get("raw_design_points") != 5:
-        errors.append("pillar raw_design_points should preserve raw subcategory points before calibration")
-    if scientific_pillar.get("design_points") != 2.5:
-        errors.append("pillar design_points should sum calibrated subcategory points")
-
-    packet, review = _review_template()
-    packet["model_interpretation"]["score_delta"] = 4
-    packet["model_interpretation"]["pillar_impacts"] = {
-        "Therapeutic Context": 4.2,
-        "Scientific Challenge": 4.0,
-        "Patient Profile": 2.4,
-        "Execution Framework": 1.0,
-    }
-    packet["model_interpretation"]["pillar_deltas"] = {"Scientific Challenge": 3.5}
-    review["design_confidence_subcategories"]["endpoint_evidence_strength"] = _subcategory(
-        "strong",
-        "Same-pillar positive movement should be modest once the current pillar is already positive.",
-        ["endpoint_rigor_ml"],
-        "very_high",
-    )
-    result = validate_and_score_review(packet, review)
-    endpoint = (
-        result["scoring"].get("design_confidence_assessment", {})
-        .get("subcategories", {})
-        .get("endpoint_evidence_strength", {})
-    )
-    if endpoint.get("points") != 1.5:
-        errors.append("same-direction positive cap failed: strong positive matching-pillar movement with positive current pillar should cap to +1.5")
-
-    packet, review = _review_template()
-    packet["model_interpretation"]["score_delta"] = -4
-    packet["model_interpretation"]["pillar_deltas"] = {"Scientific Challenge": -3.5}
-    review["design_confidence_subcategories"]["endpoint_evidence_strength"] = _subcategory(
-        "strong",
-        "Opposite-direction positive counterweight should be preserved against a negative matching-pillar move.",
-        ["endpoint_rigor_ml"],
-        "very_high",
-    )
-    result = validate_and_score_review(packet, review)
-    endpoint = (
-        result["scoring"].get("design_confidence_assessment", {})
-        .get("subcategories", {})
-        .get("endpoint_evidence_strength", {})
-    )
-    if endpoint.get("points") != 5:
-        errors.append("opposite-direction counterweight failed: positive Design Confidence should survive negative matching-pillar movement")
-
-    packet, review = _review_template()
-    packet["model_interpretation"]["score_delta"] = -4
-    packet["model_interpretation"]["pillar_deltas"] = {"Scientific Challenge": -3.5}
-    review["design_confidence_subcategories"]["endpoint_evidence_strength"] = _subcategory(
-        "conflicting",
-        "Same-pillar negative movement should remain modest once the current pillar is already negative.",
-        ["endpoint_rigor_ml"],
-        "very_high",
-    )
-    result = validate_and_score_review(packet, review)
-    endpoint = (
-        result["scoring"].get("design_confidence_assessment", {})
-        .get("subcategories", {})
-        .get("endpoint_evidence_strength", {})
-    )
-    if endpoint.get("points") != -1.5:
-        errors.append("same-direction negative cap failed: strong negative matching-pillar movement should soften to -1.5")
-
-    packet, review = _review_template()
-    packet["model_interpretation"]["score_delta"] = -4
-    packet["model_interpretation"]["pillar_impacts"] = {
-        "Therapeutic Context": 4.2,
-        "Scientific Challenge": 4.0,
-        "Patient Profile": 2.4,
-        "Execution Framework": 1.0,
-    }
-    packet["model_interpretation"]["pillar_deltas"] = {"Scientific Challenge": -3.5}
-    review["design_confidence_subcategories"]["endpoint_evidence_strength"] = _subcategory(
-        "conflicting",
-        "Same-pillar negative movement can keep meaningful critique when the current pillar remains positive.",
-        ["endpoint_rigor_ml"],
-        "very_high",
-    )
-    result = validate_and_score_review(packet, review)
-    endpoint = (
-        result["scoring"].get("design_confidence_assessment", {})
-        .get("subcategories", {})
-        .get("endpoint_evidence_strength", {})
-    )
-    if endpoint.get("points") != -2.5:
-        errors.append("same-direction negative cap failed: strong negative matching-pillar movement with residual strength should soften to -2.5")
-
-    packet, review = _review_template()
-    packet["model_interpretation"]["score_delta"] = 4
-    packet["model_interpretation"]["pillar_deltas"] = {"Scientific Challenge": 2.5}
-    review["design_confidence_subcategories"]["endpoint_evidence_strength"] = _subcategory(
-        "strong",
-        "Moderate matching-pillar movement should not trigger double-counting calibration.",
-        ["endpoint_rigor_ml"],
-        "very_high",
-    )
-    result = validate_and_score_review(packet, review)
-    endpoint = (
-        result["scoring"].get("design_confidence_assessment", {})
-        .get("subcategories", {})
-        .get("endpoint_evidence_strength", {})
-    )
-    if endpoint.get("points") != 5:
-        errors.append("same-direction threshold failed: matching-pillar movement below +3 should not cap points")
-
-    packet, review = _review_template()
-    packet["model_interpretation"]["score_delta"] = 4
-    packet["model_interpretation"]["pillar_deltas"] = {}
-    review["design_confidence_subcategories"]["endpoint_evidence_strength"] = _subcategory(
-        "strong",
-        "Total Completion Outlook movement alone should not trigger subcategory double-counting calibration.",
-        ["endpoint_rigor_ml"],
-        "very_high",
-    )
-    result = validate_and_score_review(packet, review)
-    endpoint = (
-        result["scoring"].get("design_confidence_assessment", {})
-        .get("subcategories", {})
-        .get("endpoint_evidence_strength", {})
-    )
-    if endpoint.get("points") != 5:
-        errors.append("pillar-only calibration failed: total score movement without matching-pillar movement should not cap points")
-
-    packet, review = _review_template()
-    packet["model_interpretation"]["previous_completion_score"] = 58
-    packet["model_interpretation"]["completion_score"] = 59
-    packet["model_interpretation"]["score_delta"] = 1
-    review["design_confidence_subcategories"]["phase_intent_alignment"] = _subcategory(
-        "strong",
-        "Already favorable prior score alone should not cap Design Confidence points.",
-        ["phase_ml"],
-        "very_high",
-    )
-    result = validate_and_score_review(packet, review)
-    phase = (
-        result["scoring"].get("design_confidence_assessment", {})
-        .get("subcategories", {})
-        .get("phase_intent_alignment", {})
-    )
-    if phase.get("points") != 5:
-        errors.append("removed saturation guard failed: prior score >=55 should not cap without matching-pillar movement")
+    if endpoint.get("points") != 0:
+        errors.append("unchanged movement failed: strong current state with unchanged movement should score 0")
 
 
 def _check_incomplete_review_suppresses_scores(errors: list[str]) -> None:

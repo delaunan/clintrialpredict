@@ -151,8 +151,17 @@ def _trial_block(trial_entry: dict[str, Any], index: int) -> list[str]:
 
 def export_review_pack(report_path: Path, out_path: Path) -> None:
     data = json.loads(report_path.read_text(encoding="utf-8"))
-    summary = data.get("summary") or {}
-    plan = data.get("scenario_plan") or {}
+    summary = data.get("summary") or {
+        key: data.get(key)
+        for key in ("visible_iterations", "reviewed_iterations", "failed_checks", "warning_checks")
+    }
+    plan_value = data.get("scenario_plan") or {}
+    if isinstance(plan_value, dict):
+        plan_name = plan_value.get("name")
+        plan_description = plan_value.get("description")
+    else:
+        plan_name = str(plan_value)
+        plan_description = data.get("scenario_description") or ""
     visible_iterations = _fmt(summary.get("visible_iterations"))
     trial_count = len(data.get("trials") or [])
     iteration_count_text = visible_iterations
@@ -165,7 +174,7 @@ def export_review_pack(report_path: Path, out_path: Path) -> None:
         f"# Storyline Review Pack: {_fmt(data.get('run_id') or report_path.stem)}",
         "",
         f"- Source report: `{report_path}`",
-        f"- Scenario plan: `{_fmt(plan.get('name'))}` - {_fmt(plan.get('description'))}",
+        f"- Scenario plan: `{_fmt(plan_name)}` - {_fmt(plan_description)}",
         f"- Generated: `{_fmt(data.get('generated_at'))}`",
         f"- Visible iterations: `{_fmt(summary.get('visible_iterations'))}`",
         f"- Reviewed iterations: `{_fmt(summary.get('reviewed_iterations'))}`",

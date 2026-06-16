@@ -14,6 +14,15 @@ This plan complements:
 
 ## Product Direction
 
+Current calibration update:
+
+- Design Confidence scoring is being simplified from absolute current-state scoring to movement-based adjustment scoring.
+- Provider subcategories should separate `current_state` from `movement_direction`, `movement_materiality`, and `effect_role`.
+- `current_state` supports narrative nuance; movement fields drive app-owned scoring.
+- This prevents unchanged baseline strengths from receiving new positive credit, allows weak current states to receive positive movement when partially fixed, and avoids extreme narrative reversals.
+- `effect_role=confirming` reduces same-field double counting with Completion Outlook, while `counterweight` and `independent` preserve trade-off signals.
+- The app applies a proportional net cap based on Completion Score movement and changed-field materiality, so bottom-up subcategory scoring remains visible but Total Scenario Score movement stays calibrated.
+
 The current narrative system should be reshaped around four concise participant-facing parts:
 
 1. `Completion Outlook Analysis`

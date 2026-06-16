@@ -6,7 +6,8 @@ import json
 from typing import Any
 
 from src.narratives.contract_fixtures import REQUIRED_DESIGN_SUBCATEGORIES
-from src.narratives.scoring import DESIGN_RATINGS, PARTICIPANT_REVIEW_KEYS, SCORE_MATERIALITY_LEVELS
+from src.narratives.scoring import DESIGN_RATINGS, PARTICIPANT_REVIEW_KEYS
+from src.narratives.scoring import EFFECT_ROLES, MOVEMENT_DIRECTIONS, MOVEMENT_MATERIALITY_LEVELS
 
 PROMPT_TEMPLATE_VERSION = "narrative_provider_prompt_v4"
 RESPONSE_SCHEMA_VERSION = "scenario_review_schema_v4"
@@ -225,16 +226,14 @@ OUTPUT_STYLE_REQUIREMENTS = {
 
 def provider_response_contract() -> dict[str, Any]:
     """Return the app-owned V2 response contract expected from providers."""
-    rating_contract = {
-        subcategory: sorted(DESIGN_RATINGS)
-        for subcategory in REQUIRED_SUBCATEGORY_NAMES
-    }
     return {
         "schema_version": RESPONSE_SCHEMA_VERSION,
         "required_top_level_objects": list(REQUIRED_TOP_LEVEL_OBJECTS),
         "required_design_confidence_subcategories": list(REQUIRED_SUBCATEGORY_NAMES),
-        "allowed_ratings_by_subcategory": rating_contract,
-        "allowed_score_materiality": sorted(SCORE_MATERIALITY_LEVELS),
+        "allowed_current_state": sorted(DESIGN_RATINGS),
+        "allowed_movement_direction": sorted(MOVEMENT_DIRECTIONS),
+        "allowed_movement_materiality": sorted(MOVEMENT_MATERIALITY_LEVELS),
+        "allowed_effect_role": sorted(EFFECT_ROLES),
         "rating_guidance": RATING_GUIDANCE,
         "subcategory_guidance": SUBCATEGORY_GUIDANCE,
         "expert_analysis_requirements": EXPERT_ANALYSIS_REQUIREMENTS,
@@ -243,8 +242,10 @@ def provider_response_contract() -> dict[str, Any]:
         "required_subcategory_fields": [
             "evidence_fields",
             "rationale",
-            "rating",
-            "score_materiality",
+            "current_state",
+            "movement_direction",
+            "movement_materiality",
+            "effect_role",
             "short_rationale",
             "optional_lenses_used",
             "regulatory_or_finance_note",
@@ -280,8 +281,10 @@ def provider_response_contract() -> dict[str, Any]:
         "reasoning_sequence": [
             "select packet-supported evidence_fields",
             "write rationale from those evidence_fields",
-            "assign rating from the evidence and rationale",
-            "assign score_materiality from supported evidence strength and context guardrails",
+            "assign current_state for the current full scenario",
+            "assign movement_direction versus the relevant anchor",
+            "assign movement_materiality from the edit's actual effect, not absolute current quality",
+            "assign effect_role to identify counterweight, confirming, independent, or unchanged scoring behavior",
         ],
     }
 
@@ -298,13 +301,21 @@ def _subcategory_schema() -> dict[str, Any]:
             "short_rationale": {"type": "STRING"},
             "optional_lenses_used": _string_array_schema(),
             "regulatory_or_finance_note": {"type": "STRING"},
-            "rating": {
+            "current_state": {
                 "type": "STRING",
                 "enum": sorted(DESIGN_RATINGS),
             },
-            "score_materiality": {
+            "movement_direction": {
                 "type": "STRING",
-                "enum": sorted(SCORE_MATERIALITY_LEVELS),
+                "enum": sorted(MOVEMENT_DIRECTIONS),
+            },
+            "movement_materiality": {
+                "type": "STRING",
+                "enum": sorted(MOVEMENT_MATERIALITY_LEVELS),
+            },
+            "effect_role": {
+                "type": "STRING",
+                "enum": sorted(EFFECT_ROLES),
             },
         },
         "required": [
@@ -313,8 +324,10 @@ def _subcategory_schema() -> dict[str, Any]:
             "short_rationale",
             "optional_lenses_used",
             "regulatory_or_finance_note",
-            "rating",
-            "score_materiality",
+            "current_state",
+            "movement_direction",
+            "movement_materiality",
+            "effect_role",
         ],
     }
 
@@ -576,10 +589,11 @@ def build_provider_prompt(packet: dict[str, Any], *, prompt_mode: str | None = N
         "Endpoint & Evidence Strength asks whether endpoints, comparator, masking, allocation, duration, and biomarker strategy support interpretable evidence. "
         "Target Population Alignment asks whether condition, severity, treatment line, eligibility, biomarker strategy, and patient scope fit the intended patient question. "
         "Operational Burden Balance asks whether enrollment, sites, Planned Total Timeline, arms, administration, oversight, and execution burden are proportionate to the evidence gained.\n"
-        "For each Design Confidence subcategory, first select packet-supported evidence_fields, then write the rationale, then assign rating and score_materiality. "
-        "Default to minimal unless the rationale identifies a concrete reason for larger score movement. "
-        "High or very_high positive score_materiality is rare and requires new or resolved design-quality evidence, not merely a favorable Completion Outlook. "
-        "Preserve each Design Confidence subcategory's meaning: when a change improves one design dimension but worsens another, reflect both effects in their relevant subcategories; cross-functional trade-offs may be justified in the overall Design Confidence judgment, but a subcategory should be positive only when that subcategory itself improved.\n"
+        "For each Design Confidence subcategory, first select packet-supported evidence_fields, then write the rationale, then separate current_state from movement. "
+        "current_state describes how defensible the current full scenario is. movement_direction and movement_materiality describe what the latest visible edit changed versus the relevant anchor. "
+        "The Design Confidence score effect follows movement, not absolute current_state: a strong current state with a small weakening can receive negative or unchanged movement, and a weak current state with a partial fix can receive positive movement while still naming the unresolved concern. "
+        "Use effect_role to mark whether the movement is a counterweight to Completion Outlook, confirming the same Completion Outlook direction, independent of Completion Outlook movement, or unchanged. "
+        "Preserve each Design Confidence subcategory's meaning: when a change improves one design dimension but worsens another, reflect both effects in their relevant subcategories; cross-functional trade-offs may be justified in the overall Design Confidence judgment, but a subcategory should receive positive movement only when that subcategory itself improved.\n"
         "One changed field may affect several Design Confidence subcategories. Reflect mixed effects in their correct subcategories rather than forcing one overall direction. "
         "Design Confidence summary and main_tension should synthesize cross-pillar effects from the latest change. When a change improves Completion Outlook but weakens evidence quality, population fit, phase/intent fit, or operational proportionality, state that trade-off directly. When a change worsens Completion Outlook but strengthens design defensibility, state that distinction directly.\n"
         "Question split: Completion Outlook narrative answers only whether the Completion Outlook score inputs or early-termination risk-pattern evidence moved, and why. "
@@ -590,21 +604,24 @@ def build_provider_prompt(packet: dict[str, Any], *, prompt_mode: str | None = N
         "If completion_outlook_mode is stable_non_score_input_context, Completion Outlook should use required_completion_outlook_sentence as the complete Completion Outlook summary when present. If no required sentence is provided, state that the score remains stable because the latest changes are not directly used to calculate the Completion Outlook score. Reserve the fixed planning-assumption sentence for fixed_planning_assumption_boundary mode. Keep planning-assumption details such as enrollment, site count, Planned Total Timeline, planned duration, primary duration, resource allocation, or operational footprint in Design Confidence only. "
         "If completion_outlook_mode is structured_score_inputs_only, write the Completion Outlook narrative from changed structured Completion Outlook score inputs and aligned Trial description field context only; keep fields in completion_outlook_forbidden_latest_fields and proxy phrases such as operational footprint, operational scale, site expansion, larger enrollment, scaled execution, or site performance out of Completion Outlook evidence. "
         "If completion_outlook_mode is consistency_note_only, mention any structured_features/text_context mismatch only briefly and rely on selected Completion Outlook score inputs for score interpretation. "
-        "If review_controls.shortcut_design_confidence_rule is present, apply it when assigning Design Confidence subcategory ratings and score_materiality. "
+        "If review_controls.shortcut_design_confidence_rule is present, apply it when assigning Design Confidence subcategory movement and materiality. "
         "Use packet.review_controls.question_controls to anchor questions to the latest change focus; reframe any older unresolved issue through the newest material change. "
         "When review_controls are present, explain the latest change without re-labeling older cumulative issues as newly changed.\n"
         "If operational burden increases without matching evidence gain, operational_burden_balance should be neutral or negative even when the total Design Confidence remains positive because other current-scenario strengths remain.\n"
         "Operational Burden Balance may discuss qualitative resource, staffing, and budget implications when packet fields imply added burden. Keep monetary cost, affordability, and financial feasibility claims tied to explicit financial evidence. Judge whether the added resource intensity is proportionate to the evidence, patient-relevance, governance, or interpretability value gained.\n"
         "Operational simplification caused mainly by weaker comparator, masking, allocation, endpoint rigor, or evidence ambition may receive feasibility credit, but strong positive Operational Burden Balance (+3 to +5) requires independent operational value or a context where lower evidence ambition is appropriate, such as a coherent safety-extension/proportionality rationale. Removing randomization, masking, comparator structure, arms, or endpoint rigor is not independent operational value by itself. In shortcut scenarios, Operational Burden Balance should usually be bounded unless a separate access, safety-extension, oversight, patient-burden, or proportionality gain is present. Otherwise frame shortcut-driven feasibility as bounded and usually low or moderate materiality, so it does not overpower Endpoint Evidence Strength or Phase & Intent concerns.\n"
-        "If the corresponding Completion Outlook pillar is already strongly positive, positive Design Confidence score_materiality for that same pillar should usually be minimal or low unless the packet shows a resolved current-scenario weakness or new design-quality evidence not already captured by Completion Outlook.\n"
+        "If Design Confidence movement confirms the same fields and direction already reflected in Completion Outlook, use effect_role confirming so the app can reduce double counting. Counterweight and independent movements may carry fuller Design Confidence weight.\n"
         "Scenario edits are cumulative, but Design Confidence is recalculated fresh from the current full scenario state. "
         "Use prior visible reviews for continuity and deltas only: identify concerns that remain unresolved, concerns that "
         "were resolved by current fields, and newly introduced concerns. Stop penalizing or rewarding a prior issue "
         "after the current packet evidence shows the underlying scenario weakness has been fixed.\n"
+        "In first_visible_iteration, hidden baseline Design Confidence subcategory ratings are qualitative context only. "
+        "Use them to identify original strengths, original concerns, and what the first visible edit resolves, worsens, offsets, or newly creates. "
+        "Assign movement_materiality only when the first visible edit changes evidence in that subcategory; unchanged baseline strengths or weaknesses should usually be unchanged movement with none materiality.\n"
         "When iteration_context.design_confidence_continuity.available is true, use its subcategory anchors before assigning current Design Confidence ratings. "
         "For each subcategory, compare previous_rating, previous_points, previous_evidence_fields, previous_rationale, current_relevant_changed_fields, and iteration_context.field_changes with the current packet evidence. "
-        "Classify the current effect before assigning rating/materiality: unchanged means no relevant current evidence changed this subcategory; prior weakness unresolved means a prior weakness remains and the latest change does not address it; prior weakness resolved means the field or evidence causing the prior weakness changed or no longer applies; prior weakness offset means the prior weakness remains but new relevant evidence partly balances it; prior weakness worsened means the prior weakness remains and new relevant evidence adds pressure; new strength or new weakness means current evidence newly strengthens or weakens this subcategory. "
-        "Keep the current rating direction broadly stable when current_relevant_changed_fields is empty. Move rating or score_materiality when current packet evidence supports resolved, offset, worsened, new-strength, or new-weakness reasoning. "
+        "Classify the current effect before assigning movement: unchanged means no relevant current evidence changed this subcategory; prior weakness unresolved means a prior weakness remains and the latest change does not address it; prior weakness resolved means the field or evidence causing the prior weakness changed or no longer applies; prior weakness offset means the prior weakness remains but new relevant evidence partly balances it; prior weakness worsened means the prior weakness remains and new relevant evidence adds pressure; new strength or new weakness means current evidence newly strengthens or weakens this subcategory. "
+        "Keep current_state broadly stable when current_relevant_changed_fields is empty. Move movement_direction or movement_materiality when current packet evidence supports resolved, offset, worsened, new-strength, or new-weakness reasoning. "
         "If a changed field appears in previous_evidence_fields, compare current_value/current_label with previous_value/previous_label and baseline_value/baseline_label from field_changes. If the current edit restores, reverses, or materially reduces the prior weakness, treat the prior issue as resolved or reduced. "
         "If a structured_features/text_context conflict is unchanged from the prior visible iteration, keep the consistency warning visible but treat it as an unresolved prior concern rather than a new or expanded penalty. "
         "Avoid increasing a subcategory merely because a prior strength remains true, and avoid carrying forward a prior penalty mechanically when current relevant evidence offsets or resolves it.\n"

@@ -37,6 +37,34 @@ DESIGN_RATINGS = {
     "conflicting",
 }
 
+CURRENT_STATE_LEVELS = DESIGN_RATINGS
+
+MOVEMENT_DIRECTIONS = {
+    "resolved",
+    "improved",
+    "partially_resolved",
+    "unchanged",
+    "offset",
+    "weakened",
+    "worsened",
+    "newly_introduced",
+}
+
+MOVEMENT_MATERIALITY_LEVELS = {
+    "none",
+    "minor",
+    "moderate",
+    "major",
+}
+
+EFFECT_ROLES = {
+    "counterweight",
+    "confirming",
+    "independent",
+    "unchanged",
+}
+
+# Compatibility alias for older prompt/checker code during migration.
 SCORE_MATERIALITY_LEVELS = {
     "minimal",
     "low",
@@ -45,58 +73,46 @@ SCORE_MATERIALITY_LEVELS = {
     "very_high",
 }
 
-DESIGN_RATING_MATERIALITY_POINTS = {
-    "strong": {
-        "minimal": 3.0,
-        "low": 3.5,
-        "moderate": 4.0,
-        "high": 4.5,
-        "very_high": 5.0,
-    },
-    "supportive": {
-        "minimal": 0.5,
-        "low": 1.0,
-        "moderate": 1.5,
-        "high": 2.0,
-        "very_high": 2.5,
-    },
-    "balanced": {
-        "minimal": 0.0,
-        "low": 0.0,
-        "moderate": 0.0,
-        "high": 0.0,
-        "very_high": 0.0,
-    },
-    "weak": {
-        "minimal": -0.5,
-        "low": -1.0,
-        "moderate": -1.5,
-        "high": -2.0,
-        "very_high": -2.5,
-    },
-    "conflicting": {
-        "minimal": -3.0,
-        "low": -3.5,
-        "moderate": -4.0,
-        "high": -4.5,
-        "very_high": -5.0,
-    },
+MOVEMENT_MATERIALITY_POINTS = {
+    "none": 0.0,
+    "minor": 0.5,
+    "moderate": 1.0,
+    "major": 2.0,
+}
+
+POSITIVE_MOVEMENTS = {
+    "resolved",
+    "improved",
+    "partially_resolved",
+    "offset",
+}
+
+NEGATIVE_MOVEMENTS = {
+    "weakened",
+    "worsened",
+    "newly_introduced",
+}
+
+EFFECT_ROLE_MULTIPLIERS = {
+    "counterweight": 1.0,
+    "independent": 1.0,
+    "confirming": 0.5,
+    "unchanged": 0.0,
 }
 
 # Temporary compatibility alias for prompt/schema code that migrates in Phase 4.
 DOMAIN_RATING_POINTS = {
     subcategory_name: {
-        rating: values["minimal"]
-        for rating, values in DESIGN_RATING_MATERIALITY_POINTS.items()
+        rating: 0.0
+        for rating in DESIGN_RATINGS
     }
     for subcategory_name in sorted(REQUIRED_DESIGN_SUBCATEGORIES)
 }
 
-DESIGN_SUBCATEGORY_MIN = -5.0
-DESIGN_SUBCATEGORY_MAX = 5.0
-STRONG_PILLAR_DELTA = 3.0
-SAME_DIRECTION_STRONG_CAP = 1.5
-SAME_DIRECTION_RESIDUAL_WEAKNESS_CAP = 2.5
+DESIGN_SUBCATEGORY_MIN = -2.0
+DESIGN_SUBCATEGORY_MAX = 2.0
+DESIGN_CONFIDENCE_NORMAL_CAP = 4.0
+DESIGN_CONFIDENCE_EXCEPTIONAL_CAP = 6.0
 TOTAL_SCORE_MIN = 0
 TOTAL_SCORE_MAX = 100
 
@@ -229,94 +245,43 @@ def _supported_evidence(evidence_fields: list[str], packet: dict[str, Any]) -> t
     return supported, unsupported
 
 
-def _completion_pillar_delta(packet: dict[str, Any], subcategory_name: str) -> float | None:
-    pillar_key = DESIGN_SUBCATEGORY_PILLARS.get(subcategory_name)
-    pillar_label = DESIGN_PILLAR_LABELS.get(pillar_key or "")
-    deltas = (packet.get("model_interpretation") or {}).get("pillar_deltas") or {}
-    value = None
-    if isinstance(deltas, dict):
-        value = deltas.get(pillar_label)
-    elif isinstance(deltas, list):
-        for delta in deltas:
-            if not isinstance(delta, dict):
-                continue
-            if delta.get("Pillar") == pillar_label:
-                value = delta.get("Delta", delta.get("delta"))
-                break
-    return float(value) if isinstance(value, (int, float)) else None
-
-
-def _completion_pillar_value(packet: dict[str, Any], subcategory_name: str) -> float | None:
-    pillar_key = DESIGN_SUBCATEGORY_PILLARS.get(subcategory_name)
-    pillar_label = DESIGN_PILLAR_LABELS.get(pillar_key or "")
-    impacts = (packet.get("model_interpretation") or {}).get("pillar_impacts") or {}
-    value = None
-    if isinstance(impacts, dict):
-        value = impacts.get(pillar_label)
-    elif isinstance(impacts, list):
-        for impact in impacts:
-            if not isinstance(impact, dict):
-                continue
-            if impact.get("Pillar") == pillar_label:
-                value = impact.get("Impact")
-                break
-    return float(value) if isinstance(value, (int, float)) else None
-
-
 def _base_design_points(
-    rating: str,
-    score_materiality: str,
+    movement_direction: str,
+    movement_materiality: str,
+    effect_role: str,
 ) -> float:
-    """Map validated qualitative review fields to deterministic raw Design Confidence points."""
-    return DESIGN_RATING_MATERIALITY_POINTS.get(rating, {}).get(score_materiality, 0.0)
+    """Map movement-based qualitative review fields to deterministic raw Design Confidence points."""
+    if movement_direction in POSITIVE_MOVEMENTS:
+        sign = 1.0
+    elif movement_direction in NEGATIVE_MOVEMENTS:
+        sign = -1.0
+    else:
+        sign = 0.0
+    magnitude = MOVEMENT_MATERIALITY_POINTS.get(movement_materiality, 0.0)
+    multiplier = EFFECT_ROLE_MULTIPLIERS.get(effect_role, 1.0)
+    return sign * magnitude * multiplier
 
 
-def _same_direction_cap(
-    raw_points: float,
-    packet: dict[str, Any],
-    subcategory_name: str,
-) -> tuple[float, str | None]:
-    pillar_delta = _completion_pillar_delta(packet, subcategory_name)
-    pillar_value = _completion_pillar_value(packet, subcategory_name)
-    strong_positive = pillar_delta is not None and pillar_delta >= STRONG_PILLAR_DELTA
-    strong_negative = pillar_delta is not None and pillar_delta <= -STRONG_PILLAR_DELTA
-    positive_cap = (
-        SAME_DIRECTION_RESIDUAL_WEAKNESS_CAP
-        if pillar_value is not None and pillar_value < 0
-        else SAME_DIRECTION_STRONG_CAP
-    )
-    negative_cap = (
-        -SAME_DIRECTION_RESIDUAL_WEAKNESS_CAP
-        if pillar_value is not None and pillar_value > 0
-        else -SAME_DIRECTION_STRONG_CAP
-    )
-    if raw_points > positive_cap and strong_positive:
-        return (
-            positive_cap,
-            "positive Design Confidence softened because the matching Completion Outlook pillar already moved strongly positive",
-        )
-    if raw_points < negative_cap and strong_negative:
-        return (
-            negative_cap,
-            "negative Design Confidence softened because the matching Completion Outlook pillar already moved strongly negative",
-        )
-    return raw_points, None
+def _legacy_movement_direction(rating: str | None) -> str:
+    return {
+        "strong": "improved",
+        "supportive": "improved",
+        "balanced": "unchanged",
+        "weak": "weakened",
+        "conflicting": "worsened",
+    }.get(str(rating or ""), "unchanged")
 
 
-def _calibrated_design_points(
-    subcategory_name: str,
-    raw_points: float,
-    packet: dict[str, Any],
-) -> tuple[float, list[str]]:
-    """Apply conservative app-owned caps without changing the score direction."""
-    points = raw_points
-    notes: list[str] = []
-    capped_points, same_direction_note = _same_direction_cap(points, packet, subcategory_name)
-    if capped_points != points:
-        points = capped_points
-        notes.append(same_direction_note or "same-direction Design Confidence amplification softened")
-
-    return points, notes
+def _legacy_movement_materiality(score_materiality: str | None, movement_direction: str) -> str:
+    if movement_direction == "unchanged":
+        return "none"
+    return {
+        "minimal": "minor",
+        "low": "minor",
+        "moderate": "moderate",
+        "high": "major",
+        "very_high": "major",
+    }.get(str(score_materiality or ""), "minor")
 
 
 def _validated_subcategory(subcategory_name: str, subcategory: Any) -> tuple[dict[str, Any], list[str]]:
@@ -330,8 +295,18 @@ def _validated_subcategory(subcategory_name: str, subcategory: Any) -> tuple[dic
             "validation_notes": ["design subcategory is not an object"],
         }, [f"{subcategory_name}: design subcategory is not an object"]
 
-    rating = subcategory.get("rating")
+    current_state = subcategory.get("current_state", subcategory.get("rating"))
+    movement_direction = subcategory.get("movement_direction")
+    movement_materiality = subcategory.get("movement_materiality")
+    effect_role = subcategory.get("effect_role")
+    rating = subcategory.get("rating", current_state)
     score_materiality = subcategory.get("score_materiality")
+    if movement_direction is None:
+        movement_direction = _legacy_movement_direction(rating)
+    if movement_materiality is None:
+        movement_materiality = _legacy_movement_materiality(score_materiality, str(movement_direction))
+    if effect_role is None:
+        effect_role = "unchanged" if movement_direction == "unchanged" else "independent"
     rationale = subcategory.get("rationale")
     evidence_fields = subcategory.get("evidence_fields")
     short_rationale = subcategory.get("short_rationale")
@@ -339,11 +314,17 @@ def _validated_subcategory(subcategory_name: str, subcategory: Any) -> tuple[dic
     regulatory_or_finance_note = subcategory.get("regulatory_or_finance_note")
     valid = True
 
-    if rating not in DESIGN_RATINGS:
-        errors.append(f"{subcategory_name}: invalid rating {rating!r}")
+    if current_state not in CURRENT_STATE_LEVELS:
+        errors.append(f"{subcategory_name}: invalid current_state {current_state!r}")
         valid = False
-    if score_materiality not in SCORE_MATERIALITY_LEVELS:
-        errors.append(f"{subcategory_name}: invalid score_materiality {score_materiality!r}")
+    if movement_direction not in MOVEMENT_DIRECTIONS:
+        errors.append(f"{subcategory_name}: invalid movement_direction {movement_direction!r}")
+        valid = False
+    if movement_materiality not in MOVEMENT_MATERIALITY_LEVELS:
+        errors.append(f"{subcategory_name}: invalid movement_materiality {movement_materiality!r}")
+        valid = False
+    if effect_role not in EFFECT_ROLES:
+        errors.append(f"{subcategory_name}: invalid effect_role {effect_role!r}")
         valid = False
     if not isinstance(rationale, str):
         errors.append(f"{subcategory_name}: rationale must be a string")
@@ -367,6 +348,10 @@ def _validated_subcategory(subcategory_name: str, subcategory: Any) -> tuple[dic
         valid = False
 
     return {
+        "current_state": current_state,
+        "movement_direction": movement_direction,
+        "movement_materiality": movement_materiality,
+        "effect_role": effect_role,
         "rating": rating,
         "score_materiality": score_materiality,
         "rationale": rationale,
@@ -584,20 +569,16 @@ def _score_subcategory(packet: dict[str, Any], subcategory_name: str, subcategor
     evidence_fields = list(subcategory.get("evidence_fields") or [])
     supported, unsupported = _supported_evidence(evidence_fields, packet)
     raw_points = _base_design_points(
-        str(subcategory.get("rating")),
-        str(subcategory.get("score_materiality")),
+        str(subcategory.get("movement_direction")),
+        str(subcategory.get("movement_materiality")),
+        str(subcategory.get("effect_role")),
     )
     notes = list(subcategory.get("validation_notes") or [])
-    calibration_notes: list[str] = []
     if raw_points and not supported:
         points = 0
         notes.append("rating has no point effect because evidence_fields do not reference packet evidence")
     else:
-        points, calibration_notes = _calibrated_design_points(
-            subcategory_name,
-            raw_points,
-            packet,
-        )
+        points = raw_points
     points = clamp(points, DESIGN_SUBCATEGORY_MIN, DESIGN_SUBCATEGORY_MAX)
     return {
         **deepcopy(subcategory),
@@ -605,9 +586,75 @@ def _score_subcategory(packet: dict[str, Any], subcategory_name: str, subcategor
         "unsupported_evidence_fields": unsupported,
         "raw_points": _clean_points(raw_points),
         "points": points,
-        "calibration_notes": calibration_notes,
+        "calibration_notes": [],
         "validation_notes": notes,
     }
+
+
+def _scenario_materiality_cap(packet: dict[str, Any]) -> float:
+    model = packet.get("model_interpretation") or {}
+    score_delta = model.get("score_delta")
+    abs_delta = abs(float(score_delta)) if isinstance(score_delta, (int, float)) else 0.0
+    if abs_delta < 1:
+        delta_cap = 2.0
+    elif abs_delta < 3:
+        delta_cap = 3.0
+    elif abs_delta < 6:
+        delta_cap = 4.0
+    else:
+        delta_cap = 5.0
+
+    changed_fields = [
+        str(field)
+        for field in ((packet.get("iteration_context") or {}).get("changed_fields") or [])
+    ]
+    structured_changes = [
+        field for field in changed_fields
+        if not field.startswith("text_context.") and not field.startswith("operational_assumptions.")
+    ]
+    operational_changes = [field for field in changed_fields if field.startswith("operational_assumptions.")]
+    text_changes = [field for field in changed_fields if field.startswith("text_context.")]
+
+    if len(structured_changes) >= 4:
+        change_cap = 5.0
+    elif len(structured_changes) >= 2:
+        change_cap = 4.0
+    elif len(structured_changes) == 1:
+        change_cap = 3.0
+    elif operational_changes:
+        change_cap = 2.0
+    elif text_changes:
+        change_cap = 1.5
+    else:
+        change_cap = 1.0
+
+    # Major coherent redesigns can exceed a flat-score cap, but still stay inside a small adjustment range.
+    return min(DESIGN_CONFIDENCE_EXCEPTIONAL_CAP, max(delta_cap, change_cap))
+
+
+def _apply_net_cap(subcategory_results: dict[str, dict[str, Any]], cap: float) -> None:
+    net = sum(float(item.get("points") or 0) for item in subcategory_results.values())
+    if abs(net) <= cap or not net:
+        return
+
+    if net > cap:
+        side_total = sum(float(item.get("points") or 0) for item in subcategory_results.values() if float(item.get("points") or 0) > 0)
+        allowed_side_total = side_total - (net - cap)
+        scale = max(0.0, allowed_side_total / side_total) if side_total else 0.0
+        side = "positive"
+    else:
+        side_total = sum(abs(float(item.get("points") or 0)) for item in subcategory_results.values() if float(item.get("points") or 0) < 0)
+        allowed_side_total = side_total - (abs(net) - cap)
+        scale = max(0.0, allowed_side_total / side_total) if side_total else 0.0
+        side = "negative"
+
+    for item in subcategory_results.values():
+        points = float(item.get("points") or 0)
+        if (side == "positive" and points > 0) or (side == "negative" and points < 0):
+            item["points"] = _clean_points(points * scale)
+            item.setdefault("calibration_notes", []).append(
+                f"{side} Design Confidence movement scaled to keep net adjustment within +/-{_clean_points(cap)}"
+            )
 
 
 def _design_contributions(packet: dict[str, Any], validated_subcategories: dict[str, dict[str, Any]]) -> dict[str, Any]:
@@ -626,9 +673,18 @@ def _design_contributions(packet: dict[str, Any], validated_subcategories: dict[
     for subcategory_name, subcategory in validated_subcategories.items():
         scored = _score_subcategory(packet, subcategory_name, subcategory)
         subcategory_results[subcategory_name] = scored
+
+    design_cap = _scenario_materiality_cap(packet)
+    _apply_net_cap(subcategory_results, design_cap)
+
+    for subcategory_name, scored in subcategory_results.items():
         pillar_key = DESIGN_SUBCATEGORY_PILLARS[subcategory_name]
         pillars[pillar_key]["design_subcategories"][subcategory_name] = {
             "label": DESIGN_SUBCATEGORY_LABELS[subcategory_name],
+            "current_state": scored.get("current_state"),
+            "movement_direction": scored.get("movement_direction"),
+            "movement_materiality": scored.get("movement_materiality"),
+            "effect_role": scored.get("effect_role"),
             "rating": scored.get("rating"),
             "score_materiality": scored.get("score_materiality"),
             "raw_points": scored.get("raw_points"),
@@ -653,6 +709,7 @@ def _design_contributions(packet: dict[str, Any], validated_subcategories: dict[
         "subcategories": subcategory_results,
         "pillars": pillars,
         "design_confidence": design_confidence,
+        "design_confidence_cap": _clean_points(design_cap),
     }
 
 

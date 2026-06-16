@@ -880,6 +880,10 @@ def _compact_review_context(
         ),
         "design_confidence_subcategory_ratings": {
             subcategory_name: {
+                "current_state": subcategory.get("current_state"),
+                "movement_direction": subcategory.get("movement_direction"),
+                "movement_materiality": subcategory.get("movement_materiality"),
+                "effect_role": subcategory.get("effect_role"),
                 "rating": subcategory.get("rating"),
                 "score_materiality": subcategory.get("score_materiality"),
                 "rationale": subcategory.get("rationale"),
@@ -978,6 +982,10 @@ def _design_confidence_continuity(
         relevant_changes = design_confidence_relevant_changed_fields(subcategory_name, changed_fields)
         subcategories[subcategory_name] = {
             "label": label,
+            "previous_current_state": rating.get("current_state"),
+            "previous_movement_direction": rating.get("movement_direction"),
+            "previous_movement_materiality": rating.get("movement_materiality"),
+            "previous_effect_role": rating.get("effect_role"),
             "previous_rating": rating.get("rating"),
             "previous_score_materiality": rating.get("score_materiality"),
             "previous_points": contribution.get("points"),
