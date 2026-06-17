@@ -1,10 +1,14 @@
 # Strategic Review Phase 1 Contract
 
+> Superseded on 2026-06-17 by `docs/trial_score_narrative_direction.md`.
+> This file remains historical context for the first Strategic Review migration.
+> Do not use it as the active planning source for the next narrative/scoring work.
+
 ## Document Role
 
-This document is the clean Phase 1 source for the next narrative/scoring direction. It is intentionally separate from older narrative plans that contain unfinished or superseded `Design Confidence`, `Total Scenario Score`, `Quality Review`, and calibration work.
+This document was the clean Phase 1 source for the first Strategic Review migration. It is intentionally separate from older narrative plans that contain unfinished or superseded `Design Confidence`, `Total Scenario Score`, `Quality Review`, and calibration work.
 
-Use this document to align terminology and product behavior before changing prompts, scoring code, UI labels, eval harnesses, or architecture history.
+Use `docs/trial_score_narrative_direction.md` to align terminology and product behavior before changing prompts, scoring code, UI labels, eval harnesses, or architecture history.
 
 ## Superseded Direction
 
@@ -632,5 +636,5 @@ Expected changes:
 
 - Mark old `Design Confidence` / `Total Scenario Score` sections as superseded.
 - Promote durable Strategic Review decisions into `docs/architecture_narratives.md`.
-- Update or retire `implementation_plan.md` and `prompt_enhancement_plan.md`.
+- Retire obsolete root planning files.
 - Keep historical details only where they explain implementation provenance.

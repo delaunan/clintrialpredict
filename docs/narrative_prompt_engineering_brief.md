@@ -1,14 +1,16 @@
 # Narrative Prompt Engineering Brief
 
+> Superseded planning note: this brief describes the older Scenario Review / Design Confidence prompt system. The active next narrative direction is `docs/trial_score_narrative_direction.md`. Use this file only as historical prompt anatomy when recycling useful packet or provider ideas.
+
 ## Purpose
 
 Architecture scope: `architecture_narratives`
 
-This brief is the working prompt-engineering artifact for the Scenario Review / Design Confidence layer. It explains what the LLM currently receives, how the LLM flow works, which files feed the prompt, and how prompt/content/settings changes should be evaluated before implementation and deployment.
+This brief is historical prompt-engineering context for the older Scenario Review / Design Confidence layer. It explains what the LLM received in that flow, how the LLM flow worked, which files fed the prompt, and how prompt/content/settings changes were evaluated.
 
-Use this file when the work is about narrative quality, prompt content, reference packs, provider settings, or reproducible LLM behavior. Use `docs/architecture_narratives.md` for durable product architecture decisions.
+Use `docs/trial_score_narrative_direction.md` for the active planning direction and `docs/architecture_narratives.md` for durable product architecture decisions.
 
-Status note: this brief reconstructs the current prompt system for understanding and debugging. The target prompt/schema migration is tracked in `prompt_enhancement_plan.md`; accepted durable decisions from that plan should be promoted into `docs/architecture_narratives.md` before code implementation.
+Status note: do not use this file as an active implementation plan. The old `prompt_enhancement_plan.md` root document has been removed as obsolete planning material.
 
 ## Current Prompt Anatomy
 
@@ -173,9 +175,9 @@ Best-practice pattern to preserve:
 - cache keys include provider/model/settings namespace
 - diagnostics store provider metadata without API keys or raw secrets
 
-## Target Prompt Process
+## Historical Target Prompt Process
 
-The next prompt/schema migration is defined in detail in `prompt_enhancement_plan.md`. This section summarizes the target prompt process for learning and review.
+This section summarizes the older target prompt process for learning and review. It is not the active next prompt/schema migration.
 
 The target design keeps one shared response schema with mode-specific constraints. The shared schema should include:
 
@@ -473,7 +475,7 @@ At the time this brief reconstructed the current prompt, the participant output 
 6. One medical/development debate question.
 7. One clinops/execution debate question.
 
-The next target participant output is now defined in `prompt_enhancement_plan.md` as three blocks: Completion Outlook Analysis, Design Confidence Analysis, and Two Key Questions.
+That historical target participant output was later superseded. The active participant narrative direction is now defined in `docs/trial_score_narrative_direction.md`: one integrated Trial Score narrative, one central tension, and one broader strategic question.
 
 Open design questions:
 

@@ -25,7 +25,7 @@ This file is the **Single Source of Truth** for all AI agents (Gemini CLI, Antig
 
 ### Advisory & Planning Protocols
 - **Advisory Mode**: Default to explaining and reviewing risks before editing.
-- **Planning Mode**: Strictly follow the Planning Mode workflow. Create/update `implementation_plan.md` and obtain user approval before execution.
+- **Planning Mode**: Strictly follow the Planning Mode workflow. Create or update a scoped plan document only when explicitly requested; do not recreate obsolete root planning files by default.
 - **Reply Quality**: Final replies should state the architecture scope, files changed, verification run, remaining risk, and next action. Do not restate long history unless the user asks.
 
 ### Parity & Regression Safeguards
