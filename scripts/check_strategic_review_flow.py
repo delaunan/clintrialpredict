@@ -169,6 +169,45 @@ def main() -> int:
     _assert_equal(errors, "negative softening Strategic Review", result["scoring"].get("strategic_review"), 0.8)
     _assert_equal(errors, "negative softening Trial Score", result["scoring"].get("trial_score"), 60.8)
 
+    result = validate_and_score_review(
+        negative_packet,
+        _review(effect_label="supports_tradeoff_balance", evidence_fields=["endpoint_rigor_ml"]),
+    )
+    normalized_review = result["validated_review"].get("strategic_review") or {}
+    _assert_equal(
+        errors,
+        "negative flat-support label normalization",
+        normalized_review.get("effect_label"),
+        "softens_score_decline",
+    )
+    _assert_equal(errors, "normalized negative flat-support Strategic Review", result["scoring"].get("strategic_review"), 0.8)
+
+    result = validate_and_score_review(
+        negative_packet,
+        _review(effect_label="worsens_active_tension", evidence_fields=["endpoint_rigor_ml"]),
+    )
+    normalized_review = result["validated_review"].get("strategic_review") or {}
+    _assert_equal(
+        errors,
+        "negative flat-worsening label normalization",
+        normalized_review.get("effect_label"),
+        "reinforces_score_decline",
+    )
+    _assert_equal(errors, "normalized negative flat-worsening Strategic Review", result["scoring"].get("strategic_review"), -2.4)
+
+    result = validate_and_score_review(
+        packet,
+        _review(effect_label="worsens_active_tension"),
+    )
+    normalized_review = result["validated_review"].get("strategic_review") or {}
+    _assert_equal(
+        errors,
+        "positive flat-worsening label normalization",
+        normalized_review.get("effect_label"),
+        "partly_offsets_score_gain",
+    )
+    _assert_equal(errors, "normalized positive flat-worsening Strategic Review", result["scoring"].get("strategic_review"), -2)
+
     operational_packet = _packet(
         completion=70,
         previous=70,

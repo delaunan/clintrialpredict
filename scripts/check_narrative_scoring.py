@@ -134,6 +134,31 @@ def _check_negative_softening(errors: list[str]) -> None:
         errors.append("negative softening Trial Score should use the current Completion Outlook")
 
 
+def _check_flat_labels_normalize_for_score_movement(errors: list[str]) -> None:
+    negative_packet = _packet(completion_score=60, previous_score=68)
+    result = validate_and_score_review(negative_packet, _review("supports_tradeoff_balance"))
+    strategic_review = result["validated_review"].get("strategic_review") or {}
+    if strategic_review.get("effect_label") != "softens_score_decline":
+        errors.append("negative movement should normalize flat support label to decline-softening label")
+    if result["scoring"].get("strategic_review") != 0.8:
+        errors.append("normalized negative support label should score as decline softening")
+
+    result = validate_and_score_review(negative_packet, _review("worsens_active_tension"))
+    strategic_review = result["validated_review"].get("strategic_review") or {}
+    if strategic_review.get("effect_label") != "reinforces_score_decline":
+        errors.append("negative movement should normalize flat worsening label to decline-reinforcing label")
+    if result["scoring"].get("strategic_review") != -2.4:
+        errors.append("normalized negative worsening label should score as decline reinforcement")
+
+    positive_packet = _packet(completion_score=70, previous_score=60)
+    result = validate_and_score_review(positive_packet, _review("worsens_active_tension"))
+    strategic_review = result["validated_review"].get("strategic_review") or {}
+    if strategic_review.get("effect_label") != "partly_offsets_score_gain":
+        errors.append("positive movement should normalize flat worsening label to gain-offset label")
+    if result["scoring"].get("strategic_review") != -2:
+        errors.append("normalized positive worsening label should score as gain offset")
+
+
 def _check_operational_only(errors: list[str]) -> None:
     packet = _packet(
         completion_score=70,
@@ -168,6 +193,10 @@ def _check_invalid_or_legacy_outputs(errors: list[str]) -> None:
     result = validate_and_score_review(packet, app_score_review)
     if result["scoring"].get("validation_status") == "valid":
         errors.append("provider-returned app-owned score fields should prevent a valid provider result")
+    if result["scoring"].get("strategic_review") is None:
+        errors.append("provider-returned app-owned score fields should be ignored without suppressing Strategic Review")
+    if result["scoring"].get("trial_score") is None:
+        errors.append("provider-returned app-owned score fields should be ignored without suppressing Trial Score")
     if not any("application-owned" in error for error in result["scoring"].get("validation_errors") or []):
         errors.append("app-owned score fields should be reported")
 
@@ -182,8 +211,10 @@ def _check_invalid_or_legacy_outputs(errors: list[str]) -> None:
     malformed_continuity["continuity"]["prior_concerns_resolved"] = "not-an-array"
     malformed_continuity["continuity"]["storyline_update"] = 123
     result = validate_and_score_review(packet, malformed_continuity)
-    if result["scoring"].get("strategic_review") is not None:
-        errors.append("malformed continuity should suppress Strategic Review")
+    if result["scoring"].get("strategic_review") is None:
+        errors.append("malformed continuity should warn without suppressing Strategic Review")
+    if not any("continuity." in error for error in result["scoring"].get("validation_errors") or []):
+        errors.append("malformed continuity should report validation warnings")
 
 
 def _check_hidden_baseline_suppresses_scores(errors: list[str]) -> None:
@@ -211,6 +242,7 @@ def main() -> int:
     _check_positive_support(errors)
     _check_positive_offset_and_carryover(errors)
     _check_negative_softening(errors)
+    _check_flat_labels_normalize_for_score_movement(errors)
     _check_operational_only(errors)
     _check_invalid_or_legacy_outputs(errors)
     _check_hidden_baseline_suppresses_scores(errors)

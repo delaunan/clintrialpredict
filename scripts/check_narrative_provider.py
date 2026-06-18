@@ -26,6 +26,7 @@ from src.narratives.provider import (  # noqa: E402
     MOCK_MODEL_NAME,
     PROVIDER_MOCK,
     PROVIDER_VALIDATION_RETRY_ATTEMPTS,
+    STATUS_REVIEWED,
     _gemini_http_options,
     _record_gemini_response_metadata,
     _score_provider_review,
@@ -239,12 +240,17 @@ def main() -> int:
         review=review_with_app_score,
         provider_metadata={},
     )
-    if app_score_result.get("status") != FAILURE_MALFORMED_RESPONSE:
-        errors.append("provider-returned app score field should make result malformed_response")
-    if app_score_result.get("scoring", {}).get("strategic_review") is not None:
-        errors.append("provider-returned app score field should suppress Strategic Review")
-    if app_score_result.get("scoring", {}).get("trial_score") is not None:
-        errors.append("provider-returned app score field should suppress Trial Score")
+    if app_score_result.get("status") != STATUS_REVIEWED:
+        errors.append("provider-returned app score field should be ignored without making result malformed_response")
+    if app_score_result.get("scoring", {}).get("strategic_review") is None:
+        errors.append("provider-returned app score field should not suppress Strategic Review")
+    if app_score_result.get("scoring", {}).get("trial_score") is None:
+        errors.append("provider-returned app score field should not suppress Trial Score")
+    if not any(
+        "application-owned" in str(error)
+        for error in app_score_result.get("scoring", {}).get("validation_errors") or []
+    ):
+        errors.append("provider-returned app score field should stay visible as a validation warning")
 
     _check_openai_validation_retry(packet, fixture, errors)
 

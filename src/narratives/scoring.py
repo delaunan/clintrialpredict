@@ -832,6 +832,50 @@ def _effect_label_movement_error(packet: dict[str, Any], strategic_review: dict[
     return None
 
 
+FLAT_TO_POSITIVE_EFFECT_LABELS = {
+    "supports_tradeoff_balance": "supports_score_gain",
+    "lightly_supports_tradeoff_balance": "lightly_supports_score_gain",
+    "worsens_active_tension": "partly_offsets_score_gain",
+    "strongly_worsens_active_tension": "strongly_offsets_score_gain",
+    "reopens_protected_tension": "critical_reversal",
+}
+
+FLAT_TO_NEGATIVE_EFFECT_LABELS = {
+    "supports_tradeoff_balance": "softens_score_decline",
+    "lightly_supports_tradeoff_balance": "lightly_softens_decline",
+    "worsens_active_tension": "reinforces_score_decline",
+    "strongly_worsens_active_tension": "critical_negative_review",
+    "reopens_protected_tension": "critical_negative_review",
+}
+
+
+def _normalize_movement_effect_label(packet: dict[str, Any], strategic_review: dict[str, Any]) -> dict[str, Any]:
+    """Map flat/tradeoff labels into the active movement family when intent is clear."""
+    if _is_operational_only_packet(packet):
+        return strategic_review
+
+    effect_label = str(strategic_review.get("effect_label") or "neutral")
+    if effect_label == "neutral":
+        return strategic_review
+
+    delta = _completion_delta(packet)
+    mapped_label = None
+    if delta > 0:
+        mapped_label = FLAT_TO_POSITIVE_EFFECT_LABELS.get(effect_label)
+    elif delta < 0:
+        mapped_label = FLAT_TO_NEGATIVE_EFFECT_LABELS.get(effect_label)
+
+    if not mapped_label:
+        return strategic_review
+
+    normalized = deepcopy(strategic_review)
+    normalized["effect_label"] = mapped_label
+    notes = list(normalized.get("validation_notes") or [])
+    notes.append(f"effect_label normalized from {effect_label!r} to {mapped_label!r} for Completion Outlook movement")
+    normalized["validation_notes"] = notes
+    return normalized
+
+
 def _is_hidden_baseline_review(packet: dict[str, Any], validated_review: dict[str, Any]) -> bool:
     metadata = validated_review.get("review_metadata") or {}
     if metadata.get("review_mode") == "hidden_baseline":
@@ -914,10 +958,26 @@ def _has_complete_design_subcategories(validated_review: dict[str, Any]) -> bool
 
 def _blocking_validation_errors(validated_review: dict[str, Any]) -> list[str]:
     errors = list(validated_review.get("validation_errors") or [])
+    blocking_prefixes = (
+        "strategic_review.",
+    )
+    blocking_messages = {
+        "strategic_review is required for scoring",
+        "strategic_review must be an object",
+    }
+    blocking_fragments = (
+        "effect_label",
+        "tension_status",
+        "operational_materiality",
+    )
     return [
         error
         for error in errors
-        if "is application-owned and ignored if returned by provider" not in str(error)
+        if (
+            str(error) in blocking_messages
+            or str(error).startswith(blocking_prefixes)
+            or any(fragment in str(error) for fragment in blocking_fragments)
+        )
     ]
 
 
@@ -1244,6 +1304,11 @@ def score_validated_review(packet: dict[str, Any], validated_review: dict[str, A
             "input_hash": input_hash,
         }
     if validated_review.get("strategic_review"):
+        validated_review = deepcopy(validated_review)
+        validated_review["strategic_review"] = _normalize_movement_effect_label(
+            packet,
+            validated_review.get("strategic_review") or {},
+        )
         effect_label_error = _effect_label_movement_error(
             packet,
             validated_review.get("strategic_review") or {},
@@ -1317,6 +1382,12 @@ def score_validated_review(packet: dict[str, Any], validated_review: dict[str, A
 def validate_and_score_review(packet: dict[str, Any], review: dict[str, Any]) -> dict[str, Any]:
     """Validate Scenario Review JSON and return deterministic score fields."""
     validated_review = validate_review_json(review)
+    if validated_review.get("strategic_review"):
+        validated_review = deepcopy(validated_review)
+        validated_review["strategic_review"] = _normalize_movement_effect_label(
+            packet,
+            validated_review.get("strategic_review") or {},
+        )
     scoring = score_validated_review(packet, validated_review)
     return {
         "validated_review": validated_review,

@@ -252,9 +252,7 @@ def _score_provider_review(
     scoring = scored["scoring"]
     prompt_mode = str((scored["validated_review"].get("review_metadata") or {}).get("review_mode") or "")
     hidden_baseline = prompt_mode == "hidden_baseline"
-    is_valid = scoring.get("validation_status") == "valid" and (
-        hidden_baseline or scoring.get("strategic_review") is not None
-    )
+    is_valid = hidden_baseline or scoring.get("strategic_review") is not None
     if not is_valid:
         scoring = {
             **scoring,
