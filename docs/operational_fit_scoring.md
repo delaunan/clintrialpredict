@@ -274,7 +274,7 @@ major
 extreme
 ```
 
-For the first implementation, keep the app scoring simple:
+For the first implementation, lock the app scoring as:
 
 ```text
 Operational Fit points = lookup(rating, materiality)
@@ -283,7 +283,7 @@ Operational Fit points = clamp(points, -5.0, +5.0)
 
 The LLM does not return points. It returns rating, materiality, evidence, direction, and rationale. The app owns the numeric mapping.
 
-Candidate mapping:
+V1 mapping:
 
 ```text
 minor:
@@ -437,7 +437,7 @@ The LLM can explain cross-pillar tension qualitatively and decide whether the to
 
 ## Suggested Provider Output Shape
 
-The Pass 1 LLM should inspect field-level ratings, but the app should score only the combined Operational Fit before Pass 2.
+The Pass 1 LLM should inspect field-level ratings, but the app should score only the combined Operational Fit before Pass 2. Field-level ratings are explanatory and validation support; they are not summed into separate field scores.
 
 Example:
 
@@ -498,10 +498,19 @@ Example:
 
 The app should calculate points from `combined_operational_fit.rating`, `combined_operational_fit.materiality`, and validated evidence. Field-level ratings explain and validate the combined judgment.
 
-## Open Decisions
+## V1 Locked Decisions And Monitoring Questions
 
-- Exact point mapping from rating/materiality to Operational Fit points.
-- Whether a small positive Operational Fit can apply when only one field improves but the other two remain neutral.
-- Whether completed actual baselines should cap positive redesign credit more strongly than estimated baselines.
-- Whether percentile movement should be calculated against P50 only, or against an accepted neutral band such as P25-P75.
-- Whether facilitator/debug view should expose field-level Operational Fit ratings by default.
+Locked for V1:
+
+- use the V1 rating/materiality point mapping above;
+- score only `combined_operational_fit`, not the field-level ratings;
+- clamp Operational Fit to `-5.0/+5.0`;
+- keep field-level ratings as explanatory and validation support;
+- expose field-level ratings only in facilitator/debug context by default.
+
+Monitor during implementation and live testing:
+
+- whether a small positive Operational Fit should apply when only one field improves but the other two remain neutral;
+- whether completed actual baselines should cap positive redesign credit more strongly than estimated baselines;
+- whether percentile movement should be calculated against P50 only, or against an accepted neutral band such as P25-P75;
+- whether the `+/-5.0` guardrails are too permissive or too restrictive.
