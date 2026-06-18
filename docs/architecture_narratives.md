@@ -42,7 +42,27 @@ Core boundary:
 - `Operational Fit` is planned as an additive `Execution Framework` interpretation layer, not a replacement for `/predict`.
 - `Reality Check` is planned as a freer LLM judgment layer over the total scenario, with evidence and safety guardrails.
 - The participant-facing narrative should assess the final `Trial Score` rather than repeat separate component narratives.
-- The provider schema and numeric scoring contract for `Operational Fit` and `Reality Check` are not locked yet.
+- The V1 provider schema, two-pass participant-narrative contract, and numeric scoring contract for `Operational Fit` and `Reality Check` are implemented in `src/narratives/trial_score_contract.py` and the adjacent narrative provider/prompt modules.
+
+### Current Trial Score V1 Narrative Status
+
+As of 2026-06-18, the narrative-production direction has moved from the first-generation Strategic Review migration to the current Trial Score V1 stack:
+
+```text
+Trial Score = Completion Outlook + Operational Fit + Reality Check
+```
+
+Durable implementation decisions:
+
+- `Completion Outlook` remains anchored to the protected XGBoost score and SHAP-derived model drivers.
+- `Operational Fit` is app-scored from validated Pass 1 classifications and appears as an additive `Execution Framework` subpillar.
+- `Reality Check` is app-scored from validated Pass 1 classifications and allocated only to canonical existing pillar/subpillar targets.
+- Pass 1 performs structured analytical review and classification; app-owned scoring runs between passes; Pass 2 writes the participant-facing Trial Score narrative.
+- Provider label drift is handled by strict schema validation and targeted repair retries. If retries still fail, the UI reports the failed level clearly rather than using unsafe labels.
+- Same-state scoring reuses prior deterministic app scoring, while Pass 2 may regenerate narrative with reversion/path context.
+- Locked premise fields are visually disabled in the simulator, with greyed controls and lighter text.
+- Obsolete `Strategic Review`, `Design Confidence`, `Quality Review`, and `Total Scenario Score` active scoring/eval paths have been deleted rather than preserved as compatibility logic.
+- The current verification gate is `bash scripts/check_trial_score_v1_migration.sh`.
 
 ## 3. Current Technical Foundation
 
@@ -1362,9 +1382,6 @@ Gemini JSON reliability finding from the NCT02741128 live audit:
 - The Gemini provider path now uses the SDK response schema and the Gemini 3 `thinking_level` control. The current production-style setting is `gemini-3.1-flash-lite`, omitted/default temperature, primary `thinking_level=high`, and a 12000-token primary output ceiling. The output ceiling is a completion-safety margin, not a quality knob; in earlier medium-thinking benchmarks, ceilings from 4000 through 12000 produced the same visible review quality and actual token use for the tested scenarios. The 12000-token default is retained to prepare for longer future reviews.
 - The explicit metadata-visible retry remains bounded to one attempt. It is reserved for malformed JSON or provider `MAX_TOKENS`; the retry lowers thinking to `low` and uses a 16000-token ceiling because excessive thinking can consume output budget and harm JSON completion.
 - Later temperature/thinking evals on five-trial Scenario Review waves showed omitted/default temperature gave better visible quality than explicit `0` or `0.3`, while explicit high thinking reduced failed/warning checks versus default medium thinking. Higher thinking did not make outputs deterministic: duplicate runs still drifted in Design Confidence scoring and wording. Therefore high thinking is a quality setting, not a reproducibility guarantee; reproducibility-sensitive evals should keep using duplicate traces and drift inspection.
-- Final-settings quality/reproducibility assessment should use `scripts/run_final_narrative_quality_plan.py`. The default wave runs 10 live Gemini trials with omitted/default temperature and explicit high thinking to detect quality, adherence, and scoring patterns, then runs the first 3 trials twice under the same settings to inspect reproducibility drift. The helper also writes a generation-control comparison report so the review can separate systematic prompt issues from expected live-provider variability.
-- Final narrative validation should use `scripts/run_final_narrative_validation_plan.py`. This is separate from generation-control testing: it keeps omitted/default temperature and Gemini high thinking, then runs a boundary-behavior wave, a 12-trial credible-storyline candidate wave, and a duplicate reproducibility wave. The boundary wave is non-cumulative: each boundary iteration resets to the same baseline so it can isolate latest-change behavior. It covers the key input combinations: structured score-input only, Trial description only, planning assumptions only, structured + Trial description, Trial description + planning assumptions, structured + planning assumptions, all three input types together, `structured_features` / `text_context` contradiction, aligned non-conflict structured/text version, and shortcut simplification. The storyline wave remains cumulative because it is deliberately built as candidate material for later one-shot example selection; it targets Oncology plus UCB-relevant therapeutic areas and prefers UCB-sponsored candidates when available without making sponsor identity a hard filter. It should be reviewed for credibility, cross-functional tension, narrative coherence across 2-4 iterations, Design Confidence scoring quality, question quality, and whether the example is `presentation_ready`, `good_after_light_edit`, `useful_for_stress_test_only`, or `discard`. Do not embed one-shot examples into the live provider prompt until candidate examples are selected and an A/B check shows they improve quality without making output formulaic.
-- Final validation wave `final_validation_boundary_10_1`, `final_validation_storyline_candidates_12_1`, `final_validation_repro_3_a`, `final_validation_repro_3_b`, and `final_validation_repro_3_comparison` completed on 2026-06-15. Boundary behavior was stable at 110/110 reviewed visible iterations. Storyline candidates completed 48/48 reviewed visible iterations and are the source of truth for later one-shot selection. Duplicate storyline reproducibility was 12/12 exact iteration matches and 12/12 score matches. The next step is human qualitative inspection of full storylines, changed fields, narratives, subcategory rationales, score movements, and questions before any example is selected or embedded.
 - Real-provider diagnostics now record token usage metadata when available, including Gemini prompt, candidate, thought, cached-content, and total token counts; they also record finish metadata such as finish reason and safety-rating count when exposed by the SDK.
 
 Current structured/text consistency-check status:
@@ -1843,14 +1860,13 @@ The active next-step roadmap is now owned by `docs/trial_score_narrative_directi
 
 Near-term narrative work should:
 
-- pause additional implementation on the first-generation Strategic Review path until the new contract is specified;
+- keep first-generation Strategic Review code as compatibility-only unless it is explicitly migrated;
 - preserve the existing XGBoost Completion Outlook and SHAP behavior unchanged;
-- define Operational Fit as an additive subpillar of `Execution Framework`;
-- define Reality Check as a freer LLM judgment layer that assesses the total scenario constructively;
+- continue implementation from the V1 Operational Fit and Reality Check contract in `src/narratives/trial_score_contract.py`;
 - make the participant narrative assess only the final `Trial Score`;
 - avoid separate repetitive component narratives;
 - surface one central tension and one broader strategic question;
-- inspect the current uncommitted code and keep only pieces compatible with the new direction.
+- keep only pieces compatible with the new direction when touching remaining legacy UI, eval, or fixture code.
 
 Obsolete roadmap items tied to `Design Confidence`, `Total Scenario Score`, and first-generation rigid `Strategic Review` scoring should not guide new implementation.
 
@@ -1860,9 +1876,8 @@ Obsolete roadmap items tied to `Design Confidence`, `Total Scenario Score`, and 
 - Exact storage mechanism.
 - Exact participant versus facilitator UI placement.
 - Exact number of previous iterations to keep raw before summarization.
-- Exact Operational Fit and Reality Check scoring budgets.
-- Whether Operational Fit should be fully app-owned, LLM-classified/app-scored, or partly LLM-scored under strict validation.
-- How much Reality Check numerical freedom the LLM should have versus app-owned mapping.
+- Whether V1 Operational Fit and Reality Check budgets need tuning after live testing.
+- Whether future versions should keep the current LLM-classified/app-scored mapping or add bounded LLM-scored fields under strict validation.
 - Whether continuity checks should block scoring, warn in eval reports, or remain facilitator-only diagnostics.
 - Whether facilitator view is hidden behind an expander or separate mode.
 - Whether final governance recommendation is generated by participants, LLM, or both.

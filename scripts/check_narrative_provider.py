@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import sys
+import types as py_types
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -13,7 +14,7 @@ if str(ROOT) not in sys.path:
 import src.narratives.provider as provider_module  # noqa: E402
 from src.narratives.contract_fixtures import get_contract_fixtures  # noqa: E402
 from src.narratives.packet_builder import build_review_packet_from_fixture  # noqa: E402
-from src.narratives.mock_reviewer import _synthesized_strategic_review  # noqa: E402
+from src.narratives.mock_reviewer import _synthesized_trial_score_pass1_review  # noqa: E402
 from src.narratives.provider import (  # noqa: E402
     FAILURE_MALFORMED_RESPONSE,
     FAILURE_PROVIDER_UNAVAILABLE,
@@ -26,10 +27,14 @@ from src.narratives.provider import (  # noqa: E402
     MOCK_MODEL_NAME,
     PROVIDER_MOCK,
     PROVIDER_VALIDATION_RETRY_ATTEMPTS,
+    PASS2_VALIDATION_RETRY_ATTEMPTS,
     STATUS_REVIEWED,
     _gemini_http_options,
+    _pass1_repair_stage,
     _record_gemini_response_metadata,
     _score_provider_review,
+    pass1_result_needs_repair,
+    review_packet_pass1_initial_with_provider,
     review_packet_with_provider_chain,
     review_packet_with_provider,
 )
@@ -48,6 +53,14 @@ class _FakeResponse:
         return self._payload
 
 
+class _FakeGeminiResponse:
+    def __init__(self, parsed: dict | None = None, text: str = "") -> None:
+        self.parsed = parsed
+        self.text = text
+        self.usage_metadata = None
+        self.candidates = []
+
+
 def _check_openai_validation_retry(packet: dict, fixture: dict, errors: list[str]) -> None:
     config = load_narrative_provider_config({
         "NARRATIVE_LLM_PROVIDER": "openai",
@@ -59,12 +72,39 @@ def _check_openai_validation_retry(packet: dict, fixture: dict, errors: list[str
 
     def run_case(first_payload: dict, expected_reason_fragment: str) -> dict:
         calls = {"count": 0}
-        retry_review = _synthesized_strategic_review(packet, fixture)
+        retry_review = _synthesized_trial_score_pass1_review(packet, fixture)
+        pass2_review = {
+            "review_metadata": {"review_mode": "first_visible_iteration", "visible": True},
+            "trial_score_narrative": {
+                "summary": "The Trial Score reading is mixed but defensible.",
+                "movement_reading": "Operational Fit and Reality Check should be read together.",
+                "score_interpretation": "Completion Outlook remains the protected model-pattern anchor.",
+            },
+            "pillar_reading": [{"pillar": "Execution Framework", "reading": "Operational proportionality matters."}],
+            "central_tension": {
+                "summary": "Execution support versus evidence ambition.",
+                "why_it_matters": "It frames the participant discussion.",
+            },
+            "broader_strategic_question": {
+                "question": "When should operational support change how a development scenario is defended?",
+            },
+            "facilitator_questions": [],
+        }
 
         def fake_post(*args, **kwargs):
             calls["count"] += 1
+            prompt_text = str((kwargs.get("json") or {}).get("input") or "")
             if calls["count"] == 1:
                 return _FakeResponse(first_payload)
+            if calls["count"] == 2:
+                if "repairing a previous Pass 1 Trial Score JSON response" not in prompt_text:
+                    errors.append("OpenAI validation retry should use a targeted repair prompt")
+                if "Allowed Reality Check allocation_target_id values" not in prompt_text:
+                    errors.append("OpenAI validation retry prompt should include canonical allocation target IDs")
+                if "Allowed packet evidence references" not in prompt_text:
+                    errors.append("OpenAI validation retry prompt should include allowed packet evidence refs")
+            if calls["count"] == 3:
+                return _FakeResponse({"output_text": provider_module.json.dumps(pass2_review)})
             return _FakeResponse({"output_text": provider_module.json.dumps(retry_review)})
 
         provider_module.requests.post = fake_post
@@ -72,11 +112,19 @@ def _check_openai_validation_retry(packet: dict, fixture: dict, errors: list[str
             result = provider_module.review_packet_with_provider(packet, provider="openai", config=config)
         finally:
             provider_module.requests.post = original_post
-        if calls["count"] != 2:
-            errors.append("OpenAI validation retry should make exactly one retry call")
+        if calls["count"] != 3:
+            errors.append("OpenAI validation retry should make one retry call plus one Pass 2 call")
         metadata = result.get("provider_metadata") or {}
         if metadata.get("validation_retry_attempts") != 1:
             errors.append("OpenAI validation retry should record one validation_retry_attempt")
+        if metadata.get("validation_retry_max_attempts") != PROVIDER_VALIDATION_RETRY_ATTEMPTS:
+            errors.append("OpenAI validation retry should record configured max attempts")
+        if not metadata.get("validation_retry_history"):
+            errors.append("OpenAI validation retry should record retry history")
+        if metadata.get("pass2_validation_status") != "valid":
+            errors.append("OpenAI recovered review should validate Pass 2 participant narrative")
+        if not (result.get("validated_participant_narrative") or {}).get("trial_score_narrative"):
+            errors.append("OpenAI recovered review should attach validated Pass 2 narrative")
         if expected_reason_fragment not in str(metadata.get("validation_retry_reason")):
             errors.append("OpenAI validation retry should record the retry reason")
         return result
@@ -84,17 +132,508 @@ def _check_openai_validation_retry(packet: dict, fixture: dict, errors: list[str
     non_json_result = run_case({"output_text": "not json"}, "not a JSON object")
     if non_json_result.get("status") != provider_module.STATUS_REVIEWED:
         errors.append("OpenAI non-JSON response should recover when validation retry returns valid review")
-    if non_json_result.get("scoring", {}).get("strategic_review") is None:
-        errors.append("OpenAI non-JSON retry should preserve valid Strategic Review scoring")
+    if non_json_result.get("scoring", {}).get("trial_score") is None:
+        errors.append("OpenAI non-JSON retry should preserve valid Trial Score scoring")
 
     invalid_json_result = run_case(
-        {"output_text": provider_module.json.dumps({"design_confidence_subcategories": {}})},
-        "Scenario Review contract",
+        {"output_text": provider_module.json.dumps({"reality_check": "malformed"})},
+        "Pass 1 Trial Score JSON shape",
     )
     if invalid_json_result.get("status") != provider_module.STATUS_REVIEWED:
         errors.append("OpenAI invalid JSON contract response should recover when validation retry returns valid review")
-    if invalid_json_result.get("scoring", {}).get("strategic_review") is None:
-        errors.append("OpenAI invalid-contract retry should preserve valid Strategic Review scoring")
+    if invalid_json_result.get("scoring", {}).get("trial_score") is None:
+        errors.append("OpenAI invalid-contract retry should preserve valid Trial Score scoring")
+
+    invalid_operational_fit_review = _synthesized_trial_score_pass1_review(packet, fixture)
+    invalid_operational_fit_review["operational_fit"]["combined_operational_fit"]["rating"] = "invented_rating"
+    operational_fit_result = run_case(
+        {"output_text": provider_module.json.dumps(invalid_operational_fit_review)},
+        "combined_operational_fit.rating",
+    )
+    metadata = operational_fit_result.get("provider_metadata") or {}
+    if metadata.get("validation_retry_stage") != provider_module.PASS1_REPAIR_STAGE_OPERATIONAL_FIT:
+        errors.append("OpenAI Operational Fit contract failure should use Operational Fit repair stage")
+    if operational_fit_result.get("status") != provider_module.STATUS_REVIEWED:
+        errors.append("OpenAI Operational Fit contract response should recover when validation retry returns valid review")
+    if operational_fit_result.get("scoring", {}).get("trial_score") is None:
+        errors.append("OpenAI Operational Fit contract retry should preserve valid Trial Score scoring")
+
+    calls = {"count": 0}
+    invalid_initial = _synthesized_trial_score_pass1_review(packet, fixture)
+    invalid_initial["operational_fit"]["combined_operational_fit"]["rating"] = "invented_rating"
+    invalid_repair = _synthesized_trial_score_pass1_review(packet, fixture)
+    invalid_repair["operational_fit"]["combined_operational_fit"]["rating"] = "still_invented"
+    valid_repair = _synthesized_trial_score_pass1_review(packet, fixture)
+    pass2_review = {
+        "review_metadata": {"review_mode": "first_visible_iteration", "visible": True},
+        "trial_score_narrative": {
+            "summary": "The Trial Score reading is mixed but defensible.",
+            "movement_reading": "Operational Fit and Reality Check should be read together.",
+            "score_interpretation": "Completion Outlook remains the protected model-pattern anchor.",
+        },
+        "pillar_reading": [{"pillar": "Execution Framework", "reading": "Operational proportionality matters."}],
+        "central_tension": {
+            "summary": "Execution support versus evidence ambition.",
+            "why_it_matters": "It frames the participant discussion.",
+        },
+        "broader_strategic_question": {
+            "question": "When should operational support change how a development scenario is defended?",
+        },
+        "facilitator_questions": [],
+    }
+
+    def fake_post_multi_repair(*args, **kwargs):
+        calls["count"] += 1
+        if calls["count"] == 1:
+            return _FakeResponse({"output_text": provider_module.json.dumps(invalid_initial)})
+        if calls["count"] == 2:
+            return _FakeResponse({"output_text": provider_module.json.dumps(invalid_repair)})
+        if calls["count"] == 3:
+            return _FakeResponse({"output_text": provider_module.json.dumps(valid_repair)})
+        return _FakeResponse({"output_text": provider_module.json.dumps(pass2_review)})
+
+    provider_module.requests.post = fake_post_multi_repair
+    try:
+        multi_repair_result = provider_module.review_packet_with_provider(packet, provider="openai", config=config)
+    finally:
+        provider_module.requests.post = original_post
+    metadata = multi_repair_result.get("provider_metadata") or {}
+    if multi_repair_result.get("status") != provider_module.STATUS_REVIEWED:
+        errors.append("OpenAI validation repair should allow a second targeted repair when the first repair remains invalid")
+    if metadata.get("validation_retry_attempts") != 2:
+        errors.append("OpenAI multi-repair recovery should record two validation_retry_attempts")
+    if len(metadata.get("validation_retry_history") or []) != 2:
+        errors.append("OpenAI multi-repair recovery should record two retry-history entries")
+
+
+def _check_openai_pass2_retry(packet: dict, fixture: dict, errors: list[str]) -> None:
+    config = load_narrative_provider_config({
+        "NARRATIVE_LLM_PROVIDER": "openai",
+        "OPENAI_API_KEY": "test-key",
+        "OPENAI_NARRATIVE_MODEL": "test-openai-model",
+        "NARRATIVE_LLM_MAX_RETRIES": "0",
+    })
+    original_post = provider_module.requests.post
+    calls = {"count": 0}
+    pass1_review = _synthesized_trial_score_pass1_review(packet, fixture)
+    invalid_pass2 = {
+        "review_metadata": {"review_mode": "first_visible_iteration", "visible": True},
+        "trial_score_narrative": {"summary": "Missing required narrative fields."},
+    }
+    repaired_pass2 = {
+        "review_metadata": {"review_mode": "first_visible_iteration", "visible": True},
+        "trial_score_narrative": {
+            "summary": "The Trial Score reading is mixed but defensible.",
+            "movement_reading": "Operational Fit and Reality Check should be read together.",
+            "score_interpretation": "Completion Outlook remains the protected model-pattern anchor.",
+        },
+        "pillar_reading": [{"pillar": "Execution Framework", "reading": "Operational proportionality matters."}],
+        "central_tension": {
+            "summary": "Execution support versus evidence ambition.",
+            "why_it_matters": "It frames the participant discussion.",
+        },
+        "broader_strategic_question": {
+            "question": "When should operational support change how a development scenario is defended?",
+        },
+        "facilitator_questions": [],
+    }
+
+    def fake_post(*args, **kwargs):
+        calls["count"] += 1
+        prompt_text = str((kwargs.get("json") or {}).get("input") or "")
+        if calls["count"] == 1:
+            return _FakeResponse({"output_text": provider_module.json.dumps(pass1_review)})
+        if calls["count"] == 2:
+            return _FakeResponse({"output_text": provider_module.json.dumps(invalid_pass2)})
+        if "repairing a previous Pass 2 Participant Narrative JSON response" not in prompt_text:
+            errors.append("OpenAI Pass 2 retry should use a targeted Pass 2 repair prompt")
+        if "Do not rerun Pass 1" not in prompt_text or "Preserve app_calculated_scores exactly" not in prompt_text:
+            errors.append("OpenAI Pass 2 retry should preserve Pass 1 scoring basis")
+        return _FakeResponse({"output_text": provider_module.json.dumps(repaired_pass2)})
+
+    provider_module.requests.post = fake_post
+    try:
+        result = provider_module.review_packet_with_provider(packet, provider="openai", config=config)
+    finally:
+        provider_module.requests.post = original_post
+    if calls["count"] != 3:
+        errors.append("OpenAI Pass 2 retry should add only one participant-narrative retry call")
+    metadata = result.get("provider_metadata") or {}
+    if metadata.get("pass2_retry_attempts") != 1:
+        errors.append("OpenAI Pass 2 retry should record one pass2_retry_attempt")
+    if result.get("participant_narrative_status") != "valid":
+        errors.append("OpenAI Pass 2 retry should attach a valid participant narrative")
+    if result.get("scoring", {}).get("trial_score") is None:
+        errors.append("OpenAI Pass 2 retry should preserve Trial Score scoring")
+
+
+def _check_openai_pass2_exception_warning(packet: dict, fixture: dict, errors: list[str]) -> None:
+    config = load_narrative_provider_config({
+        "NARRATIVE_LLM_PROVIDER": "openai",
+        "OPENAI_API_KEY": "test-key",
+        "OPENAI_NARRATIVE_MODEL": "test-openai-model",
+        "NARRATIVE_LLM_MAX_RETRIES": "0",
+    })
+    original_post = provider_module.requests.post
+    calls = {"count": 0}
+    pass1_review = _synthesized_trial_score_pass1_review(packet, fixture)
+
+    def fake_post(*args, **kwargs):
+        calls["count"] += 1
+        if calls["count"] == 1:
+            return _FakeResponse({"output_text": provider_module.json.dumps(pass1_review)})
+        raise provider_module.requests.exceptions.Timeout("pass2 timeout")
+
+    provider_module.requests.post = fake_post
+    try:
+        result = provider_module.review_packet_with_provider(packet, provider="openai", config=config)
+    finally:
+        provider_module.requests.post = original_post
+    metadata = result.get("provider_metadata") or {}
+    if result.get("status") != provider_module.STATUS_REVIEWED:
+        errors.append("OpenAI Pass 2 exception should preserve reviewed Pass 1 status")
+    if result.get("scoring", {}).get("trial_score") is None:
+        errors.append("OpenAI Pass 2 exception should preserve Trial Score scoring")
+    if result.get("participant_narrative_status") != "invalid":
+        errors.append("OpenAI Pass 2 exception should mark participant narrative invalid")
+    if "Pass 2 generation" not in str(result.get("participant_narrative_warning") or ""):
+        errors.append("OpenAI Pass 2 exception should expose a participant narrative warning")
+    if metadata.get("pass2_error_type") != "Timeout":
+        errors.append("OpenAI Pass 2 exception should record pass2_error_type")
+
+
+def _check_gemini_validation_retry(packet: dict, fixture: dict, errors: list[str]) -> None:
+    config = load_narrative_provider_config({
+        "NARRATIVE_LLM_PROVIDER": "gemini",
+        "GEMINI_API_KEY": "test-key",
+        "GEMINI_NARRATIVE_MODEL": "test-gemini-model",
+        "NARRATIVE_LLM_MAX_RETRIES": "0",
+    })
+    original_google = sys.modules.get("google")
+    original_genai = sys.modules.get("google.genai")
+    original_types = sys.modules.get("google.genai.types")
+    calls = {"count": 0, "repair_prompt_seen": False}
+    retry_review = _synthesized_trial_score_pass1_review(packet, fixture)
+    invalid_pass2 = {
+        "review_metadata": {"review_mode": "first_visible_iteration", "visible": True},
+        "trial_score_narrative": {"summary": "Missing required narrative fields."},
+    }
+    pass2_review = {
+        "review_metadata": {"review_mode": "first_visible_iteration", "visible": True},
+        "trial_score_narrative": {
+            "summary": "The Trial Score reading is mixed but defensible.",
+            "movement_reading": "Operational Fit and Reality Check should be read together.",
+            "score_interpretation": "Completion Outlook remains the protected model-pattern anchor.",
+        },
+        "pillar_reading": [{"pillar": "Execution Framework", "reading": "Operational proportionality matters."}],
+        "central_tension": {
+            "summary": "Execution support versus evidence ambition.",
+            "why_it_matters": "It frames the participant discussion.",
+        },
+        "broader_strategic_question": {
+            "question": "When should operational support change how a development scenario is defended?",
+        },
+        "facilitator_questions": [],
+    }
+
+    class FakeModels:
+        def generate_content(self, *, model, contents, config):
+            calls["count"] += 1
+            prompt_text = str(contents or "")
+            if calls["count"] == 1:
+                return _FakeGeminiResponse(parsed={"reality_check": "malformed"})
+            if calls["count"] == 2:
+                if "repairing a previous Pass 1 Trial Score JSON response" not in prompt_text:
+                    errors.append("Gemini validation retry should use a targeted repair prompt")
+                if "Allowed Reality Check allocation_target_id values" not in prompt_text:
+                    errors.append("Gemini validation retry prompt should include canonical allocation target IDs")
+                calls["repair_prompt_seen"] = True
+                return _FakeGeminiResponse(parsed=retry_review)
+            if calls["count"] == 3:
+                return _FakeGeminiResponse(parsed=invalid_pass2)
+            if "repairing a previous Pass 2 Participant Narrative JSON response" not in prompt_text:
+                errors.append("Gemini Pass 2 retry should use a targeted Pass 2 repair prompt")
+            return _FakeGeminiResponse(parsed=pass2_review)
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs) -> None:
+            self.models = FakeModels()
+
+    class FakeTypesModule:
+        class ThinkingConfig:
+            def __init__(self, **kwargs) -> None:
+                self.kwargs = kwargs
+
+        class GenerateContentConfig:
+            def __init__(self, **kwargs) -> None:
+                self.kwargs = kwargs
+
+        class HttpRetryOptions:
+            def __init__(self, attempts) -> None:
+                self.attempts = attempts
+
+        class HttpOptions:
+            def __init__(self, timeout, retry_options) -> None:
+                self.timeout = timeout
+                self.retry_options = retry_options
+
+    fake_genai = py_types.ModuleType("google.genai")
+    fake_genai.Client = FakeClient
+    fake_genai.types = FakeTypesModule
+    fake_google = py_types.ModuleType("google")
+    fake_google.genai = fake_genai
+    sys.modules["google"] = fake_google
+    sys.modules["google.genai"] = fake_genai
+    sys.modules["google.genai.types"] = FakeTypesModule
+    try:
+        result = provider_module.review_packet_with_provider(packet, provider="gemini", config=config)
+    finally:
+        if original_google is None:
+            sys.modules.pop("google", None)
+        else:
+            sys.modules["google"] = original_google
+        if original_genai is None:
+            sys.modules.pop("google.genai", None)
+        else:
+            sys.modules["google.genai"] = original_genai
+        if original_types is None:
+            sys.modules.pop("google.genai.types", None)
+        else:
+            sys.modules["google.genai.types"] = original_types
+
+    if calls["count"] != 4:
+        errors.append("Gemini validation retry should make one Pass 1 retry, one Pass 2 call, and one Pass 2 retry")
+    if not calls["repair_prompt_seen"]:
+        errors.append("Gemini validation retry prompt should be observed")
+    metadata = result.get("provider_metadata") or {}
+    if metadata.get("validation_retry_attempts") != 1:
+        errors.append("Gemini validation retry should record one validation_retry_attempt")
+    if metadata.get("validation_retry_max_attempts") != PROVIDER_VALIDATION_RETRY_ATTEMPTS:
+        errors.append("Gemini validation retry should record configured max attempts")
+    if not metadata.get("validation_retry_history"):
+        errors.append("Gemini validation retry should record retry history")
+    if metadata.get("pass2_retry_attempts") != 1:
+        errors.append("Gemini Pass 2 retry should record one pass2_retry_attempt")
+    if metadata.get("validation_retry_stage") != provider_module.PASS1_REPAIR_STAGE_JSON_SHAPE:
+        errors.append("Gemini validation retry should record the repair stage")
+    if result.get("status") != provider_module.STATUS_REVIEWED:
+        errors.append("Gemini validation retry should recover to reviewed status")
+    if metadata.get("pass2_validation_status") != "valid":
+        errors.append("Gemini recovered review should validate Pass 2 participant narrative after retry")
+
+
+def _check_gemini_multi_validation_retry(packet: dict, fixture: dict, errors: list[str]) -> None:
+    config = load_narrative_provider_config({
+        "NARRATIVE_LLM_PROVIDER": "gemini",
+        "GEMINI_API_KEY": "test-key",
+        "GEMINI_NARRATIVE_MODEL": "test-gemini-model",
+        "NARRATIVE_LLM_MAX_RETRIES": "0",
+    })
+    original_google = sys.modules.get("google")
+    original_genai = sys.modules.get("google.genai")
+    original_types = sys.modules.get("google.genai.types")
+    calls = {"count": 0}
+    invalid_initial = _synthesized_trial_score_pass1_review(packet, fixture)
+    invalid_initial["operational_fit"]["combined_operational_fit"]["rating"] = "invented_rating"
+    invalid_repair = _synthesized_trial_score_pass1_review(packet, fixture)
+    invalid_repair["operational_fit"]["combined_operational_fit"]["rating"] = "still_invented"
+    valid_repair = _synthesized_trial_score_pass1_review(packet, fixture)
+    pass2_review = {
+        "review_metadata": {"review_mode": "first_visible_iteration", "visible": True},
+        "trial_score_narrative": {
+            "summary": "The Trial Score reading is mixed but defensible.",
+            "movement_reading": "Operational Fit and Reality Check should be read together.",
+            "score_interpretation": "Completion Outlook remains the protected model-pattern anchor.",
+        },
+        "pillar_reading": [{"pillar": "Execution Framework", "reading": "Operational proportionality matters."}],
+        "central_tension": {
+            "summary": "Execution support versus evidence ambition.",
+            "why_it_matters": "It frames the participant discussion.",
+        },
+        "broader_strategic_question": {
+            "question": "When should operational support change how a development scenario is defended?",
+        },
+        "facilitator_questions": [],
+    }
+
+    class FakeModels:
+        def generate_content(self, *, model, contents, config):
+            calls["count"] += 1
+            if calls["count"] == 1:
+                return _FakeGeminiResponse(parsed=invalid_initial, text=provider_module.json.dumps(invalid_initial))
+            if calls["count"] == 2:
+                return _FakeGeminiResponse(parsed=invalid_repair, text=provider_module.json.dumps(invalid_repair))
+            if calls["count"] == 3:
+                return _FakeGeminiResponse(parsed=valid_repair, text=provider_module.json.dumps(valid_repair))
+            return _FakeGeminiResponse(parsed=pass2_review, text=provider_module.json.dumps(pass2_review))
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs) -> None:
+            self.models = FakeModels()
+
+    class FakeTypesModule:
+        class ThinkingConfig:
+            def __init__(self, **kwargs) -> None:
+                self.kwargs = kwargs
+
+        class GenerateContentConfig:
+            def __init__(self, **kwargs) -> None:
+                self.kwargs = kwargs
+
+        class HttpRetryOptions:
+            def __init__(self, attempts) -> None:
+                self.attempts = attempts
+
+        class HttpOptions:
+            def __init__(self, **kwargs) -> None:
+                self.kwargs = kwargs
+
+    fake_genai = py_types.ModuleType("google.genai")
+    fake_genai.Client = FakeClient
+    fake_genai.types = FakeTypesModule
+    fake_google = py_types.ModuleType("google")
+    fake_google.genai = fake_genai
+    sys.modules["google"] = fake_google
+    sys.modules["google.genai"] = fake_genai
+    sys.modules["google.genai.types"] = FakeTypesModule
+    try:
+        result = provider_module.review_packet_with_provider(packet, provider="gemini", config=config)
+    finally:
+        if original_google is None:
+            sys.modules.pop("google", None)
+        else:
+            sys.modules["google"] = original_google
+        if original_genai is None:
+            sys.modules.pop("google.genai", None)
+        else:
+            sys.modules["google.genai"] = original_genai
+        if original_types is None:
+            sys.modules.pop("google.genai.types", None)
+        else:
+            sys.modules["google.genai.types"] = original_types
+
+    metadata = result.get("provider_metadata") or {}
+    if result.get("status") != provider_module.STATUS_REVIEWED:
+        errors.append("Gemini validation repair should allow a second targeted repair when the first repair remains invalid")
+    if metadata.get("validation_retry_attempts") != 2:
+        errors.append("Gemini multi-repair recovery should record two validation_retry_attempts")
+    history = metadata.get("validation_retry_history") or []
+    if len(history) != 2:
+        errors.append("Gemini multi-repair recovery should record two retry-history entries")
+    if not all(item.get("prompt_text") and item.get("response_text") for item in history):
+        errors.append("Gemini retry history should preserve per-attempt prompt and response text")
+
+
+def _check_gemini_staged_pass1_malformed_retry(packet: dict, fixture: dict, errors: list[str]) -> None:
+    config = load_narrative_provider_config({
+        "NARRATIVE_LLM_PROVIDER": "gemini",
+        "GEMINI_API_KEY": "test-key",
+        "GEMINI_NARRATIVE_MODEL": "test-gemini-model",
+        "NARRATIVE_LLM_MAX_RETRIES": "0",
+    })
+    original_google = sys.modules.get("google")
+    original_genai = sys.modules.get("google.genai")
+    original_types = sys.modules.get("google.genai.types")
+    calls = {"count": 0}
+    retry_review = _synthesized_trial_score_pass1_review(packet, fixture)
+
+    class FakeModels:
+        def generate_content(self, *, model, contents, config):
+            calls["count"] += 1
+            if calls["count"] == 1:
+                return _FakeGeminiResponse(parsed=None, text="not json")
+            return _FakeGeminiResponse(parsed=retry_review)
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs) -> None:
+            self.models = FakeModels()
+
+    class FakeTypesModule:
+        class ThinkingConfig:
+            def __init__(self, **kwargs) -> None:
+                self.kwargs = kwargs
+
+        class GenerateContentConfig:
+            def __init__(self, **kwargs) -> None:
+                self.kwargs = kwargs
+
+        class HttpRetryOptions:
+            def __init__(self, attempts) -> None:
+                self.attempts = attempts
+
+        class HttpOptions:
+            def __init__(self, timeout, retry_options) -> None:
+                self.timeout = timeout
+                self.retry_options = retry_options
+
+    fake_genai = py_types.ModuleType("google.genai")
+    fake_genai.Client = FakeClient
+    fake_genai.types = FakeTypesModule
+    fake_google = py_types.ModuleType("google")
+    fake_google.genai = fake_genai
+    sys.modules["google"] = fake_google
+    sys.modules["google.genai"] = fake_genai
+    sys.modules["google.genai.types"] = FakeTypesModule
+    try:
+        result = review_packet_pass1_initial_with_provider(packet, provider="gemini", config=config)
+    finally:
+        if original_google is None:
+            sys.modules.pop("google", None)
+        else:
+            sys.modules["google"] = original_google
+        if original_genai is None:
+            sys.modules.pop("google.genai", None)
+        else:
+            sys.modules["google.genai"] = original_genai
+        if original_types is None:
+            sys.modules.pop("google.genai.types", None)
+        else:
+            sys.modules["google.genai.types"] = original_types
+
+    if calls["count"] != 2:
+        errors.append("Staged Gemini Pass 1 should retry once after malformed JSON")
+    metadata = result.get("provider_metadata") or {}
+    if metadata.get("malformed_json_retry_attempts") != 1:
+        errors.append("Staged Gemini malformed retry should record malformed_json_retry_attempts")
+    if result.get("status") != STATUS_REVIEWED:
+        errors.append("Staged Gemini malformed retry should recover to reviewed status")
+
+
+def _check_validation_stage_classifier(errors: list[str]) -> None:
+    cases = [
+        (
+            ["operational_fit.combined_operational_fit must be an object"],
+            provider_module.PASS1_REPAIR_STAGE_OPERATIONAL_FIT,
+        ),
+        (
+            ["combined_operational_fit.rating must be one of ['neutral_or_unclear']"],
+            provider_module.PASS1_REPAIR_STAGE_OPERATIONAL_FIT,
+        ),
+        (
+            ["reality_check.allocations[0] must target an allowed allocation_target_id"],
+            provider_module.PASS1_REPAIR_STAGE_REALITY_CHECK,
+        ),
+        (
+            ["reality_check.allocations[].allocation_target_id is required"],
+            provider_module.PASS1_REPAIR_STAGE_REALITY_CHECK,
+        ),
+        (
+            ["strategy_shift_check.status must not be not_applicable when gated premise-sensitive fields changed"],
+            provider_module.PASS1_REPAIR_STAGE_STRATEGY_SHIFT,
+        ),
+        (
+            ["combined_operational_fit.evidence_fields do not reference packet evidence"],
+            provider_module.PASS1_REPAIR_STAGE_OPERATIONAL_FIT,
+        ),
+        (
+            ["Pass 1 review must be an object"],
+            provider_module.PASS1_REPAIR_STAGE_JSON_SHAPE,
+        ),
+    ]
+    for messages, expected in cases:
+        actual = _pass1_repair_stage(messages)
+        if actual != expected:
+            errors.append(f"expected validation stage {expected!r}, got {actual!r} for {messages!r}")
 
 
 def main() -> int:
@@ -112,8 +651,15 @@ def main() -> int:
         errors.append("mock provider result did not set normalized model_name")
     if mock_result.get("provider_metadata", {}).get("deterministic") is not True:
         errors.append("mock provider result did not expose deterministic metadata")
-    if mock_result.get("scoring", {}).get("strategic_review") is None:
-        errors.append("mock provider did not preserve Strategic Review scoring result")
+    if mock_result.get("scoring", {}).get("trial_score") is None:
+        errors.append("mock provider did not preserve Trial Score scoring result")
+    staged_mock_result = review_packet_pass1_initial_with_provider(packet, provider=PROVIDER_MOCK)
+    if staged_mock_result.get("provider_metadata", {}).get("workflow_stage") != provider_module.PASS1_INITIAL_STAGE:
+        errors.append("staged mock Pass 1 should expose the pass1_initial workflow stage")
+    if pass1_result_needs_repair(staged_mock_result):
+        errors.append("staged mock Pass 1 should not require repair for the valid operational fixture")
+    if staged_mock_result.get("scoring", {}).get("trial_score") is None:
+        errors.append("staged mock Pass 1 should preserve Trial Score scoring result")
 
     baseline_fixture = next(
         item for item in get_contract_fixtures()
@@ -122,9 +668,9 @@ def main() -> int:
     baseline_packet = build_review_packet_from_fixture(baseline_fixture)
     baseline_result = review_packet_with_provider(baseline_packet, provider=PROVIDER_MOCK)
     if baseline_result.get("status") != "reviewed":
-        errors.append("provider should review hidden baseline packet through the normal Scenario Review path")
-    if baseline_result.get("scoring", {}).get("strategic_review") is not None:
-        errors.append("hidden baseline provider result should not calculate Strategic Review")
+        errors.append("provider should review hidden baseline packet through the normal Trial Score review path")
+    if baseline_result.get("scoring", {}).get("reality_check_points") is not None:
+        errors.append("hidden baseline provider result should not calculate Reality Check")
     if baseline_result.get("scoring", {}).get("trial_score") is not None:
         errors.append("hidden baseline provider result should not calculate Trial Score")
 
@@ -136,14 +682,14 @@ def main() -> int:
     context_result = review_packet_with_provider(context_packet, provider=PROVIDER_MOCK)
     if context_result.get("status") != "reviewed":
         errors.append("provider should review structured/text context fixture without a clarification gate")
-    if context_result.get("scoring", {}).get("strategic_review") is None:
-        errors.append("structured/text context fixture did not preserve Strategic Review scoring result")
+    if context_result.get("scoring", {}).get("trial_score") is None:
+        errors.append("structured/text context fixture did not preserve Trial Score scoring result")
 
     unsupported = review_packet_with_provider(packet, provider="not_configured")
     if unsupported.get("status") != FAILURE_UNSUPPORTED_PROVIDER:
         errors.append("unsupported provider should return unsupported_provider status")
-    if unsupported.get("scoring", {}).get("strategic_review") is not None:
-        errors.append("unsupported provider should not return Strategic Review")
+    if unsupported.get("scoring", {}).get("reality_check_points") is not None:
+        errors.append("unsupported provider should not return Reality Check")
     if unsupported.get("review") is not None:
         errors.append("unsupported provider should not return review JSON")
 
@@ -183,8 +729,10 @@ def main() -> int:
         errors.append("Gemini retry output budget should be at least 16000 tokens")
     if GEMINI_MALFORMED_JSON_RETRY_ATTEMPTS != 1:
         errors.append("Gemini malformed JSON retry should stay bounded to one explicit retry")
-    if PROVIDER_VALIDATION_RETRY_ATTEMPTS != 1:
-        errors.append("provider validation retry should stay bounded to one explicit retry")
+    if PROVIDER_VALIDATION_RETRY_ATTEMPTS != 3:
+        errors.append("provider validation retry should stay bounded to three explicit retries")
+    if PASS2_VALIDATION_RETRY_ATTEMPTS != 1:
+        errors.append("Pass 2 validation retry should stay bounded to one explicit retry")
     fake_usage = type("FakeUsage", (), {
         "prompt_token_count": 100,
         "candidates_token_count": 40,
@@ -220,17 +768,17 @@ def main() -> int:
         packet,
         provider="openai",
         model_name="test-model",
-        review={"design_confidence_subcategories": {}},
+        review={"reality_check": "malformed"},
         provider_metadata={},
     )
     if invalid_real_review.get("status") != FAILURE_MALFORMED_RESPONSE:
         errors.append("contract-invalid real provider review should be malformed_response")
-    if invalid_real_review.get("scoring", {}).get("strategic_review") is not None:
-        errors.append("contract-invalid real provider review should not return Strategic Review")
+    if invalid_real_review.get("scoring", {}).get("reality_check_points") is not None:
+        errors.append("contract-invalid real provider review should not return Reality Check")
 
     review_with_app_score = {
-        **_synthesized_strategic_review(packet, fixture),
-        "strategic_review_points": 99,
+        **_synthesized_trial_score_pass1_review(packet, fixture),
+        "reality_check_points": 99,
         "trial_score": 99,
     }
     app_score_result = _score_provider_review(
@@ -240,19 +788,25 @@ def main() -> int:
         review=review_with_app_score,
         provider_metadata={},
     )
-    if app_score_result.get("status") != STATUS_REVIEWED:
-        errors.append("provider-returned app score field should be ignored without making result malformed_response")
-    if app_score_result.get("scoring", {}).get("strategic_review") is None:
-        errors.append("provider-returned app score field should not suppress Strategic Review")
-    if app_score_result.get("scoring", {}).get("trial_score") is None:
-        errors.append("provider-returned app score field should not suppress Trial Score")
+    if app_score_result.get("status") != FAILURE_MALFORMED_RESPONSE:
+        errors.append("provider-returned app score field should make result malformed_response")
+    if app_score_result.get("scoring", {}).get("reality_check_points") is not None:
+        errors.append("provider-returned app score field should suppress Reality Check")
+    if app_score_result.get("scoring", {}).get("trial_score") is not None:
+        errors.append("provider-returned app score field should suppress Trial Score")
     if not any(
         "application-owned" in str(error)
         for error in app_score_result.get("scoring", {}).get("validation_errors") or []
     ):
         errors.append("provider-returned app score field should stay visible as a validation warning")
 
+    _check_validation_stage_classifier(errors)
     _check_openai_validation_retry(packet, fixture, errors)
+    _check_openai_pass2_retry(packet, fixture, errors)
+    _check_openai_pass2_exception_warning(packet, fixture, errors)
+    _check_gemini_validation_retry(packet, fixture, errors)
+    _check_gemini_multi_validation_retry(packet, fixture, errors)
+    _check_gemini_staged_pass1_malformed_retry(packet, fixture, errors)
 
     if errors:
         for error in errors:

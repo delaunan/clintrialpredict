@@ -12,7 +12,9 @@ from typing import Any
 
 from src.narratives.contract_fixtures import get_contract_fixtures
 from src.narratives.packet_builder import build_review_packet_from_fixture, stable_packet_hash
+from src.narratives.prompt_builder import build_pass2_input
 from src.narratives.scoring import validate_and_score_review
+from src.narratives.trial_score_contract import GATED_PREMISE_SENSITIVE_FIELDS, validate_pass2_review
 
 FAILURE_PROVIDER_ERROR = "provider_error"
 FAILURE_MALFORMED_JSON = "malformed_json"
@@ -55,39 +57,58 @@ def _operational_only(packet: dict[str, Any]) -> bool:
     return bool(fields) and all(field.startswith("operational_assumptions.") for field in fields)
 
 
-def _synthesized_strategic_review(packet: dict[str, Any], fixture: dict[str, Any]) -> dict[str, Any]:
-    """Return a minimal Strategic Review schema for legacy fixture-backed mock paths."""
+def _synthesized_trial_score_pass1_review(packet: dict[str, Any], fixture: dict[str, Any]) -> dict[str, Any]:
+    """Return a minimal Trial Score Pass 1 schema for fixture-backed mock paths."""
     source = deepcopy(fixture.get("mock_review") or {})
     expected = fixture.get("expected_behavior") or {}
     model = packet.get("model_interpretation") or {}
     delta = model.get("score_delta")
     if not isinstance(delta, (int, float)):
         delta = 0
-    expected_modifier = expected.get("expected_design_confidence", 0)
-    if not isinstance(expected_modifier, (int, float)):
-        expected_modifier = 0
+    expected_reality_check = expected.get("expected_reality_check_points", 0)
+    if not isinstance(expected_reality_check, (int, float)):
+        expected_reality_check = 0
 
-    if _operational_only(packet) or float(delta) == 0:
-        if expected_modifier < 0:
-            effect_label = "strongly_worsens_active_tension"
-        elif expected_modifier > 0:
-            effect_label = "supports_tradeoff_balance"
-        else:
-            effect_label = "neutral"
+    if expected_reality_check == 0:
+        reality_effect = "neutral"
+        reality_strength = "none"
+        allocations = []
+    elif _operational_only(packet) or float(delta) == 0:
+        reality_effect = "reward_coherence" if expected_reality_check > 0 else "penalize_incoherence"
+        reality_strength = "slight" if abs(float(expected_reality_check)) <= 1 else "moderate"
+        allocations = [
+            {
+                "allocation_target_id": "execution_framework.operational_fit",
+                "share": 1.0,
+                "movement_label": "Reality Check: operational coherence",
+                "rationale": "The mock review routes operational-only movement through the operational proportionality lens.",
+                "incremental_check": "This checks coherence of the operational plan after Operational Fit rather than repeating the raw operational rating.",
+            }
+        ]
     elif float(delta) > 0:
-        if expected_modifier < 0:
-            effect_label = "partly_offsets_score_gain"
-        elif expected_modifier > 0:
-            effect_label = "supports_score_gain"
-        else:
-            effect_label = "neutral"
+        reality_effect = "offset_gain" if expected_reality_check < 0 else "reinforce_gain"
+        reality_strength = "moderate" if expected_reality_check < 0 else "slight"
+        allocations = [
+            {
+                "allocation_target_id": "scientific_challenge.protocol_architecture",
+                "share": 1.0,
+                "movement_label": "Reality Check: evidence robustness",
+                "rationale": "The mock review checks whether a favorable score movement remains evidence-ready.",
+                "incremental_check": "This is not counted by Operational Fit because it concerns evidence interpretability.",
+            }
+        ]
     else:
-        if expected_modifier > 0:
-            effect_label = "softens_score_decline"
-        elif expected_modifier < 0:
-            effect_label = "reinforces_score_decline"
-        else:
-            effect_label = "neutral"
+        reality_effect = "soften_decline" if expected_reality_check > 0 else "reinforce_decline"
+        reality_strength = "moderate" if expected_reality_check > 0 else "slight"
+        allocations = [
+            {
+                "allocation_target_id": "scientific_challenge.protocol_architecture",
+                "share": 1.0,
+                "movement_label": "Reality Check: rigor trade-off",
+                "rationale": "The mock review checks whether a less favorable score movement reflects useful rigor or unresolved complexity.",
+                "incremental_check": "This is a post-score interpretation rather than a rewrite of Completion Outlook.",
+            }
+        ]
 
     completion = source.get("completion_outlook_analysis") or source.get("completion_outlook_review") or {}
     if "risk_pattern_summary" not in completion:
@@ -109,84 +130,168 @@ def _synthesized_strategic_review(packet: dict[str, Any], fixture: dict[str, Any
         }
 
     participant = source.get("key_questions") or source.get("participant_review") or {}
-    strategic_review = {
-        "effect_label": effect_label,
-        "tension_status": "not_applicable",
-        "operational_materiality": "minor",
-        "evidence_fields": _default_evidence_fields(packet),
-        "move_classification": ["balanced_improvement"] if expected_modifier >= 0 else ["strategic_mismatch"],
-        "current_tension": source.get("main_tension") or "Feasibility vs Evidence Strength.",
-        "carryover_check": "",
-        "tradeoff_resolution": "The latest move is interpreted through the current strategic tradeoff.",
-        "rationale": "Fixture-backed Strategic Review generated for deterministic local checks.",
-        "next_consideration": "Stress-test whether the score movement remains strategically defensible.",
-    }
+    evidence_fields = _default_evidence_fields(packet)
+    operational_changed = [field for field in evidence_fields if field.startswith("operational_assumptions.")]
+    gated_changed = sorted(set(evidence_fields).intersection(GATED_PREMISE_SENSITIVE_FIELDS))
+    operational_fit_rating = "neutral_or_unclear"
+    operational_fit_materiality = "minor"
+    operational_interaction = "mixed"
+    if operational_changed:
+        operational_fit_rating = (
+            "slightly_improves_fit"
+            if expected_reality_check > 0
+            else "slightly_worsens_fit"
+            if expected_reality_check < 0
+            else "neutral_or_unclear"
+        )
+        operational_fit_materiality = "moderate" if len(operational_changed) >= 2 else "minor"
+        operational_interaction = "unmodeled_support" if expected_reality_check > 0 else "under_supported"
     return {
         "review_metadata": {
             "review_mode": (source.get("review_metadata") or {}).get("review_mode", "first_visible_iteration"),
             "visible": bool((source.get("review_metadata") or {}).get("visible", True)),
         },
         "completion_outlook_analysis": completion,
-        "strategic_review": strategic_review,
-        "strategic_review_analysis": {
-            "summary": "The Trial Score review combines Completion Outlook movement with a Strategic Review interpretation.",
-            "overall_score_explanation": "The Completion Outlook movement is interpreted first, then moderated by Strategic Review when the score pattern is strategically uneven.",
-            "pillar_readout": [
-                {
-                    "label": "Score Pattern",
-                    "interpretation": "Changed trial attributes and category movement are interpreted together rather than as isolated UI sections.",
-                },
-                {
-                    "label": "Strategic Review",
-                    "interpretation": strategic_review["rationale"],
-                },
-            ],
-            "strategic_review_bullet": strategic_review["rationale"],
-            "tension_question": strategic_review.get("next_consideration", ""),
-            "broader_strategic_question": (
-                participant.get("strategic_development_question")
-                or participant.get("strategic_field_question")
-                or "What broader development tension does this scenario expose?"
+        "strategy_shift_check": {
+            "status": "partly_supported" if gated_changed else "not_applicable",
+            "rationale": (
+                "Mock Strategy Shift Check applied because gated premise-sensitive fields changed."
+                if gated_changed
+                else "No mock fixture premise shift is evaluated."
             ),
-            "review_rationale": strategic_review["rationale"],
-            "supporting_evidence": strategic_review["evidence_fields"],
-            "limiting_evidence": [],
         },
-        "key_questions": {
-            "medical_clinical_development_question": (
-                participant.get("medical_clinical_development_question")
-                or participant.get("medical_development_question")
-                or "What evidence standard would make this scenario defensible?"
-            ),
-            "strategic_development_question": (
+        "operational_fit": {
+            "enrollment_fit": {"rating": "neutral_or_unclear", "materiality": "minor", "rationale": "Mock field-level context."},
+            "site_footprint_fit": {"rating": "neutral_or_unclear", "materiality": "minor", "rationale": "Mock field-level context."},
+            "timeline_fit": {"rating": "neutral_or_unclear", "materiality": "minor", "rationale": "Mock field-level context."},
+            "combined_operational_fit": {
+                "rating": operational_fit_rating,
+                "materiality": operational_fit_materiality,
+                "interaction_with_completion_outlook": operational_interaction,
+                "central_reason": "Fixture-backed Operational Fit generated for deterministic local checks.",
+                "evidence_fields": operational_changed or evidence_fields,
+            },
+        },
+        "reality_check": {
+            "effect": reality_effect,
+            "strength": reality_strength,
+            "central_reason": "Fixture-backed Reality Check generated for deterministic local checks.",
+            "evidence_fields": evidence_fields,
+            "allocations": allocations,
+        },
+        "central_tension_candidate": {
+            "summary": source.get("main_tension") or "Feasibility vs Evidence Strength.",
+            "why_it_matters": "The scenario should be discussed as a total-score trade-off.",
+            "supporting_evidence": evidence_fields,
+        },
+        "broader_strategic_question_candidate": {
+            "question": (
                 participant.get("strategic_development_question")
                 or participant.get("strategic_field_question")
                 or participant.get("clinical_operations_question")
-                or "How should the development path balance completion resemblance and evidence value?"
+                or "What broader development tension does this scenario expose?"
             ),
         },
-        "scenario_consistency_note": source.get("scenario_consistency_note") or {
-            "has_clear_mismatch": False,
-            "message": "",
-            "fields_in_tension": [],
+        "continuity_update": {
+            "active_tension": source.get("main_tension") or "Feasibility vs Evidence Strength.",
+            "what_changed": "Fixture-backed mock review evaluated the latest scenario change.",
+            "watch_next": "Stress-test whether the score movement remains defensible.",
         },
-        "continuity": source.get("continuity") or {
-            "prior_concerns_resolved": [],
-            "prior_concerns_worsened": [],
-            "prior_concerns_unchanged": [],
-            "new_concerns": [],
-            "storyline_update": "Fixture-backed Strategic Review storyline update.",
+    }
+
+
+def _synthesized_pass2_narrative(
+    packet: dict[str, Any],
+    pass1_review: dict[str, Any],
+    scoring: dict[str, Any],
+) -> dict[str, Any] | None:
+    if scoring.get("trial_score") is None:
+        return None
+
+    pass2_input = build_pass2_input(packet, pass1_review, scoring)
+    app_scores = pass2_input["app_calculated_scores"]
+    analysis = pass2_input["pass1_analysis"]
+    operational_assessment = analysis.get("operational_fit_assessment") or {}
+    reality_assessment = analysis.get("reality_check_assessment") or {}
+    tension = analysis.get("central_tension_candidate") or {}
+    broader_question = analysis.get("broader_strategic_question_candidate") or {}
+    continuity = analysis.get("continuity_update") or {}
+    completion = analysis.get("completion_outlook_analysis") or {}
+
+    operational_points = app_scores.get("operational_fit_points")
+    reality_points = app_scores.get("reality_check_points")
+    trial_score = app_scores.get("trial_score")
+    pre_delta = app_scores.get("pre_reality_delta")
+    operational_phrase = (
+        f"Operational Fit contributes {operational_points:+g} points"
+        if isinstance(operational_points, (int, float))
+        else "Operational Fit is not scored for this hidden or unavailable review"
+    )
+    reality_phrase = (
+        f"Reality Check contributes {reality_points:+g} points"
+        if isinstance(reality_points, (int, float))
+        else "Reality Check is not scored for this hidden or unavailable review"
+    )
+    movement_phrase = (
+        f"The pre-Reality movement is {pre_delta:+g} points versus the reference score"
+        if isinstance(pre_delta, (int, float))
+        else "The reference movement is unavailable"
+    )
+
+    review_mode = (pass2_input.get("review_metadata") or {}).get("review_mode") or "first_visible_iteration"
+    return {
+        "review_metadata": {
+            "review_mode": review_mode,
+            "visible": True,
         },
-        "trace": {
-            "main_features_considered": (source.get("trace") or {}).get("main_features_considered") or [],
-            "main_completion_drivers_considered": (source.get("trace") or {}).get("main_completion_drivers_considered") or [],
-            "main_strategic_review_signals_considered": _default_evidence_fields(packet),
-            "operational_statuses_considered": (source.get("trace") or {}).get("operational_statuses_considered") or [],
-            "reference_pack_ids_used": (source.get("trace") or {}).get("reference_pack_ids_used") or [],
-            "therapeutic_area_pack_used": (source.get("trace") or {}).get("therapeutic_area_pack_used") or "",
-            "compared_against": (source.get("trace") or {}).get("compared_against") or "previous_visible_iteration",
-            "should_repeat_prior_warning": bool((source.get("trace") or {}).get("should_repeat_prior_warning", False)),
+        "trial_score_narrative": {
+            "summary": (
+                f"The Trial Score is {trial_score:g}. The current reading appears mixed because the model-pattern "
+                "Completion Outlook, operational proportionality, and after-review realism check need to be read together."
+            ),
+            "movement_reading": (
+                f"{movement_phrase}. {operational_phrase}, while {reality_phrase}; this should be read as an integrated "
+                "scenario judgment rather than separate component essays."
+            ),
+            "score_interpretation": (
+                completion.get("summary")
+                or completion.get("risk_pattern_summary")
+                or "Completion Outlook remains the protected model-pattern anchor, while the app-owned review layers interpret scenario coherence."
+            ),
         },
+        "pillar_reading": [
+            {
+                "pillar": "Execution Framework",
+                "reading": (
+                    operational_assessment.get("central_reason")
+                    or "Operational Fit is interpreted as execution proportionality within the total score."
+                ),
+            },
+            {
+                "pillar": "Reality Check",
+                "reading": (
+                    reality_assessment.get("central_reason")
+                    or "Reality Check reads whether the scenario movement appears coherent and realistic."
+                ),
+            },
+        ],
+        "central_tension": {
+            "summary": tension.get("summary") or continuity.get("active_tension") or "Completion favorability versus scenario defensibility.",
+            "why_it_matters": (
+                tension.get("why_it_matters")
+                or "This tension shapes how participants should defend the current Trial Score movement."
+            ),
+        },
+        "broader_strategic_question": {
+            "question": broader_question.get("question") or "What broader development trade-off does this scenario expose?",
+        },
+        "facilitator_questions": [
+            {
+                "question": "What evidence would make the current Trial Score movement defensible?",
+                "why_it_matters": "It tests whether the score movement reflects a coherent development scenario rather than a shortcut.",
+                "related_feature_families": ["evidence", "population", "operations"],
+            }
+        ],
     }
 
 
@@ -213,9 +318,12 @@ def review_packet_with_mock(
             "scoring": {
                 "validation_status": "unavailable",
                 "validation_errors": ["Simulated mock provider failure."],
-                "design_confidence": None,
-                "total_scenario_score": None,
-                "design_confidence_assessment": {},
+                "operational_fit_points": None,
+                "pre_reality_score": None,
+                "pre_reality_delta": None,
+                "reality_check_points": None,
+                "reality_check_assessment": {},
+                "trial_score": None,
                 "input_hash": packet.get("input_hash"),
             },
         }
@@ -233,9 +341,12 @@ def review_packet_with_mock(
             "scoring": {
                 "validation_status": "unavailable",
                 "validation_errors": ["No mock fixture matched packet input_hash."],
-                "design_confidence": None,
-                "total_scenario_score": None,
-                "design_confidence_assessment": {},
+                "operational_fit_points": None,
+                "pre_reality_score": None,
+                "pre_reality_delta": None,
+                "reality_check_points": None,
+                "reality_check_assessment": {},
+                "trial_score": None,
                 "input_hash": packet.get("input_hash"),
             },
         }
@@ -254,29 +365,42 @@ def review_packet_with_mock(
             "scoring": {
                 "validation_status": "reused",
                 "validation_errors": [],
-                "design_confidence": expected.get("expected_design_confidence"),
-                "total_scenario_score": expected.get("expected_total_scenario_score"),
-                "design_confidence_assessment": {},
+                "operational_fit_points": expected.get("expected_operational_fit_points"),
+                "pre_reality_score": expected.get("expected_pre_reality_score"),
+                "pre_reality_delta": expected.get("expected_pre_reality_delta"),
+                "reality_check_points": expected.get("expected_reality_check_points"),
+                "reality_check_assessment": {},
+                "trial_score": expected.get("expected_trial_score"),
                 "input_hash": packet.get("input_hash"),
             },
         }
 
     review = deepcopy(fixture["mock_review"])
-    if isinstance(review, dict) and "strategic_review" not in review:
-        review = _synthesized_strategic_review(packet, fixture)
+    if isinstance(review, dict) and "reality_check" not in review:
+        review = _synthesized_trial_score_pass1_review(packet, fixture)
     if failure_mode == FAILURE_MALFORMED_JSON:
-        review = {"design_confidence_subcategories": "malformed"}
+        review = {"reality_check": "malformed"}
 
     scored = validate_and_score_review(packet, review)
+    pass2_review = None
+    validated_pass2 = {"validation_status": "valid", "validation_errors": []}
+    if failure_mode != FAILURE_MALFORMED_JSON and scored["scoring"].get("validation_status") == "valid":
+        pass2_review = _synthesized_pass2_narrative(packet, scored["validated_review"], scored["scoring"])
+        if pass2_review is not None:
+            validated_pass2 = validate_pass2_review(pass2_review)
     status = "malformed_response" if failure_mode == FAILURE_MALFORMED_JSON else "reviewed"
+    if validated_pass2.get("validation_status") != "valid":
+        status = "malformed_response"
     return {
         "review_needed": True,
         "reuse_previous_review": False,
         "provider": "mock",
         "status": status,
         "fixture_id": fixture["fixture_id"],
-        "failure_reason": None,
+        "failure_reason": None if status == "reviewed" else "Mock Pass 2 narrative did not satisfy the Trial Score contract.",
         "review": review,
         "validated_review": scored["validated_review"],
+        "participant_narrative": pass2_review,
+        "validated_participant_narrative": validated_pass2,
         "scoring": scored["scoring"],
     }

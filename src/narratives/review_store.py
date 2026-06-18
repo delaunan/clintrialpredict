@@ -16,7 +16,7 @@ from src.narratives.provider_config import NarrativeProviderConfig, provider_con
 from src.narratives.review_controls import apply_review_control_overrides, attach_review_controls
 from src.narratives.storyline import build_storyline_state
 
-NARRATIVE_REVIEW_STATE_KEY = "narrative_review_store_v1"
+NARRATIVE_REVIEW_STATE_KEY = "narrative_review_store_v2"
 
 
 def _utc_now() -> str:
@@ -45,6 +45,9 @@ def compact_storyline_from_trace(trace: dict[str, Any] | None) -> str:
     if not trace:
         return ""
     validated = trace.get("validated_review") or {}
+    continuity_update = validated.get("continuity_update") or {}
+    if isinstance(continuity_update.get("what_changed"), str) and continuity_update.get("what_changed").strip():
+        return continuity_update["what_changed"].strip()
     continuity = validated.get("continuity") or {}
     storyline = continuity.get("storyline_update")
     if isinstance(storyline, str) and storyline.strip():
@@ -93,21 +96,24 @@ def _build_trace(
     iteration_context = packet.get("iteration_context") or {}
     scoring = review_result.get("scoring") or {}
     validated_review = review_result.get("validated_review")
-    strategic_review = scoring.get("strategic_review", scoring.get("design_confidence"))
-    trial_score = scoring.get("trial_score", scoring.get("total_scenario_score"))
-    strategic_review_assessment = deepcopy(scoring.get("strategic_review_assessment") or {})
-    design_confidence = scoring.get("design_confidence", strategic_review)
-    total_scenario_score = scoring.get("total_scenario_score", trial_score)
-    design_confidence_assessment = deepcopy(scoring.get("design_confidence_assessment") or {})
+    participant_narrative = review_result.get("participant_narrative")
+    validated_participant_narrative = review_result.get("validated_participant_narrative")
+    operational_fit_points = scoring.get("operational_fit_points")
+    pre_reality_score = scoring.get("pre_reality_score")
+    pre_reality_delta = scoring.get("pre_reality_delta")
+    reality_check_points = scoring.get("reality_check_points")
+    reality_check_assessment = deepcopy(scoring.get("reality_check_assessment") or {})
+    reality_check_allocation_points = deepcopy(scoring.get("reality_check_allocation_points") or [])
+    trial_score = scoring.get("trial_score")
     provider_trace = (validated_review or {}).get("trace") or {}
-    strategic_review_analysis = (validated_review or {}).get("strategic_review_analysis") or {}
-    strategic_review_object = (validated_review or {}).get("strategic_review") or {}
-    design_confidence_analysis = (validated_review or {}).get("design_confidence_analysis") or {}
+    operational_fit = (validated_review or {}).get("operational_fit") or {}
+    central_tension_candidate = (validated_review or {}).get("central_tension_candidate") or {}
+    broader_strategic_question_candidate = (validated_review or {}).get("broader_strategic_question_candidate") or {}
+    continuity_update = (validated_review or {}).get("continuity_update") or {}
     tradeoff_review = (validated_review or {}).get("tradeoff_review") or {}
     main_tension = (
-        strategic_review_object.get("current_tension")
+        central_tension_candidate.get("summary")
         or (validated_review or {}).get("main_tension")
-        or design_confidence_analysis.get("confidence_rationale")
         or tradeoff_review.get("central_tension")
     )
     storyline_state = build_storyline_state(validated_review)
@@ -145,45 +151,65 @@ def _build_trace(
         "cache_namespace": cache_namespace,
         "provider_metadata": deepcopy(review_result.get("provider_metadata") or {}),
         "status": review_result.get("status"),
+        "repair_warning": (review_result.get("provider_metadata") or {}).get("validation_retry_final_error"),
         "cached": cached,
         "review_needed": review_result.get("review_needed"),
         "reuse_previous_review": review_result.get("reuse_previous_review"),
         "input_hash": input_hash,
+        "scenario_state_hash": packet.get("scenario_state_hash"),
         "prompt_version": packet.get("prompt_version"),
         "rubric_version": packet.get("rubric_version"),
         "input_packet": deepcopy(packet),
         "output_json": deepcopy(review_result.get("review")),
+        "participant_narrative_json": deepcopy(participant_narrative),
+        "participant_narrative_status": review_result.get("participant_narrative_status"),
+        "participant_narrative_warning": review_result.get("participant_narrative_warning"),
         "validated_review": deepcopy(validated_review),
+        "validated_participant_narrative": deepcopy(validated_participant_narrative),
         "validation_status": scoring.get("validation_status"),
         "validation_errors": deepcopy(scoring.get("validation_errors") or []),
-        "strategic_review": strategic_review,
+        "xgboost_completion_outlook": scoring.get("xgboost_completion_outlook"),
+        "operational_fit_points": operational_fit_points,
+        "operational_fit_assessment": deepcopy(scoring.get("operational_fit_assessment") or {}),
+        "pre_reality_score": pre_reality_score,
+        "pre_reality_delta": pre_reality_delta,
+        "reality_check_points": reality_check_points,
+        "reality_check_assessment": reality_check_assessment,
+        "reality_check_allocation_points": reality_check_allocation_points,
+        "trial_score_diagnostics": {
+            "xgboost_completion_outlook": scoring.get("xgboost_completion_outlook"),
+            "operational_fit_points": operational_fit_points,
+            "pre_reality_score": pre_reality_score,
+            "pre_reality_delta": pre_reality_delta,
+            "reality_check_points": reality_check_points,
+            "trial_score": trial_score,
+            "delta_vs_previous_trial_score": scoring.get("delta_vs_previous_trial_score"),
+            "delta_vs_previous_pre_reality_score": scoring.get("delta_vs_previous_pre_reality_score"),
+            "delta_vs_baseline_xgboost": scoring.get("delta_vs_baseline_xgboost"),
+        },
         "trial_score": trial_score,
-        "strategic_review_assessment": strategic_review_assessment,
-        "strategic_review_object": deepcopy(strategic_review_object),
-        "strategic_review_analysis": deepcopy(strategic_review_analysis),
+        "operational_fit": deepcopy(operational_fit),
+        "central_tension_candidate": deepcopy(central_tension_candidate),
+        "broader_strategic_question_candidate": deepcopy(broader_strategic_question_candidate),
+        "continuity_update": deepcopy(continuity_update),
         "storyline_state": deepcopy(storyline_state),
-        "design_confidence": design_confidence,
-        "total_scenario_score": total_scenario_score,
-        "design_confidence_assessment": design_confidence_assessment,
-        "design_confidence_subcategories": deepcopy(
-            (validated_review or {}).get("design_confidence_subcategories") or {}
-        ),
         "completion_outlook_analysis": deepcopy(
             (validated_review or {}).get("completion_outlook_analysis") or {}
         ),
-        "design_confidence_analysis": deepcopy(design_confidence_analysis),
         "key_questions": deepcopy((validated_review or {}).get("key_questions") or {}),
+        "trial_score_narrative": deepcopy((validated_participant_narrative or {}).get("trial_score_narrative") or {}),
+        "participant_pillar_reading": deepcopy((validated_participant_narrative or {}).get("pillar_reading") or []),
+        "participant_central_tension": deepcopy((validated_participant_narrative or {}).get("central_tension") or {}),
+        "participant_broader_strategic_question": deepcopy(
+            (validated_participant_narrative or {}).get("broader_strategic_question") or {}
+        ),
+        "facilitator_questions": deepcopy((validated_participant_narrative or {}).get("facilitator_questions") or []),
         "scenario_consistency_note": deepcopy((validated_review or {}).get("scenario_consistency_note") or {}),
-        "design_confidence_contributions": deepcopy(design_confidence_assessment.get("subcategories") or {}),
         "central_tension": main_tension,
         "reference_pack_ids_available": reference_pack_ids_available,
         "reference_pack_ids_used": supported_reference_pack_ids_used,
         "unsupported_reference_pack_ids_used": unsupported_reference_pack_ids_used,
         "therapeutic_area_pack_used": provider_trace.get("therapeutic_area_pack_used"),
-        # Temporary aliases for the old simulator panel until Phase 6 migrates UI labels.
-        "quality_adjustment": design_confidence,
-        "final_candidate_score": total_scenario_score,
-        "quality_assessment": design_confidence_assessment,
         "failure_reason": review_result.get("failure_reason"),
         "clarification_issues": deepcopy(review_result.get("clarification_issues") or []),
         "user_clarifications": deepcopy((packet.get("clarification_context") or {}).get("user_clarifications") or []),
@@ -334,16 +360,21 @@ def replay_or_review_with_provider(
             "scoring": {
                 "validation_status": previous_session_trace.get("validation_status"),
                 "validation_errors": deepcopy(previous_session_trace.get("validation_errors") or []),
-                "strategic_review": previous_session_trace.get("strategic_review"),
+                "xgboost_completion_outlook": previous_session_trace.get("xgboost_completion_outlook"),
+                "operational_fit_points": previous_session_trace.get("operational_fit_points"),
+                "operational_fit_assessment": deepcopy(
+                    previous_session_trace.get("operational_fit_assessment") or {}
+                ),
+                "pre_reality_score": previous_session_trace.get("pre_reality_score"),
+                "pre_reality_delta": previous_session_trace.get("pre_reality_delta"),
+                "reality_check_points": previous_session_trace.get("reality_check_points"),
+                "reality_check_assessment": deepcopy(
+                    previous_session_trace.get("reality_check_assessment") or {}
+                ),
+                "reality_check_allocation_points": deepcopy(
+                    previous_session_trace.get("reality_check_allocation_points") or []
+                ),
                 "trial_score": previous_session_trace.get("trial_score"),
-                "strategic_review_assessment": deepcopy(
-                    previous_session_trace.get("strategic_review_assessment") or {}
-                ),
-                "design_confidence": previous_session_trace.get("design_confidence"),
-                "total_scenario_score": previous_session_trace.get("total_scenario_score"),
-                "design_confidence_assessment": deepcopy(
-                    previous_session_trace.get("design_confidence_assessment") or {}
-                ),
                 "input_hash": packet.get("input_hash"),
             },
         }

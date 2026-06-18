@@ -206,19 +206,19 @@ Reality Check defines one overall app-calculated adjustment first, then allocate
 
 The LLM may choose where the Reality Check lands, but it must target existing pillars/subpillars rather than creating a new visible pillar. V1 should keep this deliberately small and readable: allocate to 1-3 subpillars, not a long list of tiny effects.
 
-Reality Check allocations must target existing subpillars. The pillar is the parent path, not the direct allocation target. For V1, use the current taxonomy subpillars plus the new additive `Operational Fit` subpillar:
+Reality Check allocations must use canonical `allocation_target_id` values. The application maps those IDs to exact pillar/subpillar display labels, so the provider should not free-type pillar or subpillar names. For V1, use the current taxonomy subpillars plus the new additive `Operational Fit` subpillar:
 
-| Pillar | Subpillar | Included Fields / Inputs | Broader Meaning | Reality Check Allocation Guidance |
-| --- | --- | --- | --- | --- |
-| Therapeutic Context | Therapeutic Area Profile | Therapeutic area, indication, rare-condition status | Disease context, patient relevance, benchmark context, and calibration limits. | Allocate here only when an after-review issue concerns disease-context fit, rare-condition implications, or stale/inconsistent condition context. Hard-locked premise fields should usually start a new scenario rather than receive Reality Check allocation. |
-| Therapeutic Context | Development Phase and Goal | Clinical phase, regulatory intent / strategic ambition | Whether the evidence standard, endpoint maturity, population scope, and operational scale fit the development decision. | Allocate here when the issue is phase/ambition coherence, such as a pivotal claim without supporting evidence rigor or an exploratory scenario carrying excessive confirmatory burden. |
-| Scientific Challenge | Biological Profile | Target precedent, pathway profile, therapeutic modality, innovation rank | Biological plausibility, novelty, modality risk, and the evidence burden the mechanism creates. | Allocate here when the after-review concern is about mechanism plausibility, novelty, modality-specific risk, delivery/safety implications, or whether biology supports the evidence claim. |
-| Scientific Challenge | Protocol Architecture | Intervention model, primary purpose, adaptive design, endpoint rigor, endpoint structure, biomarker patient selection | Whether the trial design architecture can credibly answer the clinical-development question. | Allocate here when the after-review concern is about endpoint interpretability, comparator/design coherence, biomarker logic, evidence robustness, or simplification that weakens the clinical question. |
-| Patient Profile | Clinical Severity | Patient severity, line of therapy | Whether patient burden, acceptable risk, endpoint relevance, and unmet need fit the scenario. | Allocate here when the issue is risk tolerance, disease-course fit, endpoint relevance for the target population, or whether burden is justified by severity/unmet need. |
-| Patient Profile | Population Scope | Gender eligibility, healthy-volunteer flag, adult/pediatric/older-adult eligibility | Whether the population definition is credible, generalizable, ethically coherent, and recruitable. | Allocate here when the issue is population breadth/narrowness, representativeness, vulnerable-population safeguards, or whether eligibility choices support the evidence objective. |
-| Execution Framework | Trial Complexity Footprint | Sponsor type proxy, endpoint duration, number of arms, delivery profile | SHAP-derived trial-footprint complexity, follow-up burden, site capability needs, and operational load. | Allocate here when the after-review issue concerns model-visible complexity, duration burden, arm/site complexity, delivery burden, or footprint credibility not already captured by Operational Fit. |
-| Execution Framework | Methodological Setup | Masking, allocation method, DMC status, placebo control, comparator benchmark | Bias control, causal interpretability, governance, comparator credibility, and ethical/methodological setup. | Allocate here when the issue is methodological credibility, governance proportionality, comparator adequacy, placebo ethics, or whether bias control fits the endpoint and population. |
-| Execution Framework | Operational Fit | Planned enrollment, planned sites, planned total duration, patients per site, operational benchmark metadata | Additive operational proportionality of enrollment, site footprint, duration, and benchmark position relative to the current scenario. | Allocate here when the after-review issue concerns non-XGBoost operational support, patient-per-site burden, duration feasibility, or whether operations support the revised evidence ambition. |
+| allocation_target_id | Pillar | Subpillar | Included Fields / Inputs | Broader Meaning | Reality Check Allocation Guidance |
+| --- | --- | --- | --- | --- | --- |
+| `therapeutic_context.therapeutic_area_profile` | Therapeutic Context | Therapeutic Area Profile | Therapeutic area, indication, rare-condition status | Disease context, patient relevance, benchmark context, and calibration limits. | Allocate here only when an after-review issue concerns disease-context fit, rare-condition implications, or stale/inconsistent condition context. Hard-locked premise fields should usually start a new scenario rather than receive Reality Check allocation. |
+| `therapeutic_context.development_phase_and_goal` | Therapeutic Context | Development Phase and Goal | Clinical phase, regulatory intent / strategic ambition | Whether the evidence standard, endpoint maturity, population scope, and operational scale fit the development decision. | Allocate here when the issue is phase/ambition coherence, such as a pivotal claim without supporting evidence rigor or an exploratory scenario carrying excessive confirmatory burden. |
+| `scientific_challenge.biological_profile` | Scientific Challenge | Biological Profile | Target precedent, pathway profile, therapeutic modality, innovation rank | Biological plausibility, novelty, modality risk, and the evidence burden the mechanism creates. | Allocate here when the after-review concern is about mechanism plausibility, novelty, modality-specific risk, delivery/safety implications, or whether biology supports the evidence claim. |
+| `scientific_challenge.protocol_architecture` | Scientific Challenge | Protocol Architecture | Intervention model, primary purpose, adaptive design, endpoint rigor, endpoint structure, biomarker patient selection | Whether the trial design architecture can credibly answer the clinical-development question. | Allocate here when the after-review concern is about endpoint interpretability, comparator/design coherence, biomarker logic, evidence robustness, or simplification that weakens the clinical question. |
+| `patient_profile.clinical_severity` | Patient Profile | Clinical Severity | Patient severity, line of therapy | Whether patient burden, acceptable risk, endpoint relevance, and unmet need fit the scenario. | Allocate here when the issue is risk tolerance, disease-course fit, endpoint relevance for the target population, or whether burden is justified by severity/unmet need. |
+| `patient_profile.population_scope` | Patient Profile | Population Scope | Gender eligibility, healthy-volunteer flag, adult/pediatric/older-adult eligibility | Whether the population definition is credible, generalizable, ethically coherent, and recruitable. | Allocate here when the issue is population breadth/narrowness, representativeness, vulnerable-population safeguards, or whether eligibility choices support the evidence objective. |
+| `execution_framework.trial_complexity_footprint` | Execution Framework | Trial Complexity Footprint | Sponsor type proxy, endpoint duration, number of arms, delivery profile | SHAP-derived trial-footprint complexity, follow-up burden, site capability needs, and operational load. | Allocate here when the after-review issue concerns model-visible complexity, duration burden, arm/site complexity, delivery burden, or footprint credibility not already captured by Operational Fit. |
+| `execution_framework.methodological_setup` | Execution Framework | Methodological Setup | Masking, allocation method, DMC status, placebo control, comparator benchmark | Bias control, causal interpretability, governance, comparator credibility, and ethical/methodological setup. | Allocate here when the issue is methodological credibility, governance proportionality, comparator adequacy, placebo ethics, or whether bias control fits the endpoint and population. |
+| `execution_framework.operational_fit` | Execution Framework | Operational Fit | Planned enrollment, planned sites, planned total duration, patients per site, operational benchmark metadata | Additive operational proportionality of enrollment, site footprint, duration, and benchmark position relative to the current scenario. | Allocate here when the after-review issue concerns non-XGBoost operational support, patient-per-site burden, duration feasibility, or whether operations support the revised evidence ambition. |
 
 Example:
 
@@ -231,19 +231,15 @@ Example:
     "central_reason": "The score gain depends on simplification that improves completion resemblance but leaves endpoint interpretability less robust.",
     "allocations": [
       {
-        "pillar": "Scientific Challenge",
-        "subpillar": "Protocol Architecture",
+        "allocation_target_id": "scientific_challenge.protocol_architecture",
         "share": 0.7,
-        "direction": "down",
         "movement_label": "Simplification weakens evidence robustness",
         "rationale": "The endpoint simplification supports completion-like movement, but it may reduce the strength of the evidence claim.",
         "incremental_check": "This is not already counted by Operational Fit because it concerns evidence interpretability, not execution feasibility."
       },
       {
-        "pillar": "Execution Framework",
-        "subpillar": "Operational Fit",
+        "allocation_target_id": "execution_framework.operational_fit",
         "share": 0.3,
-        "direction": "down",
         "movement_label": "Execution support remains incomplete",
         "rationale": "The revised operational plan improves site burden but does not fully support the higher evidence ambition.",
         "incremental_check": "This is incremental to Completion Outlook because it uses non-model operational assumptions."
@@ -257,10 +253,8 @@ The app calculates the Reality Check points from effect/strength/fraction and di
 
 Each allocation must include:
 
-- `pillar`;
-- `subpillar`;
+- `allocation_target_id`;
 - `share`;
-- `direction`;
 - `movement_label`;
 - `rationale`;
 - `incremental_check`.
@@ -269,10 +263,11 @@ Validation should stay simple:
 
 - allocation count is 1-3;
 - allocation shares sum to `1.0`, allowing only small rounding tolerance;
-- pillar/subpillar targets are valid existing targets;
-- direction matches the signed Reality Check effect;
+- `allocation_target_id` targets are valid existing targets;
 - `movement_label`, `rationale`, and `incremental_check` are present;
 - duplicate same-evidence / same-target / same-consequence allocations are rejected or downgraded.
+
+Provider contract repair should be targeted, not a full re-review. If Pass 1 returns a repairable contract issue, the app may send one short correction prompt with the previous JSON, exact validation errors, canonical allocation IDs, allowed Operational Fit and Reality Check enums, and allowed packet evidence references. The provider must change only the invalid fields. If the second attempt still fails, the trace should report the failed level, such as Operational Fit contract, Reality Check contract, packet evidence references, or Pass 1 Trial Score JSON shape.
 
 The Reality Check radio should answer three questions quickly:
 
@@ -305,15 +300,14 @@ V1 should hard-lock the fields that most clearly change the whole scenario conte
 ```text
 therapeutic_area_ml
 gbd_cause_id_3_ml
-lead_sponsor_canonical
+sponsor_tier_ml
 ```
 
-These changes should be blocked or treated as starting a new scenario, because they alter disease domain, indication/disease category, sponsor identity, benchmarks, calibration context, and continuity.
+These changes should be blocked or treated as starting a new scenario, because they alter disease domain, indication/disease category, sponsor premise, benchmarks, calibration context, and continuity. The underlying lead sponsor identity (`lead_sponsor_canonical`) is trial identity context and is not exposed as an editable Trial Features field.
 
 V1 should gate the following premise-sensitive fields rather than hard-lock them:
 
 ```text
-sponsor_tier_ml
 phase_ml
 strategic_ambition_ml
 therapeutic_modality_ml
@@ -566,11 +560,13 @@ Pass 2 writes:
 
 `broader_strategic_question` should be reflective and debate-oriented, but still contextualized to the scenario, condition, population, evidence goal, operational setting, or trial context. It should not be a generic conference question detached from the current scenario, and it should not become a direct instruction to change a specific field value.
 
-`facilitator_questions` are optional, hidden from the main participant UI by default, and limited to concise discussion prompts with why they matter and related feature families when useful.
+`facilitator_questions` are optional, limited to at most three concise discussion prompts, and shown only in a collapsed facilitator/debug box between the participant narrative and timing diagnostics. Each question should include why it matters and related feature families when useful.
 
 Pass 2 should use the validated score explanation from Pass 1 and app scoring. It should not make new scoring decisions, invent a different central tension, or introduce a new analytical basis.
 
-This preserves exact scoring, continuity, and participant-readable narrative quality without forcing three LLM calls.
+Pass 2 repair is separate from Pass 1 repair. If Pass 2 returns invalid participant narrative JSON after Pass 1 and app scoring succeeded, the app may send one targeted Pass 2 correction prompt with the same Pass 2 input, previous Pass 2 JSON, and exact Pass 2 validation errors. The provider must repair only invalid or missing participant-narrative fields and must not rerun Pass 1, change app-calculated scores, or change the analytical basis. If the second Pass 2 attempt still fails, Trial Score remains visible and the trace/UI should show a participant narrative warning instead of failing the scenario score.
+
+This preserves exact scoring, continuity, and participant-readable narrative quality without forcing an extra LLM call on valid Pass 2 responses.
 
 ## Development UI Contract
 
@@ -595,6 +591,8 @@ The final participant narrative should assess the total Trial Score, not write s
 Reality Check allocations should appear within existing subpillars, not directly under pillars. In the Reality Check radio, the treemap may use `Reality Check` as the root view, but the visible allocation path should still be existing pillar -> existing subpillar -> Reality Check leaf. In the Trial Score radio, the full composition treemap should embed Reality Check leaves inside impacted existing subpillars. Operational Fit and Reality Check must not render as top-level fifth pillars.
 
 ## Migration Plan
+
+Implementation status: V1 contract/schema constants, deterministic Operational Fit and Reality Check scoring, registry-owned Reality Check allocation IDs, active Pass 1 provider prompt/schema, targeted Pass 1 repair retry, Pass 2 participant-narrative prompt/schema, targeted Pass 2 repair retry, real-provider Pass 2 routing, mock-provider adaptation, storage trace fields, facilitator-question collapsed rendering, and initial simulator labels/rendering are implemented in `src/narratives/trial_score_contract.py` and the adjacent narrative modules. The active prompt builder has been simplified to the V1 Trial Score contract only. Remaining work should continue from those files rather than recreating a separate schema plan.
 
 1. Freeze the current uncommitted narrative/scoring implementation until the new contract is specified.
 2. Use this document as the active source of truth.
@@ -625,7 +623,7 @@ High-risk implementation points and required mitigations:
 - **Old contract leakage**: active new code must not emit visible `Strategic Review`, `Design Confidence`, `Quality Review`, or `Total Scenario Score` fields. Old aliases are allowed only in clearly marked legacy-cache adapters. Add a checker that fails if new scoring/provider outputs use obsolete visible fields.
 - **Reality Check movement mismatch**: score Operational Fit first, calculate actual `pre_reality_delta`, then validate Reality Check effect compatibility. Incompatible effects downgrade to neutral in V1 unless the mapping is trivial and explicitly safe.
 - **Operational Fit over-crediting**: score only combined Operational Fit; enforce materiality guardrails from `docs/operational_fit_scoring.md`; require coherent support across at least two operational fields for a positive `+5.0`.
-- **Noisy Reality Check allocations**: require 1-3 allocations, existing subpillar targets only, valid shares, signed direction compatibility, and present `movement_label`, `rationale`, and `incremental_check`. Do not invent fallback subpillars.
+- **Noisy Reality Check allocations**: require 1-3 allocations, canonical `allocation_target_id` values, valid shares, and present `movement_label`, `rationale`, and `incremental_check`. Do not invent fallback subpillars.
 - **Over-punitive Strategy Shift Check**: use `unsupported_or_incoherent` only for direct contradiction or multiple missing core supports. Use `partly_supported` for plausible but incomplete shifts.
 - **Structured/text conflict over-penalty**: structured categorical fields prevail, but unchanged or stale text should create warning/context first. Penalize only when the conflict materially undermines interpretation.
 
@@ -654,6 +652,85 @@ The following directions are superseded:
 
 Historical implementation details may remain useful when recycling code, but they should not guide the next product behavior.
 
-## Next Step
+## Implementation Record
 
-Start implementation slice 1: contract/schema constants and old-name boundary cleanup. Inspect the current uncommitted code against this document and `docs/operational_fit_scoring.md`, keep only contract-compatible reviewed-snapshot/consistency plumbing, and rewrite or discard obsolete Strategic Review / Design Confidence / Quality Review scoring paths.
+### 2026-06-18 Trial Score V1 Narrative Production Cleanup
+
+Main goal: fix and enhance Scenario Review / Trial Score narrative production while simplifying the active implementation around the current contract.
+
+Implemented direction:
+
+- `Trial Score = Completion Outlook + Operational Fit + Reality Check`.
+- `Completion Outlook` remains the protected XGBoost/SHAP model anchor.
+- `Operational Fit` is app-scored and shown under `Execution Framework`, including feature-value detail lines for planned enrollment, planned sites, and planned duration.
+- `Reality Check` is app-scored from validated classifications and allocated to canonical existing pillar/subpillar targets.
+- The participant-facing output is generated in Pass 2 as one integrated Trial Score narrative, one central tension, and one broader strategic question, with optional facilitator questions in a collapsed facilitator/debug box.
+
+Provider and prompt flow:
+
+- Pass 1 is the analytical scoring/classification pass.
+- App scoring runs between Pass 1 and Pass 2 and owns all numeric score values.
+- Pass 2 receives exact app-calculated scores plus validated Pass 1 analysis and writes participant narrative only.
+- The active prompt builder is simplified to the current Trial Score V1 contract.
+- OpenAI and Gemini provider paths use the same staged behavior conceptually: Pass 1, targeted repair when needed, then Pass 2 narrative generation.
+
+Retry and validation behavior:
+
+- Gemini malformed JSON / max-token Pass 1 retry remains reserved for parse failure or provider truncation.
+- Pass 1 validation repair retries target invalid classifications, invalid allocation targets, anti-double-counting failures, and invalid scoring structure.
+- Pass 2 repair is separate and targets only invalid participant-narrative fields; it does not rerun Pass 1 or change app-owned scores.
+- Retry history records stage, attempt, validation messages, parse status, latency, response length, and remaining errors.
+- After retries are exhausted, failure messages identify the failed level clearly.
+
+Operational Fit and same-state behavior:
+
+- Operational Fit is deterministic/app-owned once Pass 1 classifications validate.
+- A provider cannot keep Operational Fit credit when the current operational state returns to a prior identical scenario state.
+- Same-state deterministic app scoring is reused; Pass 2 may regenerate narrative with explicit reversion/path context.
+- This applies to deterministic app scoring state, not to replaying old participant narrative.
+
+Reality Check behavior:
+
+- Reality Check defaults to zero when the pre-Reality movement is coherent and realistic.
+- Reality Check is not a fifth pillar.
+- Reality Check allocations use canonical allocation target IDs, not free-typed subpillar labels.
+- Invalid or invented allocation labels are repaired through targeted validation; after repair exhaustion, scoring fails clearly rather than accepting arbitrary text.
+
+UI behavior:
+
+- Development UI keeps three score views: `Completion Outlook`, `Reality Check`, and `Trial Score`.
+- `Completion Outlook` displays XGBoost Completion Outlook plus Operational Fit after visible scenario review.
+- Operational Fit appears under `Execution Framework` in the bar chart and treemap.
+- Reality Check zero-state behavior should remain visible and interpretable without inventing fake visual movement.
+- Overlay progress text is tied to real staged behavior:
+  - `Evaluating Scenario Impact...` for Pass 1;
+  - `Refining Score...` for Pass 1 repair;
+  - `Generating Analysis...` for Pass 2.
+- Duplicate non-overlay spinner/status labels were removed.
+- Locked premise fields are disabled and greyed with lighter value text.
+
+Storage and diagnostics:
+
+- Review storage was reset to `narrative_review_store_v2` for a clean current-contract start.
+- Old diagnostics were deleted so future local checks start clean.
+- Current run diagnostics and audit bundles are for inspecting prompt content, provider responses, retry history, score decisions, and UI trace propagation.
+
+Deleted legacy paths:
+
+- The active scoring facade now delegates only to `validate_pass1_review()` and `score_pass1_review()` in `src/narratives/trial_score_contract.py`.
+- Old `Strategic Review`, `Design Confidence`, `Quality Review`, and `Total Scenario Score` active scoring paths were removed.
+- Obsolete Strategic Review / Design Confidence check scripts were deleted.
+- Disabled legacy live-eval harness stubs were deleted rather than kept as warning-only compatibility code.
+
+Verification gate:
+
+```bash
+bash scripts/check_trial_score_v1_migration.sh
+```
+
+That gate validates the active Trial Score contract, obsolete-field guard, prompt builder/provider schema, provider normalization and repair behavior, deterministic mock reviewer behavior, review storage/cache behavior, packet assembly, live-style snapshot flow, participant-facing failure formatting, visual data composition, py_compile, and `git diff --check`.
+
+Remaining validation priority:
+
+- Run a local UI scenario with live Gemini for `NCT02741128`, changing planned enrollment and planned sites, then reverting them, to confirm same-state scoring reuse, Pass 2 reversion narrative, Operational Fit treemap details, Reality Check zero-state behavior, and staged overlay progress text.
+- If a new batch/live eval harness is needed later, rebuild it around this current Trial Score V1 contract instead of restoring deleted Strategic Review or Design Confidence harnesses.

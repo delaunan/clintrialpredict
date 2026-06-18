@@ -66,17 +66,14 @@ def main() -> int:
         "iteration_id": 0,
         "status": "reviewed",
         "validation_status": "valid",
-        "quality_adjustment": 0,
-        "final_candidate_score": 68,
+        "reality_check_points": 0,
+        "trial_score": 68,
         "changed_fields": [],
         "score_movement": 0,
         "validated_review": {
             "review_metadata": {"review_mode": "hidden_baseline", "participant_visible": False},
             "completion_outlook_analysis": {"risk_pattern_summary": "Baseline reviewed."},
-            "design_confidence_analysis": {
-                "summary": "Baseline design context.",
-                "confidence_rationale": "Baseline rationale.",
-            },
+            "reality_check": {"central_reason": "Baseline design context."},
             "key_questions": {
                 "medical_development_question": "What evidence standard matters most?",
                 "clinical_operations_question": "What operational burden is proportionate?",
@@ -129,38 +126,29 @@ def main() -> int:
 
     treemap_trace = {
         "status": "reviewed",
-        "design_confidence": 0.5,
-        "design_confidence_assessment": {
-            "pillars": {
-                "scientific_challenge": {
-                    "label": "Scientific Challenge",
-                    "design_subcategories": {
-                        "endpoint_evidence_strength": {
-                            "rating": "supportive",
-                            "score_materiality": "minimal",
-                            "points": 0.5,
-                        }
-                    },
-                }
+        "validation_status": "valid",
+        "hidden_baseline": False,
+        "participant_visible": True,
+        "reality_check_points": 0.5,
+        "reality_check_assessment": {"points": 0.5},
+        "reality_check_allocation_points": [
+            {
+                "pillar": "Scientific Challenge",
+                "subpillar": "Endpoint Evidence Strength",
+                "points": 0.5,
+                "rationale": "Comparator supports clearer endpoint interpretation.",
             }
-        },
-        "validated_review": {
-            "design_confidence_subcategories": {
-                "endpoint_evidence_strength": {
-                    "short_rationale": "Comparator supports clearer endpoint interpretation.",
-                }
-            }
-        },
+        ],
     }
     treemap_rows = design_subcategory_impacts(treemap_trace)
     if not treemap_rows or not any(
         "Comparator supports clearer endpoint interpretation." in detail
         for detail in treemap_rows[0].get("FeatureDetails", [])
     ):
-        errors.append("Design Confidence treemap details should include concise LLM short_rationale")
+        errors.append("Reality Check treemap details should include concise allocation rationale")
     details_text = " ".join(str(detail) for detail in (treemap_rows[0].get("FeatureDetails", []) if treemap_rows else []))
     if "Rating:" in details_text or "Score Materiality:" in details_text:
-        errors.append("Design Confidence treemap details should not expose internal rating or score_materiality labels")
+        errors.append("Reality Check treemap details should not expose internal rating or score_materiality labels")
 
     if errors:
         for error in errors:

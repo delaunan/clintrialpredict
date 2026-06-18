@@ -37,26 +37,34 @@ def main() -> int:
     first = replay_or_review_with_mock(state, packet=packet, session_id=session_id)
     if first.get("cached") is not False:
         errors.append("first review should not be cached")
-    if first.get("strategic_review") is None:
-        errors.append("stored trace did not preserve Strategic Review")
+    if first.get("operational_fit_points") is None:
+        errors.append("stored trace did not preserve Operational Fit points")
+    if first.get("reality_check_points") is None:
+        errors.append("stored trace did not preserve Reality Check points")
     if first.get("trial_score") is None:
         errors.append("stored trace did not preserve Trial Score")
-    if first.get("quality_adjustment") != first.get("strategic_review"):
-        errors.append("temporary Quality Adjustment alias should mirror Strategic Review until alias cleanup")
-    if first.get("final_candidate_score") != first.get("trial_score"):
-        errors.append("temporary Final Candidate Score alias should mirror Trial Score until alias cleanup")
-    if not first.get("strategic_review_assessment"):
-        errors.append("stored trace should preserve Strategic Review assessment")
+    if not first.get("operational_fit_assessment"):
+        errors.append("stored trace should preserve Operational Fit assessment")
+    if not first.get("reality_check_assessment"):
+        errors.append("stored trace should preserve Reality Check assessment")
     if not first.get("central_tension"):
         errors.append("stored trace should preserve central_tension")
+    if not (first.get("trial_score_narrative") or {}).get("summary"):
+        errors.append("stored trace should preserve Pass 2 Trial Score narrative")
+    if not (first.get("participant_central_tension") or {}).get("summary"):
+        errors.append("stored trace should preserve Pass 2 participant central tension")
+    if not (first.get("participant_broader_strategic_question") or {}).get("question"):
+        errors.append("stored trace should preserve Pass 2 broader strategic question")
+    if not isinstance(first.get("facilitator_questions"), list):
+        errors.append("stored trace should preserve Pass 2 facilitator questions as a list")
     storyline_state = first.get("storyline_state") or {}
     if not storyline_state:
         errors.append("stored trace should expose app-owned storyline_state")
     if storyline_state.get("active_tension") != first.get("central_tension"):
         errors.append("storyline_state active_tension should mirror stored central_tension")
-    expected_main_tension = (first.get("validated_review") or {}).get("main_tension")
+    expected_main_tension = ((first.get("validated_review") or {}).get("central_tension_candidate") or {}).get("summary")
     if first.get("central_tension") != expected_main_tension:
-        errors.append("stored trace central_tension should prefer validated_review.main_tension")
+        errors.append("stored trace central_tension should prefer validated central_tension_candidate.summary")
     if "strategic_context_2026_v1" not in set(first.get("reference_pack_ids_available") or []):
         errors.append("stored trace should preserve available reference pack IDs")
     if first.get("unsupported_reference_pack_ids_used"):
@@ -98,8 +106,8 @@ def main() -> int:
         session_id="failure-session",
         failure_mode=FAILURE_PROVIDER_ERROR,
     )
-    if failure_trace.get("strategic_review") is not None:
-        errors.append("provider failure should not store Strategic Review")
+    if failure_trace.get("reality_check_points") is not None:
+        errors.append("provider failure should not store Reality Check")
     if failure_trace.get("failure_reason") is None:
         errors.append("provider failure should store a failure reason")
     cached_failure = cached_review_trace(state, failure_trace.get("input_hash"))
@@ -128,9 +136,11 @@ def main() -> int:
         "scoring": {
             "validation_status": first.get("validation_status"),
             "validation_errors": first.get("validation_errors") or [],
-            "strategic_review": first.get("strategic_review"),
+            "operational_fit_points": first.get("operational_fit_points"),
+            "reality_check_points": first.get("reality_check_points"),
             "trial_score": first.get("trial_score"),
-            "strategic_review_assessment": first.get("strategic_review_assessment") or {},
+            "operational_fit_assessment": first.get("operational_fit_assessment") or {},
+            "reality_check_assessment": first.get("reality_check_assessment") or {},
             "input_hash": packet.get("input_hash"),
         },
     }

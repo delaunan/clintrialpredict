@@ -1,7 +1,7 @@
 """Deterministic input-packet builder for narrative review.
 
 The builder owns data assembly only. It does not call an LLM, validate LLM
-output, calculate Strategic Review, or mutate Streamlit session state.
+output, calculate Trial Score, or mutate Streamlit session state.
 """
 
 from __future__ import annotations
@@ -174,6 +174,25 @@ def stable_packet_hash(packet: dict[str, Any]) -> str:
     """Hash a packet for future cache/replay lookup."""
     payload = json.dumps(json_safe(packet), sort_keys=True, separators=(",", ":"), default=str)
     return sha256(payload.encode("utf-8")).hexdigest()
+
+
+def scenario_state_hash_from_packet(packet: dict[str, Any]) -> str:
+    """Hash the current scenario state without storyline or iteration context."""
+    model = packet.get("model_interpretation") or {}
+    state_payload = {
+        "field_dictionary_version": packet.get("field_dictionary_version"),
+        "mode": packet.get("mode"),
+        "trial_identity": packet.get("trial_identity") or {},
+        "structured_features": packet.get("structured_features") or {},
+        "text_context": packet.get("text_context") or {},
+        "operational_assumptions": packet.get("operational_assumptions") or {},
+        "model_interpretation": {
+            "completion_score": model.get("completion_score"),
+            "pillar_impacts": model.get("pillar_impacts") or [],
+            "direct_xgboost_shap_fields": model.get("direct_xgboost_shap_fields") or [],
+        },
+    }
+    return stable_packet_hash(state_payload)
 
 
 def _first_present(*values: Any) -> Any:
@@ -754,35 +773,31 @@ def _compact_review_context(
     continuity = validated.get("continuity") or {}
     participant = validated.get("key_questions") or validated.get("participant_review") or {}
     completion_outlook = validated.get("completion_outlook_analysis") or validated.get("completion_outlook_review") or {}
+    operational_fit = validated.get("operational_fit") or trace.get("operational_fit") or {}
+    central_tension_candidate = (
+        validated.get("central_tension_candidate")
+        or trace.get("central_tension_candidate")
+        or {}
+    )
+    broader_question_candidate = (
+        validated.get("broader_strategic_question_candidate")
+        or trace.get("broader_strategic_question_candidate")
+        or {}
+    )
     tradeoff_review = validated.get("tradeoff_review") or {}
-    design_confidence = trace.get("design_confidence", trace.get("quality_adjustment"))
-    total_scenario_score = trace.get("total_scenario_score", trace.get("final_candidate_score"))
-    strategic_review = trace.get("strategic_review", design_confidence)
-    trial_score = trace.get("trial_score", total_scenario_score)
-    strategic_review_object = (
-        validated.get("strategic_review")
-        or trace.get("strategic_review_object")
-        or {}
-    )
-    strategic_review_analysis = (
-        validated.get("strategic_review_analysis")
-        or trace.get("strategic_review_analysis")
-        or {}
-    )
+    trial_score = trace.get("trial_score")
     storyline_state = merge_storyline_state(trace)
     compact = {
         "input_hash": trace.get("input_hash"),
         "iteration_id": trace.get("iteration_id"),
         "status": trace.get("status"),
         "validation_status": trace.get("validation_status"),
-        "strategic_review": strategic_review if include_quality_scores else None,
         "trial_score": trial_score if include_quality_scores else None,
-        "strategic_review_object": deepcopy(strategic_review_object),
-        "strategic_review_summary": strategic_review_analysis.get("summary"),
-        "strategic_review_rationale": (
-            strategic_review_analysis.get("review_rationale")
-            or strategic_review_object.get("rationale")
-        ),
+        "operational_fit_points": trace.get("operational_fit_points") if include_quality_scores else None,
+        "pre_reality_score": trace.get("pre_reality_score") if include_quality_scores else None,
+        "reality_check_points": trace.get("reality_check_points") if include_quality_scores else None,
+        "reality_check_assessment": deepcopy(trace.get("reality_check_assessment") or {}),
+        "operational_fit": deepcopy(operational_fit),
         "storyline_state": deepcopy(storyline_state),
         "design_numeric_context": "visible_review" if include_quality_scores else "hidden_baseline_qualitative_only",
         "changed_fields": trace.get("changed_fields") or [],
@@ -792,13 +807,15 @@ def _compact_review_context(
             or completion_outlook.get("score_delta_summary")
         ),
         "central_tension": (
-            trace.get("central_tension")
+            central_tension_candidate.get("summary")
+            or trace.get("central_tension")
             or validated.get("main_tension")
             or tradeoff_review.get("central_tension")
         ),
+        "central_tension_candidate": deepcopy(central_tension_candidate),
+        "broader_strategic_question_candidate": deepcopy(broader_question_candidate),
         "key_questions": {
             "completion_outlook_summary": completion_outlook.get("risk_pattern_summary"),
-            "strategic_review_summary": strategic_review_analysis.get("summary"),
             "medical_clinical_development_question": (
                 participant.get("medical_clinical_development_question")
                 or participant.get("medical_development_question")
@@ -840,43 +857,36 @@ def _compact_review_context(
     return json_safe(compact)
 
 
-def _strategic_review_continuity(previous_review_trace: dict[str, Any] | None) -> dict[str, Any]:
+def _trial_score_continuity(previous_review_trace: dict[str, Any] | None) -> dict[str, Any]:
     previous = _compact_review_context(previous_review_trace)
     if not previous:
         return {
             "available": False,
             "reason": "first_visible_iteration_or_no_prior_visible_review",
             "active_tension": None,
-            "active_tension_status": None,
-            "protected_gains": [],
-            "regression_watch": [],
+            "previous_trial_score": None,
         }
 
-    previous_object = previous.get("strategic_review_object") or {}
-    continuity = previous.get("continuity") or {}
     storyline_state = previous.get("storyline_state") or {}
+    central_tension = previous.get("central_tension_candidate") or {}
+    reality_check = previous.get("reality_check_assessment") or {}
     return json_safe({
         "available": True,
         "source_iteration_id": previous.get("iteration_id"),
         "source_input_hash": previous.get("input_hash"),
-        "active_tension": (
-            storyline_state.get("active_tension")
-            or previous_object.get("current_tension")
-            or previous.get("central_tension")
-        ),
-        "active_tension_status": storyline_state.get("active_tension_status") or previous_object.get("tension_status"),
-        "last_effect_label": storyline_state.get("last_effect_label") or previous_object.get("effect_label"),
-        "last_move_classification": storyline_state.get("last_move_classification") or previous_object.get("move_classification") or [],
-        "protected_gains": storyline_state.get("protected_gains") or continuity.get("prior_concerns_resolved") or [],
-        "regression_watch": storyline_state.get("regression_watch") or continuity.get("prior_concerns_worsened") or [],
-        "active_carryover": storyline_state.get("active_carryover") or continuity.get("prior_concerns_unchanged") or [],
-        "new_concerns": storyline_state.get("new_concerns") or continuity.get("new_concerns") or [],
-        "next_consideration": storyline_state.get("next_consideration") or previous_object.get("next_consideration"),
+        "previous_trial_score": previous.get("trial_score"),
+        "previous_pre_reality_score": previous.get("pre_reality_score"),
+        "previous_operational_fit_points": previous.get("operational_fit_points"),
+        "previous_reality_check_points": previous.get("reality_check_points"),
+        "active_tension": storyline_state.get("active_tension") or central_tension.get("summary") or previous.get("central_tension"),
+        "last_reality_check_effect": reality_check.get("effect"),
+        "protected_gains": storyline_state.get("protected_gains") or [],
+        "regression_watch": storyline_state.get("regression_watch") or [],
+        "next_consideration": storyline_state.get("next_consideration"),
         "storyline_update": storyline_state.get("storyline_update"),
-        "previous_rationale": previous.get("strategic_review_rationale"),
         "instruction": (
             "Use this compact state to decide whether the latest move resolves, preserves, "
-            "reopens, supersedes, or leaves active prior strategic tensions."
+            "reopens, supersedes, or leaves active prior Trial Score tensions."
         ),
     })
 
@@ -960,11 +970,12 @@ def build_review_packet(
             "changed_fields": changed_fields,
             "field_changes": _field_changes(current_snapshot, previous_snapshot, baseline_snapshot),
             "text_change_evidence": _text_change_evidence(current_snapshot, previous_snapshot, baseline_snapshot),
-            "strategic_review_continuity": _strategic_review_continuity(previous_review_trace),
+            "trial_score_continuity": _trial_score_continuity(previous_review_trace),
             "compact_storyline_memory": compact_storyline_memory,
         },
     }
 
+    packet["scenario_state_hash"] = scenario_state_hash_from_packet(packet)
     packet["input_hash"] = stable_packet_hash(packet)
     return json_safe(packet)
 

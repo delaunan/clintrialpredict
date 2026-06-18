@@ -114,8 +114,8 @@ def _check_review_continuity_context(errors: list[str]) -> None:
         "iteration_id": 0,
         "status": "reviewed",
         "validation_status": "valid",
-        "design_confidence": 0,
-        "total_scenario_score": 68,
+        "reality_check_points": 0,
+        "trial_score": 68,
         "changed_fields": [],
         "score_delta": 0,
         "central_tension": "Baseline central tension.",
@@ -125,18 +125,17 @@ def _check_review_continuity_context(errors: list[str]) -> None:
             "completion_outlook_analysis": {
                 "risk_pattern_summary": "Baseline score reflects an acceptable original design profile.",
             },
-            "design_confidence_subcategories": {
-                "endpoint_evidence_strength": {
-                    "rating": "supportive",
-                    "rationale": "Baseline endpoint and allocation preserve conventional rigor.",
-                    "evidence_fields": ["endpoint_rigor_ml", "allocation_ml"],
-                },
+            "reality_check": {
+                "central_reason": "Baseline design comment.",
+                "effect": "neutral",
+                "strength": "none",
+                "evidence_fields": [],
+                "allocations": [],
             },
-            "design_confidence_analysis": {
-                "summary": "Baseline design comment.",
-                "confidence_rationale": "Baseline central tension.",
-                "supporting_evidence": [],
-                "limiting_evidence": [],
+            "reality_check_assessment": {
+                "effect": "neutral",
+                "strength": "none",
+                "points": 0,
             },
             "key_questions": {
                 "medical_development_question": "What evidence standard matters most?",
@@ -154,45 +153,37 @@ def _check_review_continuity_context(errors: list[str]) -> None:
         **baseline_trace,
         "input_hash": "previous-input-hash",
         "iteration_id": 1,
-        "strategic_review": -2,
         "trial_score": 66,
-        "design_confidence": -2,
-        "total_scenario_score": 66,
+        "pre_reality_score": 68,
+        "operational_fit_points": 0,
+        "reality_check_points": -2,
+        "reality_check_assessment": {
+            "effect": "offset_gain",
+            "strength": "moderate",
+            "points": -2,
+        },
         "changed_fields": ["operational_assumptions.planned_enrollment"],
         "score_delta": 0,
         "central_tension": "",
-        "design_confidence_assessment": {
-            "subcategories": {
-                "endpoint_evidence_strength": {
-                    "points": -2,
-                    "raw_points": -2,
-                },
-                "operational_burden_balance": {
-                    "points": 0,
-                    "raw_points": 0,
-                },
-            },
-        },
         "validated_review": {
             **baseline_trace["validated_review"],
             "main_tension": "Previous main tension from dedicated field.",
-            "strategic_review": {
-                "effect_label": "partly_offsets_score_gain",
-                "tension_status": "partially_active",
-                "operational_materiality": "minor",
+            "reality_check": {
+                "effect": "offset_gain",
+                "strength": "moderate",
+                "central_reason": "The prior move simplified evidence.",
                 "evidence_fields": ["endpoint_rigor_ml"],
-                "move_classification": ["oversimplification"],
-                "current_tension": "Feasibility vs Evidence Strength",
-                "carryover_check": "Endpoint credibility remains partly active.",
-                "tradeoff_resolution": "The latest move only partly resolved the evidence tradeoff.",
-                "rationale": "The prior move simplified evidence.",
-                "next_consideration": "Restore evidence credibility without returning fully to baseline burden.",
+                "allocations": [],
             },
-            "strategic_review_analysis": {
-                "summary": "Previous Strategic Review summary.",
-                "review_rationale": "Previous Strategic Review rationale.",
+            "central_tension_candidate": {
+                "summary": "Feasibility vs Evidence Strength",
+                "why_it_matters": "Endpoint credibility remains partly active.",
                 "supporting_evidence": ["endpoint_rigor_ml"],
-                "limiting_evidence": [],
+            },
+            "continuity_update": {
+                "active_tension": "Feasibility vs Evidence Strength",
+                "what_changed": "Previous strategic storyline memory.",
+                "watch_next": "Restore evidence credibility without returning fully to baseline burden.",
             },
             "continuity": {
                 "prior_concerns_resolved": ["reduced execution burden"],
@@ -246,14 +237,14 @@ def _check_review_continuity_context(errors: list[str]) -> None:
         != "Baseline score reflects an acceptable original design profile."
     ):
         errors.append("hidden baseline review context should preserve completion outlook summary")
-    if context.get("previous_review", {}).get("strategic_review") != -2:
-        errors.append("previous visible review context should preserve strategic_review")
+    if context.get("previous_review", {}).get("reality_check_points") != -2:
+        errors.append("previous visible review context should preserve reality_check_points")
     if context.get("previous_review", {}).get("trial_score") != 66:
         errors.append("previous visible review context should preserve trial_score")
     if context.get("baseline_review", {}).get("central_tension") != "Baseline central tension.":
         errors.append("hidden baseline review context should preserve trace central_tension when present")
-    if context.get("previous_review", {}).get("central_tension") != "Previous main tension from dedicated field.":
-        errors.append("previous visible review context should fall back to validated_review.main_tension")
+    if context.get("previous_review", {}).get("central_tension") != "Feasibility vs Evidence Strength":
+        errors.append("previous visible review context should prefer current central_tension_candidate summary")
     previous_questions = context.get("previous_review", {}).get("key_questions") or {}
     if previous_questions.get("medical_clinical_development_question") != "What evidence standard matters most?":
         errors.append("previous visible review context should expose new medical/clinical-development question field")
@@ -266,25 +257,23 @@ def _check_review_continuity_context(errors: list[str]) -> None:
         != "Previous iteration memory"
     ):
         errors.append("continuity packet missing compact storyline memory")
-    strategic_continuity = continuity_packet.get("iteration_context", {}).get("strategic_review_continuity") or {}
-    if strategic_continuity.get("available") is not True:
-        errors.append("later visible continuity packet should include Strategic Review continuity anchors")
-    if strategic_continuity.get("active_tension") != "Feasibility vs Evidence Strength":
-        errors.append("Strategic Review continuity should carry active_tension")
-    if strategic_continuity.get("active_tension_status") != "partially_active":
-        errors.append("Strategic Review continuity should carry active_tension_status")
-    if strategic_continuity.get("last_effect_label") != "partly_offsets_score_gain":
-        errors.append("Strategic Review continuity should carry last effect label")
-    if strategic_continuity.get("protected_gains") != ["reduced execution burden"]:
-        errors.append("Strategic Review continuity should carry protected gains")
-    if strategic_continuity.get("regression_watch") != ["endpoint credibility"]:
-        errors.append("Strategic Review continuity should carry regression watch")
-    if strategic_continuity.get("active_carryover") != ["evidence burden"]:
-        errors.append("Strategic Review continuity should carry active carryover concerns")
-    if strategic_continuity.get("new_concerns") != ["population focus"]:
-        errors.append("Strategic Review continuity should carry new concerns")
-    if strategic_continuity.get("next_consideration") != "Restore evidence credibility without returning fully to baseline burden.":
-        errors.append("Strategic Review continuity should carry next consideration")
+    trial_score_continuity = continuity_packet.get("iteration_context", {}).get("trial_score_continuity") or {}
+    if trial_score_continuity.get("available") is not True:
+        errors.append("later visible continuity packet should include Trial Score continuity anchors")
+    if trial_score_continuity.get("active_tension") != "Feasibility vs Evidence Strength":
+        errors.append("Trial Score continuity should carry active_tension")
+    if trial_score_continuity.get("previous_trial_score") != 66:
+        errors.append("Trial Score continuity should carry previous_trial_score")
+    if trial_score_continuity.get("previous_reality_check_points") != -2:
+        errors.append("Trial Score continuity should carry previous_reality_check_points")
+    if trial_score_continuity.get("protected_gains") != ["reduced execution burden"]:
+        errors.append("Trial Score continuity should carry protected gains")
+    if trial_score_continuity.get("regression_watch") != ["endpoint credibility"]:
+        errors.append("Trial Score continuity should carry regression watch")
+    if trial_score_continuity.get("next_consideration") != "Restore evidence credibility without returning fully to baseline burden.":
+        errors.append("Trial Score continuity should carry next consideration")
+    if "strategic_review_continuity" in (continuity_packet.get("iteration_context") or {}):
+        errors.append("packet should not send legacy Strategic Review continuity to the provider")
     if "design_confidence_continuity" in (continuity_packet.get("iteration_context") or {}):
         errors.append("packet should not send legacy Design Confidence continuity to the provider")
     operational_change_labels = {

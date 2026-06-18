@@ -7,6 +7,7 @@ import re
 import time
 import uuid
 import hashlib
+from copy import deepcopy
 from datetime import datetime, timezone
 from urllib.parse import quote, unquote
 from pathlib import Path
@@ -31,7 +32,7 @@ from frontend.utils.scenario_review_diagnostics import (
 )
 from frontend.utils.scenario_review_plot_data import (
     design_subcategory_impacts,
-    trace_allows_design_confidence_display as _trace_allows_design_confidence_display,
+    trace_allows_reality_check_display as _trace_allows_reality_check_display,
 )
 from frontend.utils.scenario_review_failure import participant_review_failure_reason
 from frontend.utils.structured_incompatibility import structured_incompatibility_attention_fields
@@ -44,19 +45,36 @@ from src.operational_benchmarks import (
     planned_sites_metadata,
     planned_sites_default_from_operational_benchmark,
 )
-from src.narratives.packet_builder import build_review_packet
-from src.narratives.prompt_builder import PROMPT_TEMPLATE_VERSION, infer_prompt_mode
+from src.narratives.packet_builder import build_review_packet, stable_packet_hash
+from src.narratives.prompt_builder import (
+    PROMPT_TEMPLATE_VERSION,
+    build_pass2_input,
+    build_pass2_provider_prompt,
+    build_provider_prompt,
+    infer_prompt_mode,
+    pass2_response_contract,
+    provider_response_contract,
+)
 from src.narratives.review_store import (
+    cached_review_trace_for_namespace,
     compact_storyline_from_trace,
     get_review_store,
     replay_or_review_with_provider,
+    store_review_trace,
+)
+from src.narratives.provider import (
+    pass1_result_needs_repair,
+    review_packet_pass1_initial_with_provider,
+    review_packet_pass1_repair_with_provider,
+    review_packet_pass2_with_provider,
 )
 from src.narratives.provider_config import (
+    PROVIDER_GEMINI,
     PROVIDER_MOCK,
+    PROVIDER_OPENAI,
     load_narrative_provider_config,
     provider_config_cache_namespace,
 )
-from src.narratives.scoring import DESIGN_SUBCATEGORY_LABELS
 
 # Load environment variables
 load_dotenv()
@@ -91,10 +109,24 @@ SCENARIO_REVIEW_DIAGNOSTICS_PATH = (
     / "diagnostics"
     / "scenario_review_timing_diagnostics.jsonl"
 )
+SCENARIO_REVIEW_RUN_BUNDLES_DIR = (
+    PROJECT_ROOT
+    / ".gemini"
+    / "tmp"
+    / "clintrialpredict"
+    / "diagnostics"
+    / "scenario_review_runs"
+)
 OPERATIONAL_BENCHMARK_PATH = FRONTEND_DIR / "data" / "operational_benchmarks_v1.csv"
 TAXONOMY_PATH = PROJECT_ROOT / "models" / "taxonomy_01.json"
 IS_CLOUD_RUN = bool(os.getenv("K_SERVICE"))
 ACTIVE_OPERATIONAL_ASSUMPTION_KEYS = ("planned_enrollment", "planned_sites", "planned_duration_months")
+SCORE_DRIVER_PILLARS = (
+    "Scientific Challenge",
+    "Patient Profile",
+    "Therapeutic Context",
+    "Execution Framework",
+)
 FUTURE_RESERVED_OPERATIONAL_ASSUMPTION_KEYS = (
     "planned_countries",
 )
@@ -120,6 +152,14 @@ if not API_URL and not IS_CLOUD_RUN:
 API_TIMEOUT_SECONDS = 60
 logger = logging.getLogger(__name__)
 ID_COL = "nct_id"
+SCENARIO_IMPACT_PROGRESS_LABEL = "Evaluating Scenario Impact..."
+SCENARIO_REFINING_PROGRESS_LABEL = "Refining Score..."
+SCENARIO_ANALYSIS_PROGRESS_LABEL = "Generating Analysis..."
+SCENARIO_REVIEW_WORKFLOW_STATE_KEY = "scenario_review_live_workflow_state"
+SCENARIO_REVIEW_PROGRESS_LABEL_KEY = "simulation_review_progress_label"
+SCENARIO_REVIEW_PHASE_PASS1 = "pass1"
+SCENARIO_REVIEW_PHASE_REPAIR = "pass1_repair"
+SCENARIO_REVIEW_PHASE_PASS2 = "pass2"
 
 
 # ==========================
@@ -313,7 +353,7 @@ DETAIL_TAB_FEATURES = "Trial Features"
 DETAIL_TAB_SCORE = "Trial Score"
 
 SCORE_VIEW_COMPLETION = "Completion Outlook"
-SCORE_VIEW_DESIGN = "Strategic Review"
+SCORE_VIEW_DESIGN = "Reality Check"
 SCORE_VIEW_TOTAL = "Trial Score"
 SCORE_VIEW_OPTIONS = (
     SCORE_VIEW_COMPLETION,
@@ -4547,6 +4587,27 @@ def inject_custom_styles():
                             var(--ui-control-shadow) !important;
             }}
 
+            html body [class*="st-key-simfield_lock_"] div[data-baseweb="select"] > div,
+            html body [class*="st-key-simfield_lock_"] div[data-baseweb="input"] > div,
+            html body [class*="st-key-simfield_lock_"] [data-testid="stNumberInputContainer"] > div,
+            html body [class*="st-key-simfield_lock_"] [data-testid="stNumberInputContainer"] input,
+            html body [class*="st-key-simfield_lock_"] [data-testid="stNumberInputContainer"] button {{
+                background-color: #e5e7eb !important;
+                border-color: #cbd5e1 !important;
+                box-shadow: inset 0 0 0 1px rgba(100,116,139,0.10),
+                            var(--ui-control-shadow) !important;
+                cursor: not-allowed !important;
+            }}
+
+            html body [class*="st-key-simfield_lock_"] div[data-baseweb="select"] span,
+            html body [class*="st-key-simfield_lock_"] div[data-baseweb="select"] input,
+            html body [class*="st-key-simfield_lock_"] div[data-baseweb="input"] input,
+            html body [class*="st-key-simfield_lock_"] [data-testid="stNumberInputContainer"] input {{
+                color: #94a3b8 !important;
+                -webkit-text-fill-color: #94a3b8 !important;
+                opacity: 1 !important;
+            }}
+
             html body [class*="st-key-simfield_attn_"] div[data-baseweb="select"] > div,
             html body [class*="st-key-simfield_attn_"] div[data-baseweb="input"] > div,
             html body [class*="st-key-simfield_attn_"] [data-testid="stNumberInputContainer"] > div,
@@ -5170,6 +5231,11 @@ SIMULATION_FEATURE_IDS = [
     if field_meta.get("ui", {}).get("pillar") in SIMULATION_PILLAR_ORDER
 ]
 SIMULATION_FEATURE_ID_SET = set(SIMULATION_FEATURE_IDS)
+HARD_LOCKED_SIMULATION_FEATURE_IDS = {
+    "therapeutic_area_ml",
+    "gbd_cause_id_3_ml",
+    "sponsor_tier_ml",
+}
 SIMULATION_FEATURE_LABEL_OVERRIDES = {
     "primary_duration_months_ml": "Max Endpoint Duration  \n(months)",
     "has_dmc_ml": "Data Monitoring Committee",
@@ -5285,6 +5351,8 @@ def init_session_state():
         "simulation_review_pending": False,
         "simulation_review_transition_done": False,
         "simulation_review_unavailable_notice": None,
+        SCENARIO_REVIEW_PROGRESS_LABEL_KEY: "",
+        SCENARIO_REVIEW_WORKFLOW_STATE_KEY: None,
         "simulation_prediction_result": None,
         "simulation_prediction_nct_id": None,
         "simulation_initial_result": None,
@@ -5484,6 +5552,133 @@ def _json_safe(value):
 
 def get_latest_prediction_snapshot(nct_id):
     return st.session_state.get(get_simulation_snapshot_key(nct_id))
+
+
+def _snapshot_identifier(snapshot):
+    return (snapshot or {}).get("snapshot_id") or (snapshot or {}).get("timestamp")
+
+
+def _trace_has_scenario_scores(trace):
+    return bool(
+        trace
+        and trace.get("reality_check_points") is not None
+        and trace.get("trial_score") is not None
+    )
+
+
+def _trace_is_successful_visible_review(trace):
+    return bool(
+        trace
+        and not trace.get("hidden_baseline")
+        and trace.get("validation_status") == "valid"
+        and trace.get("status") in {"reviewed", "reused_previous_review"}
+        and _trace_has_scenario_scores(trace)
+    )
+
+
+def get_successful_quality_review_trace_for_snapshot(snapshot):
+    if not snapshot or snapshot.get("source") == "prerecorded_baseline":
+        return None
+
+    current_snapshot_id = _snapshot_identifier(snapshot)
+    runtime = narrative_review_runtime()
+    for trace in reversed(get_review_store(st.session_state).get("trace_history") or []):
+        if not _trace_is_successful_visible_review(trace):
+            continue
+        if get_trace_current_snapshot_id(trace) != current_snapshot_id:
+            continue
+        if not narrative_trace_matches_runtime(trace, runtime):
+            continue
+        return trace
+    return None
+
+
+def prediction_snapshot_has_successful_review(snapshot):
+    if not snapshot:
+        return False
+    if snapshot.get("source") == "prerecorded_baseline":
+        return True
+    if snapshot.get("scenario_review_status") == "reviewed":
+        runtime = narrative_review_runtime()
+        if str(snapshot.get("scenario_review_runtime_key") or "") == str(runtime.get("runtime_key") or ""):
+            return True
+    return bool(get_successful_quality_review_trace_for_snapshot(snapshot))
+
+
+def get_latest_successfully_reviewed_prediction_snapshot(nct_id):
+    for snapshot in reversed(get_simulation_prediction_history_for_trial(nct_id)):
+        if prediction_snapshot_has_successful_review(snapshot):
+            return snapshot
+    return None
+
+
+def current_prediction_snapshot_needs_review(row):
+    if not st.session_state.get("global_edit_mode", False):
+        return False
+
+    nct_id = str(row.get(ID_COL, st.session_state.get("selected_nct_id", "")))
+    snapshot = get_latest_prediction_snapshot(nct_id)
+    if not snapshot or snapshot.get("source") == "prerecorded_baseline":
+        return False
+    if prediction_snapshot_has_successful_review(snapshot):
+        return False
+    fingerprint = snapshot.get("scenario_fingerprint")
+    return bool(fingerprint and _json_safe(current_scenario_fingerprint(row)) == _json_safe(fingerprint))
+
+
+def get_pending_reference_snapshot(row):
+    nct_id = str(row.get(ID_COL, st.session_state.get("selected_nct_id", "")))
+    latest_snapshot = get_latest_prediction_snapshot(nct_id)
+    if latest_snapshot and not prediction_snapshot_has_successful_review(latest_snapshot):
+        reviewed_snapshot = get_latest_successfully_reviewed_prediction_snapshot(nct_id)
+        if reviewed_snapshot:
+            return reviewed_snapshot
+    return latest_snapshot
+
+
+def get_prediction_submission_reference_snapshot(row):
+    nct_id = str(row.get(ID_COL, st.session_state.get("selected_nct_id", "")))
+    latest_snapshot = get_latest_prediction_snapshot(nct_id)
+    if latest_snapshot and not prediction_snapshot_has_successful_review(latest_snapshot):
+        reviewed_snapshot = get_latest_successfully_reviewed_prediction_snapshot(nct_id)
+        if reviewed_snapshot:
+            return reviewed_snapshot
+    return latest_snapshot
+
+
+def update_prediction_snapshot_review_status(snapshot, trace):
+    if not snapshot:
+        return
+
+    nct_id = str(snapshot.get("nct_id") or st.session_state.get("selected_nct_id", ""))
+    snapshot_id = _snapshot_identifier(snapshot)
+    if not nct_id or not snapshot_id:
+        return
+
+    status = "reviewed" if _trace_is_successful_visible_review(trace) else "unavailable"
+    review_metadata = {
+        "scenario_review_status": status,
+        "scenario_review_trace_id": (trace or {}).get("trace_id"),
+        "scenario_review_input_hash": (trace or {}).get("input_hash"),
+        "scenario_review_runtime_key": (trace or {}).get("review_runtime_key"),
+        "scenario_review_validation_status": (trace or {}).get("validation_status"),
+        "scenario_review_failure_reason": (trace or {}).get("failure_reason"),
+        "scenario_review_repair_warning": (trace or {}).get("repair_warning"),
+        "scenario_review_participant_narrative_warning": (trace or {}).get("participant_narrative_warning"),
+    }
+
+    key = get_simulation_snapshot_key(nct_id)
+    latest = st.session_state.get(key)
+    if _snapshot_identifier(latest) == snapshot_id:
+        latest.update({key: value for key, value in review_metadata.items() if value not in (None, "", [], {})})
+
+    for item in reversed(st.session_state.get("simulation_prediction_history", [])):
+        if str(item.get("nct_id") or "") != nct_id:
+            continue
+        if _snapshot_identifier(item) != snapshot_id:
+            continue
+        item.update({key: value for key, value in review_metadata.items() if value not in (None, "", [], {})})
+        break
 
 
 def get_operational_assumption_state_key(nct_id, assumption_key):
@@ -6188,10 +6383,19 @@ def append_simulation_prediction_history(snapshot):
         "previous_operational_display_values": snapshot.get("previous_operational_display_values"),
         "operational_assumptions": snapshot.get("operational_assumptions"),
         "text_context": snapshot.get("text_context"),
+        "scenario_fingerprint": snapshot.get("scenario_fingerprint"),
         "user_clarifications": snapshot.get("user_clarifications"),
         "changed_text_context_fields": snapshot.get("changed_text_context_fields"),
         "committed_changed_text_context_fields": snapshot.get("committed_changed_text_context_fields"),
         "iteration_context": snapshot.get("iteration_context"),
+        "scenario_review_status": snapshot.get("scenario_review_status"),
+        "scenario_review_trace_id": snapshot.get("scenario_review_trace_id"),
+        "scenario_review_input_hash": snapshot.get("scenario_review_input_hash"),
+        "scenario_review_runtime_key": snapshot.get("scenario_review_runtime_key"),
+        "scenario_review_validation_status": snapshot.get("scenario_review_validation_status"),
+        "scenario_review_failure_reason": snapshot.get("scenario_review_failure_reason"),
+        "scenario_review_repair_warning": snapshot.get("scenario_review_repair_warning"),
+        "scenario_review_participant_narrative_warning": snapshot.get("scenario_review_participant_narrative_warning"),
     })
 
 
@@ -6213,12 +6417,32 @@ def get_baseline_prediction_snapshot(nct_id):
 
 def get_previous_prediction_snapshot(nct_id, current_snapshot):
     current_timestamp = (current_snapshot or {}).get("timestamp")
-    candidates = [
-        item
-        for item in get_simulation_prediction_history_for_trial(nct_id)
-        if item.get("timestamp") != current_timestamp
-    ]
-    return candidates[-1] if candidates else None
+    for item in reversed(get_simulation_prediction_history_for_trial(nct_id)):
+        if item.get("timestamp") == current_timestamp:
+            continue
+        if prediction_snapshot_has_successful_review(item):
+            return item
+    return None
+
+
+def normalize_snapshot_latest_changes_for_review(snapshot, previous_snapshot):
+    if not snapshot or not previous_snapshot:
+        return snapshot
+
+    normalized = dict(snapshot)
+    compare_values = normalized.get("compare_values") or normalized.get("submitted_values") or {}
+    operational_assumptions = normalized.get("operational_assumptions") or {}
+    text_context = normalized.get("text_context") or {}
+    normalized["changed_fields"] = _changed_fields_between(previous_snapshot, compare_values)
+    normalized["changed_operational_assumptions"] = _changed_operational_assumptions_between(
+        previous_snapshot,
+        operational_assumptions,
+    )
+    normalized["changed_text_context_fields"] = _changed_text_context_fields_between(
+        previous_snapshot,
+        text_context,
+    )
+    return normalized
 
 
 def build_trial_identity_for_narrative(row):
@@ -6270,6 +6494,16 @@ def get_quality_review_trace_state_key(nct_id):
     return f"narrative_quality_review_trace_{str(nct_id or '').strip()}"
 
 
+def cache_quality_review_trace_for_packet(trace, packet):
+    if not trace:
+        return trace
+    identity = (packet or {}).get("trial_identity") or {}
+    nct_id = str(identity.get("nct_id") or trace.get("nct_id") or "").strip()
+    if nct_id:
+        st.session_state[get_quality_review_trace_state_key(nct_id)] = trace
+    return trace
+
+
 def get_hidden_baseline_review_trace_state_key(nct_id):
     return f"narrative_hidden_baseline_review_trace_{str(nct_id or '').strip()}"
 
@@ -6280,13 +6514,10 @@ def normalize_hidden_baseline_review_trace(trace):
     normalized = dict(trace)
     normalized["hidden_baseline"] = True
     normalized["participant_visible"] = False
-    normalized["design_confidence"] = None
-    normalized["total_scenario_score"] = None
-    normalized["quality_adjustment"] = None
-    normalized["final_candidate_score"] = None
-    normalized["design_confidence_assessment"] = {}
-    normalized["design_confidence_contributions"] = {}
-    normalized["quality_assessment"] = {}
+    normalized["reality_check_points"] = None
+    normalized["trial_score"] = None
+    normalized["reality_check_assessment"] = {}
+    normalized["reality_check_allocation_points"] = []
     normalized["baseline_quality_numeric_policy"] = "qualitative_context_only"
     return normalized
 
@@ -6328,11 +6559,27 @@ def narrative_trace_matches_runtime(trace, runtime):
     return str(trace.get("review_runtime_key") or "") == str(runtime.get("runtime_key") or "")
 
 
+def sync_narrative_runtime_to_store(trace, runtime):
+    if not trace:
+        return
+
+    trace_id = trace.get("trace_id")
+    runtime_key = runtime.get("runtime_key")
+    if not trace_id or not runtime_key:
+        return
+
+    for stored_trace in reversed(get_review_store(st.session_state).get("trace_history") or []):
+        if stored_trace.get("trace_id") == trace_id:
+            stored_trace["review_runtime_key"] = runtime_key
+            break
+
+
 def attach_narrative_runtime(trace, runtime):
     if not trace:
         return trace
     trace = dict(trace)
     trace["review_runtime_key"] = runtime.get("runtime_key")
+    sync_narrative_runtime_to_store(trace, runtime)
     return trace
 
 
@@ -6462,15 +6709,442 @@ def get_cached_quality_review_trace_for_snapshot(snapshot):
 
     nct_id = str(snapshot.get("nct_id") or st.session_state.get("selected_nct_id", ""))
     cached_trace = st.session_state.get(get_quality_review_trace_state_key(nct_id))
-    current_snapshot_id = snapshot.get("snapshot_id") or snapshot.get("timestamp")
+    current_snapshot_id = _snapshot_identifier(snapshot)
     runtime = narrative_review_runtime()
     if not (
         cached_trace
         and get_trace_current_snapshot_id(cached_trace) == current_snapshot_id
         and narrative_trace_matches_runtime(cached_trace, runtime)
+        and _trace_is_successful_visible_review(cached_trace)
     ):
         return None
     return cached_trace
+
+
+def _staged_scenario_review_supported(runtime):
+    return (
+        NARRATIVE_LIVE_REVIEW_ENABLED
+        and runtime.get("config") is not None
+        and str(runtime.get("provider") or "").strip().lower() in {PROVIDER_GEMINI, PROVIDER_OPENAI}
+    )
+
+
+def _finalize_staged_scenario_review_trace(
+    *,
+    packet,
+    review_result,
+    session_id,
+    baseline_id,
+    runtime,
+    workflow_started_at,
+    visible_review_started_at,
+    baseline_latency_ms,
+    baseline_trace,
+    current_snapshot_id,
+):
+    cache_namespace = (
+        provider_config_cache_namespace(runtime.get("config"))
+        if runtime.get("config") is not None
+        else None
+    )
+    trace = store_review_trace(
+        st.session_state,
+        packet=packet,
+        review_result=review_result,
+        session_id=session_id,
+        baseline_id=baseline_id,
+        cache_namespace=cache_namespace,
+    )
+    trace = attach_narrative_runtime(trace, runtime)
+    trace = attach_narrative_workflow_metadata(trace, {
+        "review_phase": infer_prompt_mode(packet),
+        "workflow_latency_ms": _elapsed_ms(workflow_started_at),
+        "baseline_lookup_latency_ms": baseline_latency_ms,
+        "visible_provider_or_store_latency_ms": _elapsed_ms(visible_review_started_at),
+        "baseline_session_cache_hit": bool((baseline_trace or {}).get("workflow_metadata", {}).get("session_cache_hit")),
+        "baseline_review_store_cache_hit": bool((baseline_trace or {}).get("workflow_metadata", {}).get("review_store_cache_hit")),
+        "baseline_provider_latency_ms": (baseline_trace or {}).get("provider_metadata", {}).get("latency_ms"),
+        "session_cache_hit": False,
+        "review_store_cache_hit": bool(trace.get("cached")),
+        "current_snapshot_id": current_snapshot_id,
+        "input_hash": packet.get("input_hash"),
+    })
+    return cache_quality_review_trace_for_packet(trace, packet)
+
+
+def _staged_provider_with_fallback(result, runtime):
+    config = runtime.get("config")
+    if not config:
+        return None
+    if result.get("status") not in {"provider_error", "provider_unavailable", "incomplete_response"}:
+        return None
+    fallback = getattr(config, "fallback_provider", None)
+    if not fallback or not config.fallback_available():
+        return None
+    return fallback
+
+
+def _apply_staged_fallback_metadata(primary_result, fallback_result):
+    metadata = dict((fallback_result or {}).get("provider_metadata") or {})
+    metadata["fallback_after"] = {
+        "provider": (primary_result or {}).get("provider"),
+        "model_name": (primary_result or {}).get("model_name"),
+        "status": (primary_result or {}).get("status"),
+        "failure_reason": (primary_result or {}).get("failure_reason"),
+    }
+    updated = dict(fallback_result or {})
+    updated["provider_metadata"] = metadata
+    return updated
+
+
+def _replay_staged_cached_trace(cached_trace, *, packet, session_id, baseline_id):
+    if not cached_trace:
+        return None
+    trace = deepcopy(cached_trace)
+    input_hash = str(packet.get("input_hash") or trace.get("input_hash") or "")
+    iteration_id = (packet.get("iteration_context") or {}).get("iteration_number")
+    trace["cached"] = True
+    trace["timestamp"] = datetime.now(timezone.utc).isoformat()
+    trace["session_id"] = session_id
+    trace["baseline_id"] = baseline_id or (packet.get("iteration_context") or {}).get("baseline_snapshot_id")
+    trace["iteration_id"] = iteration_id
+    trace["trace_id"] = f"{session_id}:{iteration_id}:{input_hash}"
+    trace["input_packet"] = deepcopy(packet)
+    store = get_review_store(st.session_state)
+    store["trace_history"].append(deepcopy(trace))
+    store["latest_trace_by_session"][str(session_id)] = trace["trace_id"]
+    return cache_quality_review_trace_for_packet(trace, packet)
+
+
+def _prior_state_equivalent_review_trace(packet, *, runtime, nct_id, current_snapshot_id):
+    state_hash = str(packet.get("scenario_state_hash") or "")
+    if not state_hash:
+        return None
+    for trace in reversed(get_review_store(st.session_state).get("trace_history") or []):
+        if not _trace_is_successful_visible_review(trace):
+            continue
+        if _scenario_review_trial_id(trace) != nct_id:
+            continue
+        if not narrative_trace_matches_runtime(trace, runtime):
+            continue
+        if get_trace_current_snapshot_id(trace) == current_snapshot_id:
+            continue
+        trace_state_hash = str(trace.get("scenario_state_hash") or ((trace.get("input_packet") or {}).get("scenario_state_hash")) or "")
+        if trace_state_hash != state_hash:
+            continue
+        return trace
+    return None
+
+
+def _same_state_equivalence_context_from_trace(trace, packet):
+    state_hash = str(packet.get("scenario_state_hash") or trace.get("scenario_state_hash") or "")
+    return {
+        "available": True,
+        "source_iteration_id": trace.get("iteration_id"),
+        "source_input_hash": trace.get("input_hash"),
+        "source_scenario_state_hash": state_hash,
+        "operational_fit_points": trace.get("operational_fit_points"),
+        "pre_reality_score": trace.get("pre_reality_score"),
+        "reality_check_points": trace.get("reality_check_points"),
+        "trial_score": trace.get("trial_score"),
+        "instruction": (
+            "This prior visible review has the same canonical scenario state. Preserve app-owned scoring "
+            "unless current packet evidence shows a real state difference."
+        ),
+    }
+
+
+def _attach_state_equivalence_context(packet, prior_trace):
+    if not prior_trace:
+        return packet
+    updated = deepcopy(packet)
+    updated.setdefault("iteration_context", {})["state_equivalence_review"] = _same_state_equivalence_context_from_trace(
+        prior_trace,
+        packet,
+    )
+    updated["input_hash"] = stable_packet_hash({key: value for key, value in updated.items() if key != "input_hash"})
+    return updated
+
+
+def _same_state_reused_scoring(prior_trace, packet):
+    model = packet.get("model_interpretation") or {}
+    continuity = (packet.get("iteration_context") or {}).get("trial_score_continuity") or {}
+    xgboost_completion = model.get("completion_score")
+    trial_score = prior_trace.get("trial_score")
+    pre_reality_score = prior_trace.get("pre_reality_score")
+    previous_trial_score = continuity.get("previous_trial_score", model.get("previous_trial_score"))
+    previous_pre_reality_score = continuity.get("previous_pre_reality_score", model.get("previous_completion_score"))
+    baseline_completion_score = model.get("baseline_completion_score", model.get("completion_score"))
+
+    def _delta(current, previous):
+        try:
+            if current is None or previous is None:
+                return None
+            return round(float(current) - float(previous), 1)
+        except (TypeError, ValueError):
+            return None
+
+    return {
+        "validation_status": "valid",
+        "validation_errors": [],
+        "validation_notes": ["Reused app-owned scores from a prior visible review with the same scenario_state_hash"],
+        "xgboost_completion_outlook": xgboost_completion,
+        "operational_fit_points": prior_trace.get("operational_fit_points"),
+        "pre_reality_score": pre_reality_score,
+        "pre_reality_delta": _delta(pre_reality_score, previous_pre_reality_score),
+        "reality_check_points": prior_trace.get("reality_check_points"),
+        "reality_check_allocation_points": deepcopy(prior_trace.get("reality_check_allocation_points") or []),
+        "trial_score": trial_score,
+        "delta_vs_previous_trial_score": _delta(trial_score, previous_trial_score),
+        "delta_vs_previous_pre_reality_score": _delta(pre_reality_score, previous_pre_reality_score),
+        "delta_vs_baseline_xgboost": _delta(trial_score, baseline_completion_score),
+        "operational_fit_assessment": deepcopy(prior_trace.get("operational_fit_assessment") or {}),
+        "reality_check_assessment": deepcopy(prior_trace.get("reality_check_assessment") or {}),
+        "input_hash": packet.get("input_hash"),
+    }
+
+
+def _same_state_trajectory_summary(packet):
+    changes = (packet.get("iteration_context") or {}).get("field_changes") or []
+    labels = [
+        str(change.get("display_label") or change.get("field") or "").strip()
+        for change in changes
+        if isinstance(change, dict) and str(change.get("display_label") or change.get("field") or "").strip()
+    ]
+    if labels:
+        return f"Returned {', '.join(labels[:4])} to a prior reviewed scenario state."
+    return "Returned to a prior reviewed scenario state."
+
+
+def _same_state_validated_review(prior_trace, packet):
+    validated = deepcopy(prior_trace.get("validated_review") or {})
+    if not validated:
+        return {}
+    summary = _same_state_trajectory_summary(packet)
+    continuity_update = dict(validated.get("continuity_update") or {})
+    continuity_update["what_changed"] = summary
+    continuity_update.setdefault("active_tension", (prior_trace.get("storyline_state") or {}).get("active_tension"))
+    continuity_update.setdefault("watch_next", (prior_trace.get("storyline_state") or {}).get("next_consideration"))
+    validated["continuity_update"] = continuity_update
+    return validated
+
+
+def _same_state_result_with_fallback_narrative(result, prior_trace):
+    if result.get("validated_participant_narrative") or result.get("participant_narrative_status") == "valid":
+        return result
+    prior_validated = deepcopy(prior_trace.get("validated_participant_narrative") or {})
+    prior_raw = deepcopy(prior_trace.get("participant_narrative_json") or prior_validated)
+    if not prior_validated:
+        return result
+    updated = dict(result)
+    metadata = dict(updated.get("provider_metadata") or {})
+    metadata["pass2_same_state_fallback_narrative"] = True
+    updated["provider_metadata"] = metadata
+    updated["participant_narrative"] = prior_raw
+    updated["validated_participant_narrative"] = prior_validated
+    updated["participant_narrative_status"] = "valid"
+    updated["participant_narrative_warning"] = (
+        "Pass 2 narrative was not regenerated; reused the prior same-state participant narrative."
+    )
+    return updated
+
+
+def _same_state_pass2_only_trace_for_packet(
+    *,
+    packet,
+    prior_trace,
+    runtime,
+    session_id,
+    baseline_trace,
+    baseline_latency_ms,
+    current_snapshot_id,
+    workflow_started_at,
+):
+    provider = runtime.get("provider")
+    provider_metadata = {
+        "workflow_stage": "same_state_pass2_only",
+        "same_state_reuse": True,
+        "same_state_source_trace_id": prior_trace.get("trace_id"),
+        "same_state_source_input_hash": prior_trace.get("input_hash"),
+        "same_state_source_iteration_id": prior_trace.get("iteration_id"),
+        "same_state_source_scenario_state_hash": prior_trace.get("scenario_state_hash")
+        or ((prior_trace.get("input_packet") or {}).get("scenario_state_hash")),
+        "pass1_skipped": True,
+        "pass1_skip_reason": "scenario_state_hash matched a previous visible review; app-owned scoring was reused",
+    }
+    validated_review = _same_state_validated_review(prior_trace, packet)
+    result = {
+        "review_needed": True,
+        "reuse_previous_review": False,
+        "provider": provider,
+        "model_name": prior_trace.get("model_name"),
+        "provider_metadata": provider_metadata,
+        "status": "reviewed",
+        "failure_reason": None,
+        "review": validated_review,
+        "validated_review": validated_review,
+        "scoring": _same_state_reused_scoring(prior_trace, packet),
+    }
+    st.session_state[SCENARIO_REVIEW_PROGRESS_LABEL_KEY] = SCENARIO_ANALYSIS_PROGRESS_LABEL
+    result = review_packet_pass2_with_provider(
+        packet,
+        result,
+        provider=provider,
+        config=runtime.get("config"),
+    )
+    result = _same_state_result_with_fallback_narrative(result, prior_trace)
+    return _finalize_staged_scenario_review_trace(
+        packet=packet,
+        review_result=result,
+        session_id=session_id,
+        baseline_id=(packet.get("iteration_context") or {}).get("baseline_snapshot_id"),
+        runtime=runtime,
+        workflow_started_at=workflow_started_at,
+        visible_review_started_at=workflow_started_at,
+        baseline_latency_ms=baseline_latency_ms,
+        baseline_trace=baseline_trace,
+        current_snapshot_id=current_snapshot_id,
+    )
+
+
+def _staged_quality_review_trace_for_packet(
+    *,
+    packet,
+    row,
+    snapshot,
+    runtime,
+    session_id,
+    baseline_trace,
+    baseline_latency_ms,
+    current_snapshot_id,
+):
+    nct_id = str(snapshot.get("nct_id") or row.get(ID_COL, st.session_state.get("selected_nct_id", "")))
+    input_hash = packet.get("input_hash")
+    runtime_key = runtime.get("runtime_key")
+    workflow = st.session_state.get(SCENARIO_REVIEW_WORKFLOW_STATE_KEY) or {}
+    if (
+        workflow.get("input_hash") != input_hash
+        or workflow.get("runtime_key") != runtime_key
+        or workflow.get("nct_id") != nct_id
+    ):
+        workflow = {
+            "nct_id": nct_id,
+            "input_hash": input_hash,
+            "runtime_key": runtime_key,
+            "phase": SCENARIO_REVIEW_PHASE_PASS1,
+            "started_at": time.monotonic(),
+            "visible_started_at": time.monotonic(),
+            "active_provider": runtime.get("provider"),
+            "pass1_result": None,
+        }
+        st.session_state[SCENARIO_REVIEW_WORKFLOW_STATE_KEY] = workflow
+
+    phase = workflow.get("phase") or SCENARIO_REVIEW_PHASE_PASS1
+    workflow_started_at = workflow.get("started_at") or time.monotonic()
+    visible_started_at = workflow.get("visible_started_at") or time.monotonic()
+    provider = workflow.get("active_provider") or runtime.get("provider")
+    config = runtime.get("config")
+
+    if phase == SCENARIO_REVIEW_PHASE_PASS1:
+        st.session_state[SCENARIO_REVIEW_PROGRESS_LABEL_KEY] = SCENARIO_IMPACT_PROGRESS_LABEL
+        result = review_packet_pass1_initial_with_provider(
+            packet,
+            provider=provider,
+            config=config,
+        )
+        fallback_provider = _staged_provider_with_fallback(result, runtime)
+        if fallback_provider:
+            fallback_result = review_packet_pass1_initial_with_provider(
+                packet,
+                provider=fallback_provider,
+                config=config,
+            )
+            result = _apply_staged_fallback_metadata(result, fallback_result)
+            workflow["active_provider"] = result.get("provider") or fallback_provider
+        else:
+            workflow["active_provider"] = result.get("provider") or provider
+        workflow["pass1_result"] = result
+        if pass1_result_needs_repair(result):
+            workflow["phase"] = SCENARIO_REVIEW_PHASE_REPAIR
+            st.session_state[SCENARIO_REVIEW_PROGRESS_LABEL_KEY] = SCENARIO_REFINING_PROGRESS_LABEL
+            st.session_state[SCENARIO_REVIEW_WORKFLOW_STATE_KEY] = workflow
+            st.rerun()
+        if result.get("status") == "reviewed":
+            workflow["phase"] = SCENARIO_REVIEW_PHASE_PASS2
+            st.session_state[SCENARIO_REVIEW_PROGRESS_LABEL_KEY] = SCENARIO_ANALYSIS_PROGRESS_LABEL
+            st.session_state[SCENARIO_REVIEW_WORKFLOW_STATE_KEY] = workflow
+            st.rerun()
+        return _finalize_staged_scenario_review_trace(
+            packet=packet,
+            review_result=result,
+            session_id=session_id,
+            baseline_id=(packet.get("iteration_context") or {}).get("baseline_snapshot_id"),
+            runtime=runtime,
+            workflow_started_at=workflow_started_at,
+            visible_review_started_at=visible_started_at,
+            baseline_latency_ms=baseline_latency_ms,
+            baseline_trace=baseline_trace,
+            current_snapshot_id=current_snapshot_id,
+        )
+
+    if phase == SCENARIO_REVIEW_PHASE_REPAIR:
+        st.session_state[SCENARIO_REVIEW_PROGRESS_LABEL_KEY] = SCENARIO_REFINING_PROGRESS_LABEL
+        result = review_packet_pass1_repair_with_provider(
+            packet,
+            workflow.get("pass1_result") or {},
+            provider=workflow.get("active_provider") or provider,
+            config=config,
+        )
+        fallback_provider = _staged_provider_with_fallback(result, runtime)
+        if fallback_provider:
+            fallback_result = review_packet_pass1_repair_with_provider(
+                packet,
+                workflow.get("pass1_result") or {},
+                provider=fallback_provider,
+                config=config,
+            )
+            result = _apply_staged_fallback_metadata(result, fallback_result)
+            workflow["active_provider"] = result.get("provider") or fallback_provider
+        workflow["pass1_result"] = result
+        if result.get("status") == "reviewed" and not pass1_result_needs_repair(result):
+            workflow["phase"] = SCENARIO_REVIEW_PHASE_PASS2
+            st.session_state[SCENARIO_REVIEW_PROGRESS_LABEL_KEY] = SCENARIO_ANALYSIS_PROGRESS_LABEL
+            st.session_state[SCENARIO_REVIEW_WORKFLOW_STATE_KEY] = workflow
+            st.rerun()
+        return _finalize_staged_scenario_review_trace(
+            packet=packet,
+            review_result=result,
+            session_id=session_id,
+            baseline_id=(packet.get("iteration_context") or {}).get("baseline_snapshot_id"),
+            runtime=runtime,
+            workflow_started_at=workflow_started_at,
+            visible_review_started_at=visible_started_at,
+            baseline_latency_ms=baseline_latency_ms,
+            baseline_trace=baseline_trace,
+            current_snapshot_id=current_snapshot_id,
+        )
+
+    st.session_state[SCENARIO_REVIEW_PROGRESS_LABEL_KEY] = SCENARIO_ANALYSIS_PROGRESS_LABEL
+    result = review_packet_pass2_with_provider(
+        packet,
+        workflow.get("pass1_result") or {},
+        provider=workflow.get("active_provider") or provider,
+        config=config,
+    )
+    trace = _finalize_staged_scenario_review_trace(
+        packet=packet,
+        review_result=result,
+        session_id=session_id,
+        baseline_id=(packet.get("iteration_context") or {}).get("baseline_snapshot_id"),
+        runtime=runtime,
+        workflow_started_at=workflow_started_at,
+        visible_review_started_at=visible_started_at,
+        baseline_latency_ms=baseline_latency_ms,
+        baseline_trace=baseline_trace,
+        current_snapshot_id=current_snapshot_id,
+    )
+    st.session_state[SCENARIO_REVIEW_WORKFLOW_STATE_KEY] = None
+    return trace
 
 
 def get_quality_review_trace_for_snapshot(row, snapshot):
@@ -6482,13 +7156,14 @@ def get_quality_review_trace_for_snapshot(row, snapshot):
     session_id = get_narrative_session_id(nct_id)
     state_key = get_quality_review_trace_state_key(nct_id)
     cached_trace = st.session_state.get(state_key)
-    current_snapshot_id = snapshot.get("snapshot_id") or snapshot.get("timestamp")
+    current_snapshot_id = _snapshot_identifier(snapshot)
     runtime = narrative_review_runtime()
     user_clarifications = snapshot.get("user_clarifications") or []
     if (
         cached_trace
         and get_trace_current_snapshot_id(cached_trace) == current_snapshot_id
         and narrative_trace_matches_runtime(cached_trace, runtime)
+        and _trace_is_successful_visible_review(cached_trace)
     ):
         cached_review_mode = (
             ((cached_trace.get("validated_review") or {}).get("review_metadata") or {}).get("review_mode")
@@ -6502,7 +7177,18 @@ def get_quality_review_trace_for_snapshot(row, snapshot):
             "current_snapshot_id": current_snapshot_id,
         })
 
-    previous_trace = cached_trace if narrative_trace_matches_runtime(cached_trace, runtime) else None
+    previous_trace = None
+    for trace in reversed(get_review_store(st.session_state).get("trace_history") or []):
+        if not _trace_is_successful_visible_review(trace):
+            continue
+        if get_trace_current_snapshot_id(trace) == current_snapshot_id:
+            continue
+        if _scenario_review_trial_id(trace) != nct_id:
+            continue
+        if not narrative_trace_matches_runtime(trace, runtime):
+            continue
+        previous_trace = trace
+        break
     baseline_snapshot = get_baseline_prediction_snapshot(nct_id)
     baseline_started_at = time.monotonic()
     baseline_trace = safe_get_hidden_baseline_review_trace(
@@ -6513,9 +7199,15 @@ def get_quality_review_trace_for_snapshot(row, snapshot):
     baseline_latency_ms = _elapsed_ms(baseline_started_at)
     compact_storyline_memory = compact_storyline_from_trace(previous_trace)
 
+    previous_prediction_snapshot = get_previous_prediction_snapshot(nct_id, snapshot)
+    packet_snapshot = normalize_snapshot_latest_changes_for_review(
+        snapshot,
+        previous_prediction_snapshot,
+    )
+
     packet = build_review_packet(
-        current_snapshot=snapshot,
-        previous_snapshot=get_previous_prediction_snapshot(nct_id, snapshot),
+        current_snapshot=packet_snapshot,
+        previous_snapshot=previous_prediction_snapshot,
         baseline_snapshot=baseline_snapshot,
         baseline_review_trace=baseline_trace,
         previous_review_trace=previous_trace,
@@ -6524,12 +7216,20 @@ def get_quality_review_trace_for_snapshot(row, snapshot):
         user_clarifications=user_clarifications,
         compact_storyline_memory=compact_storyline_memory,
     )
+    same_state_prior_trace = _prior_state_equivalent_review_trace(
+        packet,
+        runtime=runtime,
+        nct_id=nct_id,
+        current_snapshot_id=current_snapshot_id,
+    )
+    packet = _attach_state_equivalence_context(packet, same_state_prior_trace)
     prompt_mode = infer_prompt_mode(packet)
 
     if (
         cached_trace
         and cached_trace.get("input_hash") == packet.get("input_hash")
         and narrative_trace_matches_runtime(cached_trace, runtime)
+        and _trace_is_successful_visible_review(cached_trace)
     ):
         return attach_narrative_workflow_metadata(cached_trace, {
             "review_phase": prompt_mode,
@@ -6541,6 +7241,68 @@ def get_quality_review_trace_for_snapshot(row, snapshot):
             "review_store_cache_hit": bool(cached_trace.get("cached")),
             "current_snapshot_id": current_snapshot_id,
         })
+
+    if same_state_prior_trace:
+        same_state_trace = _same_state_pass2_only_trace_for_packet(
+            packet=packet,
+            prior_trace=same_state_prior_trace,
+            runtime=runtime,
+            session_id=session_id,
+            baseline_trace=baseline_trace,
+            baseline_latency_ms=baseline_latency_ms,
+            current_snapshot_id=current_snapshot_id,
+            workflow_started_at=workflow_started_at,
+        )
+        return attach_narrative_workflow_metadata(same_state_trace, {
+            "review_phase": prompt_mode,
+            "workflow_latency_ms": _elapsed_ms(workflow_started_at),
+            "baseline_lookup_latency_ms": baseline_latency_ms,
+            "baseline_session_cache_hit": bool((baseline_trace or {}).get("workflow_metadata", {}).get("session_cache_hit")),
+            "baseline_review_store_cache_hit": bool((baseline_trace or {}).get("workflow_metadata", {}).get("review_store_cache_hit")),
+            "session_cache_hit": True,
+            "review_store_cache_hit": True,
+            "same_state_score_reuse": True,
+            "current_snapshot_id": current_snapshot_id,
+            "input_hash": packet.get("input_hash"),
+        })
+
+    if _staged_scenario_review_supported(runtime):
+        cached_by_hash = cached_review_trace_for_namespace(
+            st.session_state,
+            str(packet.get("input_hash") or ""),
+            cache_namespace=provider_config_cache_namespace(runtime.get("config")),
+        )
+        if (
+            cached_by_hash
+            and narrative_trace_matches_runtime(cached_by_hash, runtime)
+            and _trace_is_successful_visible_review(cached_by_hash)
+        ):
+            replayed_trace = _replay_staged_cached_trace(
+                cached_by_hash,
+                packet=packet,
+                session_id=session_id,
+                baseline_id=(packet.get("iteration_context") or {}).get("baseline_snapshot_id"),
+            )
+            return attach_narrative_workflow_metadata(replayed_trace, {
+                "review_phase": prompt_mode,
+                "workflow_latency_ms": _elapsed_ms(workflow_started_at),
+                "baseline_lookup_latency_ms": baseline_latency_ms,
+                "baseline_session_cache_hit": bool((baseline_trace or {}).get("workflow_metadata", {}).get("session_cache_hit")),
+                "baseline_review_store_cache_hit": bool((baseline_trace or {}).get("workflow_metadata", {}).get("review_store_cache_hit")),
+                "session_cache_hit": True,
+                "review_store_cache_hit": True,
+                "current_snapshot_id": current_snapshot_id,
+            })
+        return _staged_quality_review_trace_for_packet(
+            packet=packet,
+            row=row,
+            snapshot=snapshot,
+            runtime=runtime,
+            session_id=session_id,
+            baseline_trace=baseline_trace,
+            baseline_latency_ms=baseline_latency_ms,
+            current_snapshot_id=current_snapshot_id,
+        )
 
     visible_review_started_at = time.monotonic()
     trace = replay_or_review_with_provider(
@@ -6727,16 +7489,26 @@ def get_simulation_indication_name_state_key(trial_key):
     return get_simulation_feature_state_key(trial_key, "gbd_indication_name_3")
 
 
+def _is_hard_locked_simulation_feature(field_id):
+    return field_id in HARD_LOCKED_SIMULATION_FEATURE_IDS
+
+
+def _simulation_feature_value_for_current_state(row, field_id):
+    trial_key = str(row.get(ID_COL, st.session_state.get("selected_nct_id", "no_trial")))
+    initial_val = _get_initial_field_value(field_id, row)
+    if _is_hard_locked_simulation_feature(field_id):
+        return initial_val
+    state_key = get_simulation_feature_state_key(trial_key, field_id)
+    return st.session_state.get(state_key, initial_val)
+
+
 def get_current_feature_values(row):
     values = {}
-    trial_key = str(row.get(ID_COL, st.session_state.get("selected_nct_id", "no_trial")))
 
     for field_id in SIMULATION_FEATURE_IDS:
-        state_key = get_simulation_feature_state_key(trial_key, field_id)
-        initial_val = _get_initial_field_value(field_id, row)
         values[field_id] = _canonical_feature_value(
             field_id,
-            st.session_state.get(state_key, initial_val)
+            _simulation_feature_value_for_current_state(row, field_id)
         )
 
     return values
@@ -6744,14 +7516,11 @@ def get_current_feature_values(row):
 
 def get_current_compare_values(row):
     values = {}
-    trial_key = str(row.get(ID_COL, st.session_state.get("selected_nct_id", "no_trial")))
 
     for field_id in SIMULATION_FEATURE_IDS:
-        state_key = get_simulation_feature_state_key(trial_key, field_id)
-        initial_val = _get_initial_field_value(field_id, row)
         values[field_id] = _option_key_for_ui_value(
             field_id,
-            st.session_state.get(state_key, initial_val)
+            _simulation_feature_value_for_current_state(row, field_id)
         )
 
     return values
@@ -6834,7 +7603,10 @@ def is_current_scenario_submitted(row):
     fingerprint = snapshot.get("scenario_fingerprint")
     if not fingerprint:
         return False
-    return _json_safe(current_scenario_fingerprint(row)) == _json_safe(fingerprint)
+    return (
+        prediction_snapshot_has_successful_review(snapshot)
+        and _json_safe(current_scenario_fingerprint(row)) == _json_safe(fingerprint)
+    )
 
 
 def get_pending_feature_ids(row):
@@ -6842,7 +7614,7 @@ def get_pending_feature_ids(row):
         return []
 
     nct_id = str(row.get(ID_COL, st.session_state.get("selected_nct_id", "")))
-    snapshot = get_latest_prediction_snapshot(nct_id)
+    snapshot = get_pending_reference_snapshot(row)
     if not snapshot:
         return []
 
@@ -6869,7 +7641,7 @@ def get_pending_operational_assumption_keys(row):
         return []
 
     nct_id = str(row.get(ID_COL, st.session_state.get("selected_nct_id", "")))
-    snapshot = get_latest_prediction_snapshot(nct_id)
+    snapshot = get_pending_reference_snapshot(row)
     if not snapshot:
         return []
 
@@ -6891,7 +7663,7 @@ def get_pending_text_context_fields(row):
         return []
 
     nct_id = str(row.get(ID_COL, st.session_state.get("selected_nct_id", "")))
-    snapshot = get_latest_prediction_snapshot(nct_id)
+    snapshot = get_pending_reference_snapshot(row)
     if not snapshot:
         return []
     return _changed_text_context_fields_between(snapshot, build_text_context_for_narrative(row))
@@ -6903,7 +7675,7 @@ def has_pending_text_context_changes(row):
 
 def get_committed_text_context_fields(row):
     nct_id = str(row.get(ID_COL, st.session_state.get("selected_nct_id", "")))
-    snapshot = get_latest_prediction_snapshot(nct_id) or {}
+    snapshot = get_pending_reference_snapshot(row) or {}
     return (
         snapshot.get("committed_changed_text_context_fields")
         or snapshot.get("changed_text_context_fields")
@@ -6957,7 +7729,7 @@ def has_pending_duration_assumption(row):
 
 def get_previous_operational_assumption_value(row, assumption_key):
     nct_id = str(row.get(ID_COL, st.session_state.get("selected_nct_id", "")))
-    snapshot = get_latest_prediction_snapshot(nct_id) or {}
+    snapshot = get_pending_reference_snapshot(row) or {}
     previous = pd.to_numeric(get_operational_assumption_value_from_snapshot(snapshot, assumption_key), errors="coerce")
     if pd.isna(previous) or float(previous) <= 0:
         return None
@@ -7030,7 +7802,7 @@ def _label_with_previous_for_field(label, field_id, previous_value, state_token)
 
 def get_committed_feature_ids(row):
     nct_id = str(row.get(ID_COL, st.session_state.get("selected_nct_id", "")))
-    snapshot = get_latest_prediction_snapshot(nct_id) or {}
+    snapshot = get_pending_reference_snapshot(row) or {}
     return (
         snapshot.get("committed_changed_fields")
         or snapshot.get("changed_fields")
@@ -7047,7 +7819,7 @@ def feature_history_state_token(field_id, row):
 
 def get_committed_operational_assumption_keys(row):
     nct_id = str(row.get(ID_COL, st.session_state.get("selected_nct_id", "")))
-    snapshot = get_latest_prediction_snapshot(nct_id) or {}
+    snapshot = get_pending_reference_snapshot(row) or {}
     return (
         snapshot.get("committed_changed_operational_assumptions")
         or snapshot.get("changed_operational_assumptions")
@@ -7072,7 +7844,7 @@ def operational_assumption_label_with_previous(label, row, assumption_key):
         previous_value = get_previous_operational_assumption_value(row, assumption_key)
     elif state_token == "prev":
         nct_id = str(row.get(ID_COL, st.session_state.get("selected_nct_id", "")))
-        snapshot = get_latest_prediction_snapshot(nct_id) or {}
+        snapshot = get_pending_reference_snapshot(row) or {}
         previous_value = (snapshot.get("previous_operational_display_values") or {}).get(assumption_key)
     else:
         return label
@@ -7190,6 +7962,8 @@ def start_prediction_request(*, jump_to_score=True):
 def finish_scenario_review_transition():
     st.session_state.simulation_review_pending = False
     st.session_state.simulation_review_transition_done = True
+    st.session_state[SCENARIO_REVIEW_PROGRESS_LABEL_KEY] = ""
+    st.session_state[SCENARIO_REVIEW_WORKFLOW_STATE_KEY] = None
 
 
 def set_prediction_error_notice(message):
@@ -7315,7 +8089,18 @@ def handle_predict_trial_completion():
         st.session_state.simulation_review_pending = True
         st.session_state.simulation_review_transition_done = False
         st.session_state.simulation_review_unavailable_notice = None
+        st.session_state[SCENARIO_REVIEW_PROGRESS_LABEL_KEY] = SCENARIO_IMPACT_PROGRESS_LABEL
+        st.session_state[SCENARIO_REVIEW_WORKFLOW_STATE_KEY] = None
         st.session_state.simulation_open_features_tab = True
+
+        if current_prediction_snapshot_needs_review(row):
+            st.session_state.detail_completion_tab_visible = True
+            st.session_state.detail_prediction_notice = False
+            st.session_state.prediction_error_notice = None
+            st.session_state.trigger_prediction = False
+            st.session_state.completion_score_tab_jump_nonce += 1
+            return
+
         st.session_state.analysis_result = None
         st.session_state.analysis_nct_id = None
         start_prediction_request(jump_to_score=False)
@@ -7333,29 +8118,69 @@ def queue_simulation_reprediction_if_score_visible():
     return
 
 
+def _snapshot_feature_state_value(field_id, snapshot, row):
+    if not snapshot or field_id not in SIMULATION_FEATURE_ID_SET:
+        return _get_initial_field_value(field_id, row)
+
+    display_values = snapshot.get("display_values") or {}
+    compare_values = snapshot.get("compare_values") or snapshot.get("submitted_values") or {}
+    if field_id == "gbd_cause_id_3_ml":
+        value = compare_values.get(field_id)
+        return _get_initial_field_value(field_id, row) if value in (None, "") else value
+    if display_values.get(field_id) not in (None, ""):
+        return display_values.get(field_id)
+    if compare_values.get(field_id) not in (None, ""):
+        return get_display_value_for_field(field_id, compare_values.get(field_id))
+    return _get_initial_field_value(field_id, row)
+
+
+def _hydrate_operational_assumption_state_from_snapshot(trial_key, assumption_key, snapshot):
+    assumption = ((snapshot or {}).get("operational_assumptions") or {}).get(assumption_key) or {}
+    value = pd.to_numeric(assumption.get("value"), errors="coerce")
+    if pd.isna(value):
+        return False
+
+    value = round(float(value), 1) if assumption_key == "planned_duration_months" else int(round(float(value)))
+    value_key = get_operational_assumption_state_key(trial_key, assumption_key)
+    source_key = get_operational_assumption_source_state_key(trial_key, assumption_key)
+    baseline_key = get_operational_assumption_baseline_state_key(trial_key, assumption_key)
+
+    _safe_set_session_value(value_key, value)
+    _safe_set_session_value(source_key, str(assumption.get("source") or "user_scenario"))
+    if baseline_key not in st.session_state:
+        _safe_set_session_value(baseline_key, value)
+    return True
+
+
 def reset_trial_editor_state():
     row = get_selected_trial_row()
     if row is None:
         return
 
     trial_key = str(row[ID_COL])
+    snapshot = get_pending_reference_snapshot(row) if st.session_state.get("global_edit_mode", False) else None
 
     for field_id in sorted(set(TRIAL_EDITOR_FIELD_IDS) | SIMULATION_FEATURE_ID_SET | {"gbd_indication_name_3"}):
         state_key = f"input_{trial_key}_{field_id}"
         widget_key = f"feature_{trial_key}_{field_id}"
 
-        initial_val = _get_initial_field_value(field_id, row)
+        initial_val = _snapshot_feature_state_value(field_id, snapshot, row)
 
         _safe_set_session_value(state_key, initial_val)
         _safe_delete_session_value(widget_key)
         _safe_delete_session_value(_feature_widget_override_key(field_id))
 
     for field_id in SIMULATION_FEATURE_IDS:
-        st.session_state[get_simulation_feature_state_key(trial_key, field_id)] = _get_initial_field_value(field_id, row)
+        st.session_state[get_simulation_feature_state_key(trial_key, field_id)] = _snapshot_feature_state_value(
+            field_id,
+            snapshot,
+            row,
+        )
+    indication_name = ((snapshot or {}).get("display_values") or {}).get("gbd_cause_id_3_ml")
     st.session_state[get_simulation_indication_name_state_key(trial_key)] = row.get(
         "gbd_indication_name_3",
         "Other / Unclassified",
-    )
+    ) if indication_name in (None, "") else indication_name
 
     st.session_state[_indication_attention_key()] = False
 
@@ -7370,11 +8195,18 @@ def reset_trial_editor_state():
     ensure_planned_enrollment_state(row)
     ensure_planned_sites_state(row)
     ensure_planned_duration_state(row)
+    if snapshot and snapshot.get("source") != "prerecorded_baseline":
+        for assumption_key in ACTIVE_OPERATIONAL_ASSUMPTION_KEYS:
+            _hydrate_operational_assumption_state_from_snapshot(trial_key, assumption_key, snapshot)
 
     for suffix, candidates in TRIAL_EDITOR_TEXT_FIELDS.items():
         state_key = f"text_{trial_key}_{suffix}"
         widget_key = f"{state_key}_features"
-        value = trial_val(row, *candidates)
+        output_key = TEXT_CONTEXT_OUTPUT_KEYS.get(suffix)
+        text_context = (snapshot or {}).get("text_context") or {}
+        value = text_context.get(output_key) if output_key else None
+        if value in (None, ""):
+            value = trial_val(row, *candidates)
         _safe_set_session_value(state_key, "" if value == "N/A" else str(value))
         _safe_delete_session_value(widget_key)
 
@@ -7448,7 +8280,7 @@ def get_risk_tier(score: float):
     return "High Risk"
 
 
-def get_design_confidence_tier(score: float):
+def get_reality_check_tier(score: float):
     if score >= 25: return "Low Risk"
     if score >= 0: return "Favorable"
     if score >= -25: return "Watchlist"
@@ -7460,6 +8292,17 @@ def get_design_confidence_tier(score: float):
 # ==========================
 
 def render_transition_overlay_hook():
+    active_review_overlay_message = ""
+    if st.session_state.get("global_edit_mode", False) and st.session_state.get("simulation_review_pending", False):
+        active_review_overlay_message = (
+            SCENARIO_IMPACT_PROGRESS_LABEL
+            if st.session_state.get("trigger_prediction", False)
+            else (
+                st.session_state.get(SCENARIO_REVIEW_PROGRESS_LABEL_KEY)
+                or SCENARIO_ANALYSIS_PROGRESS_LABEL
+            )
+        )
+
     st.iframe(
         """
         <script>
@@ -7527,6 +8370,18 @@ def render_transition_overlay_hook():
                 });
             }
 
+            function updateOverlayMessage(message) {
+                const existing = doc.getElementById(OVERLAY_ID);
+                if (!existing) return false;
+
+                const messageNode = existing.querySelector(".ctp-message");
+                if (!messageNode) return false;
+
+                messageNode.textContent = message;
+                win.__ctpOverlayMessage = message;
+                return true;
+            }
+
             function showOverlay(message, timeoutMs, waitSelector) {
                 removeOverlay();
 
@@ -7579,7 +8434,7 @@ def render_transition_overlay_hook():
 
                     <div class="ctp-card">
                         <div class="ctp-spinner"></div>
-                        <div>${message}</div>
+                        <div class="ctp-message">${message}</div>
                     </div>
                 `;
 
@@ -7599,6 +8454,7 @@ def render_transition_overlay_hook():
             }
 
             win.__ctpShowOverlay = showOverlay;
+            win.__ctpUpdateOverlayMessage = updateOverlayMessage;
 
             function getButtonText(button) {
                 return (button.innerText || button.textContent || "").trim();
@@ -7648,7 +8504,11 @@ def render_transition_overlay_hook():
                 if (text === "Reset Filters") return ["Resetting filters...", 1600];
                 if (text === "Review Scenario") {
                     if (isSimulationModeActive()) {
-                        return ["Evaluating scenario impact...", 90000, SCENARIO_REVIEW_DONE_SELECTOR];
+                        return [
+                            __SCENARIO_IMPACT_PROGRESS_LABEL__,
+                            90000,
+                            SCENARIO_REVIEW_DONE_SELECTOR,
+                        ];
                     }
                     return ["Reviewing completion score...", 12000, COMPLETION_SCORE_READY_SELECTOR];
                 }
@@ -7675,6 +8535,17 @@ def render_transition_overlay_hook():
                 }
             } else {
                 removeOverlay();
+            }
+
+            const activeReviewOverlayMessage = __ACTIVE_REVIEW_OVERLAY_MESSAGE__;
+            if (activeReviewOverlayMessage) {
+                if (!updateOverlayMessage(activeReviewOverlayMessage)) {
+                    showOverlay(activeReviewOverlayMessage, 90000, SCENARIO_REVIEW_DONE_SELECTOR);
+                } else {
+                    win.__ctpOverlayWaitSelector = SCENARIO_REVIEW_DONE_SELECTOR;
+                    win.__ctpOverlayTimeoutMs = 90000;
+                    watchOverlayTarget(SCENARIO_REVIEW_DONE_SELECTOR);
+                }
             }
 
             if (!win.__ctpOverlayListenerInstalled) {
@@ -7741,7 +8612,13 @@ def render_transition_overlay_hook():
             }
         })();
         </script>
-        """,
+        """.replace(
+            "__SCENARIO_IMPACT_PROGRESS_LABEL__",
+            json.dumps(SCENARIO_IMPACT_PROGRESS_LABEL),
+        ).replace(
+            "__ACTIVE_REVIEW_OVERLAY_MESSAGE__",
+            json.dumps(active_review_overlay_message),
+        ),
         height=1,
     )
 
@@ -7842,7 +8719,11 @@ def render_header(is_landing=True, show_predict_button=False, show_back_button=F
                         if st.session_state.get("global_edit_mode", False):
                             selected_row = get_selected_trial_row()
                             simulation_pending = bool(
-                                selected_row is not None and has_pending_simulation_changes(selected_row)
+                                selected_row is not None
+                                and (
+                                    has_pending_simulation_changes(selected_row)
+                                    or current_prediction_snapshot_needs_review(selected_row)
+                                )
                             )
                             predict_btn_type = (
                                 "primary"
@@ -8595,6 +9476,8 @@ def _get_indication_options(row):
 
 
 def _sync_feature_widget_to_shared_state(field_id):
+    if _is_hard_locked_simulation_feature(field_id):
+        return
     trial_key = st.session_state.get("selected_nct_id", "no_trial")
     widget_key = f"feature_{trial_key}_{field_id}"
     state_key = get_simulation_feature_state_key(trial_key, field_id)
@@ -8630,6 +9513,8 @@ def _sync_feature_widget_to_shared_state(field_id):
 
 
 def _sync_indication_widget_to_shared_state(row):
+    if _is_hard_locked_simulation_feature("gbd_cause_id_3_ml"):
+        return
     trial_key = st.session_state.get("selected_nct_id", "no_trial")
     widget_key = f"feature_{trial_key}_gbd_cause_id_3_ml"
     selected_label = st.session_state.get(widget_key, "")
@@ -8711,7 +9596,7 @@ def _sync_planned_duration_widget(row):
 
 def _label_with_previous_value(label, field_id, row):
     nct_id = str(row.get(ID_COL, st.session_state.get("selected_nct_id", "")))
-    snapshot = get_latest_prediction_snapshot(nct_id) or {}
+    snapshot = get_pending_reference_snapshot(row) or {}
     reference_values = snapshot.get("compare_values") or snapshot.get("submitted_values") or {}
     state_token = feature_history_state_token(field_id, row)
 
@@ -8741,6 +9626,9 @@ def _render_trial_feature_control(field_id, row):
     trial_key = st.session_state.get("selected_nct_id", "no_trial")
     initial_val = _get_initial_field_value(field_id, row)
     state_key = get_simulation_feature_state_key(trial_key, field_id)
+    hard_locked = _is_hard_locked_simulation_feature(field_id)
+    if hard_locked:
+        st.session_state[state_key] = initial_val
     meta = TAXONOMY.get(field_id, {})
     options = meta.get("ui", {}).get("options")
     if not options:
@@ -8760,10 +9648,14 @@ def _render_trial_feature_control(field_id, row):
     )
     is_number_field = field_id != "gbd_cause_id_3_ml" and not options
     kind = "num" if is_number_field else "sel"
-    state_token = change_state_token(
-        pending=field_id in get_pending_feature_ids(row),
-        committed=field_id in get_committed_feature_ids(row),
-        attention=needs_attention,
+    state_token = (
+        "lock"
+        if hard_locked
+        else change_state_token(
+            pending=field_id in get_pending_feature_ids(row),
+            committed=field_id in get_committed_feature_ids(row),
+            attention=needs_attention,
+        )
     )
     container_key = (
         f"simfield_{state_token}_{kind}_{_field_token(field_id)}"
@@ -8782,9 +9674,11 @@ def _render_trial_feature_control(field_id, row):
                     break
 
             widget_override = _consume_feature_widget_override(field_id)
-            if widget_override in labels:
+            if hard_locked and labels:
+                st.session_state[widget_key] = labels[selected_index]
+            elif widget_override in labels:
                 st.session_state[widget_key] = widget_override
-            elif labels:
+            elif labels and widget_key not in st.session_state:
                 st.session_state[widget_key] = labels[selected_index]
 
             _selectbox_with_optional_default(
@@ -8793,16 +9687,19 @@ def _render_trial_feature_control(field_id, row):
                 selected_index=selected_index,
                 key=widget_key,
                 on_change=_sync_indication_widget_to_shared_state,
-                args=(row,)
+                args=(row,),
+                disabled=hard_locked,
             )
             return
 
         if options:
             labels, selected_index = _resolve_field_labels(field_id, state_key, initial_val, options)
             widget_override = _consume_feature_widget_override(field_id)
-            if widget_override in labels:
+            if hard_locked and labels:
+                st.session_state[widget_key] = labels[selected_index]
+            elif widget_override in labels:
                 st.session_state[widget_key] = widget_override
-            elif labels:
+            elif labels and widget_key not in st.session_state:
                 st.session_state[widget_key] = labels[selected_index]
 
             _selectbox_with_optional_default(
@@ -8811,7 +9708,8 @@ def _render_trial_feature_control(field_id, row):
                 selected_index=selected_index,
                 key=widget_key,
                 on_change=_sync_feature_widget_to_shared_state,
-                args=(field_id,)
+                args=(field_id,),
+                disabled=hard_locked,
             )
             return
 
@@ -8853,7 +9751,8 @@ def _render_trial_feature_control(field_id, row):
             format="%.1f" if allows_decimal else "%d",
             key=widget_key,
             on_change=_sync_feature_widget_to_shared_state,
-            args=(field_id,)
+            args=(field_id,),
+            disabled=hard_locked,
         )
 
 
@@ -9759,7 +10658,7 @@ def _previous_visible_scenario_review_trace(nct_id, current_trace):
         iteration = _scenario_review_iteration_number(trace)
         if iteration is None or iteration >= current_iteration:
             continue
-        if trace.get("strategic_review", trace.get("design_confidence")) is None or trace.get("trial_score", trace.get("total_scenario_score")) is None:
+        if trace.get("reality_check_points") is None or trace.get("trial_score") is None:
             continue
         return trace
     return None
@@ -9792,8 +10691,8 @@ def _score_view_delta_html(score_view, scenario_trace, snapshot, nct_id):
         if not previous_trace:
             return ""
         return _score_delta_badge_html(
-            previous_trace.get("strategic_review", previous_trace.get("design_confidence")),
-            scenario_trace.get("strategic_review", scenario_trace.get("design_confidence")),
+            previous_trace.get("reality_check_points"),
+            scenario_trace.get("reality_check_points"),
             delta_unit="points",
             midpoint=0.0,
             signed_values=True,
@@ -9805,13 +10704,13 @@ def _score_view_delta_html(score_view, scenario_trace, snapshot, nct_id):
         else:
             previous_trace = _previous_visible_scenario_review_trace(nct_id, scenario_trace)
             previous_total_reference = (
-                previous_trace.get("trial_score", previous_trace.get("total_scenario_score"))
+                previous_trace.get("trial_score")
                 if previous_trace
                 else None
             )
         return _score_delta_badge_html(
             previous_total_reference,
-            scenario_trace.get("trial_score", scenario_trace.get("total_scenario_score")),
+            scenario_trace.get("trial_score"),
             delta_unit="percent",
         )
 
@@ -9885,70 +10784,6 @@ def _quality_review_metric(label, value, color="#1f2937"):
     )
 
 
-def _design_subcategory_contribution_html(subcategory_name, subcategory, display_points=None):
-    points = pd.to_numeric(display_points if display_points is not None else (subcategory or {}).get("points"), errors="coerce")
-    if pd.isna(points):
-        points = 0
-    points = float(points)
-    width_pct = min(50.0, abs(points) / 4.0 * 50.0)
-    side_class = "positive" if points > 0 else "negative" if points < 0 else "neutral"
-    label = DESIGN_SUBCATEGORY_LABELS.get(str(subcategory_name), str(subcategory_name).replace("_", " ").title())
-    return (
-        "<div class='quality-contribution-row'>"
-        f"<div class='quality-contribution-label'>{html.escape(label)}</div>"
-        "<div class='quality-contribution-bar-wrap'>"
-        "<div class='quality-contribution-zero'></div>"
-        f"<div class='quality-contribution-bar {side_class}' style='width:{width_pct:.1f}%;'></div>"
-        "</div>"
-        f"<div class='quality-contribution-points' style='color:{_quality_points_color(points)};'>"
-        f"{html.escape(_format_quality_points(points))}</div>"
-        "</div>"
-    )
-
-
-def _design_confidence_visual_html(assessment):
-    pillars = (assessment or {}).get("pillars") or {}
-    if not pillars:
-        return ""
-
-    sections = []
-    for pillar in pillars.values():
-        subcategories = pillar.get("design_subcategories") or {}
-        if not subcategories:
-            continue
-        pillar_points = pillar.get("design_points")
-        rows = "".join(
-            _design_subcategory_contribution_html(
-                subcategory_name,
-                subcategories[subcategory_name],
-            )
-            for subcategory_name in DESIGN_SUBCATEGORY_LABELS
-            if subcategory_name in subcategories
-        )
-        if not rows:
-            continue
-        sections.append(
-            "<div class='quality-contribution-group'>"
-            "<div class='quality-contribution-group-head'>"
-            f"<span>{html.escape(str(pillar.get('label') or 'Strategic Review'))}</span>"
-            f"<span style='color:{_quality_points_color(pillar_points)};'>"
-            f"{html.escape(_format_quality_points(pillar_points))}</span>"
-            "</div>"
-            f"{rows}"
-            "</div>"
-        )
-
-    if not sections:
-        return ""
-
-    return (
-        "<div class='quality-contribution-chart'>"
-        "<div class='quality-contribution-title'>Strategic Review Contributions</div>"
-        f"{''.join(sections)}"
-        "</div>"
-    )
-
-
 def _scenario_review_text_block(title, text):
     if not isinstance(text, str) or not text.strip():
         return ""
@@ -9959,21 +10794,21 @@ def _scenario_review_text_block(title, text):
     )
 
 
-def _scenario_review_structured_html(strategic_analysis, key_questions):
-    if not isinstance(strategic_analysis, dict):
+def _reality_check_structured_html(reality_check, key_questions):
+    if not isinstance(reality_check, dict):
         return ""
-    overall = strategic_analysis.get("overall_score_explanation")
-    pillar_readout = strategic_analysis.get("pillar_readout")
-    strategic_bullet = strategic_analysis.get("strategic_review_bullet")
-    tension_question = strategic_analysis.get("tension_question")
+    overall = reality_check.get("overall_score_explanation")
+    pillar_readout = reality_check.get("pillar_readout")
+    reality_bullet = reality_check.get("reality_check_bullet")
+    tension_question = reality_check.get("tension_question")
     broader_question = (
-        strategic_analysis.get("broader_strategic_question")
+        reality_check.get("broader_strategic_question")
         or (key_questions or {}).get("strategic_development_question")
     )
     has_structured = any([
         isinstance(overall, str) and overall.strip(),
         isinstance(pillar_readout, list) and pillar_readout,
-        isinstance(strategic_bullet, str) and strategic_bullet.strip(),
+        isinstance(reality_bullet, str) and reality_bullet.strip(),
         isinstance(tension_question, str) and tension_question.strip(),
         isinstance(broader_question, str) and broader_question.strip(),
     ])
@@ -10007,11 +10842,11 @@ def _scenario_review_structured_html(strategic_analysis, key_questions):
             "</ul></div>"
         )
 
-    if isinstance(strategic_bullet, str) and strategic_bullet.strip():
+    if isinstance(reality_bullet, str) and reality_bullet.strip():
         sections.append(
-            "<div class='quality-review-section-title'>Strategic Review</div>"
+            "<div class='quality-review-section-title'>Reality Check</div>"
             "<div class='quality-review-text'><ul><li>"
-            f"<strong>{html.escape(strategic_bullet.strip())}</strong>"
+            f"<strong>{html.escape(reality_bullet.strip())}</strong>"
             "</li></ul></div>"
         )
 
@@ -10046,32 +10881,157 @@ def _trace_allows_total_scenario_display(trace):
         return False
     if trace.get("hidden_baseline") or trace.get("participant_visible") is False:
         return False
-    return trace.get("trial_score", trace.get("total_scenario_score")) is not None
+    return trace.get("trial_score") is not None
+
+
+def _neutral_score_driver_pillar_rows():
+    return [{"Pillar": pillar, "Impact": 0.0} for pillar in SCORE_DRIVER_PILLARS]
 
 
 def _design_pillar_impacts(trace):
-    if not _trace_allows_design_confidence_display(trace):
+    if not _trace_allows_reality_check_display(trace):
         return []
-    strategic_assessment = (trace or {}).get("strategic_review_assessment") or {}
+    strategic_assessment = (trace or {}).get("reality_check_assessment") or {}
     strategic_points = pd.to_numeric(
-        (trace or {}).get("strategic_review", strategic_assessment.get("points")),
+        (trace or {}).get("reality_check_points", strategic_assessment.get("points")),
         errors="coerce",
     )
     if strategic_assessment and pd.notna(strategic_points):
-        return [{"Pillar": "Strategic Review", "Impact": float(strategic_points)}]
-    assessment = (trace or {}).get("design_confidence_assessment") or {}
-    rows = []
-    for pillar in (assessment.get("pillars") or {}).values():
-        label = str(pillar.get("label") or "Strategic Review")
-        impact = pd.to_numeric(pillar.get("design_points"), errors="coerce")
-        if pd.notna(impact):
-            rows.append({"Pillar": label, "Impact": float(impact)})
-    return rows
+        allocation_rows = (trace or {}).get("reality_check_allocation_points") or []
+        rows = []
+        for allocation in allocation_rows:
+            impact = pd.to_numeric(allocation.get("points"), errors="coerce")
+            if pd.isna(impact):
+                continue
+            rows.append({
+                "Pillar": allocation.get("pillar") or "Reality Check",
+                "Impact": float(impact),
+            })
+        if rows:
+            return rows
+        if (
+            (trace or {}).get("reality_check_points") is not None
+            or (trace or {}).get("operational_fit_points") is not None
+        ):
+            return _neutral_score_driver_pillar_rows()
+        return [{"Pillar": "Reality Check", "Impact": float(strategic_points)}]
+    return []
 
 
 def _completion_pillar_impacts_from_trace(trace):
     interpretation = ((trace or {}).get("input_packet") or {}).get("model_interpretation") or {}
     return interpretation.get("pillar_impacts") or []
+
+
+def _operational_fit_pillar_impacts(trace):
+    if not _trace_allows_total_scenario_display(trace):
+        return []
+    points = pd.to_numeric((trace or {}).get("operational_fit_points"), errors="coerce")
+    if pd.isna(points) or abs(float(points)) < 0.0001:
+        return []
+    return [{"Pillar": "Execution Framework", "Impact": float(points)}]
+
+
+def _format_operational_assumption_treemap_value(assumption_key, value):
+    numeric_value = pd.to_numeric(value, errors="coerce")
+    if pd.isna(numeric_value):
+        return ""
+    if assumption_key == "planned_duration_months":
+        display = f"{float(numeric_value):.1f}".rstrip("0").rstrip(".")
+        return f"{display} months"
+    return f"{int(round(float(numeric_value))):,}"
+
+
+def _operational_fit_feature_details(trace):
+    operational_assumptions = (
+        ((trace or {}).get("input_packet") or {}).get("operational_assumptions")
+        or (trace or {}).get("operational_assumptions")
+        or {}
+    )
+    labels = {
+        "planned_enrollment": "Planned enrollment",
+        "planned_sites": "Planned sites",
+        "planned_duration_months": "Planned duration",
+    }
+    details = []
+    for assumption_key in ACTIVE_OPERATIONAL_ASSUMPTION_KEYS:
+        assumption = operational_assumptions.get(assumption_key) or {}
+        if not isinstance(assumption, dict):
+            continue
+        display_value = _format_operational_assumption_treemap_value(
+            assumption_key,
+            assumption.get("value"),
+        )
+        if not display_value:
+            continue
+        details.append(f"{labels[assumption_key]}: <b>{html.escape(display_value)}</b>")
+    return details
+
+
+def _operational_fit_subcategory_impacts(trace):
+    if not _trace_allows_total_scenario_display(trace):
+        return []
+    points = pd.to_numeric((trace or {}).get("operational_fit_points"), errors="coerce")
+    if pd.isna(points) or abs(float(points)) < 0.0001:
+        return []
+    return [{
+        "Pillar": "Execution Framework",
+        "Subcategory": "Operational Fit",
+        "Impact": float(points),
+        "ShowImpactValue": True,
+        "TreemapValue": max(abs(float(points)), 0.5),
+        "FeatureDetails": _operational_fit_feature_details(trace),
+    }]
+
+
+def _completion_outlook_score(res, scenario_trace):
+    score = pd.to_numeric((res or {}).get("score"), errors="coerce")
+    pre_reality_score = pd.to_numeric((scenario_trace or {}).get("pre_reality_score"), errors="coerce")
+    if pd.notna(pre_reality_score):
+        return float(pre_reality_score)
+    return float(score) if pd.notna(score) else 0.0
+
+
+def _completion_outlook_score_from_trace(trace):
+    if not trace:
+        return None
+
+    pre_reality_score = pd.to_numeric((trace or {}).get("pre_reality_score"), errors="coerce")
+    if pd.notna(pre_reality_score):
+        return float(pre_reality_score)
+
+    trial_score = pd.to_numeric(
+        (trace or {}).get("trial_score"),
+        errors="coerce",
+    )
+    reality_check = pd.to_numeric(
+        (trace or {}).get("reality_check_points"),
+        errors="coerce",
+    )
+    if pd.notna(trial_score) and pd.notna(reality_check):
+        return float(trial_score) - float(reality_check)
+
+    interpretation = ((trace or {}).get("input_packet") or {}).get("model_interpretation") or {}
+    completion_score = pd.to_numeric(interpretation.get("completion_score"), errors="coerce")
+    if pd.isna(completion_score):
+        return None
+    operational_fit = pd.to_numeric((trace or {}).get("operational_fit_points"), errors="coerce")
+    return float(completion_score) + (float(operational_fit) if pd.notna(operational_fit) else 0.0)
+
+
+def _previous_completion_outlook_score(snapshot, scenario_trace):
+    current_iteration = _scenario_review_iteration_number(scenario_trace)
+    if scenario_trace and current_iteration and current_iteration > 1:
+        previous_trace = _previous_visible_scenario_review_trace(
+            st.session_state.get("selected_nct_id", ""),
+            scenario_trace,
+        )
+        previous_score = _completion_outlook_score_from_trace(previous_trace)
+        if previous_score is not None:
+            return previous_score
+
+    previous_score = pd.to_numeric((snapshot or {}).get("previous_score"), errors="coerce")
+    return float(previous_score) if pd.notna(previous_score) else None
 
 
 def _combined_pillar_impacts(completion_pillars, design_pillars):
@@ -10100,6 +11060,26 @@ def _combined_pillar_impacts(completion_pillars, design_pillars):
     return [{"Pillar": label, "Impact": round(combined[label], 1)} for label in order]
 
 
+def _completion_outlook_pillar_impacts(completion_pillars, trace):
+    return _combined_pillar_impacts(
+        completion_pillars,
+        _operational_fit_pillar_impacts(trace),
+    )
+
+
+def _previous_completion_outlook_pillar_impacts(snapshot, scenario_trace):
+    current_iteration = _scenario_review_iteration_number(scenario_trace)
+    if scenario_trace and current_iteration and current_iteration > 1:
+        previous_trace = _previous_visible_scenario_review_trace(
+            st.session_state.get("selected_nct_id", ""),
+            scenario_trace,
+        )
+        previous_completion = _completion_pillar_impacts_from_trace(previous_trace)
+        if previous_completion:
+            return _completion_outlook_pillar_impacts(previous_completion, previous_trace)
+    return (snapshot or {}).get("previous_pillar_impacts") or []
+
+
 def _pillar_delta_map(current_rows, previous_rows):
     previous = {}
     for row in previous_rows or []:
@@ -10119,7 +11099,10 @@ def _pillar_delta_map(current_rows, previous_rows):
 
 def _score_view_pillar_delta_map(score_view, snapshot, scenario_trace, current_completion_pillars, current_design_pillars):
     if score_view == SCORE_VIEW_COMPLETION:
-        return get_simulation_pillar_delta_map()
+        return _pillar_delta_map(
+            _completion_outlook_pillar_impacts(current_completion_pillars, scenario_trace),
+            _previous_completion_outlook_pillar_impacts(snapshot, scenario_trace),
+        )
 
     if not scenario_trace:
         return {}
@@ -10134,13 +11117,22 @@ def _score_view_pillar_delta_map(score_view, snapshot, scenario_trace, current_c
         return _pillar_delta_map(current_design_pillars, _design_pillar_impacts(previous_trace))
 
     if score_view == SCORE_VIEW_TOTAL:
-        current_combined = _combined_pillar_impacts(current_completion_pillars, current_design_pillars)
+        current_combined = _combined_pillar_impacts(
+            _combined_pillar_impacts(
+                current_completion_pillars,
+                _operational_fit_pillar_impacts(scenario_trace),
+            ),
+            current_design_pillars,
+        )
         if current_iteration == 1:
             previous_combined = (snapshot or {}).get("previous_pillar_impacts") or []
         else:
             previous_trace = _previous_visible_scenario_review_trace(nct_id, scenario_trace)
             previous_combined = _combined_pillar_impacts(
-                _completion_pillar_impacts_from_trace(previous_trace),
+                _combined_pillar_impacts(
+                    _completion_pillar_impacts_from_trace(previous_trace),
+                    _operational_fit_pillar_impacts(previous_trace),
+                ),
                 _design_pillar_impacts(previous_trace),
             )
         return _pillar_delta_map(current_combined, previous_combined)
@@ -10153,9 +11145,53 @@ def _combined_subcategory_impacts(completion_subcats, design_subcats):
     for item in design_subcats or []:
         rows.append({
             **dict(item),
-            "Subcategory": f"Strategic Review: {item.get('Subcategory')}",
+            "Subcategory": f"Reality Check: {item.get('Subcategory')}",
         })
     return rows
+
+
+def _score_view_plot_impacts(score_view, scenario_trace, completion_pillar_impacts, completion_subcat_impacts):
+    design_pillar_impacts = _design_pillar_impacts(scenario_trace)
+    design_subcat_impacts = design_subcategory_impacts(scenario_trace)
+    completion_operational_pillar_impacts = _completion_outlook_pillar_impacts(
+        completion_pillar_impacts,
+        scenario_trace,
+    )
+    completion_operational_subcat_impacts = [
+        *[dict(item) for item in completion_subcat_impacts or []],
+        *_operational_fit_subcategory_impacts(scenario_trace),
+    ]
+    total_pillar_impacts = []
+    total_subcat_impacts = []
+    if _trace_allows_total_scenario_display(scenario_trace):
+        total_pillar_impacts = _combined_pillar_impacts(
+            completion_operational_pillar_impacts,
+            design_pillar_impacts,
+        )
+        total_subcat_impacts = _combined_subcategory_impacts(
+            completion_operational_subcat_impacts,
+            design_subcat_impacts,
+        )
+
+    if score_view == SCORE_VIEW_DESIGN:
+        active_bar_pillar_impacts = design_pillar_impacts
+        active_treemap_pillar_impacts = total_pillar_impacts or design_pillar_impacts
+        active_treemap_subcat_impacts = total_subcat_impacts or design_subcat_impacts
+    elif score_view == SCORE_VIEW_TOTAL:
+        active_bar_pillar_impacts = total_pillar_impacts
+        active_treemap_pillar_impacts = total_pillar_impacts
+        active_treemap_subcat_impacts = total_subcat_impacts
+    else:
+        active_bar_pillar_impacts = completion_operational_pillar_impacts
+        active_treemap_pillar_impacts = completion_operational_pillar_impacts
+        active_treemap_subcat_impacts = completion_operational_subcat_impacts
+
+    return {
+        "design_pillar_impacts": design_pillar_impacts,
+        "bar_pillar_impacts": active_bar_pillar_impacts,
+        "treemap_pillar_impacts": active_treemap_pillar_impacts,
+        "treemap_subcat_impacts": active_treemap_subcat_impacts,
+    }
 
 
 def _diagnostics_row_value(row):
@@ -10224,12 +11260,286 @@ def persist_scenario_review_exception_diagnostics(
     )
 
 
+def _safe_audit_filename(value):
+    safe = re.sub(r"[^A-Za-z0-9_.-]+", "_", str(value or "").strip())
+    return safe.strip("_")[:180] or "scenario_review_run"
+
+
+def _write_audit_json(path, payload):
+    path.write_text(
+        json.dumps(_json_safe(payload), indent=2, sort_keys=True, default=str) + "\n",
+        encoding="utf-8",
+    )
+
+
+def _write_audit_text(path, text):
+    path.write_text(str(text or "").rstrip() + "\n", encoding="utf-8")
+
+
+def _audit_retry_history_for_map(metadata):
+    history = metadata.get("validation_retry_history") or []
+    mapped = []
+    for item in history:
+        if not isinstance(item, dict):
+            continue
+        mapped.append({
+            key: value
+            for key, value in item.items()
+            if key not in {"prompt_text", "response_text"}
+        })
+    return mapped
+
+
+def _write_pass1_repair_attempt_artifacts(bundle_dir, metadata):
+    attempts_dir = bundle_dir / "pass1_repair_attempts"
+    attempts = [
+        item
+        for item in metadata.get("validation_retry_history") or []
+        if isinstance(item, dict)
+    ]
+    if not attempts:
+        return
+    attempts_dir.mkdir(parents=True, exist_ok=True)
+    for item in attempts:
+        attempt = item.get("attempt") or len(list(attempts_dir.glob("attempt_*_summary.json"))) + 1
+        prefix = f"attempt_{int(attempt):02d}"
+        summary = {
+            key: value
+            for key, value in item.items()
+            if key not in {"prompt_text", "response_text"}
+        }
+        _write_audit_json(attempts_dir / f"{prefix}_summary.json", summary)
+        _write_audit_text(attempts_dir / f"{prefix}_prompt.txt", item.get("prompt_text") or "")
+        _write_audit_text(attempts_dir / f"{prefix}_response.txt", item.get("response_text") or "")
+
+
+def _trace_scoring_for_audit(trace):
+    diagnostics = (trace or {}).get("trial_score_diagnostics") or {}
+    return {
+        "validation_status": (trace or {}).get("validation_status"),
+        "validation_errors": (trace or {}).get("validation_errors") or [],
+        "xgboost_completion_outlook": (trace or {}).get("xgboost_completion_outlook"),
+        "operational_fit_points": (trace or {}).get("operational_fit_points"),
+        "operational_fit_assessment": (trace or {}).get("operational_fit_assessment") or {},
+        "pre_reality_score": (trace or {}).get("pre_reality_score"),
+        "pre_reality_delta": (trace or {}).get("pre_reality_delta"),
+        "reality_check_points": (trace or {}).get("reality_check_points"),
+        "reality_check_assessment": (trace or {}).get("reality_check_assessment") or {},
+        "reality_check_allocation_points": (trace or {}).get("reality_check_allocation_points") or [],
+        "trial_score": (trace or {}).get("trial_score"),
+        "delta_vs_previous_trial_score": diagnostics.get("delta_vs_previous_trial_score"),
+        "delta_vs_previous_pre_reality_score": diagnostics.get("delta_vs_previous_pre_reality_score"),
+        "delta_vs_baseline_xgboost": diagnostics.get("delta_vs_baseline_xgboost"),
+    }
+
+
+def _pass2_input_for_audit(trace, scoring):
+    metadata = (trace or {}).get("provider_metadata") or {}
+    if isinstance(metadata.get("pass2_input"), dict):
+        return metadata.get("pass2_input")
+    packet = (trace or {}).get("input_packet") or {}
+    pass1_review = (trace or {}).get("validated_review") or {}
+    if not packet or not pass1_review or scoring.get("trial_score") is None:
+        return None
+    try:
+        return build_pass2_input(packet, pass1_review, scoring)
+    except Exception as exc:
+        return {"reconstruction_error": exc.__class__.__name__, "message": str(exc)}
+
+
+def _scenario_review_audit_walkthrough(trace, packet, scoring, pass2_input, bundle_dir):
+    metadata = (trace or {}).get("provider_metadata") or {}
+    iteration = packet.get("iteration_context") or {}
+    model = packet.get("model_interpretation") or {}
+    reference_packs = [
+        pack.get("pack_id")
+        for pack in packet.get("reference_packs") or []
+        if isinstance(pack, dict) and pack.get("pack_id")
+    ]
+    return f"""# Scenario Review Run Audit
+
+## Identity
+
+- Trace: `{(trace or {}).get("trace_id")}`
+- Trial: `{((packet.get("trial_identity") or {}).get("nct_id") or "")}`
+- Prompt mode: `{metadata.get("prompt_mode") or infer_prompt_mode(packet)}`
+- Workflow stage: `{metadata.get("workflow_stage")}`
+- Output folder: `{bundle_dir}`
+
+## What Was Sent
+
+- Pass 1 packet: `01_input_packet.json`
+- Pass 1 prompt: `02_pass1_prompt.txt`
+- Pass 1 response contract: `03_pass1_response_contract.json`
+- Reference packs attached: `04_reference_packs.json`
+- Pass 1 raw response, when captured: `05_pass1_raw_response.txt`
+- Pass 1 parsed JSON: `06_pass1_parsed.json`
+- Pass 1 validated JSON: `07_pass1_validated.json`
+- Pass 1 repair prompt/response, when used: `08_pass1_repair_prompt.txt`, `09_pass1_repair_raw_response.txt`
+- App scoring decisions: `10_app_scoring.json`
+- Pass 2 input: `11_pass2_input.json`
+- Pass 2 prompt: `12_pass2_prompt.txt`
+- Pass 2 response contract: `13_pass2_response_contract.json`
+- Pass 2 raw response, when captured: `14_pass2_raw_response.txt`
+- Pass 2 parsed narrative: `15_pass2_parsed.json`
+- Pass 2 validated narrative: `16_pass2_validated.json`
+- Final trace and UI binding: `17_final_trace.json`, `18_ui_binding.json`
+- Decision/rating/narrative map: `19_decision_rating_narrative_map.json`
+
+## Score Stack
+
+- XGBoost Completion Outlook: `{scoring.get("xgboost_completion_outlook")}`
+- Operational Fit: `{scoring.get("operational_fit_points")}`
+- Pre-Reality Score: `{scoring.get("pre_reality_score")}`
+- Reality Check: `{scoring.get("reality_check_points")}`
+- Trial Score: `{scoring.get("trial_score")}`
+
+## Scenario Context
+
+- Iteration: `{iteration.get("iteration_number")}`
+- Current snapshot: `{iteration.get("current_snapshot_id")}`
+- Baseline snapshot: `{iteration.get("baseline_snapshot_id")}`
+- Completion score in packet: `{model.get("completion_score")}`
+- Previous completion score: `{model.get("previous_completion_score")}`
+- Changed fields: `{", ".join(iteration.get("changed_fields") or []) or "none"}`
+- Reference packs: `{", ".join(reference_packs) if reference_packs else "none"}`
+
+## Reconstruction Limits
+
+- Exact raw provider text is available only for runs after raw-response capture was enabled.
+- For older traces, prompts can be regenerated from `input_packet`, but exact historical prompt text depends on the prompt-builder code at run time.
+- Pass 2 input is either captured from provider metadata or reconstructed from validated Pass 1 plus app scoring.
+"""
+
+
+def persist_scenario_review_audit_bundle(trace, row=None, snapshot=None):
+    if not trace:
+        return None
+    packet = trace.get("input_packet") or {}
+    metadata = trace.get("provider_metadata") or {}
+    trace_id = trace.get("trace_id") or trace.get("input_hash") or uuid.uuid4().hex
+    nct_id = (
+        ((packet.get("trial_identity") or {}).get("nct_id"))
+        or (snapshot or {}).get("nct_id")
+        or _diagnostics_nct_id(row=row, snapshot=snapshot)
+    )
+    bundle_dir = SCENARIO_REVIEW_RUN_BUNDLES_DIR / _safe_audit_filename(f"{nct_id}_{trace_id}")
+    bundle_dir.mkdir(parents=True, exist_ok=True)
+    bundle_dir_relative = str(bundle_dir.relative_to(PROJECT_ROOT))
+    trace_for_bundle = dict(trace)
+    trace_for_bundle["audit_bundle_dir"] = bundle_dir_relative
+
+    scoring = _trace_scoring_for_audit(trace_for_bundle)
+    pass2_input = _pass2_input_for_audit(trace_for_bundle, scoring)
+    prompt_mode = metadata.get("prompt_mode") or (infer_prompt_mode(packet) if packet else None)
+    pass1_prompt = metadata.get("pass1_prompt_text")
+    if not pass1_prompt and packet:
+        try:
+            pass1_prompt = build_provider_prompt(packet, prompt_mode=prompt_mode)
+        except Exception as exc:
+            pass1_prompt = f"Could not reconstruct Pass 1 prompt: {exc.__class__.__name__}: {exc}"
+    pass2_prompt = metadata.get("pass2_prompt_text")
+    if not pass2_prompt and isinstance(pass2_input, dict) and not pass2_input.get("reconstruction_error"):
+        try:
+            pass2_prompt = build_pass2_provider_prompt(pass2_input)
+        except Exception as exc:
+            pass2_prompt = f"Could not reconstruct Pass 2 prompt: {exc.__class__.__name__}: {exc}"
+    renderer_cached_trace = get_cached_quality_review_trace_for_snapshot(snapshot) if snapshot else None
+
+    ui_binding = {
+        "cache_state_key": get_quality_review_trace_state_key(nct_id),
+        "current_snapshot_id": _snapshot_identifier(snapshot),
+        "trace_current_snapshot_id": get_trace_current_snapshot_id(trace_for_bundle),
+        "runtime_key": narrative_review_runtime().get("runtime_key"),
+        "trace_runtime_key": trace_for_bundle.get("review_runtime_key"),
+        "renderer_cache_match": bool((renderer_cached_trace or {}).get("trace_id") == trace_for_bundle.get("trace_id")),
+        "successful_visible_review": _trace_is_successful_visible_review(trace_for_bundle),
+        "score_view": st.session_state.get(SCORE_VIEW_STATE_KEY),
+    }
+    decision_map = {
+        "prompt_mode": prompt_mode,
+        "provider": trace_for_bundle.get("provider"),
+        "model_name": trace_for_bundle.get("model_name"),
+        "pass1_validation": {
+            "status": trace_for_bundle.get("validation_status"),
+            "errors": trace_for_bundle.get("validation_errors") or [],
+            "messages": metadata.get("pass1_validation_messages") or [],
+            "repair_stage": metadata.get("validation_retry_stage"),
+            "repair_attempts": metadata.get("validation_retry_attempts"),
+            "repair_max_attempts": metadata.get("validation_retry_max_attempts"),
+            "repair_history": _audit_retry_history_for_map(metadata),
+        },
+        "operational_fit": {
+            "provider_answer": ((trace_for_bundle.get("validated_review") or {}).get("operational_fit") or {}),
+            "app_assessment": scoring.get("operational_fit_assessment") or {},
+            "points": scoring.get("operational_fit_points"),
+        },
+        "reality_check": {
+            "provider_answer": ((trace_for_bundle.get("validated_review") or {}).get("reality_check") or {}),
+            "app_assessment": scoring.get("reality_check_assessment") or {},
+            "allocation_points": scoring.get("reality_check_allocation_points") or [],
+            "points": scoring.get("reality_check_points"),
+        },
+        "tension_and_questions": {
+            "pass1_central_tension_candidate": trace_for_bundle.get("central_tension_candidate") or {},
+            "pass1_broader_question_candidate": trace_for_bundle.get("broader_strategic_question_candidate") or {},
+            "pass2_central_tension": trace_for_bundle.get("participant_central_tension") or {},
+            "pass2_broader_question": trace_for_bundle.get("participant_broader_strategic_question") or {},
+            "facilitator_questions": trace_for_bundle.get("facilitator_questions") or [],
+        },
+        "ui_narrative_mapping": {
+            "trial_score_narrative": trace_for_bundle.get("trial_score_narrative") or {},
+            "participant_pillar_reading": trace_for_bundle.get("participant_pillar_reading") or [],
+            "central_tension": trace_for_bundle.get("central_tension"),
+            "final_trace_score_fields": scoring,
+        },
+    }
+
+    _write_audit_json(bundle_dir / "00_manifest.json", {
+        "trace_id": trace_for_bundle.get("trace_id"),
+        "nct_id": nct_id,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "diagnostics_file": str(SCENARIO_REVIEW_DIAGNOSTICS_PATH.relative_to(PROJECT_ROOT)),
+        "bundle_dir": bundle_dir_relative,
+        "prompt_template_version": PROMPT_TEMPLATE_VERSION,
+    })
+    _write_audit_json(bundle_dir / "01_input_packet.json", packet)
+    _write_audit_text(bundle_dir / "02_pass1_prompt.txt", pass1_prompt)
+    _write_audit_json(bundle_dir / "03_pass1_response_contract.json", provider_response_contract())
+    _write_audit_json(bundle_dir / "04_reference_packs.json", packet.get("reference_packs") or [])
+    _write_audit_text(bundle_dir / "05_pass1_raw_response.txt", metadata.get("pass1_response_text") or "")
+    _write_audit_json(bundle_dir / "06_pass1_parsed.json", trace_for_bundle.get("output_json") or {})
+    _write_audit_json(bundle_dir / "07_pass1_validated.json", trace_for_bundle.get("validated_review") or {})
+    _write_audit_text(bundle_dir / "08_pass1_repair_prompt.txt", metadata.get("pass1_repair_prompt_text") or "")
+    _write_audit_text(bundle_dir / "09_pass1_repair_raw_response.txt", metadata.get("validation_retry_response_text") or "")
+    _write_pass1_repair_attempt_artifacts(bundle_dir, metadata)
+    _write_audit_json(bundle_dir / "10_app_scoring.json", scoring)
+    _write_audit_json(bundle_dir / "11_pass2_input.json", pass2_input or {})
+    _write_audit_text(bundle_dir / "12_pass2_prompt.txt", pass2_prompt or "")
+    _write_audit_json(bundle_dir / "13_pass2_response_contract.json", pass2_response_contract())
+    _write_audit_text(bundle_dir / "14_pass2_raw_response.txt", metadata.get("pass2_response_text") or "")
+    _write_audit_json(bundle_dir / "15_pass2_parsed.json", trace_for_bundle.get("participant_narrative_json") or {})
+    _write_audit_json(bundle_dir / "16_pass2_validated.json", trace_for_bundle.get("validated_participant_narrative") or {})
+    _write_audit_json(bundle_dir / "17_final_trace.json", trace_for_bundle)
+    _write_audit_json(bundle_dir / "18_ui_binding.json", ui_binding)
+    _write_audit_json(bundle_dir / "19_decision_rating_narrative_map.json", decision_map)
+    _write_audit_text(
+        bundle_dir / "20_walkthrough.md",
+        _scenario_review_audit_walkthrough(trace_for_bundle, packet, scoring, pass2_input, bundle_dir),
+    )
+    return bundle_dir
+
+
 def persist_scenario_review_diagnostics(trace, row=None, snapshot=None):
     if not trace:
         return
 
+    bundle_dir = persist_scenario_review_audit_bundle(trace, row=row, snapshot=snapshot)
+    trace_for_record = dict(trace)
+    if bundle_dir:
+        trace_for_record["audit_bundle_dir"] = str(bundle_dir.relative_to(PROJECT_ROOT))
     record = build_scenario_review_trace_record(
-        trace,
+        trace_for_record,
         diagnostics_file=str(SCENARIO_REVIEW_DIAGNOSTICS_PATH.relative_to(PROJECT_ROOT)),
         nct_id=_diagnostics_nct_id(row=row, snapshot=snapshot),
         trial_title=_diagnostics_row_value(row).get("brief_title"),
@@ -10239,7 +11549,7 @@ def persist_scenario_review_diagnostics(trace, row=None, snapshot=None):
         SCENARIO_REVIEW_DIAGNOSTICS_PATH,
         record,
         logged_keys=st.session_state.setdefault("scenario_review_diagnostics_logged_keys", set()),
-        log_key=scenario_review_trace_log_key(trace),
+        log_key=scenario_review_trace_log_key(trace_for_record),
         logger=logger,
     )
 
@@ -10256,6 +11566,47 @@ def _quality_review_diagnostics(trace, row=None, snapshot=None):
     diagnostics = scenario_review_diagnostics_payload(trace)
     with st.expander("Scenario Review timing and diagnostics", expanded=False):
         st.json(diagnostics)
+
+
+def _render_facilitator_questions(trace):
+    questions = (trace or {}).get("facilitator_questions") or []
+    if not isinstance(questions, list):
+        return
+    visible_questions = [item for item in questions if isinstance(item, dict) and str(item.get("question") or "").strip()]
+    visible_questions = visible_questions[:3]
+    if not visible_questions:
+        return
+
+    with st.expander("Facilitator questions", expanded=False):
+        for index, item in enumerate(visible_questions, start=1):
+            question = str(item.get("question") or "").strip()
+            why_it_matters = str(item.get("why_it_matters") or "").strip()
+            related_feature_families = item.get("related_feature_families") or []
+            if not isinstance(related_feature_families, list):
+                related_feature_families = []
+            families = [
+                str(value).strip()
+                for value in related_feature_families
+                if str(value).strip()
+            ]
+            details = []
+            if why_it_matters:
+                details.append(f"<div class='quality-review-text'>{html.escape(why_it_matters)}</div>")
+            if families:
+                details.append(
+                    "<div class='quality-review-muted'>Related: "
+                    f"{html.escape(', '.join(families[:4]))}</div>"
+                )
+            st.markdown(
+                (
+                    "<div class='quality-review-section'>"
+                    f"<div class='quality-review-section-title'>Question {index}</div>"
+                    f"<div class='quality-review-text'><strong>{html.escape(question)}</strong></div>"
+                    f"{''.join(details)}"
+                    "</div>"
+                ),
+                unsafe_allow_html=True,
+            )
 
 
 def render_scenario_review_report(row, trace=None, snapshot=None):
@@ -10281,8 +11632,8 @@ def render_scenario_review_report(row, trace=None, snapshot=None):
             "pending_operational_assumptions": get_pending_operational_assumption_keys(row),
         }
         _quality_review_unavailable_card(
-            "Strategic Review",
-            "Click Review Scenario to update the Strategic Review for the current scenario.",
+            "Reality Check",
+            "Click Review Scenario to update the Reality Check for the current scenario.",
             "The displayed Completion Outlook and previous review still reflect the last submitted prediction.",
         )
         with st.expander("Pending scenario diagnostics", expanded=False):
@@ -10293,15 +11644,17 @@ def render_scenario_review_report(row, trace=None, snapshot=None):
         return
 
     status = str(trace.get("status") or "unavailable")
-    if trace.get("strategic_review", trace.get("design_confidence")) is None or trace.get("trial_score", trace.get("total_scenario_score")) is None:
+    reality_check_points = trace.get("reality_check_points")
+    trial_score = trace.get("trial_score")
+    if reality_check_points is None or trial_score is None:
         reason = participant_review_failure_reason(trace)
         message = (
-            "Strategic Review is unavailable for this scenario. Completion Outlook is still shown."
+            "Reality Check is unavailable for this scenario. Completion Outlook is still shown."
             if trace.get("provider") == PROVIDER_MOCK
-            else "Strategic Review is unavailable for this scenario. Completion Outlook is still shown."
+            else "Reality Check is unavailable for this scenario. Completion Outlook is still shown."
         )
         _quality_review_unavailable_card(
-            "Strategic Review",
+            "Reality Check",
             message,
             reason,
         )
@@ -10309,40 +11662,66 @@ def render_scenario_review_report(row, trace=None, snapshot=None):
         return
 
     completion_score = snapshot.get("score")
-    strategic_review = trace.get("strategic_review", trace.get("design_confidence"))
-    trial_score = trace.get("trial_score", trace.get("total_scenario_score"))
     validated_review = trace.get("validated_review") or {}
     participant = validated_review.get("participant_review") or {}
     completion_analysis = validated_review.get("completion_outlook_analysis") or {}
-    strategic_analysis = (
-        validated_review.get("strategic_review_analysis")
-        or validated_review.get("design_confidence_analysis")
+    operational_fit = validated_review.get("operational_fit") or trace.get("operational_fit") or {}
+    operational_assessment = trace.get("operational_fit_assessment") or {}
+    reality_check = validated_review.get("reality_check") or {}
+    reality_assessment = trace.get("reality_check_assessment") or {}
+    central_tension_candidate = (
+        validated_review.get("central_tension_candidate")
+        or trace.get("central_tension_candidate")
         or {}
     )
-    strategic_object = validated_review.get("strategic_review") or trace.get("strategic_review_object") or {}
+    broader_question_candidate = (
+        validated_review.get("broader_strategic_question_candidate")
+        or trace.get("broader_strategic_question_candidate")
+        or {}
+    )
+    continuity_update = (
+        validated_review.get("continuity_update")
+        or trace.get("continuity_update")
+        or {}
+    )
+    trial_score_narrative = trace.get("trial_score_narrative") or {}
+    participant_central_tension = trace.get("participant_central_tension") or {}
+    participant_broader_question = trace.get("participant_broader_strategic_question") or {}
     consistency_note = validated_review.get("scenario_consistency_note") or {}
     key_questions = validated_review.get("key_questions") or {}
 
-    metric_html = "".join([
+    operational_fit_points = trace.get("operational_fit_points")
+    metric_blocks = [
         _quality_review_metric("Completion", f"{float(completion_score):.1f}" if completion_score is not None else "N/A"),
+    ]
+    if operational_fit_points is not None:
+        metric_blocks.append(
+            _quality_review_metric(
+                "Operational",
+                _format_quality_points(operational_fit_points),
+                _quality_points_color(operational_fit_points),
+            )
+        )
+    metric_blocks.extend([
         _quality_review_metric(
-            "Strategic",
-            _format_quality_points(strategic_review),
-            _quality_points_color(strategic_review),
+            "Reality",
+            _format_quality_points(reality_check_points),
+            _quality_points_color(reality_check_points),
         ),
         _quality_review_metric("Trial",
             _format_candidate_score(trial_score)),
     ])
+    metric_html = "".join(metric_blocks)
 
     central_tension = (
-        trace.get("central_tension")
+        participant_central_tension.get("summary")
+        or central_tension_candidate.get("summary")
+        or continuity_update.get("active_tension")
+        or trace.get("central_tension")
         or validated_review.get("main_tension")
-        or strategic_object.get("current_tension")
-        or strategic_analysis.get("review_rationale")
-        or strategic_analysis.get("confidence_rationale")
         or ((trace.get("validated_review") or {}).get("tradeoff_review") or {}).get("central_tension")
     )
-    report_title = "Baseline Strategic Review" if trace.get("hidden_baseline") else "Strategic Review"
+    report_title = "Baseline Reality Check" if trace.get("hidden_baseline") else "Trial Score Review"
     pending_review_html = (
         "<div class='simulation-stale-notice scenario-review-pending-notice'>"
         "Review update pending"
@@ -10351,15 +11730,25 @@ def render_scenario_review_report(row, trace=None, snapshot=None):
         else ""
     )
     completion_text = (
-        completion_analysis.get("risk_pattern_summary")
+        trial_score_narrative.get("score_interpretation")
+        or completion_analysis.get("summary")
+        or completion_analysis.get("risk_pattern_summary")
+        or completion_analysis.get("model_boundary_note")
         or participant.get("overall_completion_comment")
     )
-    strategic_text = (
-        strategic_analysis.get("summary")
-        or strategic_object.get("rationale")
+    combined_operational_fit = operational_fit.get("combined_operational_fit") if isinstance(operational_fit, dict) else {}
+    operational_text = (
+        operational_assessment.get("central_reason")
+        or (combined_operational_fit or {}).get("central_reason")
+    )
+    reality_text = (
+        trial_score_narrative.get("movement_reading")
+        or reality_assessment.get("central_reason")
+        or reality_check.get("central_reason")
         or participant.get("overall_design_comment")
     )
-    structured_strategic_html = _scenario_review_structured_html(strategic_analysis, key_questions)
+    strategic_text = reality_text
+    structured_strategic_html = _reality_check_structured_html(reality_check, key_questions)
     consistency_text = (
         consistency_note.get("message")
         if consistency_note.get("has_clear_mismatch")
@@ -10372,22 +11761,35 @@ def render_scenario_review_report(row, trace=None, snapshot=None):
         or participant.get("medical_development_question")
     )
     strategic_question = (
-        key_questions.get("strategic_development_question")
+        participant_broader_question.get("question")
+        or broader_question_candidate.get("question")
+        or continuity_update.get("watch_next")
+        or key_questions.get("strategic_development_question")
         or participant.get("strategic_development_question")
         or key_questions.get("strategic_field_question")
         or participant.get("strategic_field_question")
     )
     narrative_html = "".join([
         _scenario_review_text_block("Scenario Consistency", consistency_text),
+        _scenario_review_text_block("Trial Score Reading", trial_score_narrative.get("summary")),
         _scenario_review_text_block("Completion Outlook Analysis", completion_text),
-        structured_strategic_html or _scenario_review_text_block("Strategic Review", strategic_text),
+        _scenario_review_text_block("Operational Fit", operational_text),
+        structured_strategic_html or _scenario_review_text_block("Reality Check", strategic_text),
         "" if structured_strategic_html else _scenario_review_text_block("Current Tension", central_tension),
-        "" if structured_strategic_html else _scenario_review_text_block("Next Consideration", strategic_object.get("next_consideration")),
+        "" if structured_strategic_html else _scenario_review_text_block("Next Consideration", continuity_update.get("watch_next") or reality_check.get("next_consideration")),
         _scenario_review_text_block("Medical / Clinical Development Question", medical_question),
         "" if structured_strategic_html else _scenario_review_text_block("Strategic Development Question", strategic_question),
     ])
 
     cached_note = narrative_trace_provider_note(trace)
+    participant_narrative_warning = str(trace.get("participant_narrative_warning") or "").strip()
+    participant_narrative_warning_html = (
+        "<div class='quality-review-muted'>"
+        f"{html.escape(participant_narrative_warning)}"
+        "</div>"
+        if participant_narrative_warning
+        else ""
+    )
     st.markdown(
         (
             "<div class='quality-review-card'>"
@@ -10395,11 +11797,13 @@ def render_scenario_review_report(row, trace=None, snapshot=None):
             f"{pending_review_html}"
             f"<div class='quality-review-components'>{metric_html}</div>"
             f"{narrative_html}"
+            f"{participant_narrative_warning_html}"
             f"<div class='quality-review-muted'>{html.escape(cached_note)}</div>"
             "</div>"
         ),
         unsafe_allow_html=True,
     )
+    _render_facilitator_questions(trace)
     _quality_review_diagnostics(trace, row=row, snapshot=snapshot)
 
 
@@ -10435,8 +11839,8 @@ def get_simulation_pillar_delta_map():
 def scenario_score_trace_is_ready(trace):
     return bool(
         trace
-        and trace.get("strategic_review", trace.get("design_confidence")) is not None
-        and trace.get("trial_score", trace.get("total_scenario_score")) is not None
+        and trace.get("reality_check_points") is not None
+        and trace.get("trial_score") is not None
     )
 
 
@@ -10456,18 +11860,18 @@ def finalize_pending_scenario_review_before_tabs(row):
     if not snapshot or snapshot.get("source") == "prerecorded_baseline":
         return
 
-    if has_pending_simulation_changes(row):
+    if has_pending_simulation_changes(row) and not current_prediction_snapshot_needs_review(row):
         return
 
-    with st.spinner("Evaluating scenario impact..."):
-        trace = safe_get_quality_review_trace_for_snapshot(
-            row,
-            snapshot,
-            phase="pre_tab_scenario_score_generation",
-        )
+    trace = safe_get_quality_review_trace_for_snapshot(
+        row,
+        snapshot,
+        phase="pre_tab_scenario_score_generation",
+    )
 
     finish_scenario_review_transition()
     persist_scenario_review_diagnostics(trace, row=row, snapshot=snapshot)
+    update_prediction_snapshot_review_status(snapshot, trace)
 
     if scenario_score_trace_is_ready(trace):
         st.session_state[SCORE_VIEW_STATE_KEY] = SCORE_VIEW_TOTAL
@@ -10488,7 +11892,11 @@ def render_trial_detail_tabs_refined(row):
         if st.session_state.get("trigger_prediction", False):
             get_analysis_result_for_selected_trial(row)
         finalize_pending_scenario_review_before_tabs(row)
-        if has_pending_simulation_changes(row) and not st.session_state.get("prediction_error_notice"):
+        if (
+            has_pending_simulation_changes(row)
+            and not current_prediction_snapshot_needs_review(row)
+            and not st.session_state.get("prediction_error_notice")
+        ):
             st.session_state.simulation_review_transition_done = False
             st.session_state.simulation_review_unavailable_notice = None
         elif st.session_state.get("simulation_review_transition_done", False):
@@ -10687,7 +12095,7 @@ def get_analysis_result_for_selected_trial(row):
             (has_pending_operational_assumptions(row) or has_pending_text_context_changes(row))
             and not has_pending_changes(row)
         ):
-            previous_snapshot = snapshot or {}
+            previous_snapshot = get_prediction_submission_reference_snapshot(row) or {}
             if previous_snapshot.get("result"):
                 compare_values = previous_snapshot.get("compare_values") or get_current_compare_values(row)
                 submitted_values = previous_snapshot.get("submitted_values") or get_current_feature_values(row)
@@ -10733,127 +12141,126 @@ def get_analysis_result_for_selected_trial(row):
     )
 
     if should_run_prediction:
-        with st.spinner("Analyzing signals..."):
-            try:
-                if not is_simulation_mode:
-                    result = build_prerecorded_audit_decomposition_result(row, TAXONOMY)
-                    if not result:
-                        audit_log(
-                            "prediction_prerecorded_unavailable",
-                            **get_selected_trial_audit_fields(),
-                        )
-                        set_prediction_error_notice("Prerecorded score decomposition is unavailable for this trial.")
-                        return None
-
-                    st.session_state.analysis_result = result
-                    st.session_state.analysis_nct_id = st.session_state.selected_nct_id
-                    st.session_state.trigger_prediction = False
-                    st.session_state.prediction_error_notice = None
-
+        try:
+            if not is_simulation_mode:
+                result = build_prerecorded_audit_decomposition_result(row, TAXONOMY)
+                if not result:
                     audit_log(
-                        "prediction_success",
-                        score=result.get("score"),
+                        "prediction_prerecorded_unavailable",
                         **get_selected_trial_audit_fields(),
                     )
-                    return result
-
-                if not API_URL:
-                    set_prediction_error_notice("Prediction service is not configured.")
+                    set_prediction_error_notice("Prerecorded score decomposition is unavailable for this trial.")
                     return None
 
-                row_to_predict: pd.Series = get_edited_row(row)
-                prediction_payload = row_to_predict.replace({np.nan: None}).to_dict()
-                prediction_payload["simulation_mode"] = True
-                previous_snapshot = get_latest_prediction_snapshot(st.session_state.selected_nct_id)
-                submitted_values = get_current_feature_values(row)
-                compare_values = get_current_compare_values(row)
-                operational_assumptions = build_operational_assumptions(
-                    row,
-                    snapshot_values=compare_values,
-                    is_benchmark_stale=False,
-                )
+                st.session_state.analysis_result = result
+                st.session_state.analysis_nct_id = st.session_state.selected_nct_id
+                st.session_state.trigger_prediction = False
+                st.session_state.prediction_error_notice = None
 
-                res = requests.post(
-                    API_URL,
-                    json=prediction_payload,
-                    timeout=API_TIMEOUT_SECONDS
-                )
-
-                if res.status_code == 200:
-                    result = res.json()
-
-                    st.session_state.analysis_result = result
-                    st.session_state.analysis_nct_id = st.session_state.selected_nct_id
-                    st.session_state.trigger_prediction = False
-                    st.session_state.prediction_error_notice = None
-
-                    snapshot = set_latest_prediction_snapshot(
-                        st.session_state.selected_nct_id,
-                        result,
-                        submitted_values,
-                        previous_snapshot=previous_snapshot,
-                        source="simulation_ptc",
-                        compare_values=compare_values,
-                        operational_assumptions=operational_assumptions,
-                        text_context=build_text_context_for_narrative(row),
-                    )
-                    st.session_state.analysis_result = snapshot["result"]
-
-                    audit_log(
-                        "prediction_success",
-                        score=result.get("score"),
-                        **get_selected_trial_audit_fields(),
-                    )
-
-                    st.rerun()
-                else:
-                    audit_log(
-                        "prediction_api_error",
-                        status_code=res.status_code,
-                        **get_selected_trial_audit_fields(),
-                    )
-
-                    set_prediction_error_notice(f"API Error: {res.status_code}")
-                    return None
-
-            except requests.exceptions.Timeout:
                 audit_log(
-                    "prediction_timeout",
+                    "prediction_success",
+                    score=result.get("score"),
+                    **get_selected_trial_audit_fields(),
+                )
+                return result
+
+            if not API_URL:
+                set_prediction_error_notice("Prediction service is not configured.")
+                return None
+
+            row_to_predict: pd.Series = get_edited_row(row)
+            prediction_payload = row_to_predict.replace({np.nan: None}).to_dict()
+            prediction_payload["simulation_mode"] = True
+            previous_snapshot = get_prediction_submission_reference_snapshot(row)
+            submitted_values = get_current_feature_values(row)
+            compare_values = get_current_compare_values(row)
+            operational_assumptions = build_operational_assumptions(
+                row,
+                snapshot_values=compare_values,
+                is_benchmark_stale=False,
+            )
+
+            res = requests.post(
+                API_URL,
+                json=prediction_payload,
+                timeout=API_TIMEOUT_SECONDS
+            )
+
+            if res.status_code == 200:
+                result = res.json()
+
+                st.session_state.analysis_result = result
+                st.session_state.analysis_nct_id = st.session_state.selected_nct_id
+                st.session_state.trigger_prediction = False
+                st.session_state.prediction_error_notice = None
+
+                snapshot = set_latest_prediction_snapshot(
+                    st.session_state.selected_nct_id,
+                    result,
+                    submitted_values,
+                    previous_snapshot=previous_snapshot,
+                    source="simulation_ptc",
+                    compare_values=compare_values,
+                    operational_assumptions=operational_assumptions,
+                    text_context=build_text_context_for_narrative(row),
+                )
+                st.session_state.analysis_result = snapshot["result"]
+
+                audit_log(
+                    "prediction_success",
+                    score=result.get("score"),
                     **get_selected_trial_audit_fields(),
                 )
 
-                set_prediction_error_notice("API Error: request timed out.")
-                return None
-
-            except requests.exceptions.RequestException:
+                st.rerun()
+            else:
                 audit_log(
-                    "prediction_request_exception",
+                    "prediction_api_error",
+                    status_code=res.status_code,
                     **get_selected_trial_audit_fields(),
                 )
 
-                logger.exception("Prediction API request failed")
-                set_prediction_error_notice("Prediction service is temporarily unavailable. Please try again later.")
+                set_prediction_error_notice(f"API Error: {res.status_code}")
                 return None
 
-            except ValueError:
-                audit_log(
-                    "prediction_invalid_response",
-                    **get_selected_trial_audit_fields(),
-                )
+        except requests.exceptions.Timeout:
+            audit_log(
+                "prediction_timeout",
+                **get_selected_trial_audit_fields(),
+            )
 
-                logger.exception("Prediction API returned an invalid response")
-                set_prediction_error_notice("Prediction service returned an invalid response. Please try again later.")
-                return None
+            set_prediction_error_notice("API Error: request timed out.")
+            return None
 
-            except Exception:
-                audit_log(
-                    "prediction_unexpected_error",
-                    **get_selected_trial_audit_fields(),
-                )
+        except requests.exceptions.RequestException:
+            audit_log(
+                "prediction_request_exception",
+                **get_selected_trial_audit_fields(),
+            )
 
-                logger.exception("Unexpected prediction workflow error")
-                set_prediction_error_notice("An unexpected error occurred. Please try again later.")
-                return None
+            logger.exception("Prediction API request failed")
+            set_prediction_error_notice("Prediction service is temporarily unavailable. Please try again later.")
+            return None
+
+        except ValueError:
+            audit_log(
+                "prediction_invalid_response",
+                **get_selected_trial_audit_fields(),
+            )
+
+            logger.exception("Prediction API returned an invalid response")
+            set_prediction_error_notice("Prediction service returned an invalid response. Please try again later.")
+            return None
+
+        except Exception:
+            audit_log(
+                "prediction_unexpected_error",
+                **get_selected_trial_audit_fields(),
+            )
+
+            logger.exception("Unexpected prediction workflow error")
+            set_prediction_error_notice("An unexpected error occurred. Please try again later.")
+            return None
 
     if st.session_state.get("trigger_prediction", False):
         st.session_state.trigger_prediction = False
@@ -10875,7 +12282,7 @@ def render_completion_prediction_tab(row):
     nct_id = st.session_state.get("selected_nct_id", "")
     snapshot = get_latest_prediction_snapshot(nct_id) if simulation_mode else None
     scenario_trace = None
-    if simulation_mode and snapshot and score_view in (SCORE_VIEW_DESIGN, SCORE_VIEW_TOTAL):
+    if simulation_mode and snapshot:
         if snapshot.get("source") == "prerecorded_baseline":
             scenario_trace = get_cached_hidden_baseline_review_trace_for_snapshot(snapshot)
         else:
@@ -10887,24 +12294,18 @@ def render_completion_prediction_tab(row):
             unsafe_allow_html=True,
         )
 
-    design_pillar_impacts = _design_pillar_impacts(scenario_trace)
-    design_subcat_impacts = design_subcategory_impacts(scenario_trace)
     completion_pillar_impacts = (res or {}).get("pillar_impacts") or []
     completion_subcat_impacts = (res or {}).get("subcat_impacts") or []
-
-    if score_view == SCORE_VIEW_DESIGN:
-        active_pillar_impacts = design_pillar_impacts
-        active_subcat_impacts = design_subcat_impacts
-    elif score_view == SCORE_VIEW_TOTAL:
-        if _trace_allows_total_scenario_display(scenario_trace):
-            active_pillar_impacts = _combined_pillar_impacts(completion_pillar_impacts, design_pillar_impacts)
-            active_subcat_impacts = _combined_subcategory_impacts(completion_subcat_impacts, design_subcat_impacts)
-        else:
-            active_pillar_impacts = []
-            active_subcat_impacts = []
-    else:
-        active_pillar_impacts = completion_pillar_impacts
-        active_subcat_impacts = completion_subcat_impacts
+    plot_impacts = _score_view_plot_impacts(
+        score_view,
+        scenario_trace,
+        completion_pillar_impacts,
+        completion_subcat_impacts,
+    )
+    design_pillar_impacts = plot_impacts["design_pillar_impacts"]
+    active_bar_pillar_impacts = plot_impacts["bar_pillar_impacts"]
+    active_treemap_pillar_impacts = plot_impacts["treemap_pillar_impacts"]
+    active_treemap_subcat_impacts = plot_impacts["treemap_subcat_impacts"]
 
     # Completion tab visual profile.
     # Keep the gauge visually lighter, give the tier label more room,
@@ -10951,14 +12352,13 @@ def render_completion_prediction_tab(row):
                     render_box_spacer(left_box_h)
                     return
 
-                score = res.get("score", 0)
+                score = _completion_outlook_score(res, scenario_trace)
                 delta_html = ""
                 stale_html = ""
 
                 if st.session_state.get("global_edit_mode", False):
                     display_snapshot = snapshot or {}
-                    previous_score = pd.to_numeric(display_snapshot.get("previous_score"), errors="coerce")
-                    delta_pct = pd.to_numeric(display_snapshot.get("score_delta_percent"), errors="coerce")
+                    previous_score = _previous_completion_outlook_score(display_snapshot, scenario_trace)
                     snapshot_iteration = pd.to_numeric(
                         (display_snapshot.get("iteration_context") or {}).get("iteration_number"),
                         errors="coerce",
@@ -10988,7 +12388,6 @@ def render_completion_prediction_tab(row):
                     if (
                         display_snapshot.get("source") in SIMULATION_SNAPSHOT_SCORE_DELTA_SOURCES
                         and pd.notna(previous_score)
-                        and pd.notna(delta_pct)
                         and score_view == SCORE_VIEW_COMPLETION
                         and show_completion_delta
                     ):
@@ -11018,21 +12417,21 @@ def render_completion_prediction_tab(row):
                     tier_tooltip = COMPLETION_TIER_SCALE_TOOLTIP
                     tier_aria_label = "Completion score scale"
                     if score_view == SCORE_VIEW_DESIGN:
-                        strategic_review = (scenario_trace or {}).get("strategic_review", (scenario_trace or {}).get("design_confidence"))
-                        if strategic_review is None:
+                        reality_check_points = (scenario_trace or {}).get("reality_check_points")
+                        if reality_check_points is None:
                             render_box_spacer(gauge_plot_h)
-                            tier = "Strategic Review unavailable"
+                            tier = "Reality Check unavailable"
                         else:
                             st.plotly_chart(
-                                plot_adjustment_gauge(strategic_review, limit=50, height=gauge_plot_h),
+                                plot_adjustment_gauge(reality_check_points, limit=50, height=gauge_plot_h),
                                 width="stretch",
                                 config={"displayModeBar": False}
                             )
-                            tier = get_design_confidence_tier(float(strategic_review))
+                            tier = get_reality_check_tier(float(reality_check_points))
                             tier_tooltip = DESIGN_CONFIDENCE_TIER_SCALE_TOOLTIP
-                            tier_aria_label = "Strategic Review scale"
+                            tier_aria_label = "Reality Check scale"
                     elif score_view == SCORE_VIEW_TOTAL:
-                        total_score = (scenario_trace or {}).get("trial_score", (scenario_trace or {}).get("total_scenario_score"))
+                        total_score = (scenario_trace or {}).get("trial_score")
                         if total_score is None:
                             render_box_spacer(gauge_plot_h)
                             tier = "Trial Score unavailable"
@@ -11049,7 +12448,7 @@ def render_completion_prediction_tab(row):
                             width="stretch",
                             config={"displayModeBar": False}
                         )
-                        tier = get_risk_tier(score)
+                        tier = get_risk_tier(float(score))
 
                     if tier:
                         st.markdown(
@@ -11075,7 +12474,7 @@ def render_completion_prediction_tab(row):
             )
 
         def _render_bar_panel():
-            if not active_pillar_impacts:
+            if not active_bar_pillar_impacts:
                 render_box_spacer(left_box_h)
                 return
 
@@ -11092,7 +12491,7 @@ def render_completion_prediction_tab(row):
             )
             st.plotly_chart(
                 plot_impact_bar(
-                    pd.DataFrame(active_pillar_impacts),
+                    pd.DataFrame(active_bar_pillar_impacts),
                     height=bar_plot_h,
                     delta_by_pillar=score_view_delta_by_pillar
                 ),
@@ -11112,7 +12511,7 @@ def render_completion_prediction_tab(row):
     with right_col:
 
         def _render_treemap_panel():
-            if not active_subcat_impacts or not active_pillar_impacts:
+            if not active_treemap_subcat_impacts or not active_treemap_pillar_impacts:
                 render_box_spacer(right_box_h)
                 return
 
@@ -11136,8 +12535,8 @@ def render_completion_prediction_tab(row):
 
             st.plotly_chart(
                 plot_treemap(
-                    active_subcat_impacts,
-                    active_pillar_impacts,
+                    active_treemap_subcat_impacts,
+                    active_treemap_pillar_impacts,
                     show_values=show_detailed,
                     height=treemap_plot_h
                 ),

@@ -407,7 +407,6 @@ Automated checks:
 
 - `python scripts/check_narrative_contract_fixtures.py`
 - `python scripts/check_narrative_packet_builder.py`
-- `python scripts/check_narrative_scoring.py`
 - `python scripts/check_narrative_mock_reviewer.py`
 - `python scripts/check_narrative_review_store.py`
 - `python scripts/check_narrative_provider_config.py`

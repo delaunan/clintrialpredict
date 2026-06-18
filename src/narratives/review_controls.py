@@ -1,4 +1,4 @@
-"""Product-level controls for Scenario Review narrative boundaries."""
+"""Product-level controls for Trial Score narrative boundaries."""
 
 from __future__ import annotations
 
@@ -11,13 +11,13 @@ from src.narratives.scoring import validate_and_score_review
 OPERATIONAL_ONLY_COMPLETION_OUTLOOK_BOUNDARY = (
     "The Completion Outlook remains unchanged because planning assumptions such as enrollment, site count, and "
     "Planned Total Timeline do not directly feed the score. They still matter for whether the scenario feels operationally "
-    "proportionate and executable. Therefore, the impact of changes in these variables is reflected in Strategic "
-    "Review instead."
+    "proportionate and executable. Therefore, the impact of changes in these variables is reflected in Operational "
+    "Fit and, when needed, Reality Check instead."
 )
 
 STABLE_NON_SCORE_INPUT_COMPLETION_OUTLOOK = (
     "The Completion Outlook score remains stable because the latest changes are not directly used to calculate the "
-    "Completion Outlook score. Nevertheless, the updated scenario details are considered in Strategic Review."
+    "Completion Outlook score. Nevertheless, the updated scenario details are considered in Reality Check."
 )
 
 OPERATIONAL_ASSUMPTION_FIELDS = {
@@ -56,7 +56,7 @@ CORE_EVIDENCE_WEAKER_VALUES = {
 SHORTCUT_STRATEGIC_REVIEW_RULE = (
     "When multiple core evidence-quality controls are removed together, such as randomization, masking, "
     "comparator structure, arms, and endpoint rigor, unchanged target-population relevance should not by itself "
-    "make Strategic Review positive. Strategic Review should usually offset the Completion Outlook gain unless "
+    "make Reality Check positive. Reality Check should usually offset the Completion Outlook gain unless "
     "the packet provides a clear safety-extension, exploratory-signal, access, or proportionality rationale for "
     "lower evidence ambition."
 )
