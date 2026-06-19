@@ -308,7 +308,10 @@ def main() -> int:
             },
             "pillar_reading": [],
             "central_tension": {"summary": "Prior tension.", "why_it_matters": "Prior reason."},
-            "broader_strategic_question": {"question": "Prior question?"},
+            "broader_strategic_question": {
+                "mapped_tension": "Prior tension.",
+                "question": "Prior question?",
+            },
         },
         "output_json": {},
         "input_packet": {

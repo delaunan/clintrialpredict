@@ -13,6 +13,10 @@ from src.narratives.provider import (
     review_packet_with_provider_chain,
 )
 from src.narratives.provider_config import NarrativeProviderConfig, provider_config_cache_namespace
+from src.narratives.question_history import (
+    merge_participant_visible_question_history,
+    participant_visible_question_entry,
+)
 from src.narratives.review_controls import apply_review_control_overrides, attach_review_controls
 from src.narratives.storyline import build_storyline_state
 
@@ -119,6 +123,18 @@ def _build_trace(
     operational_fit = (validated_review or {}).get("operational_fit") or {}
     central_tension_candidate = (validated_review or {}).get("central_tension_candidate") or {}
     broader_strategic_question_candidate = (validated_review or {}).get("broader_strategic_question_candidate") or {}
+    participant_central_tension = (validated_participant_narrative or {}).get("central_tension") or {}
+    participant_broader_strategic_question = (
+        (validated_participant_narrative or {}).get("broader_strategic_question") or {}
+    )
+    previous_review_context = (packet.get("review_context") or {}).get("previous_review") or {}
+    participant_visible_question_history = merge_participant_visible_question_history(
+        previous_review_context.get("recent_participant_visible_questions"),
+        participant_visible_question_entry(
+            central_tension=participant_central_tension,
+            broader_strategic_question=participant_broader_strategic_question,
+        ),
+    )
     continuity_update = (validated_review or {}).get("continuity_update") or {}
     tradeoff_review = (validated_review or {}).get("tradeoff_review") or {}
     main_tension = (
@@ -209,10 +225,9 @@ def _build_trace(
         "key_questions": deepcopy((validated_review or {}).get("key_questions") or {}),
         "trial_score_narrative": deepcopy((validated_participant_narrative or {}).get("trial_score_narrative") or {}),
         "participant_pillar_reading": deepcopy((validated_participant_narrative or {}).get("pillar_reading") or []),
-        "participant_central_tension": deepcopy((validated_participant_narrative or {}).get("central_tension") or {}),
-        "participant_broader_strategic_question": deepcopy(
-            (validated_participant_narrative or {}).get("broader_strategic_question") or {}
-        ),
+        "participant_central_tension": deepcopy(participant_central_tension),
+        "participant_broader_strategic_question": deepcopy(participant_broader_strategic_question),
+        "recent_participant_visible_questions": participant_visible_question_history,
         "facilitator_questions": deepcopy((validated_participant_narrative or {}).get("facilitator_questions") or []),
         "scenario_consistency_note": deepcopy((validated_review or {}).get("scenario_consistency_note") or {}),
         "central_tension": main_tension,

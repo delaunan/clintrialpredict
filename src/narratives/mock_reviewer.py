@@ -184,6 +184,24 @@ def _synthesized_trial_score_pass1_review(packet: dict[str, Any], fixture: dict[
             "why_it_matters": "The scenario should be discussed as a total-score trade-off.",
             "supporting_evidence": evidence_fields,
         },
+        "alternative_tension_candidates": [
+            {
+                "summary": "Operational feasibility versus evidence interpretability.",
+                "why_it_matters": (
+                    "This frames whether a scenario looks easier to execute while still leaving uncertainty about "
+                    "what decision the resulting evidence could credibly support."
+                ),
+                "supporting_evidence": evidence_fields,
+            },
+            {
+                "summary": "Safety governance versus participant and site burden.",
+                "why_it_matters": (
+                    "This gives later iterations a non-prescriptive tension for discussing whether oversight, follow-up, "
+                    "or monitoring requirements remain proportionate to the population and study purpose."
+                ),
+                "supporting_evidence": evidence_fields,
+            },
+        ],
         "broader_strategic_question_candidate": {
             "question": (
                 participant.get("strategic_development_question")
@@ -192,6 +210,23 @@ def _synthesized_trial_score_pass1_review(packet: dict[str, Any], fixture: dict[
                 or "What broader development tension does this scenario expose?"
             ),
         },
+        "alternative_strategic_question_candidates": [
+            {
+                "mapped_tension": source.get("main_tension") or "Feasibility vs Evidence Strength.",
+                "question": "When should operational feasibility change confidence in the development story, and when does it only make an uncertain evidence package easier to run?",
+                "supporting_evidence": evidence_fields,
+            },
+            {
+                "mapped_tension": "Operational feasibility versus evidence interpretability.",
+                "question": "How should a team distinguish a scenario that is operationally practical from one that is genuinely more decision-ready?",
+                "supporting_evidence": evidence_fields,
+            },
+            {
+                "mapped_tension": "Safety governance versus participant and site burden.",
+                "question": "When does additional governance strengthen credibility, and when might it become a burden that changes what the trial can realistically show?",
+                "supporting_evidence": evidence_fields,
+            },
+        ],
         "continuity_update": {
             "active_tension": source.get("main_tension") or "Feasibility vs Evidence Strength.",
             "what_changed": "Fixture-backed mock review evaluated the latest scenario change.",
@@ -199,19 +234,37 @@ def _synthesized_trial_score_pass1_review(packet: dict[str, Any], fixture: dict[
         },
         "analytical_narrative_draft": {
             "current_state_read": (
-                "The current state appears mixed, with Completion Outlook acting as the protected model-pattern anchor."
+                "The current state appears mixed, with Completion Outlook acting as the protected model-pattern anchor. "
+                "The scenario should be read through the actual trial population, intervention, endpoint structure, and "
+                "operational footprint rather than through a generic score label. This mock draft deliberately preserves "
+                "enough source context for Pass 2 to shape the final participant narrative without inventing new claims."
             ),
             "movement_read": (
-                "The latest move should be read as a cautious historical-pattern shift rather than proof of causal improvement."
+                "The latest move should be read as a cautious historical-pattern shift rather than proof of causal improvement. "
+                "If no model-facing field changed, the draft should say that Completion Outlook remains anchored while other "
+                "scenario dimensions may still affect the qualitative discussion. If model-facing fields changed, the movement "
+                "should be explained as pattern evidence, not as a recommendation or instruction."
             ),
             "operational_fit_read": (
-                "Operational Fit is interpreted as proportionality between the edited assumptions and the current design."
+                "Operational Fit is interpreted as proportionality between the edited assumptions and the current design. "
+                "The wording should describe whether enrollment, site footprint, duration, and patients-per-site resemble "
+                "similar trial patterns for the current development problem, while avoiding prescriptive advice about what "
+                "the participant should change next."
             ),
             "reality_check_read": (
-                "Reality Check may reinforce, soften, or leave neutral the pre-Reality read depending on scenario coherence."
+                "Reality Check may reinforce, soften, or leave neutral the pre-Reality read depending on scenario coherence. "
+                "The draft should frame residual concerns as trade-offs, robustness questions, or tensions in the evidence "
+                "package, not as sponsor instructions. It should leave Pass 2 room to summarize the implication in the chosen "
+                "participant-facing format."
             ),
             "central_tension_read": (
-                source.get("main_tension") or "The scenario tension is feasibility versus evidence strength."
+                (
+                    source.get("main_tension")
+                    or "The scenario tension is feasibility versus evidence strength."
+                )
+                + " The selected tension is only one plausible storyline; alternative tensions should remain available "
+                "for later iterations if the participant changes the scenario in a direction that makes another trade-off "
+                "more analytically useful."
             ),
         },
     }
@@ -285,6 +338,7 @@ def _synthesized_pass2_narrative(
             ),
         },
         "broader_strategic_question": {
+            "mapped_tension": tension.get("summary") or continuity.get("active_tension") or "Completion favorability versus scenario defensibility.",
             "question": broader_question.get("question") or "What broader development trade-off does this scenario expose?",
         },
         "facilitator_questions": [

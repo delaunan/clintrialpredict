@@ -14,6 +14,10 @@ from pathlib import Path
 from typing import Any
 
 from src.narratives.contract_fixtures import PROMPT_VERSION, RUBRIC_VERSION
+from src.narratives.question_history import (
+    merge_participant_visible_question_history,
+    participant_visible_question_entry,
+)
 from src.narratives.storyline import merge_storyline_state
 
 MODE_EXISTING_STUDY = "existing_study"
@@ -1417,6 +1421,8 @@ def _compact_review_context(
         or trace.get("broader_strategic_question_candidate")
         or {}
     )
+    participant_central_tension = trace.get("participant_central_tension") or {}
+    participant_broader_question = trace.get("participant_broader_strategic_question") or {}
     tradeoff_review = validated.get("tradeoff_review") or {}
     trial_score = trace.get("trial_score")
     storyline_state = merge_storyline_state(trace)
@@ -1441,6 +1447,18 @@ def _compact_review_context(
         compact_storyline_memory = f"Baseline tension: {central_tension_summary}"
         if next_watch:
             compact_storyline_memory = f"{compact_storyline_memory} Next watch: {next_watch}"
+    participant_visible_question_history = trace.get("recent_participant_visible_questions")
+    if not include_quality_scores:
+        participant_visible_question_history = []
+    elif not isinstance(participant_visible_question_history, list):
+        participant_visible_question_history = merge_participant_visible_question_history(
+            [],
+            participant_visible_question_entry(
+                central_tension=participant_central_tension,
+                broader_strategic_question=participant_broader_question,
+                fallback_mapped_tension=str(central_tension_summary or ""),
+            ),
+        )
     compact = {
         "input_hash": trace.get("input_hash"),
         "iteration_id": trace.get("iteration_id"),
@@ -1460,6 +1478,7 @@ def _compact_review_context(
         "central_tension": central_tension_summary,
         "central_tension_candidate": deepcopy(central_tension_candidate),
         "broader_strategic_question_candidate": deepcopy(broader_question_candidate),
+        "recent_participant_visible_questions": deepcopy(participant_visible_question_history),
         "key_questions": {
             "completion_outlook_summary": completion_outlook.get("risk_pattern_summary"),
             "medical_clinical_development_question": (

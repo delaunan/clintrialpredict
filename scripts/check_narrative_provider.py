@@ -86,6 +86,7 @@ def _check_openai_validation_retry(packet: dict, fixture: dict, errors: list[str
                 "why_it_matters": "It frames the participant discussion.",
             },
             "broader_strategic_question": {
+                "mapped_tension": "Execution support versus evidence ambition.",
                 "question": "When should operational support change how a development scenario is defended?",
             },
             "facilitator_questions": [],
@@ -177,6 +178,7 @@ def _check_openai_validation_retry(packet: dict, fixture: dict, errors: list[str
             "why_it_matters": "It frames the participant discussion.",
         },
         "broader_strategic_question": {
+            "mapped_tension": "Execution support versus evidence ambition.",
             "question": "When should operational support change how a development scenario is defended?",
         },
         "facilitator_questions": [],
@@ -233,6 +235,7 @@ def _check_openai_pass2_retry(packet: dict, fixture: dict, errors: list[str]) ->
             "why_it_matters": "It frames the participant discussion.",
         },
         "broader_strategic_question": {
+            "mapped_tension": "Execution support versus evidence ambition.",
             "question": "When should operational support change how a development scenario is defended?",
         },
         "facilitator_questions": [],
@@ -331,6 +334,7 @@ def _check_gemini_validation_retry(packet: dict, fixture: dict, errors: list[str
             "why_it_matters": "It frames the participant discussion.",
         },
         "broader_strategic_question": {
+            "mapped_tension": "Execution support versus evidence ambition.",
             "question": "When should operational support change how a development scenario is defended?",
         },
         "facilitator_questions": [],
@@ -451,6 +455,7 @@ def _check_gemini_multi_validation_retry(packet: dict, fixture: dict, errors: li
             "why_it_matters": "It frames the participant discussion.",
         },
         "broader_strategic_question": {
+            "mapped_tension": "Execution support versus evidence ambition.",
             "question": "When should operational support change how a development scenario is defended?",
         },
         "facilitator_questions": [],

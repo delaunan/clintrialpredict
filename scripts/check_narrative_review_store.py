@@ -55,6 +55,15 @@ def main() -> int:
         errors.append("stored trace should preserve Pass 2 participant central tension")
     if not (first.get("participant_broader_strategic_question") or {}).get("question"):
         errors.append("stored trace should preserve Pass 2 broader strategic question")
+    if not (first.get("participant_broader_strategic_question") or {}).get("mapped_tension"):
+        errors.append("stored trace should preserve Pass 2 broader strategic question mapped tension")
+    first_visible_history = first.get("recent_participant_visible_questions") or []
+    if len(first_visible_history) != 1:
+        errors.append("first stored trace should initialize participant-visible question history")
+    elif first_visible_history[-1].get("mapped_tension") != (
+        first.get("participant_broader_strategic_question") or {}
+    ).get("mapped_tension"):
+        errors.append("participant-visible question history should preserve selected question mapped tension")
     if not isinstance(first.get("facilitator_questions"), list):
         errors.append("stored trace should preserve Pass 2 facilitator questions as a list")
     storyline_state = first.get("storyline_state") or {}
@@ -154,6 +163,59 @@ def main() -> int:
         errors.append("store should keep only provider-used reference pack IDs available in the packet")
     if unsupported_pack_trace.get("unsupported_reference_pack_ids_used") != ["not_in_packet_v1"]:
         errors.append("store should preserve unsupported provider-returned reference pack IDs for audit")
+
+    history_result = {
+        "review_needed": True,
+        "reuse_previous_review": False,
+        "provider": "mock",
+        "model_name": "fixture_hash_mock_v1",
+        "provider_metadata": {"deterministic": True},
+        "status": "reviewed",
+        "failure_reason": None,
+        "review": first.get("output_json"),
+        "participant_narrative": first.get("participant_narrative_json"),
+        "validated_review": first.get("validated_review"),
+        "validated_participant_narrative": first.get("validated_participant_narrative"),
+        "scoring": {
+            "validation_status": first.get("validation_status"),
+            "validation_errors": first.get("validation_errors") or [],
+            "operational_fit_points": first.get("operational_fit_points"),
+            "reality_check_points": first.get("reality_check_points"),
+            "trial_score": first.get("trial_score"),
+            "operational_fit_assessment": first.get("operational_fit_assessment") or {},
+            "reality_check_assessment": first.get("reality_check_assessment") or {},
+            "input_hash": f"{packet['input_hash']}-manual-history-check",
+        },
+    }
+    history_trace = store_review_trace(
+        state,
+        packet={
+            **packet,
+            "input_hash": f"{packet['input_hash']}-manual-history-check",
+            "review_context": {
+                "previous_review": {
+                    "recent_participant_visible_questions": [
+                        {
+                            "question": "How should earlier evidence ambition be debated?",
+                            "mapped_tension": "Evidence ambition versus feasibility.",
+                        },
+                        {
+                            "question": "How should earlier governance burden be debated?",
+                            "mapped_tension": "Governance burden versus interpretability.",
+                        },
+                    ],
+                },
+            },
+        },
+        review_result=history_result,
+        session_id="history-session-manual",
+    )
+    visible_history = history_trace.get("recent_participant_visible_questions") or []
+    current_question = (first.get("participant_broader_strategic_question") or {}).get("question")
+    if len(visible_history) != 3:
+        errors.append("participant-visible question history should retain previous questions and append current question")
+    elif visible_history[-1].get("question") != current_question:
+        errors.append("participant-visible question history should put the current question last")
 
     missing_key_config = load_narrative_provider_config({
         "NARRATIVE_LLM_PROVIDER": "openai",

@@ -68,7 +68,7 @@ PASS1_REPAIR_STAGE_OPERATIONAL_FIT = "operational_fit"
 PASS1_REPAIR_STAGE_REALITY_CHECK = "reality_check"
 PASS1_REPAIR_STAGE_EVIDENCE = "evidence_fields"
 PASS1_REPAIR_STAGE_STRATEGY_SHIFT = "strategy_shift"
-PASS1_REPAIR_STAGE_DRAFT = "analytical_narrative_draft"
+PASS1_REPAIR_STAGE_NARRATIVE_SCAFFOLD = "narrative_scaffold"
 PASS1_REPAIR_STAGE_UNKNOWN = "unknown"
 
 def _unavailable_scoring(packet: dict[str, Any], message: str) -> dict[str, Any]:
@@ -305,8 +305,12 @@ def _pass1_repair_stage(messages: list[str]) -> str | None:
         return PASS1_REPAIR_STAGE_REALITY_CHECK
     if "strategy_shift_check" in joined or "gated premise-sensitive" in joined:
         return PASS1_REPAIR_STAGE_STRATEGY_SHIFT
-    if "analytical_narrative_draft" in joined:
-        return PASS1_REPAIR_STAGE_DRAFT
+    if (
+        "analytical_narrative_draft" in joined
+        or "alternative_tension_candidates" in joined
+        or "alternative_strategic_question_candidates" in joined
+    ):
+        return PASS1_REPAIR_STAGE_NARRATIVE_SCAFFOLD
     if "evidence_fields" in joined or "packet evidence" in joined:
         return PASS1_REPAIR_STAGE_EVIDENCE
     if "json object" in joined or "must be an object" in joined or "is required" in joined:
@@ -322,7 +326,7 @@ def _pass1_repair_failure_message(stage: str | None, messages: list[str], *, aft
         PASS1_REPAIR_STAGE_REALITY_CHECK: "Reality Check contract",
         PASS1_REPAIR_STAGE_STRATEGY_SHIFT: "Strategy Shift Check contract",
         PASS1_REPAIR_STAGE_EVIDENCE: "packet evidence references",
-        PASS1_REPAIR_STAGE_DRAFT: "analytical narrative draft",
+        PASS1_REPAIR_STAGE_NARRATIVE_SCAFFOLD: "narrative scaffold",
         PASS1_REPAIR_STAGE_UNKNOWN: "Pass 1 Trial Score contract",
     }.get(stage or PASS1_REPAIR_STAGE_UNKNOWN, "Pass 1 Trial Score contract")
     detail = "; ".join(messages[:4]) if messages else "unknown validation error"
@@ -357,9 +361,11 @@ def _pass1_repair_prompt(packet: dict[str, Any], review: dict[str, Any] | None, 
         PASS1_REPAIR_STAGE_JSON_SHAPE: (
             "Return the same review as a complete Pass 1 JSON object with the missing required objects restored."
         ),
-        PASS1_REPAIR_STAGE_DRAFT: (
-            "Change only analytical_narrative_draft. Add or repair the required qualitative draft fields without "
-            "changing valid ratings, evidence fields, strategy_shift_check, or Reality Check allocations."
+        PASS1_REPAIR_STAGE_NARRATIVE_SCAFFOLD: (
+            "Change only analytical_narrative_draft and alternative_tension_candidates. Add or repair the required "
+            "qualitative draft fields, at least two non-prescriptive tension options, and at least three wider strategic "
+            "question candidates mapped to the selected and alternative tensions. Do not change valid ratings, evidence "
+            "fields, strategy_shift_check, or Reality Check allocations. Do not recommend actions or field changes."
         ),
     }.get(stage or "", "Change only the fields named by the validation errors.")
     return (
@@ -371,6 +377,8 @@ def _pass1_repair_prompt(packet: dict[str, Any], review: dict[str, Any] | None, 
         "- Return exactly one JSON object and no markdown.\n"
         "- Do not return app-owned score fields such as operational_fit_points, reality_check_points, or trial_score.\n"
         "- analytical_narrative_draft may be extensive and score-aware because it is not participant-facing; do not add app-owned score fields as structured fields.\n"
+        "- Tension candidates must frame trade-offs and questions, not recommendations, next steps, or sponsor instructions.\n"
+        "- Strategic question candidates must be wider facilitator debate questions mapped to tensions, not narrow checklist questions.\n"
         "- Use only canonical Reality Check allocation_target_id values; do not use free-text pillar/subpillar targets.\n"
         "Allowed Reality Check allocation_target_id values:\n"
         f"{chr(10).join(target_lines)}\n"
@@ -398,7 +406,7 @@ def _pass1_needs_repair(result: dict[str, Any] | None) -> tuple[bool, str | None
         PASS1_REPAIR_STAGE_OPERATIONAL_FIT,
         PASS1_REPAIR_STAGE_REALITY_CHECK,
         PASS1_REPAIR_STAGE_STRATEGY_SHIFT,
-        PASS1_REPAIR_STAGE_DRAFT,
+        PASS1_REPAIR_STAGE_NARRATIVE_SCAFFOLD,
         PASS1_REPAIR_STAGE_EVIDENCE,
     }:
         return True, stage, messages

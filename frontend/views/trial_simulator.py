@@ -11490,7 +11490,9 @@ def _pass2_pass1_analysis_debug_view(pass1_analysis):
         "operational_fit_provider_answer": pass1_analysis.get("operational_fit") or {},
         "reality_check_provider_answer": pass1_analysis.get("reality_check") or {},
         "central_tension_candidate": pass1_analysis.get("central_tension_candidate") or {},
+        "alternative_tension_candidates": pass1_analysis.get("alternative_tension_candidates") or [],
         "broader_strategic_question_candidate": pass1_analysis.get("broader_strategic_question_candidate") or {},
+        "alternative_strategic_question_candidates": pass1_analysis.get("alternative_strategic_question_candidates") or [],
         "continuity_update": pass1_analysis.get("continuity_update") or {},
         "analytical_narrative_draft": pass1_analysis.get("analytical_narrative_draft") or {},
     }
@@ -11508,6 +11510,7 @@ def _pass2_input_debug_view(pass2_input):
         "source_input_hash": pass2_input.get("source_input_hash"),
         "scenario_state_hash": pass2_input.get("scenario_state_hash"),
         "review_metadata": pass2_input.get("review_metadata") or {},
+        "participant_visible_history": pass2_input.get("participant_visible_history") or {},
         "trajectory_context": pass2_input.get("trajectory_context") or {},
         "app_calculated_scores_shared_with_pass2": pass2_input.get("app_calculated_scores") or {},
         "pass1_draft": pass2_input.get("pass1_draft") or {},

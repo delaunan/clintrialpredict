@@ -128,6 +128,12 @@ def _check_review_continuity_context(errors: list[str]) -> None:
         "changed_fields": [],
         "score_delta": 0,
         "central_tension": "Baseline central tension.",
+        "recent_participant_visible_questions": [
+            {
+                "question": "Hidden baseline should not consume this participant topic.",
+                "mapped_tension": "Hidden baseline seed tension.",
+            },
+        ],
         "validated_review": {
             "review_metadata": {"review_mode": "hidden_baseline", "participant_visible": False},
             "main_tension": "Baseline main tension from dedicated field.",
@@ -177,6 +183,19 @@ def _check_review_continuity_context(errors: list[str]) -> None:
         "changed_fields": ["operational_assumptions.planned_enrollment"],
         "score_delta": 0,
         "central_tension": "",
+        "recent_participant_visible_questions": [
+            {
+                "question": "How should teams debate feasibility gains when evidence strength remains uncertain?",
+                "mapped_tension": "Participant-visible feasibility tension.",
+            },
+        ],
+        "participant_central_tension": {
+            "summary": "Participant-visible feasibility tension.",
+            "why_it_matters": "This was shown to the participant.",
+        },
+        "participant_broader_strategic_question": {
+            "question": "How should teams debate feasibility gains when evidence strength remains uncertain?",
+        },
         "validated_review": {
             **baseline_trace["validated_review"],
             "main_tension": "Previous main tension from dedicated field.",
@@ -255,6 +274,8 @@ def _check_review_continuity_context(errors: list[str]) -> None:
         errors.append("previous visible review context should preserve trial_score")
     if context.get("baseline_review", {}).get("central_tension") != "Baseline central tension.":
         errors.append("hidden baseline review context should preserve trace central_tension when present")
+    if context.get("baseline_review", {}).get("recent_participant_visible_questions") != []:
+        errors.append("hidden baseline review context must not mark baseline questions as participant-visible history")
     baseline_memory = context.get("baseline_review", {}).get("compact_storyline_memory") or ""
     if "Baseline tension:" not in baseline_memory or "Next watch:" not in baseline_memory:
         errors.append("hidden baseline review context should compact useful baseline tension and next-watch memory")
@@ -272,6 +293,12 @@ def _check_review_continuity_context(errors: list[str]) -> None:
         != "Previous iteration memory"
     ):
         errors.append("continuity packet missing compact storyline memory")
+    visible_history = context.get("previous_review", {}).get("recent_participant_visible_questions") or []
+    latest_visible = visible_history[-1] if visible_history else {}
+    if latest_visible.get("question") != "How should teams debate feasibility gains when evidence strength remains uncertain?":
+        errors.append("previous visible review context should preserve participant-visible strategic question")
+    if latest_visible.get("mapped_tension") != "Participant-visible feasibility tension.":
+        errors.append("previous visible review context should preserve participant-visible mapped tension")
     trial_score_continuity = continuity_packet.get("iteration_context", {}).get("trial_score_continuity") or {}
     if trial_score_continuity.get("available") is not True:
         errors.append("later visible continuity packet should include Trial Score continuity anchors")
