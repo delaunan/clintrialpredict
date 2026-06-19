@@ -18,6 +18,7 @@ from src.narratives.storyline import merge_storyline_state
 
 MODE_EXISTING_STUDY = "existing_study"
 FIELD_DICTIONARY_VERSION = "taxonomy_01_narrative_v1"
+MODEL_FEATURE_EVIDENCE_LIMIT = 3
 
 TRIAL_IDENTITY_KEYS = (
     "nct_id",
@@ -203,6 +204,23 @@ def _first_present(*values: Any) -> Any:
             continue
         return value
     return None
+
+
+def _number(value: Any) -> float | None:
+    if isinstance(value, dict):
+        value = value.get("value")
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return None
+    return numeric if numeric == numeric else None
+
+
+def _round_number(value: Any, digits: int = 3) -> float | None:
+    numeric = _number(value)
+    if numeric is None:
+        return None
+    return round(numeric, digits)
 
 
 def _select_keys(source: dict[str, Any], keys: tuple[str, ...]) -> dict[str, Any]:
@@ -455,6 +473,17 @@ def _snapshot_feature_impacts(snapshot: dict[str, Any] | None) -> list[dict[str,
     return json_safe(impacts) if isinstance(impacts, list) else []
 
 
+def _snapshot_feature_level_impacts(snapshot: dict[str, Any] | None) -> list[dict[str, Any]]:
+    snapshot = snapshot or {}
+    impacts = _first_present(
+        snapshot.get("feature_level_impacts"),
+        snapshot.get("model_interpretation", {}).get("feature_level_impacts"),
+        snapshot.get("result", {}).get("feature_level_impacts"),
+        [],
+    )
+    return json_safe(impacts) if isinstance(impacts, list) else []
+
+
 def _impact_value(item: dict[str, Any]) -> float | None:
     value = _first_present(item.get("Impact"), item.get("impact"), item.get("value"))
     if isinstance(value, (int, float)):
@@ -499,6 +528,27 @@ def _impact_index(
             "name": str(name),
             "pillar": item.get("Pillar") or item.get("pillar"),
             "subcategory": subcategory,
+            "impact": round(impact, 1),
+        }
+    return indexed
+
+
+def _feature_impact_index(snapshot: dict[str, Any] | None) -> dict[str, dict[str, Any]]:
+    indexed: dict[str, dict[str, Any]] = {}
+    for item in _snapshot_feature_level_impacts(snapshot):
+        if not isinstance(item, dict):
+            continue
+        feature = _first_present(item.get("Feature"), item.get("feature"), item.get("field"), item.get("Field"))
+        impact = _impact_value(item)
+        if feature is None or impact is None:
+            continue
+        indexed[str(feature)] = {
+            "name": str(feature),
+            "feature": str(feature),
+            "label": _first_present(item.get("Label"), item.get("label"), item.get("display_label")),
+            "value": _first_present(item.get("Value"), item.get("value"), item.get("display_value")),
+            "pillar": item.get("Pillar") or item.get("pillar"),
+            "subcategory": item.get("Subcategory") or item.get("subcategory") or item.get("subpillar"),
             "impact": round(impact, 1),
         }
     return indexed
@@ -568,6 +618,357 @@ def _impact_direction(delta: float | None) -> str | None:
     if delta < 0:
         return "decreased"
     return "unchanged"
+
+
+def _impact_sign(value: Any) -> str | None:
+    numeric = _number(value)
+    if numeric is None:
+        return None
+    if numeric > 0:
+        return "positive"
+    if numeric < 0:
+        return "negative"
+    return "neutral"
+
+
+def _impact_state_label(value: Any) -> str | None:
+    sign = _impact_sign(value)
+    if sign == "positive":
+        return "positive_state"
+    if sign == "negative":
+        return "negative_state"
+    if sign == "neutral":
+        return "neutral_state"
+    return None
+
+
+def _crossed_zero(start: Any, end: Any) -> bool | None:
+    start_number = _number(start)
+    end_number = _number(end)
+    if start_number is None or end_number is None:
+        return None
+    return (start_number < 0 < end_number) or (start_number > 0 > end_number)
+
+
+def _movement_label(start: Any, end: Any) -> str | None:
+    start_number = _number(start)
+    end_number = _number(end)
+    if start_number is None or end_number is None:
+        return None
+    if abs(end_number - start_number) <= 1e-9:
+        return "unchanged"
+    if start_number < 0 < end_number:
+        return "negative_to_positive"
+    if start_number > 0 > end_number:
+        return "positive_to_negative"
+    if end_number > start_number:
+        if end_number < 0:
+            return "still_negative_but_improved"
+        if start_number > 0:
+            return "still_positive_and_improved"
+        return "improved"
+    if end_number < start_number:
+        if end_number > 0:
+            return "still_positive_but_weakened"
+        if start_number < 0:
+            return "still_negative_and_worsened"
+        return "worsened"
+    return "unchanged"
+
+
+def _impact_state_items(snapshot: dict[str, Any] | None, *, level: str) -> list[dict[str, Any]]:
+    indexed = _impact_index(snapshot, level=level)
+    items: list[dict[str, Any]] = []
+    for item in indexed.values():
+        impact = _round_number(item.get("impact"), 1)
+        if impact is None:
+            continue
+        items.append({
+            "impact_level": "subpillar" if level == "subcategory" else level,
+            "name": item.get("name"),
+            "pillar": item.get("pillar") or (item.get("name") if level == "pillar" else None),
+            "subpillar": item.get("subcategory"),
+            "impact": impact,
+            "impact_sign": _impact_sign(impact),
+            "state": _impact_state_label(impact),
+        })
+    return items
+
+
+def _top_signed_impacts(items: list[dict[str, Any]], *, sign: str, limit: int = 5) -> list[dict[str, Any]]:
+    signed = [item for item in items if item.get("impact_sign") == sign]
+    return sorted(signed, key=lambda item: abs(float(item.get("impact") or 0)), reverse=True)[:limit]
+
+
+def _feature_state_items(snapshot: dict[str, Any] | None) -> list[dict[str, Any]]:
+    items: list[dict[str, Any]] = []
+    for item in _feature_impact_index(snapshot).values():
+        impact = _round_number(item.get("impact"), 1)
+        if impact is None:
+            continue
+        items.append({
+            "impact_level": "feature",
+            "feature": item.get("feature"),
+            "label": item.get("label"),
+            "value": item.get("value"),
+            "pillar": item.get("pillar"),
+            "subpillar": item.get("subcategory"),
+            "impact": impact,
+            "impact_sign": _impact_sign(impact),
+            "state": _impact_state_label(impact),
+        })
+    return items
+
+
+def _feature_movement_items(
+    current_snapshot: dict[str, Any],
+    previous_snapshot: dict[str, Any] | None,
+    baseline_snapshot: dict[str, Any] | None,
+) -> list[dict[str, Any]]:
+    current = _feature_impact_index(current_snapshot)
+    previous = _feature_impact_index(previous_snapshot)
+    baseline = _feature_impact_index(baseline_snapshot)
+    items: list[dict[str, Any]] = []
+    for name in sorted(set(current) | set(previous) | set(baseline)):
+        current_impact = current.get(name, {}).get("impact", 0.0)
+        previous_impact = previous.get(name, {}).get("impact")
+        baseline_impact = baseline.get(name, {}).get("impact")
+        delta_from_previous = (
+            _round_number(float(current_impact) - float(previous_impact), 1)
+            if previous_impact is not None
+            else None
+        )
+        delta_from_baseline = (
+            _round_number(float(current_impact) - float(baseline_impact), 1)
+            if baseline_impact is not None
+            else None
+        )
+        if not delta_from_previous and not delta_from_baseline:
+            continue
+        source = current.get(name) or previous.get(name) or baseline.get(name) or {}
+        items.append({
+            "impact_level": "feature",
+            "name": name,
+            "feature": source.get("feature") or name,
+            "label": source.get("label"),
+            "value": source.get("value"),
+            "pillar": source.get("pillar"),
+            "subpillar": source.get("subcategory"),
+            "baseline_impact": _round_number(baseline_impact, 1),
+            "previous_impact": _round_number(previous_impact, 1),
+            "current_impact": _round_number(current_impact, 1),
+            "current_state": _impact_state_label(current_impact),
+            "delta_from_baseline": delta_from_baseline,
+            "delta_from_previous": delta_from_previous,
+            "movement_from_baseline": _movement_label(baseline_impact, current_impact),
+            "movement_from_previous": _movement_label(previous_impact, current_impact),
+            "crossed_zero_from_baseline": _crossed_zero(baseline_impact, current_impact),
+            "crossed_zero_from_previous": _crossed_zero(previous_impact, current_impact),
+        })
+    return sorted(
+        items,
+        key=_movement_magnitude_sort_key,
+        reverse=True,
+    )
+
+
+def _movement_magnitude_sort_key(item: dict[str, Any]) -> tuple[int, float]:
+    previous_delta = item.get("delta_from_previous")
+    if previous_delta is not None:
+        return (1, abs(float(previous_delta or 0)))
+    return (0, abs(float(item.get("delta_from_baseline") or 0)))
+
+
+def _movement_direction_value(item: dict[str, Any]) -> float:
+    previous_delta = item.get("delta_from_previous")
+    if previous_delta is not None:
+        return float(previous_delta or 0)
+    return float(item.get("delta_from_baseline") or 0)
+
+
+def _impact_movement_items(
+    current_snapshot: dict[str, Any],
+    previous_snapshot: dict[str, Any] | None,
+    baseline_snapshot: dict[str, Any] | None,
+    *,
+    level: str,
+) -> list[dict[str, Any]]:
+    current = _impact_index(current_snapshot, level=level)
+    previous = _impact_index(previous_snapshot, level=level)
+    baseline = _impact_index(baseline_snapshot, level=level)
+    items: list[dict[str, Any]] = []
+    for name in sorted(set(current) | set(previous) | set(baseline)):
+        current_impact = current.get(name, {}).get("impact")
+        if current_impact is None:
+            continue
+        previous_impact = previous.get(name, {}).get("impact")
+        baseline_impact = baseline.get(name, {}).get("impact")
+        delta_from_previous = (
+            _round_number(float(current_impact) - float(previous_impact), 1)
+            if previous_impact is not None
+            else None
+        )
+        delta_from_baseline = (
+            _round_number(float(current_impact) - float(baseline_impact), 1)
+            if baseline_impact is not None
+            else None
+        )
+        if not delta_from_previous and not delta_from_baseline:
+            continue
+        source = current.get(name) or previous.get(name) or baseline.get(name) or {}
+        items.append({
+            "impact_level": "subpillar" if level == "subcategory" else level,
+            "name": name,
+            "pillar": source.get("pillar") or (name if level == "pillar" else None),
+            "subpillar": source.get("subcategory"),
+            "baseline_impact": _round_number(baseline_impact, 1),
+            "previous_impact": _round_number(previous_impact, 1),
+            "current_impact": _round_number(current_impact, 1),
+            "current_state": _impact_state_label(current_impact),
+            "delta_from_baseline": delta_from_baseline,
+            "delta_from_previous": delta_from_previous,
+            "movement_from_baseline": _movement_label(baseline_impact, current_impact),
+            "movement_from_previous": _movement_label(previous_impact, current_impact),
+            "crossed_zero_from_baseline": _crossed_zero(baseline_impact, current_impact),
+            "crossed_zero_from_previous": _crossed_zero(previous_impact, current_impact),
+        })
+    return sorted(
+        items,
+        key=_movement_magnitude_sort_key,
+        reverse=True,
+    )
+
+
+def _top_movements(items: list[dict[str, Any]], *, direction: str, limit: int = 5) -> list[dict[str, Any]]:
+    if direction == "positive":
+        filtered = [item for item in items if _movement_direction_value(item) > 0]
+        return sorted(
+            filtered,
+            key=_movement_magnitude_sort_key,
+            reverse=True,
+        )[:limit]
+    filtered = [item for item in items if _movement_direction_value(item) < 0]
+    return sorted(
+        filtered,
+        key=_movement_magnitude_sort_key,
+        reverse=True,
+    )[:limit]
+
+
+def _model_state_evidence(snapshot: dict[str, Any] | None) -> dict[str, Any]:
+    pillar_items = _impact_state_items(snapshot, level="pillar")
+    subpillar_items = _impact_state_items(snapshot, level="subcategory")
+    feature_items = _feature_state_items(snapshot)
+    return json_safe({
+        "completion_score": _completion_score(snapshot),
+        "state_rule": (
+            "State is the fixed snapshot of signed model forces. Positive impacts are favorable by definition; "
+            "negative impacts are unfavorable by definition."
+        ),
+        "top_positive_pillar_impacts": _top_signed_impacts(pillar_items, sign="positive"),
+        "top_negative_pillar_impacts": _top_signed_impacts(pillar_items, sign="negative"),
+        "top_positive_subpillar_impacts": _top_signed_impacts(subpillar_items, sign="positive"),
+        "top_negative_subpillar_impacts": _top_signed_impacts(subpillar_items, sign="negative"),
+        "top_positive_feature_impacts": _top_signed_impacts(
+            feature_items,
+            sign="positive",
+            limit=MODEL_FEATURE_EVIDENCE_LIMIT,
+        ),
+        "top_negative_feature_impacts": _top_signed_impacts(
+            feature_items,
+            sign="negative",
+            limit=MODEL_FEATURE_EVIDENCE_LIMIT,
+        ),
+        "feature_impact_availability": (
+            "direct_xgboost_feature_impacts_available"
+            if feature_items
+            else "not_available_no_direct_xgboost_feature_impacts"
+        ),
+        "feature_driver_names": {
+            "top_positive_feature_drivers": _feature_driver_values(snapshot or {}, "top_positive_feature_drivers"),
+            "top_negative_feature_drivers": _feature_driver_values(snapshot or {}, "top_negative_feature_drivers"),
+        },
+    })
+
+
+def _model_movement_evidence(
+    current_snapshot: dict[str, Any],
+    previous_snapshot: dict[str, Any] | None,
+    baseline_snapshot: dict[str, Any] | None,
+) -> dict[str, Any]:
+    pillar_items = _impact_movement_items(current_snapshot, previous_snapshot, baseline_snapshot, level="pillar")
+    subpillar_items = _impact_movement_items(current_snapshot, previous_snapshot, baseline_snapshot, level="subcategory")
+    feature_items = _feature_movement_items(current_snapshot, previous_snapshot, baseline_snapshot)
+    movement_available = bool(pillar_items or subpillar_items or feature_items)
+    return json_safe({
+        "available": movement_available,
+        "movement_rule": (
+            "Movement is the change in signed model forces. Positive deltas are more favorable; negative deltas are "
+            "less favorable. Interpret movement together with current_state."
+        ),
+        "top_positive_pillar_movements": _top_movements(pillar_items, direction="positive"),
+        "top_negative_pillar_movements": _top_movements(pillar_items, direction="negative"),
+        "top_positive_subpillar_movements": _top_movements(subpillar_items, direction="positive"),
+        "top_negative_subpillar_movements": _top_movements(subpillar_items, direction="negative"),
+        "top_positive_feature_movements": _top_movements(
+            feature_items,
+            direction="positive",
+            limit=MODEL_FEATURE_EVIDENCE_LIMIT,
+        ),
+        "top_negative_feature_movements": _top_movements(
+            feature_items,
+            direction="negative",
+            limit=MODEL_FEATURE_EVIDENCE_LIMIT,
+        ),
+        "feature_movement_availability": (
+            "direct_xgboost_feature_movements_available"
+            if feature_items
+            else "not_available_no_direct_xgboost_feature_movement"
+        ),
+    })
+
+
+def _model_signal_guidance() -> dict[str, Any]:
+    return {
+        "baseline_rule": (
+            "For hidden baseline, derive main_model_signals from current_model_state_evidence only; movement "
+            "evidence may be empty."
+        ),
+        "visible_iteration_rule": (
+            "For visible iterations, prioritize model_movement_evidence from the previous iteration, then use "
+            "current_model_state_evidence as the current-state anchor."
+        ),
+        "first_visible_iteration_rule": (
+            "For first visible iteration, movement from baseline is the relevant movement context because no prior "
+            "visible iteration exists."
+        ),
+        "later_visible_iteration_rule": (
+            "For later visible iterations, previous-iteration movement is the primary ranking signal; baseline "
+            "movement is context for accumulated drift."
+        ),
+        "granularity_rule": (
+            "Prefer feature-level evidence when available and include parent subpillar and pillar. Fall back to "
+            "subpillar, then pillar."
+        ),
+        "main_model_signals_rule": (
+            "Populate main_model_signals with concrete packet-backed signals, not generic pillar slogans. "
+            "Movement explains what changed; state explains what still matters."
+        ),
+        "interpretation_rule": (
+            "Positive impacts and deltas are favorable by definition; negative impacts and deltas are unfavorable "
+            "by definition."
+        ),
+        "preferred_signal_format": (
+            "Feature label/value under Pillar / Subpillar with signed current impact or signed delta, for example "
+            "'Placebo control under Execution Framework / Methodological Setup (+2.0 vs previous)'."
+        ),
+        "avoid": [
+            "Scientific Challenge alignment",
+            "Patient Profile fit",
+            "Execution Framework constraints",
+            "pillar-only phrases when feature or subpillar evidence is available",
+        ],
+    }
 
 
 def _feature_driver_values(snapshot: dict[str, Any], key: str) -> list[Any]:
@@ -676,6 +1077,238 @@ def _text_change_evidence(
             "change_type": change_type,
         })
     return evidence
+
+
+def _operational_baseline_confidence(source: Any) -> str:
+    source_text = str(source or "").strip()
+    if source_text in {
+        "completed_registry_facility_count",
+        "final_observed_value",
+        "completed_actual_primary_completion",
+        "final_observed_total_duration",
+    }:
+        return "high"
+    if source_text in {
+        "planned_value",
+        "estimated_planned_total_duration",
+        "current_registry_facility_count_proxy",
+        "observed_lower_bound",
+        "observed_to_date_lower_bound",
+        "actual_primary_completion",
+        "actual_total_completion_lower_bound",
+        "model_default",
+        "benchmark_default",
+        "benchmark_default_with_floors",
+        "benchmark_imputed_default",
+        "benchmark_imputed_default_with_observed_lower_bound",
+        "enrollment_coherent_benchmark_default",
+        "same_cohort_benchmark",
+    }:
+        return "medium"
+    return "low" if source_text else "unknown"
+
+
+def _movement_magnitude(baseline_value: float | None, current_value: float | None) -> str:
+    if baseline_value is None or current_value is None:
+        return "not_comparable"
+    change = abs(current_value - baseline_value)
+    relative = change / max(abs(baseline_value), 1.0)
+    if change <= 1e-9:
+        return "none"
+    if relative < 0.1:
+        return "minor"
+    if relative < 0.35:
+        return "moderate"
+    if relative < 0.75:
+        return "major"
+    return "extreme"
+
+
+def _movement_direction(baseline_value: float | None, current_value: float | None) -> str:
+    if baseline_value is None or current_value is None:
+        return "not_comparable"
+    delta = current_value - baseline_value
+    if abs(delta) <= 1e-9:
+        return "no_change"
+    return "increased" if delta > 0 else "decreased"
+
+
+def _movement_relative_to_p50(
+    baseline_value: float | None,
+    current_value: float | None,
+    p50: float | None,
+) -> str:
+    if baseline_value is None or current_value is None or p50 is None:
+        return "not_available"
+    baseline_distance = abs(baseline_value - p50)
+    current_distance = abs(current_value - p50)
+    if abs(current_distance - baseline_distance) <= 1e-9:
+        return "unchanged_distance_to_p50"
+    return "toward_p50" if current_distance < baseline_distance else "away_from_p50"
+
+
+def _benchmark_context_id(assumption: dict[str, Any]) -> Any:
+    return _first_present(
+        assumption.get("benchmark_snapshot_id"),
+        assumption.get("patients_per_site_benchmark_snapshot_id"),
+        assumption.get("operational_benchmark_snapshot_id"),
+        assumption.get("benchmark_level_used"),
+        assumption.get("patients_per_site_benchmark_level_used"),
+    )
+
+
+def _benchmark_context_changed(
+    baseline_assumption: dict[str, Any],
+    current_assumption: dict[str, Any],
+) -> bool | None:
+    baseline_id = _benchmark_context_id(baseline_assumption)
+    current_id = _benchmark_context_id(current_assumption)
+    if baseline_id is None or current_id is None:
+        return None
+    return str(baseline_id) != str(current_id)
+
+
+def _operational_status_key(status_kind: str) -> str:
+    return {
+        "enrollment": "enrollment_status",
+        "site_count": "site_count_status",
+        "duration": "duration_status",
+        "patients_per_site": "patients_per_site_status",
+    }.get(status_kind, "benchmark_status")
+
+
+def _operational_percentiles(
+    assumption: dict[str, Any],
+    *,
+    percentile_prefix: str,
+    status_kind: str,
+) -> dict[str, Any]:
+    return {
+        "p25": _round_number(assumption.get(f"{percentile_prefix}_p25")),
+        "p50": _round_number(assumption.get(f"{percentile_prefix}_p50")),
+        "p75": _round_number(assumption.get(f"{percentile_prefix}_p75")),
+        "p90": _round_number(assumption.get(f"{percentile_prefix}_p90")),
+        "status": assumption.get(_operational_status_key(status_kind)),
+    }
+
+
+def _operational_value_context(
+    field_key: str,
+    *,
+    baseline_assumption: dict[str, Any],
+    current_assumption: dict[str, Any],
+    value_key: str = "value",
+    percentile_prefix: str = "benchmark",
+    status_kind: str = "benchmark",
+    value_origin: str = "direct_operational_assumption",
+) -> dict[str, Any]:
+    baseline_value = _number(baseline_assumption.get(value_key))
+    current_value = _number(current_assumption.get(value_key))
+    current_p50 = _number(current_assumption.get(f"{percentile_prefix}_p50"))
+    baseline_source = _first_present(
+        baseline_assumption.get("source"),
+        baseline_assumption.get("site_default_basis"),
+        "not_available",
+    )
+    return {
+        "field": field_key,
+        "value_origin": value_origin,
+        "baseline": {
+            "value": _round_number(baseline_value),
+            "source": baseline_source,
+            "confidence": _operational_baseline_confidence(baseline_source),
+            "is_neutral_reference": True,
+            "benchmark_position": _operational_percentiles(
+                baseline_assumption,
+                percentile_prefix=percentile_prefix,
+                status_kind=status_kind,
+            ),
+        },
+        "current": {
+            "value": _round_number(current_value),
+            "source": current_assumption.get("source"),
+            "benchmark_position": _operational_percentiles(
+                current_assumption,
+                percentile_prefix=percentile_prefix,
+                status_kind=status_kind,
+            ),
+        },
+        "movement_from_baseline": {
+            "direction": _movement_direction(baseline_value, current_value),
+            "absolute_change": _round_number(
+                None if baseline_value is None or current_value is None else current_value - baseline_value
+            ),
+            "relative_change": _round_number(
+                None
+                if baseline_value is None or current_value is None
+                else (current_value - baseline_value) / max(abs(baseline_value), 1.0)
+            ),
+            "magnitude": _movement_magnitude(baseline_value, current_value),
+            "relative_to_p50": _movement_relative_to_p50(baseline_value, current_value, current_p50),
+        },
+        "benchmark_context": {
+            "baseline_context_id": _benchmark_context_id(baseline_assumption),
+            "current_context_id": _benchmark_context_id(current_assumption),
+            "changed_from_baseline": _benchmark_context_changed(baseline_assumption, current_assumption),
+            "interpretation": (
+                "If benchmark context changed, separate scenario-value movement from benchmark-cohort movement before "
+                "rating Operational Fit."
+            ),
+        },
+        "interpretation_rule": (
+            "Treat the baseline value as the neutral starting assumption. Use benchmark percentiles as residual "
+            "context that can counterbalance movement size; do not penalize or credit absolute distance from P50 alone."
+        ),
+    }
+
+
+def _operational_movement_context(
+    current_snapshot: dict[str, Any],
+    baseline_snapshot: dict[str, Any] | None,
+) -> dict[str, Any]:
+    current_operational = current_snapshot.get("operational_assumptions") or {}
+    baseline_operational = (baseline_snapshot or current_snapshot).get("operational_assumptions") or {}
+    current_sites = current_operational.get("planned_sites") or {}
+    baseline_sites = baseline_operational.get("planned_sites") or {}
+    return json_safe({
+        "baseline_is_neutral_reference": True,
+        "scoring_rule": (
+            "Operational Fit scores movement and coherence versus the neutral baseline first. Residual benchmark "
+            "position and percentile distance provide context and may counterbalance a large move from baseline."
+        ),
+        "fields": {
+            "planned_enrollment": _operational_value_context(
+                "planned_enrollment",
+                baseline_assumption=baseline_operational.get("planned_enrollment") or {},
+                current_assumption=current_operational.get("planned_enrollment") or {},
+                percentile_prefix="benchmark",
+                status_kind="enrollment",
+            ),
+            "planned_sites": _operational_value_context(
+                "planned_sites",
+                baseline_assumption=baseline_sites,
+                current_assumption=current_sites,
+                percentile_prefix="benchmark",
+                status_kind="site_count",
+            ),
+            "patients_per_site": _operational_value_context(
+                "patients_per_site",
+                baseline_assumption=baseline_sites,
+                current_assumption=current_sites,
+                value_key="patients_per_site_value",
+                percentile_prefix="patients_per_site",
+                status_kind="patients_per_site",
+                value_origin="calculated_from_enrollment_and_sites",
+            ),
+            "planned_duration_months": _operational_value_context(
+                "planned_duration_months",
+                baseline_assumption=baseline_operational.get("planned_duration_months") or {},
+                current_assumption=current_operational.get("planned_duration_months") or {},
+                percentile_prefix="benchmark",
+                status_kind="duration",
+            ),
+        },
+    })
 
 
 def _field_changes(
@@ -787,6 +1420,27 @@ def _compact_review_context(
     tradeoff_review = validated.get("tradeoff_review") or {}
     trial_score = trace.get("trial_score")
     storyline_state = merge_storyline_state(trace)
+    completion_summary = (
+        completion_outlook.get("risk_pattern_summary")
+        or completion_outlook.get("score_delta_summary")
+        or completion_outlook.get("summary")
+    )
+    central_tension_summary = (
+        central_tension_candidate.get("summary")
+        or trace.get("central_tension")
+        or validated.get("main_tension")
+        or tradeoff_review.get("central_tension")
+    )
+    compact_storyline_memory = trace.get("compact_storyline_memory") or ""
+    if not include_quality_scores and central_tension_summary:
+        next_watch = (
+            storyline_state.get("next_consideration")
+            or (validated.get("continuity_update") or {}).get("watch_next")
+            or ""
+        )
+        compact_storyline_memory = f"Baseline tension: {central_tension_summary}"
+        if next_watch:
+            compact_storyline_memory = f"{compact_storyline_memory} Next watch: {next_watch}"
     compact = {
         "input_hash": trace.get("input_hash"),
         "iteration_id": trace.get("iteration_id"),
@@ -802,16 +1456,8 @@ def _compact_review_context(
         "design_numeric_context": "visible_review" if include_quality_scores else "hidden_baseline_qualitative_only",
         "changed_fields": trace.get("changed_fields") or [],
         "score_delta": trace.get("score_delta", trace.get("score_movement")),
-        "completion_outlook_summary": (
-            completion_outlook.get("risk_pattern_summary")
-            or completion_outlook.get("score_delta_summary")
-        ),
-        "central_tension": (
-            central_tension_candidate.get("summary")
-            or trace.get("central_tension")
-            or validated.get("main_tension")
-            or tradeoff_review.get("central_tension")
-        ),
+        "completion_outlook_summary": completion_summary,
+        "central_tension": central_tension_summary,
         "central_tension_candidate": deepcopy(central_tension_candidate),
         "broader_strategic_question_candidate": deepcopy(broader_question_candidate),
         "key_questions": {
@@ -844,14 +1490,11 @@ def _compact_review_context(
             "new_concerns": continuity.get("new_concerns") or [],
             "storyline_update": continuity.get("storyline_update"),
         },
-        "compact_storyline_memory": trace.get("compact_storyline_memory") or "",
+        "compact_storyline_memory": compact_storyline_memory,
     }
 
     if not include_quality_scores:
-        compact["baseline_completion_outlook_summary"] = (
-            completion_outlook.get("risk_pattern_summary")
-            or completion_outlook.get("score_delta_summary")
-        )
+        compact["baseline_completion_outlook_summary"] = completion_summary
         compact["baseline_consistency_flags"] = {}
 
     return json_safe(compact)
@@ -940,6 +1583,7 @@ def build_review_packet(
             current_snapshot.get("operational_assumptions") or {},
             ACTIVE_OPERATIONAL_ASSUMPTION_KEYS,
         ),
+        "operational_movement_context": _operational_movement_context(current_snapshot, baseline_snapshot),
         "model_interpretation": {
             "completion_score": _completion_score(current_snapshot),
             "previous_completion_score": _completion_score(previous_snapshot),
@@ -948,6 +1592,13 @@ def build_review_packet(
             "pillar_impacts": _pillar_impacts(current_snapshot),
             "pillar_deltas": _pillar_deltas(current_snapshot, previous_snapshot),
             "xgboost_impact_changes": _impact_changes(current_snapshot, previous_snapshot, baseline_snapshot),
+            "current_model_state_evidence": _model_state_evidence(current_snapshot),
+            "model_movement_evidence": _model_movement_evidence(
+                current_snapshot,
+                previous_snapshot,
+                baseline_snapshot,
+            ),
+            "model_signal_guidance": _model_signal_guidance(),
             "top_positive_feature_drivers": _feature_driver_values(current_snapshot, "top_positive_feature_drivers"),
             "top_negative_feature_drivers": _feature_driver_values(current_snapshot, "top_negative_feature_drivers"),
             "top_feature_impact_changes": _feature_driver_values(current_snapshot, "top_feature_impact_changes"),

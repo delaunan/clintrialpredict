@@ -594,6 +594,51 @@ Reality Check allocations should appear within existing subpillars, not directly
 
 Implementation status: V1 contract/schema constants, deterministic Operational Fit and Reality Check scoring, registry-owned Reality Check allocation IDs, active Pass 1 provider prompt/schema, targeted Pass 1 repair retry, Pass 2 participant-narrative prompt/schema, targeted Pass 2 repair retry, real-provider Pass 2 routing, mock-provider adaptation, storage trace fields, facilitator-question collapsed rendering, and initial simulator labels/rendering are implemented in `src/narratives/trial_score_contract.py` and the adjacent narrative modules. The active prompt builder has been simplified to the V1 Trial Score contract only. Remaining work should continue from those files rather than recreating a separate schema plan.
 
+Current implementation also passes `operational_movement_context` into Pass 1 so the provider can compare current enrollment, site count, calculated patients per site, and duration against neutral baseline assumptions and residual cohort percentiles. The prompt explicitly separates movement from baseline, residual percentile/status, and benchmark-context changes caused by cohort-defining field edits. Percentiles may counterbalance movement, and distance from P50 alone must not drive Operational Fit.
+
+Current implementation also passes compact model state and movement evidence into Pass 1. Model state is the fixed snapshot of signed model forces: positive impacts are favorable by definition and negative impacts are unfavorable by definition. Model movement is the delta from baseline and/or previous visible iteration, including whether a pillar, subpillar, or direct feature contribution crossed zero, improved while still negative, worsened while still positive, or reversed sign. Visible-iteration movement ranking is previous-first: latest delta from the immediately prior iteration determines top positive/negative movement when available, while baseline delta remains context; baseline delta is used for ranking only when no previous iteration exists. Feature-level evidence is sourced only from direct XGBoost-backed `feature_level_impacts` exported by the decomposition helper and is capped to the top three positive and top three negative rows for prompt use. Therapeutic-area threshold offsets, residual/clipping adjustments, unmapped internal factors, and non-model registry fields are excluded from feature-level prompt evidence. Baseline reviews should use state evidence even when movement evidence is empty. Pass 2 receives the same compact model evidence as narrative context only, so it can explain the validated analysis without recalculating Completion Outlook.
+
+The packet includes `model_interpretation.model_signal_guidance` so the provider has explicit rules for `completion_outlook_analysis.main_model_signals`. Baseline signals should be state-only. Visible iteration signals should prioritize movement first, then current-state anchors. Signal wording should prefer feature label/value with parent subpillar and pillar, then subpillar, then pillar-only fallback; generic pillar slogans should be avoided.
+
+Hidden-baseline compaction now preserves the baseline Completion Outlook summary when available and carries a compact baseline tension plus next-watch note into the first visible prompt. Hidden baseline output remains qualitative context only: no hidden Trial Score, hidden Operational Fit points, or hidden Reality Check points should be treated as prior visible scores.
+
+Provider repair prompts and Pass 1 validation now use one shared recursive packet-evidence reference helper from the Trial Score contract. This allows provider citations to point to deep movement evidence, such as patients-per-site benchmark position or movement relative to P50 inside `operational_movement_context`, without failing evidence validation.
+
+Current contract refinement: the two-pass role split is asymmetric.
+
+- Pass 1 is the full analyst and rough narrative drafter. It keeps all existing structured outputs for Completion Outlook, Operational Fit, Reality Check, strategy shift, central tension, broader question, and continuity, and now adds `analytical_narrative_draft`.
+- The Pass 1 draft is provisional and intentionally richer than the final output. It may explain current model state, model movement, Operational Fit reasoning, pre-Reality direction, Reality Check reasoning, central tension, relevant reference-pack implications, and score-aware implications used in the analysis. This draft is not participant-facing, so the final-output score-language rule does not apply here.
+- The implemented shape is:
+
+```json
+"analytical_narrative_draft": {
+  "current_state_read": "...",
+  "movement_read": "...",
+  "operational_fit_read": "...",
+  "reality_check_read": "...",
+  "central_tension_read": "..."
+}
+```
+
+- Hidden baseline produces the same draft object as qualitative context, and draft fields must be non-empty even though the review remains hidden, `visible=false`, and score-free. The compacted hidden baseline preserves only useful qualitative tension/summary context, not hidden numeric component scores.
+- After Pass 1 validation, the application calculates app-owned scores and adds `score_alignment_notes`. These notes may include internal numeric values for calibration, but they also expose participant-safe labels such as `trial_score_direction`, `pre_reality_direction`, `operational_fit_importance`, `reality_check_importance`, `wording_calibration`, and `conflicts`.
+- Participant-facing text should prefer direction and importance over numeric points or exact Trial Score values. Pass 2 may use internal values to calibrate wording. This is prompt/style guidance, not a validation blocker.
+- Pass 2 is an editor/formatter, not a second analyst. It receives the Pass 1 draft, validated Pass 1 structured analysis, app-calculated scores, score-alignment notes, trajectory/reuse context, and compact model evidence. Its task is to restructure into the final participant-facing sections, align wording with score direction/materiality, remove repetition, and preserve the Pass 1 analytical conclusion.
+- Pass 2 must not re-rate Operational Fit, re-decide Reality Check, reinterpret model movement, introduce new clinical/regulatory claims, or change the central analytical conclusion except to soften/align wording when app-generated alignment notes identify overstatement or inconsistency.
+- FDA/EMA/reference packs should primarily enrich Pass 1. Pass 2 should receive reference implications through the Pass 1 draft and validated analysis rather than re-reading or reinterpreting full reference packs by default.
+
+Validation and repair implementation:
+
+- Pass 1 schema is `trial_score_pass1_schema_v2`, Pass 2 schema is `trial_score_pass2_schema_v2`, and prompt template is `trial_score_two_pass_prompt_v1_4`.
+- Pass 1 validation checks draft shape and non-empty string fields for hidden baseline and visible reviews. Semantic validation remains light; structured ratings remain the scoring source of truth. Numeric wording inside the draft is allowed so Pass 2 can edit it rather than failing the run.
+- Targeted Pass 1 repair prompts can repair missing/malformed draft fields without changing valid Operational Fit, Reality Check, strategy-shift, or evidence-field content.
+- App-owned `score_alignment_notes` are generated after scoring. These translate app points into qualitative direction/materiality and identify wording conflicts such as capped Operational Fit, neutral Reality Check despite concern language, slight movement being described as major, or same-state reuse requiring reversion language.
+- Pass 2 input includes `pass1_draft` and `score_alignment_notes`.
+- Pass 2 prompt and repair prompts say: edit the Pass 1 draft, do not reanalyze, do not introduce new unsupported claims, app-calculated direction/materiality overrides draft intensity, and prefer qualitative direction/materiality over numeric score/point language in the final participant-facing prose.
+- Pass 2 validation mirrors the response schema shape and rejects returned app-owned score fields. It does not reject numeric prose; exact score wording is handled as prompt/style guidance.
+- Live simulator debug output shows `pass2_editor_input_debug_summary` with `app_calculated_scores_shared_with_pass2`, Pass 1 draft, selected Pass 1 analytical basis, score-alignment notes, model evidence, and participant guardrails. This is a compact summary, not the full raw Pass 2 input. Full raw Pass 2 input remains available in the audit bundle. Exact app scores are part of Pass 2 input calibration, and the score-language restriction applies only to final participant-facing prose.
+- Keep existing bounded retry counts: Pass 1 uses the existing malformed JSON and targeted validation repair path; Pass 2 uses the existing one-shot participant-narrative repair path. Do not add a third LLM pass unless a later live-provider audit proves the editor-only flow is insufficient.
+
 1. Freeze the current uncommitted narrative/scoring implementation until the new contract is specified.
 2. Use this document as the active source of truth.
 3. Use `docs/operational_fit_scoring.md` as the detailed Operational Fit scoring source of truth.

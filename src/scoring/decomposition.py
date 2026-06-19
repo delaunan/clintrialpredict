@@ -121,6 +121,7 @@ def build_completion_decomposition(
     feature_to_idx = {name: idx for idx, name in enumerate(feature_names)}
     sub_sums_raw: dict[tuple[str, str], float] = {}
     sub_features: dict[tuple[str, str], list[tuple[Any, str]]] = {}
+    feature_level_impacts: list[dict[str, Any]] = []
     mapped_indices: set[int] = set()
     calibration_target: tuple[str, str] | None = None
 
@@ -137,11 +138,26 @@ def build_completion_decomposition(
             continue
 
         impact = 0.0
+        matched_model_feature = False
         prefixed_field = f"{_feature_prefix(field_id, field_meta, disabled)}{field_id}"
         for full_name, idx in feature_to_idx.items():
             if full_name == prefixed_field or full_name.startswith(f"{prefixed_field}_"):
+                matched_model_feature = True
                 impact += -float(shap_vals[idx]) * gain_factor
                 mapped_indices.add(idx)
+
+        rounded_feature_impact = round(impact, 1)
+        if rounded_feature_impact == -0.0:
+            rounded_feature_impact = 0.0
+        if matched_model_feature and rounded_feature_impact != 0.0:
+            feature_level_impacts.append({
+                "Feature": field_id,
+                "Label": label,
+                "Value": _display_value(data, field_id),
+                "Pillar": pillar,
+                "Subcategory": subgroup,
+                "Impact": rounded_feature_impact,
+            })
 
         key = (pillar, subgroup)
         sub_sums_raw[key] = sub_sums_raw.get(key, 0.0) + impact
@@ -224,6 +240,7 @@ def build_completion_decomposition(
         ],
         "feature_impacts": final_subcats,
         "subcat_impacts": final_subcats,
+        "feature_level_impacts": feature_level_impacts,
         "mode": mode,
         "probability": live_probability,
     }

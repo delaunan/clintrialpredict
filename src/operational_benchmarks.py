@@ -537,6 +537,121 @@ def lookup_operational_benchmark(
     return None
 
 
+def _patients_per_site_benchmark_context(
+    snapshot: dict[str, Any],
+    benchmarks: pd.DataFrame,
+    *,
+    planned_enrollment: Any,
+    planned_sites: Any,
+) -> dict[str, Any]:
+    pps_row = lookup_operational_benchmark(snapshot, benchmarks, metric_prefix="patients_per_site")
+    enrollment_value = _positive_float(planned_enrollment)
+    site_value = _positive_float(planned_sites)
+    implied_patients_per_site = None
+    if enrollment_value is not None and site_value is not None:
+        implied_patients_per_site = enrollment_value / site_value
+
+    if pps_row is None:
+        return {
+            "patients_per_site_value": implied_patients_per_site,
+            "patients_per_site_status": "not_available",
+            "patients_per_site_p25": None,
+            "patients_per_site_p50": None,
+            "patients_per_site_p75": None,
+            "patients_per_site_p90": None,
+            "patients_per_site_benchmark_level_used": None,
+            "patients_per_site_n": None,
+            "patients_per_site_low_confidence_flag": None,
+            "patients_per_site_benchmark_snapshot_id": None,
+            "operational_benchmark_snapshot_id": None,
+        }
+
+    return {
+        "patients_per_site_value": implied_patients_per_site,
+        "patients_per_site_status": _classify_against_percentiles(
+            implied_patients_per_site,
+            pps_row,
+            "patients_per_site",
+        ),
+        "patients_per_site_p25": _metric_value(pps_row, "patients_per_site_p25"),
+        "patients_per_site_p50": _metric_value(pps_row, "patients_per_site_p50"),
+        "patients_per_site_p75": _metric_value(pps_row, "patients_per_site_p75"),
+        "patients_per_site_p90": _metric_value(pps_row, "patients_per_site_p90"),
+        "patients_per_site_benchmark_level_used": pps_row.get("benchmark_level_used"),
+        "patients_per_site_n": _metric_n(pps_row, "patients_per_site"),
+        "patients_per_site_low_confidence_flag": bool(pps_row.get("patients_per_site_low_confidence_flag", True)),
+        "patients_per_site_benchmark_snapshot_id": _benchmark_snapshot_id(pps_row),
+        "operational_benchmark_snapshot_id": _benchmark_snapshot_id(pps_row),
+    }
+
+
+def _patients_per_site_qualitative_assessment(status: Any) -> str:
+    status_text = str(status or "not_available")
+    if status_text == "below_benchmark":
+        return (
+            "Enrollment load per site is below the matched completed-trial benchmark; "
+            "this does not suggest site-footprint stretch."
+        )
+    if status_text == "typical":
+        return "Enrollment load per site is within the matched completed-trial benchmark range."
+    if status_text == "ambitious":
+        return (
+            "Enrollment load per site is above the usual range but not beyond the high matched benchmark; "
+            "site/enrollment proportionality may need attention."
+        )
+    if status_text == "above_benchmark_high":
+        return (
+            "Enrollment load per site is above the high matched completed-trial benchmark; "
+            "site/enrollment proportionality appears stretched."
+        )
+    return "Patients-per-site benchmark context is not available for this snapshot."
+
+
+def _site_enrollment_proportionality_context(
+    *,
+    source: Any,
+    default_basis: Any,
+    overall_status: Any,
+    patients_per_site_status: Any,
+    patients_per_site_value: Any,
+) -> dict[str, Any]:
+    completed_actual = (
+        str(overall_status or "").strip().upper() == "COMPLETED"
+        and str(default_basis or source or "").strip() == "completed_registry_facility_count"
+    )
+    if completed_actual:
+        site_count_value_type = "completed_actual_registry_facility_proxy"
+        site_count_validity = "observed_actual_valid"
+        site_count_role = "observed_actual_context"
+        site_count_quality_direction = "not_penalized"
+        should_judge_site_count_as_estimate = False
+        site_count_quality_note = (
+            "Observed completed-trial facility count proxy; do not penalize as an unrealistic estimate."
+        )
+    else:
+        site_count_value_type = "planned_or_estimated_site_count"
+        site_count_validity = "scenario_or_registry_context"
+        site_count_role = "scenario_assumption_to_evaluate"
+        site_count_quality_direction = "evaluate_with_patients_per_site"
+        should_judge_site_count_as_estimate = True
+        site_count_quality_note = (
+            "Planned or estimated site count; evaluate plausibility primarily through enrollment per site."
+        )
+
+    return {
+        "primary_assessment_basis": "patients_per_site",
+        "site_count_value_type": site_count_value_type,
+        "site_count_validity": site_count_validity,
+        "site_count_role": site_count_role,
+        "site_count_should_be_judged_as_estimate": should_judge_site_count_as_estimate,
+        "site_count_quality_direction": site_count_quality_direction,
+        "site_count_quality_note": site_count_quality_note,
+        "patients_per_site_value": patients_per_site_value,
+        "patients_per_site_status": str(patients_per_site_status or "not_available"),
+        "qualitative_assessment": _patients_per_site_qualitative_assessment(patients_per_site_status),
+    }
+
+
 def planned_sites_default_from_operational_benchmark(
     snapshot: dict[str, Any],
     *,
@@ -547,28 +662,35 @@ def planned_sites_default_from_operational_benchmark(
     artifact_path: str | Path = DEFAULT_ARTIFACT_PATH,
 ) -> dict[str, Any]:
     current_proxy = _positive_float(current_registry_facility_count_proxy)
+    benchmarks = load_operational_benchmarks(artifact_path) if artifact is None else artifact
     completed = str(overall_status or snapshot.get("overall_status") or "").strip().upper() == "COMPLETED"
     if completed and current_proxy is not None:
+        pps_context = _patients_per_site_benchmark_context(
+            snapshot,
+            benchmarks,
+            planned_enrollment=planned_enrollment,
+            planned_sites=current_proxy,
+        )
         return {
             "value": int(round(current_proxy)),
             "source": "completed_registry_facility_count",
             "site_default_basis": "completed_registry_facility_count",
             "current_registry_facility_count_proxy": current_proxy,
             "site_count_benchmark_p50": None,
-            "patients_per_site_p50": None,
-            "patients_per_site_benchmark_level_used": None,
-            "patients_per_site_n": None,
-            "patients_per_site_low_confidence_flag": None,
+            **pps_context,
             "enrollment_coherent_site_candidate": None,
-            "operational_benchmark_snapshot_id": None,
         }
 
-    benchmarks = load_operational_benchmarks(artifact_path) if artifact is None else artifact
     site_row = lookup_operational_benchmark(snapshot, benchmarks, metric_prefix="site_count")
-    pps_row = lookup_operational_benchmark(snapshot, benchmarks, metric_prefix="patients_per_site")
+    pps_context = _patients_per_site_benchmark_context(
+        snapshot,
+        benchmarks,
+        planned_enrollment=planned_enrollment,
+        planned_sites=current_proxy,
+    )
+    pps_p50 = _positive_float(pps_context.get("patients_per_site_p50"))
 
     site_p50 = _positive_float(site_row.get("site_count_p50")) if site_row is not None else None
-    pps_p50 = _positive_float(pps_row.get("patients_per_site_p50")) if pps_row is not None else None
     enrollment_value = _positive_float(planned_enrollment)
     enrollment_candidate = None
     if enrollment_value is not None and pps_p50 is not None:
@@ -588,14 +710,8 @@ def planned_sites_default_from_operational_benchmark(
             "site_default_basis": "not_available",
             "current_registry_facility_count_proxy": current_proxy,
             "site_count_benchmark_p50": site_p50,
-            "patients_per_site_p50": pps_p50,
-            "patients_per_site_benchmark_level_used": pps_row.get("benchmark_level_used") if pps_row is not None else None,
-            "patients_per_site_n": _metric_n(pps_row, "patients_per_site") if pps_row is not None else None,
-            "patients_per_site_low_confidence_flag": (
-                bool(pps_row.get("patients_per_site_low_confidence_flag", True)) if pps_row is not None else None
-            ),
+            **pps_context,
             "enrollment_coherent_site_candidate": enrollment_candidate,
-            "operational_benchmark_snapshot_id": None,
         }
 
     selected_basis, selected_value = max(available, key=lambda item: item[1])
@@ -604,7 +720,7 @@ def planned_sites_default_from_operational_benchmark(
     else:
         source = selected_basis
 
-    snapshot_row = pps_row if pps_row is not None else site_row
+    snapshot_row = site_row
     snapshot_id = None
     if snapshot_row is not None:
         snapshot_id = (
@@ -619,12 +735,7 @@ def planned_sites_default_from_operational_benchmark(
         "site_default_basis": selected_basis,
         "current_registry_facility_count_proxy": current_proxy,
         "site_count_benchmark_p50": site_p50,
-        "patients_per_site_p50": pps_p50,
-        "patients_per_site_benchmark_level_used": pps_row.get("benchmark_level_used") if pps_row is not None else None,
-        "patients_per_site_n": _metric_n(pps_row, "patients_per_site") if pps_row is not None else None,
-        "patients_per_site_low_confidence_flag": (
-            bool(pps_row.get("patients_per_site_low_confidence_flag", True)) if pps_row is not None else None
-        ),
+        **pps_context,
         "enrollment_coherent_site_candidate": enrollment_candidate,
         "operational_benchmark_snapshot_id": snapshot_id,
     }
@@ -1050,6 +1161,23 @@ def _empty_site_metadata(
             "benchmark_snapshot_id": None,
             "is_benchmark_stale": bool(is_benchmark_stale),
             "low_confidence_flag": True,
+            "patients_per_site_value": None,
+            "patients_per_site_status": "not_available",
+            "patients_per_site_p25": None,
+            "patients_per_site_p50": None,
+            "patients_per_site_p75": None,
+            "patients_per_site_p90": None,
+            "patients_per_site_benchmark_level_used": None,
+            "patients_per_site_n": None,
+            "patients_per_site_low_confidence_flag": None,
+            "patients_per_site_benchmark_snapshot_id": None,
+            "site_enrollment_proportionality": _site_enrollment_proportionality_context(
+                source=source,
+                default_basis=source,
+                overall_status=None,
+                patients_per_site_status="not_available",
+                patients_per_site_value=None,
+            ),
             "interpretation_hint": hint or "Site-count benchmark is not available for this snapshot.",
         }
     }
@@ -1191,6 +1319,12 @@ def planned_sites_metadata(
         overall_status=overall_status,
         artifact=benchmarks,
     )
+    current_pps_context = _patients_per_site_benchmark_context(
+        snapshot,
+        benchmarks,
+        planned_enrollment=planned_enrollment,
+        planned_sites=numeric_value,
+    )
     hint_map = {
         "below_benchmark": "Site count is below the usual completed registry facility-count proxy benchmark for the matched cohort.",
         "typical": "Site count is within the usual completed registry facility-count proxy benchmark range for the matched cohort.",
@@ -1214,15 +1348,19 @@ def planned_sites_metadata(
             "benchmark_snapshot_id": _benchmark_snapshot_id(row),
             "is_benchmark_stale": bool(is_benchmark_stale),
             "low_confidence_flag": bool(row.get("site_count_low_confidence_flag", True)),
-            "patients_per_site_benchmark_level_used": default_context.get("patients_per_site_benchmark_level_used"),
-            "patients_per_site_n": default_context.get("patients_per_site_n"),
-            "patients_per_site_low_confidence_flag": default_context.get("patients_per_site_low_confidence_flag"),
+            **current_pps_context,
             "current_registry_facility_count_proxy": default_context.get("current_registry_facility_count_proxy"),
             "site_default_basis": default_context.get("site_default_basis"),
             "site_count_benchmark_p50": default_context.get("site_count_benchmark_p50"),
-            "patients_per_site_p50": default_context.get("patients_per_site_p50"),
             "enrollment_coherent_site_candidate": default_context.get("enrollment_coherent_site_candidate"),
             "operational_benchmark_snapshot_id": default_context.get("operational_benchmark_snapshot_id"),
+            "site_enrollment_proportionality": _site_enrollment_proportionality_context(
+                source=source,
+                default_basis=default_context.get("site_default_basis"),
+                overall_status=overall_status or snapshot.get("overall_status"),
+                patients_per_site_status=current_pps_context.get("patients_per_site_status"),
+                patients_per_site_value=current_pps_context.get("patients_per_site_value"),
+            ),
             "interpretation_hint": hint_map[status],
         }
     }

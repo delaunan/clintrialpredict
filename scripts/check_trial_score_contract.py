@@ -64,6 +64,20 @@ def _packet(
                 "baseline_value_source": "registered_planned",
             },
         },
+        "operational_movement_context": {
+            "fields": {
+                "patients_per_site": {
+                    "current": {
+                        "benchmark_position": {
+                            "status": "typical",
+                        },
+                    },
+                    "movement_from_baseline": {
+                        "relative_to_p50": "toward_p50",
+                    },
+                },
+            },
+        },
         "model_interpretation": {
             "completion_score": completion_score,
             "previous_completion_score": previous_trial_score,
@@ -157,6 +171,13 @@ def _pass1_review(
             "active_tension": "Execution support versus evidence interpretability.",
             "what_changed": "Operational assumptions changed.",
             "watch_next": "Whether evidence support catches up with operational scale.",
+        },
+        "analytical_narrative_draft": {
+            "current_state_read": "The current state remains anchored in the protected model-pattern Completion Outlook.",
+            "movement_read": "The latest move appears operationally supportive but still needs evidence interpretation.",
+            "operational_fit_read": "Operational Fit reads the enrollment and site-footprint change as a proportionality question.",
+            "reality_check_read": "Reality Check may offset part of the apparent gain if the movement looks shortcut-driven.",
+            "central_tension_read": "The core tension is execution support versus evidence interpretability.",
         },
     }
 
@@ -455,6 +476,18 @@ def _check_duplicate_reality_check_allocation(errors: list[str]) -> None:
         errors.append("duplicate Reality Check allocation downgrade should point to incremental_check")
 
 
+def _check_deep_operational_movement_evidence_refs(errors: list[str]) -> None:
+    review = _pass1_review(reality_effect="neutral", reality_strength="none")
+    deep_ref = "operational_movement_context.fields.patients_per_site.current.benchmark_position.status"
+    review["operational_fit"]["combined_operational_fit"]["evidence_fields"] = [deep_ref]
+    result = score_pass1_review(_packet(), review)
+    if result.get("validation_status") != "valid":
+        errors.append("deep operational movement evidence ref should validate")
+    supported = result.get("operational_fit_assessment", {}).get("supported_evidence_fields") or []
+    if deep_ref not in supported:
+        errors.append("deep operational movement evidence ref should be preserved as supported evidence")
+
+
 def _check_app_owned_fields(errors: list[str]) -> None:
     review = _pass1_review()
     review["trial_score"] = 99
@@ -466,9 +499,16 @@ def _check_app_owned_fields(errors: list[str]) -> None:
 
     pass2 = {
         "review_metadata": {"review_mode": "first_visible_iteration", "visible": True},
-        "trial_score_narrative": {"summary": "The Trial Score improved, but the gain is mixed."},
+        "trial_score_narrative": {
+            "summary": "The Trial Score improved, but the gain is mixed.",
+            "movement_reading": "The movement appears directionally favorable.",
+            "score_interpretation": "The result should remain cautious.",
+        },
         "pillar_reading": [{"pillar": "Execution Framework", "reading": "Operational support improved."}],
-        "central_tension": {"summary": "Execution support versus evidence interpretability."},
+        "central_tension": {
+            "summary": "Execution support versus evidence interpretability.",
+            "why_it_matters": "It affects how the scenario should be defended.",
+        },
         "broader_strategic_question": {"question": "What trade-off should the team defend?"},
         "trial_score": 99,
     }
@@ -478,9 +518,16 @@ def _check_app_owned_fields(errors: list[str]) -> None:
 
     pass2_without_questions = {
         "review_metadata": {"review_mode": "first_visible_iteration", "visible": True},
-        "trial_score_narrative": {"summary": "The Trial Score improved, but the gain is mixed."},
+        "trial_score_narrative": {
+            "summary": "The Trial Score improved, but the gain is mixed.",
+            "movement_reading": "The movement appears directionally favorable.",
+            "score_interpretation": "The result should remain cautious.",
+        },
         "pillar_reading": [{"pillar": "Execution Framework", "reading": "Operational support improved."}],
-        "central_tension": {"summary": "Execution support versus evidence interpretability."},
+        "central_tension": {
+            "summary": "Execution support versus evidence interpretability.",
+            "why_it_matters": "It affects how the scenario should be defended.",
+        },
         "broader_strategic_question": {"question": "What trade-off should the team defend?"},
     }
     validated_optional = validate_pass2_review(pass2_without_questions)
@@ -511,6 +558,70 @@ def _check_app_owned_fields(errors: list[str]) -> None:
     malformed_errors = " ".join(validated_malformed_question.get("validation_errors") or [])
     if "question is required" not in malformed_errors or "array of strings" not in malformed_errors:
         errors.append("Pass 2 malformed facilitator question errors should identify the bad fields")
+
+    malformed_pass2_shape = {
+        "review_metadata": {"review_mode": "first_visible_iteration", "visible": True},
+        "trial_score_narrative": "Thin narrative.",
+        "pillar_reading": [{"pillar": "Execution Framework"}],
+        "central_tension": {"summary": "Execution support versus evidence interpretability."},
+        "broader_strategic_question": "What trade-off should the team defend?",
+    }
+    validated_malformed_shape = validate_pass2_review(malformed_pass2_shape)
+    if validated_malformed_shape.get("validation_status") != "invalid":
+        errors.append("Pass 2 should reject schema-thin narrative objects")
+    shape_errors = " ".join(validated_malformed_shape.get("validation_errors") or [])
+    for term in (
+        "trial_score_narrative must be an object",
+        "pillar_reading[0].reading is required",
+        "central_tension.why_it_matters is required",
+        "broader_strategic_question must be an object",
+    ):
+        if term not in shape_errors:
+            errors.append(f"Pass 2 malformed shape should report: {term}")
+
+
+def _check_analytical_draft_contract(errors: list[str]) -> None:
+    missing = _pass1_review()
+    missing.pop("analytical_narrative_draft", None)
+    missing_result = score_pass1_review(_packet(), missing)
+    if missing_result.get("validation_status") != "invalid":
+        errors.append("Pass 1 should require analytical_narrative_draft")
+    if not any("analytical_narrative_draft must be an object" in error for error in missing_result.get("validation_errors") or []):
+        errors.append("Missing analytical_narrative_draft should produce a targeted validation error")
+
+    numeric = _pass1_review()
+    numeric["analytical_narrative_draft"]["movement_read"] = "The Trial Score improves by 7 points."
+    numeric_result = score_pass1_review(_packet(), numeric)
+    if numeric_result.get("validation_status") != "valid":
+        errors.append("Pass 1 analytical_narrative_draft should allow numeric prose while preserving shape validation")
+
+    hidden_empty = _pass1_review()
+    hidden_empty["review_metadata"] = {"review_mode": "hidden_baseline", "visible": False}
+    hidden_empty["analytical_narrative_draft"]["current_state_read"] = ""
+    hidden_result = score_pass1_review(
+        _packet(changed_fields=[]),
+        hidden_empty,
+    )
+    if hidden_result.get("validation_status") != "invalid":
+        errors.append("Hidden baseline should require non-empty analytical_narrative_draft fields")
+
+    pass2_numeric = {
+        "review_metadata": {"review_mode": "first_visible_iteration", "visible": True},
+        "trial_score_narrative": {
+            "summary": "The Trial Score is 69, so the gain is mixed.",
+            "movement_reading": "Operational Fit contributes 2 points in the draft wording.",
+            "score_interpretation": "Reality Check remains a 1-point concern in this wording.",
+        },
+        "pillar_reading": [{"pillar": "Execution Framework", "reading": "Operational support improved."}],
+        "central_tension": {
+            "summary": "Execution support versus evidence interpretability.",
+            "why_it_matters": "It affects how the 2-part scenario is defended.",
+        },
+        "broader_strategic_question": {"question": "What trade-off should the team defend?"},
+    }
+    validated = validate_pass2_review(pass2_numeric)
+    if validated.get("validation_status") != "valid":
+        errors.append("Pass 2 should allow numeric prose while preserving shape and app-owned field validation")
 
 
 def _check_neutral_reality_check_has_no_top_level_plot_row(errors: list[str]) -> None:
@@ -546,7 +657,9 @@ def main() -> int:
     _check_allocation_target_id_contract(errors)
     _check_text_only_allocation_target_rejected(errors)
     _check_duplicate_reality_check_allocation(errors)
+    _check_deep_operational_movement_evidence_refs(errors)
     _check_app_owned_fields(errors)
+    _check_analytical_draft_contract(errors)
     _check_neutral_reality_check_has_no_top_level_plot_row(errors)
 
     if errors:

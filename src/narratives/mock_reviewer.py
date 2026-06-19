@@ -197,6 +197,23 @@ def _synthesized_trial_score_pass1_review(packet: dict[str, Any], fixture: dict[
             "what_changed": "Fixture-backed mock review evaluated the latest scenario change.",
             "watch_next": "Stress-test whether the score movement remains defensible.",
         },
+        "analytical_narrative_draft": {
+            "current_state_read": (
+                "The current state appears mixed, with Completion Outlook acting as the protected model-pattern anchor."
+            ),
+            "movement_read": (
+                "The latest move should be read as a cautious historical-pattern shift rather than proof of causal improvement."
+            ),
+            "operational_fit_read": (
+                "Operational Fit is interpreted as proportionality between the edited assumptions and the current design."
+            ),
+            "reality_check_read": (
+                "Reality Check may reinforce, soften, or leave neutral the pre-Reality read depending on scenario coherence."
+            ),
+            "central_tension_read": (
+                source.get("main_tension") or "The scenario tension is feasibility versus evidence strength."
+            ),
+        },
     }
 
 
@@ -211,6 +228,8 @@ def _synthesized_pass2_narrative(
     pass2_input = build_pass2_input(packet, pass1_review, scoring)
     app_scores = pass2_input["app_calculated_scores"]
     analysis = pass2_input["pass1_analysis"]
+    alignment = pass2_input.get("score_alignment_notes") or {}
+    safe_summary = alignment.get("participant_safe_summary") or {}
     operational_assessment = analysis.get("operational_fit_assessment") or {}
     reality_assessment = analysis.get("reality_check_assessment") or {}
     tension = analysis.get("central_tension_candidate") or {}
@@ -218,27 +237,10 @@ def _synthesized_pass2_narrative(
     continuity = analysis.get("continuity_update") or {}
     completion = analysis.get("completion_outlook_analysis") or {}
 
-    operational_points = app_scores.get("operational_fit_points")
-    reality_points = app_scores.get("reality_check_points")
-    trial_score = app_scores.get("trial_score")
-    pre_delta = app_scores.get("pre_reality_delta")
-    operational_phrase = (
-        f"Operational Fit contributes {operational_points:+g} points"
-        if isinstance(operational_points, (int, float))
-        else "Operational Fit is not scored for this hidden or unavailable review"
-    )
-    reality_phrase = (
-        f"Reality Check contributes {reality_points:+g} points"
-        if isinstance(reality_points, (int, float))
-        else "Reality Check is not scored for this hidden or unavailable review"
-    )
-    movement_phrase = (
-        f"The pre-Reality movement is {pre_delta:+g} points versus the reference score"
-        if isinstance(pre_delta, (int, float))
-        else "The reference movement is unavailable"
-    )
-
     review_mode = (pass2_input.get("review_metadata") or {}).get("review_mode") or "first_visible_iteration"
+    trial_direction = str(safe_summary.get("trial_score_direction") or "mixed")
+    pre_reality_direction = str(safe_summary.get("pre_reality_direction") or "mixed")
+    reality_importance = str(safe_summary.get("reality_check_importance") or "not_available")
     return {
         "review_metadata": {
             "review_mode": review_mode,
@@ -246,12 +248,12 @@ def _synthesized_pass2_narrative(
         },
         "trial_score_narrative": {
             "summary": (
-                f"The Trial Score is {trial_score:g}. The current reading appears mixed because the model-pattern "
-                "Completion Outlook, operational proportionality, and after-review realism check need to be read together."
+                f"The final reading appears {trial_direction}. The model-pattern Completion Outlook, operational "
+                "proportionality, and after-review realism check need to be read together."
             ),
             "movement_reading": (
-                f"{movement_phrase}. {operational_phrase}, while {reality_phrase}; this should be read as an integrated "
-                "scenario judgment rather than separate component essays."
+                f"Before Reality Check, the scenario appears {pre_reality_direction}. Reality Check has "
+                f"{reality_importance} qualitative importance, so the final wording should remain cautious and integrated."
             ),
             "score_interpretation": (
                 completion.get("summary")

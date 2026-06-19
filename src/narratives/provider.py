@@ -39,6 +39,7 @@ from src.narratives.trial_score_contract import (
     REALITY_CHECK_ALLOCATION_TARGETS,
     REALITY_CHECK_EFFECTS,
     REALITY_CHECK_STRENGTHS,
+    packet_evidence_refs,
     validate_pass2_review,
 )
 
@@ -67,6 +68,7 @@ PASS1_REPAIR_STAGE_OPERATIONAL_FIT = "operational_fit"
 PASS1_REPAIR_STAGE_REALITY_CHECK = "reality_check"
 PASS1_REPAIR_STAGE_EVIDENCE = "evidence_fields"
 PASS1_REPAIR_STAGE_STRATEGY_SHIFT = "strategy_shift"
+PASS1_REPAIR_STAGE_DRAFT = "analytical_narrative_draft"
 PASS1_REPAIR_STAGE_UNKNOWN = "unknown"
 
 def _unavailable_scoring(packet: dict[str, Any], message: str) -> dict[str, Any]:
@@ -267,27 +269,7 @@ def _real_provider_metadata(
 
 
 def _packet_evidence_refs(packet: dict[str, Any]) -> list[str]:
-    refs = {
-        "completion_score",
-        "model_interpretation.completion_score",
-        "model_interpretation.score_delta",
-        "operational_assumptions",
-        "field_changes",
-        "text_context",
-    }
-    for field in ((packet.get("iteration_context") or {}).get("changed_fields") or []):
-        refs.add(str(field))
-    for section_name in ("structured_features", "text_context", "operational_assumptions", "model_interpretation"):
-        section = packet.get(section_name) or {}
-        if not isinstance(section, dict):
-            continue
-        for key, value in section.items():
-            refs.add(str(key))
-            refs.add(f"{section_name}.{key}")
-            if isinstance(value, dict):
-                for child_key in value:
-                    refs.add(f"{section_name}.{key}.{child_key}")
-    return sorted(refs)
+    return sorted(packet_evidence_refs(packet))
 
 
 def _pass1_validation_messages(result: dict[str, Any] | None) -> list[str]:
@@ -323,6 +305,8 @@ def _pass1_repair_stage(messages: list[str]) -> str | None:
         return PASS1_REPAIR_STAGE_REALITY_CHECK
     if "strategy_shift_check" in joined or "gated premise-sensitive" in joined:
         return PASS1_REPAIR_STAGE_STRATEGY_SHIFT
+    if "analytical_narrative_draft" in joined:
+        return PASS1_REPAIR_STAGE_DRAFT
     if "evidence_fields" in joined or "packet evidence" in joined:
         return PASS1_REPAIR_STAGE_EVIDENCE
     if "json object" in joined or "must be an object" in joined or "is required" in joined:
@@ -338,6 +322,7 @@ def _pass1_repair_failure_message(stage: str | None, messages: list[str], *, aft
         PASS1_REPAIR_STAGE_REALITY_CHECK: "Reality Check contract",
         PASS1_REPAIR_STAGE_STRATEGY_SHIFT: "Strategy Shift Check contract",
         PASS1_REPAIR_STAGE_EVIDENCE: "packet evidence references",
+        PASS1_REPAIR_STAGE_DRAFT: "analytical narrative draft",
         PASS1_REPAIR_STAGE_UNKNOWN: "Pass 1 Trial Score contract",
     }.get(stage or PASS1_REPAIR_STAGE_UNKNOWN, "Pass 1 Trial Score contract")
     detail = "; ".join(messages[:4]) if messages else "unknown validation error"
@@ -372,6 +357,10 @@ def _pass1_repair_prompt(packet: dict[str, Any], review: dict[str, Any] | None, 
         PASS1_REPAIR_STAGE_JSON_SHAPE: (
             "Return the same review as a complete Pass 1 JSON object with the missing required objects restored."
         ),
+        PASS1_REPAIR_STAGE_DRAFT: (
+            "Change only analytical_narrative_draft. Add or repair the required qualitative draft fields without "
+            "changing valid ratings, evidence fields, strategy_shift_check, or Reality Check allocations."
+        ),
     }.get(stage or "", "Change only the fields named by the validation errors.")
     return (
         "You are repairing a previous Pass 1 Trial Score JSON response. "
@@ -381,6 +370,7 @@ def _pass1_repair_prompt(packet: dict[str, Any], review: dict[str, Any] | None, 
         "Hard rules:\n"
         "- Return exactly one JSON object and no markdown.\n"
         "- Do not return app-owned score fields such as operational_fit_points, reality_check_points, or trial_score.\n"
+        "- analytical_narrative_draft may be extensive and score-aware because it is not participant-facing; do not add app-owned score fields as structured fields.\n"
         "- Use only canonical Reality Check allocation_target_id values; do not use free-text pillar/subpillar targets.\n"
         "Allowed Reality Check allocation_target_id values:\n"
         f"{chr(10).join(target_lines)}\n"
@@ -408,6 +398,7 @@ def _pass1_needs_repair(result: dict[str, Any] | None) -> tuple[bool, str | None
         PASS1_REPAIR_STAGE_OPERATIONAL_FIT,
         PASS1_REPAIR_STAGE_REALITY_CHECK,
         PASS1_REPAIR_STAGE_STRATEGY_SHIFT,
+        PASS1_REPAIR_STAGE_DRAFT,
         PASS1_REPAIR_STAGE_EVIDENCE,
     }:
         return True, stage, messages
@@ -515,6 +506,9 @@ def _pass2_repair_prompt(pass2_input: dict[str, Any], narrative: dict[str, Any] 
         "- Return exactly one JSON object and no markdown.\n"
         "- Do not return app-owned score fields such as operational_fit_points, reality_check_points, or trial_score.\n"
         "- Preserve app_calculated_scores exactly as supplied in Pass 2 input.\n"
+        "- Use score_alignment_notes only to calibrate qualitative direction/materiality.\n"
+        "- Remove exact Trial Score values, point values, and numeric contribution language from participant-facing prose.\n"
+        "- Do not reanalyze, re-rate Operational Fit, re-decide Reality Check, or introduce new claims beyond Pass 1.\n"
         "- Keep one integrated Trial Score narrative, central tension, and broader strategic question.\n"
         "- facilitator_questions are optional and must include at most three questions.\n"
         "Pass 2 input JSON:\n"

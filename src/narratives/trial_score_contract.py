@@ -13,9 +13,9 @@ from copy import deepcopy
 from typing import Any
 
 TRIAL_SCORE_CONTRACT_VERSION = "trial_score_v1"
-PASS1_SCHEMA_VERSION = "trial_score_pass1_schema_v1"
-PASS2_SCHEMA_VERSION = "trial_score_pass2_schema_v1"
-PROMPT_TEMPLATE_VERSION = "trial_score_two_pass_prompt_v1_2"
+PASS1_SCHEMA_VERSION = "trial_score_pass1_schema_v2"
+PASS2_SCHEMA_VERSION = "trial_score_pass2_schema_v2"
+PROMPT_TEMPLATE_VERSION = "trial_score_two_pass_prompt_v1_4"
 
 XGBOOST_COMPLETION_OUTLOOK_LABEL = "XGBoost Completion Outlook"
 COMPLETION_OUTLOOK_LABEL = "Completion Outlook"
@@ -243,6 +243,14 @@ REALITY_CHECK_ALLOCATION_TARGETS = {
     },
 }
 
+ANALYTICAL_NARRATIVE_DRAFT_FIELDS = (
+    "current_state_read",
+    "movement_read",
+    "operational_fit_read",
+    "reality_check_read",
+    "central_tension_read",
+)
+
 def _clean_points(value: int | float) -> int | float:
     numeric = round(float(value), 1)
     return int(numeric) if numeric.is_integer() else numeric
@@ -272,28 +280,49 @@ def _string_list(value: Any) -> list[str]:
     return [str(item) for item in value if str(item).strip()]
 
 
-def _packet_evidence_refs(packet: dict[str, Any]) -> set[str]:
+def _nested_evidence_refs(value: Any, *, prefix: str) -> set[str]:
+    refs: set[str] = set()
+    if not isinstance(value, dict):
+        return refs
+    for key, child_value in value.items():
+        key_text = str(key)
+        path = f"{prefix}.{key_text}"
+        refs.add(path)
+        refs.update(_nested_evidence_refs(child_value, prefix=path))
+    return refs
+
+
+def packet_evidence_refs(packet: dict[str, Any]) -> set[str]:
     refs = {
         "completion_score",
         "model_interpretation.completion_score",
         "model_interpretation.score_delta",
         "operational_assumptions",
+        "operational_movement_context",
         "field_changes",
         "text_context",
     }
     for field in ((packet.get("iteration_context") or {}).get("changed_fields") or []):
         refs.add(str(field))
-    for section_name in ("structured_features", "text_context", "operational_assumptions", "model_interpretation"):
+    for section_name in (
+        "structured_features",
+        "text_context",
+        "operational_assumptions",
+        "operational_movement_context",
+        "model_interpretation",
+    ):
         section = packet.get(section_name) or {}
         if not isinstance(section, dict):
             continue
         for key, value in section.items():
             refs.add(str(key))
             refs.add(f"{section_name}.{key}")
-            if isinstance(value, dict):
-                for child_key in value:
-                    refs.add(f"{section_name}.{key}.{child_key}")
+            refs.update(_nested_evidence_refs(value, prefix=f"{section_name}.{key}"))
     return refs
+
+
+def _packet_evidence_refs(packet: dict[str, Any]) -> set[str]:
+    return packet_evidence_refs(packet)
 
 
 def _operational_refs(fields: list[str] | set[str]) -> set[str]:
@@ -752,10 +781,17 @@ def validate_pass1_review(packet: dict[str, Any], review: dict[str, Any]) -> dic
         "central_tension_candidate",
         "broader_strategic_question_candidate",
         "continuity_update",
+        "analytical_narrative_draft",
     )
     for field in required_objects:
         if not isinstance(review.get(field), dict):
             errors.append(f"{field} must be an object")
+    draft = review.get("analytical_narrative_draft") or {}
+    if isinstance(draft, dict):
+        for field in ANALYTICAL_NARRATIVE_DRAFT_FIELDS:
+            value = draft.get(field)
+            if not isinstance(value, str) or not value.strip():
+                errors.append(f"analytical_narrative_draft.{field} must be a non-empty string")
 
     return {
         "validation_status": "valid" if not errors else "invalid",
@@ -770,6 +806,7 @@ def validate_pass1_review(packet: dict[str, Any], review: dict[str, Any]) -> dic
         "central_tension_candidate": deepcopy(review.get("central_tension_candidate") or {}),
         "broader_strategic_question_candidate": deepcopy(review.get("broader_strategic_question_candidate") or {}),
         "continuity_update": deepcopy(review.get("continuity_update") or {}),
+        "analytical_narrative_draft": deepcopy(draft),
     }
 
 
@@ -879,19 +916,50 @@ def validate_pass2_review(review: dict[str, Any]) -> dict[str, Any]:
         return {"validation_status": "invalid", "validation_errors": ["Pass 2 review must be an object"]}
     for field in sorted(APP_OWNED_TRIAL_SCORE_FIELDS.intersection(review)):
         errors.append(f"{field} is application-owned and must not be returned by Pass 2")
-    required = (
-        "review_metadata",
-        "trial_score_narrative",
-        "pillar_reading",
-        "central_tension",
-        "broader_strategic_question",
-    )
-    for field in required:
-        if field == "pillar_reading":
-            if not isinstance(review.get(field), list):
-                errors.append("pillar_reading must be an array")
-        elif not isinstance(review.get(field), (dict, str)):
-            errors.append(f"{field} must be present")
+    metadata = review.get("review_metadata")
+    if not isinstance(metadata, dict):
+        errors.append("review_metadata must be an object")
+    else:
+        if not isinstance(metadata.get("review_mode"), str) or not metadata.get("review_mode", "").strip():
+            errors.append("review_metadata.review_mode is required")
+        if not isinstance(metadata.get("visible"), bool):
+            errors.append("review_metadata.visible must be a boolean")
+
+    narrative = review.get("trial_score_narrative")
+    if not isinstance(narrative, dict):
+        errors.append("trial_score_narrative must be an object")
+        narrative = {}
+    for field in ("summary", "movement_reading", "score_interpretation"):
+        if not isinstance(narrative.get(field), str) or not narrative.get(field, "").strip():
+            errors.append(f"trial_score_narrative.{field} is required")
+
+    pillar_reading = review.get("pillar_reading")
+    if not isinstance(pillar_reading, list):
+        errors.append("pillar_reading must be an array")
+        pillar_reading = []
+    for index, item in enumerate(pillar_reading):
+        if not isinstance(item, dict):
+            errors.append(f"pillar_reading[{index}] must be an object")
+            continue
+        for field in ("pillar", "reading"):
+            if not isinstance(item.get(field), str) or not item.get(field, "").strip():
+                errors.append(f"pillar_reading[{index}].{field} is required")
+
+    central_tension = review.get("central_tension")
+    if not isinstance(central_tension, dict):
+        errors.append("central_tension must be an object")
+        central_tension = {}
+    for field in ("summary", "why_it_matters"):
+        if not isinstance(central_tension.get(field), str) or not central_tension.get(field, "").strip():
+            errors.append(f"central_tension.{field} is required")
+
+    broader_question = review.get("broader_strategic_question")
+    if not isinstance(broader_question, dict):
+        errors.append("broader_strategic_question must be an object")
+        broader_question = {}
+    if not isinstance(broader_question.get("question"), str) or not broader_question.get("question", "").strip():
+        errors.append("broader_strategic_question.question is required")
+
     facilitator_questions = review.get("facilitator_questions") or []
     if not isinstance(facilitator_questions, list):
         errors.append("facilitator_questions must be an array when present")
@@ -917,10 +985,10 @@ def validate_pass2_review(review: dict[str, Any]) -> dict[str, Any]:
     return {
         "validation_status": "valid" if not errors else "invalid",
         "validation_errors": errors,
-        "review_metadata": deepcopy(review.get("review_metadata") or {}),
-        "trial_score_narrative": deepcopy(review.get("trial_score_narrative") or {}),
-        "pillar_reading": deepcopy(review.get("pillar_reading") or []),
-        "central_tension": deepcopy(review.get("central_tension") or {}),
-        "broader_strategic_question": deepcopy(review.get("broader_strategic_question") or {}),
+        "review_metadata": deepcopy(metadata or {}),
+        "trial_score_narrative": deepcopy(narrative or {}),
+        "pillar_reading": deepcopy(pillar_reading or []),
+        "central_tension": deepcopy(central_tension or {}),
+        "broader_strategic_question": deepcopy(broader_question or {}),
         "facilitator_questions": deepcopy(facilitator_questions),
     }

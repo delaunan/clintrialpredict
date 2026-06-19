@@ -45,7 +45,17 @@ def compact_storyline_from_trace(trace: dict[str, Any] | None) -> str:
     if not trace:
         return ""
     validated = trace.get("validated_review") or {}
+    metadata = validated.get("review_metadata") or {}
+    central_tension = validated.get("central_tension_candidate") or {}
     continuity_update = validated.get("continuity_update") or {}
+    if str(metadata.get("review_mode") or "") == "hidden_baseline":
+        summary = str(central_tension.get("summary") or "").strip()
+        if summary:
+            watch_next = str(continuity_update.get("watch_next") or "").strip()
+            memory = f"Baseline tension: {summary}"
+            if watch_next:
+                memory = f"{memory} Next watch: {watch_next}"
+            return memory
     if isinstance(continuity_update.get("what_changed"), str) and continuity_update.get("what_changed").strip():
         return continuity_update["what_changed"].strip()
     continuity = validated.get("continuity") or {}

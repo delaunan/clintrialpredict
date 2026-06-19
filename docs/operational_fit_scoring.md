@@ -249,6 +249,28 @@ If current improves percentile but conflicts with enrollment or duration:
   mixed or slight positive only
 ```
 
+### V1 Prompt-Facing Movement Context
+
+The V1 narrative packet now carries `operational_movement_context` for the four operational fields that can drive Operational Fit reasoning:
+
+- `planned_enrollment`;
+- `planned_sites`;
+- `patients_per_site`;
+- `planned_duration_months`.
+
+For each field, the packet separates the neutral opening assumption from the current scenario value. It preserves the baseline value, current value, value source, baseline confidence, benchmark position, movement direction, movement magnitude, movement relative to P50, and whether the benchmark cohort/context changed between baseline and current scenario.
+
+Opening operational assumptions are neutral references. A completed actual, registered planned value, cohort estimate, or observed floor may be more or less reliable as evidence, but it is not automatically a positive or negative Operational Fit judgment. Pass 1 should rate the current scenario by combining:
+
+- movement from the neutral baseline;
+- residual percentile/status against the closest available cohort;
+- benchmark cohort changes caused by updated structured fields;
+- source confidence and study evidence.
+
+Percentiles are contextual, not a standalone grade. A large movement from baseline can be acceptable when the current value lands near a plausible cohort percentile, and a small movement can still be weak if it leaves the scenario operationally incoherent. Distance from P50 alone must not determine the rating.
+
+`patients_per_site` is calculated from enrollment and sites, not edited directly. It should be interpreted cautiously as site-footprint proportionality evidence. Completed actual site counts remain valid observed values for completed trials and should not be penalized as estimates, but patient-per-site context should still be shown so the LLM can assess whether the site footprint and enrollment ambition are proportionate.
+
 ## Materiality And Rating
 
 Use categorical ratings first, then map them to app-owned points.

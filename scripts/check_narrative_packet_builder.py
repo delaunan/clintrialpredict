@@ -78,6 +78,15 @@ def _check_packet(fixture: dict, errors: list[str]) -> None:
         errors.append(f"{fixture_id}: score_delta changed")
     if model.get("direct_xgboost_shap_fields") != list(DIRECT_XGBOOST_SHAP_FIELDS):
         errors.append(f"{fixture_id}: direct_xgboost_shap_fields mismatch")
+    guidance = model.get("model_signal_guidance") or {}
+    if "model_signal_guidance" not in model:
+        errors.append(f"{fixture_id}: model_interpretation missing model_signal_guidance")
+    elif (
+        "feature-level evidence" not in str(guidance.get("granularity_rule") or "")
+        or "Movement explains what changed" not in str(guidance.get("main_model_signals_rule") or "")
+        or "Scientific Challenge alignment" not in (guidance.get("avoid") or [])
+    ):
+        errors.append(f"{fixture_id}: model_signal_guidance should constrain main_model_signals granularity")
 
     iteration = packet.get("iteration_context", {})
     source_iteration = source_packet.get("iteration_context", {})
@@ -141,6 +150,9 @@ def _check_review_continuity_context(errors: list[str]) -> None:
                 "medical_development_question": "What evidence standard matters most?",
                 "clinical_operations_question": "What operational burden is proportionate?",
                 "strategic_field_question": "What broader field challenge does this scenario expose?",
+            },
+            "continuity_update": {
+                "watch_next": "Watch whether later edits preserve the baseline evidence-operational balance.",
             },
             "continuity": {
                 "new_concerns": [],
@@ -243,6 +255,9 @@ def _check_review_continuity_context(errors: list[str]) -> None:
         errors.append("previous visible review context should preserve trial_score")
     if context.get("baseline_review", {}).get("central_tension") != "Baseline central tension.":
         errors.append("hidden baseline review context should preserve trace central_tension when present")
+    baseline_memory = context.get("baseline_review", {}).get("compact_storyline_memory") or ""
+    if "Baseline tension:" not in baseline_memory or "Next watch:" not in baseline_memory:
+        errors.append("hidden baseline review context should compact useful baseline tension and next-watch memory")
     if context.get("previous_review", {}).get("central_tension") != "Feasibility vs Evidence Strength":
         errors.append("previous visible review context should prefer current central_tension_candidate summary")
     previous_questions = context.get("previous_review", {}).get("key_questions") or {}
@@ -384,6 +399,48 @@ def _check_field_and_impact_changes(errors: list[str]) -> None:
             {"Pillar": "Scientific Challenge", "Subcategory": "Protocol Architecture", "Impact": -1.0},
             {"Pillar": "Execution Framework", "Subcategory": "Methodological Setup", "Impact": 1.0},
         ],
+        "feature_level_impacts": [
+            {
+                "Feature": "endpoint_rigor_ml",
+                "Label": "Endpoint Rigor",
+                "Value": "Clinical",
+                "Pillar": "Scientific Challenge",
+                "Subcategory": "Protocol Architecture",
+                "Impact": -1.0,
+            },
+            {
+                "Feature": "comparator_benchmark_ml",
+                "Label": "Comparator",
+                "Value": "Active (Modern Standard)",
+                "Pillar": "Execution Framework",
+                "Subcategory": "Methodological Setup",
+                "Impact": 1.0,
+            },
+            {
+                "Feature": "phase_ml",
+                "Label": "Phase",
+                "Value": "Phase 2",
+                "Pillar": "Therapeutic Context",
+                "Subcategory": "Development Phase",
+                "Impact": -2.0,
+            },
+            {
+                "Feature": "endpoint_structure_ml",
+                "Label": "Endpoint Structure",
+                "Value": "Single primary endpoint",
+                "Pillar": "Scientific Challenge",
+                "Subcategory": "Protocol Architecture",
+                "Impact": -5.0,
+            },
+            {
+                "Feature": "healthy_volunteers_ml",
+                "Label": "Healthy Volunteers",
+                "Value": "No",
+                "Pillar": "Patient Profile",
+                "Subcategory": "Population Scope",
+                "Impact": -1.5,
+            },
+        ],
     }
     previous_snapshot = {
         **baseline_snapshot,
@@ -404,6 +461,48 @@ def _check_field_and_impact_changes(errors: list[str]) -> None:
         "feature_impacts": [
             {"Pillar": "Scientific Challenge", "Subcategory": "Protocol Architecture", "Impact": 0.5},
             {"Pillar": "Execution Framework", "Subcategory": "Methodological Setup", "Impact": 1.0},
+        ],
+        "feature_level_impacts": [
+            {
+                "Feature": "endpoint_rigor_ml",
+                "Label": "Endpoint Rigor",
+                "Value": "Surrogate / Biomarker",
+                "Pillar": "Scientific Challenge",
+                "Subcategory": "Protocol Architecture",
+                "Impact": 0.5,
+            },
+            {
+                "Feature": "comparator_benchmark_ml",
+                "Label": "Comparator",
+                "Value": "Active (Modern Standard)",
+                "Pillar": "Execution Framework",
+                "Subcategory": "Methodological Setup",
+                "Impact": 1.0,
+            },
+            {
+                "Feature": "phase_ml",
+                "Label": "Phase",
+                "Value": "Phase 2",
+                "Pillar": "Therapeutic Context",
+                "Subcategory": "Development Phase",
+                "Impact": -2.0,
+            },
+            {
+                "Feature": "endpoint_structure_ml",
+                "Label": "Endpoint Structure",
+                "Value": "Single primary endpoint",
+                "Pillar": "Scientific Challenge",
+                "Subcategory": "Protocol Architecture",
+                "Impact": -3.0,
+            },
+            {
+                "Feature": "healthy_volunteers_ml",
+                "Label": "Healthy Volunteers",
+                "Value": "No",
+                "Pillar": "Patient Profile",
+                "Subcategory": "Population Scope",
+                "Impact": -1.5,
+            },
         ],
     }
     current_snapshot = {
@@ -426,8 +525,74 @@ def _check_field_and_impact_changes(errors: list[str]) -> None:
             {"Pillar": "Execution Framework", "Impact": 3.0},
         ],
         "feature_impacts": [
-            {"Pillar": "Scientific Challenge", "Subcategory": "Protocol Architecture", "Impact": 0.5},
+            {"Pillar": "Scientific Challenge", "Subcategory": "Protocol Architecture", "Impact": 0.8},
             {"Pillar": "Execution Framework", "Subcategory": "Methodological Setup", "Impact": 3.0},
+        ],
+        "feature_level_impacts": [
+            {
+                "Feature": "endpoint_rigor_ml",
+                "Label": "Endpoint Rigor",
+                "Value": "Surrogate / Biomarker",
+                "Pillar": "Scientific Challenge",
+                "Subcategory": "Protocol Architecture",
+                "Impact": 0.5,
+            },
+            {
+                "Feature": "comparator_benchmark_ml",
+                "Label": "Comparator",
+                "Value": "Placebo Control",
+                "Pillar": "Execution Framework",
+                "Subcategory": "Methodological Setup",
+                "Impact": 3.0,
+            },
+            {
+                "Feature": "allocation_ml",
+                "Label": "Allocation",
+                "Value": "Randomized",
+                "Pillar": "Execution Framework",
+                "Subcategory": "Methodological Setup",
+                "Impact": 2.0,
+            },
+            {
+                "Feature": "sponsor_tier_ml",
+                "Label": "Sponsor Tier",
+                "Value": "Large pharma",
+                "Pillar": "Execution Framework",
+                "Subcategory": "Sponsor Capability",
+                "Impact": 1.0,
+            },
+            {
+                "Feature": "phase_ml",
+                "Label": "Phase",
+                "Value": "Phase 2",
+                "Pillar": "Therapeutic Context",
+                "Subcategory": "Development Phase",
+                "Impact": -2.0,
+            },
+            {
+                "Feature": "administration_complexity_ml",
+                "Label": "Administration Complexity",
+                "Value": "Complex",
+                "Pillar": "Execution Framework",
+                "Subcategory": "Site Burden",
+                "Impact": -0.7,
+            },
+            {
+                "Feature": "line_of_therapy_ml",
+                "Label": "Line of Therapy",
+                "Value": "Later line",
+                "Pillar": "Patient Profile",
+                "Subcategory": "Treatment Context",
+                "Impact": -0.2,
+            },
+            {
+                "Feature": "endpoint_structure_ml",
+                "Label": "Endpoint Structure",
+                "Value": "Single primary endpoint",
+                "Pillar": "Scientific Challenge",
+                "Subcategory": "Protocol Architecture",
+                "Impact": -3.0,
+            },
         ],
         "operational_assumptions": {
             "planned_enrollment": {},
@@ -482,6 +647,186 @@ def _check_field_and_impact_changes(errors: list[str]) -> None:
     ):
         errors.append("XGBoost impact changes should include baseline, previous, current, and deltas")
 
+    model = packet.get("model_interpretation", {})
+    state = model.get("current_model_state_evidence") or {}
+    movement = model.get("model_movement_evidence") or {}
+    positive_pillars = state.get("top_positive_pillar_impacts") or []
+    negative_pillars = state.get("top_negative_pillar_impacts") or []
+    if not any(item.get("pillar") == "Execution Framework" and item.get("impact") == 3.0 for item in positive_pillars):
+        errors.append("current model state should expose top positive pillar impacts")
+    if not any(item.get("pillar") == "Scientific Challenge" and item.get("impact") == 0.5 for item in positive_pillars):
+        errors.append("current model state should classify positive signed impacts as favorable state")
+    if negative_pillars:
+        errors.append("current model state should not report negative pillars when all current pillar impacts are positive")
+    positive_subpillars = state.get("top_positive_subpillar_impacts") or []
+    if not any(
+        item.get("subpillar") == "Methodological Setup" and item.get("impact") == 3.0
+        for item in positive_subpillars
+    ):
+        errors.append("current model state should expose top positive subpillar impacts")
+    if state.get("feature_impact_availability") != "direct_xgboost_feature_impacts_available":
+        errors.append("feature impact availability should report direct XGBoost feature impacts")
+    positive_features = state.get("top_positive_feature_impacts") or []
+    negative_features = state.get("top_negative_feature_impacts") or []
+    if [item.get("feature") for item in positive_features] != [
+        "comparator_benchmark_ml",
+        "allocation_ml",
+        "sponsor_tier_ml",
+    ]:
+        errors.append("current model state should expose only the top three positive feature impacts")
+    if [item.get("feature") for item in negative_features] != [
+        "endpoint_structure_ml",
+        "phase_ml",
+        "administration_complexity_ml",
+    ]:
+        errors.append("current model state should expose only the top three negative feature impacts")
+    if any(item.get("feature") == "Protocol Architecture" for item in positive_features + negative_features):
+        errors.append("feature impact state should not treat subpillar rows as feature rows")
+
+    positive_movements = movement.get("top_positive_pillar_movements") or []
+    if not any(
+        item.get("pillar") == "Execution Framework"
+        and item.get("delta_from_previous") == 2.0
+        and item.get("movement_from_previous") == "still_positive_and_improved"
+        and item.get("crossed_zero_from_previous") is False
+        for item in positive_movements
+    ):
+        errors.append("model movement should expose positive pillar movement from previous iteration")
+    positive_subpillar_movements = movement.get("top_positive_subpillar_movements") or []
+    if not any(
+        item.get("subpillar") == "Protocol Architecture"
+        and item.get("movement_from_baseline") == "negative_to_positive"
+        and item.get("crossed_zero_from_baseline") is True
+        for item in positive_subpillar_movements
+    ):
+        errors.append("model movement should expose subpillar zero-crossing from baseline")
+    positive_feature_movements = movement.get("top_positive_feature_movements") or []
+    if not any(
+        item.get("feature") == "comparator_benchmark_ml"
+        and item.get("delta_from_previous") == 2.0
+        and item.get("delta_from_baseline") == 2.0
+        for item in positive_feature_movements
+    ):
+        errors.append("model movement should expose direct feature impact movement")
+    if not any(
+        item.get("feature") == "healthy_volunteers_ml"
+        and item.get("current_impact") == 0.0
+        and item.get("delta_from_previous") == 1.5
+        and item.get("movement_from_previous") == "improved"
+        for item in positive_feature_movements
+    ):
+        errors.append("model movement should treat missing current feature impact as zero for movement")
+    if any(item.get("feature") == "endpoint_structure_ml" for item in positive_feature_movements):
+        errors.append("model movement should not rank stale baseline movement ahead of previous-iteration movement")
+    negative_feature_movements = movement.get("top_negative_feature_movements") or []
+    if any(item.get("feature") == "endpoint_structure_ml" for item in negative_feature_movements):
+        errors.append("model movement should not rank stale negative baseline movement ahead of previous-iteration movement")
+
+
+def _check_operational_movement_context(errors: list[str]) -> None:
+    baseline_snapshot = {
+        "snapshot_id": "baseline-operational",
+        "source": "prerecorded_baseline",
+        "operational_assumptions": {
+            "planned_enrollment": {
+                "value": 40,
+                "source": "final_observed_value",
+                "benchmark_snapshot_id": "baseline-enrollment-cohort",
+                "benchmark_p50": 120,
+                "enrollment_status": "below_benchmark",
+            },
+            "planned_sites": {
+                "value": 4,
+                "source": "completed_registry_facility_count",
+                "site_default_basis": "completed_registry_facility_count",
+                "benchmark_p50": 12,
+                "site_count_status": "below_benchmark",
+                "patients_per_site_value": 10,
+                "patients_per_site_p50": 30,
+                "patients_per_site_status": "below_benchmark",
+            },
+            "planned_duration_months": {
+                "value": 24,
+                "source": "completed_actual_primary_completion",
+                "benchmark_p50": 30,
+                "duration_status": "typical",
+            },
+        },
+    }
+    current_snapshot = {
+        "snapshot_id": "current-operational",
+        "source": "simulation_ptc",
+        "changed_fields": ["operational_assumptions.planned_enrollment", "operational_assumptions.planned_sites"],
+        "changed_operational_assumptions": ["planned_enrollment", "planned_sites"],
+        "operational_assumptions": {
+            "planned_enrollment": {
+                "value": 100,
+                "source": "user_scenario",
+                "benchmark_snapshot_id": "current-enrollment-cohort",
+                "benchmark_p50": 120,
+                "enrollment_status": "typical",
+            },
+            "planned_sites": {
+                "value": 16,
+                "source": "user_scenario",
+                "benchmark_p50": 12,
+                "site_count_status": "ambitious",
+                "patients_per_site_value": 6.25,
+                "patients_per_site_p50": 30,
+                "patients_per_site_status": "below_benchmark",
+            },
+            "planned_duration_months": {
+                "value": 30,
+                "source": "user_scenario",
+                "benchmark_p50": 30,
+                "duration_status": "typical",
+            },
+        },
+    }
+    packet = build_review_packet(current_snapshot=current_snapshot, baseline_snapshot=baseline_snapshot)
+    movement = packet.get("operational_movement_context") or {}
+    fields = movement.get("fields") or {}
+    if movement.get("baseline_is_neutral_reference") is not True:
+        errors.append("operational_movement_context should mark the baseline as neutral reference")
+
+    enrollment = fields.get("planned_enrollment") or {}
+    if ((enrollment.get("movement_from_baseline") or {}).get("relative_to_p50")) != "toward_p50":
+        errors.append("enrollment movement should identify movement toward P50 when current value is closer than baseline")
+    if ((enrollment.get("baseline") or {}).get("confidence")) != "high":
+        errors.append("completed observed enrollment baseline should have high confidence")
+    if ((enrollment.get("benchmark_context") or {}).get("changed_from_baseline")) is not True:
+        errors.append("enrollment movement should explicitly flag changed benchmark context")
+
+    sites = fields.get("planned_sites") or {}
+    if sites.get("value_origin") != "direct_operational_assumption":
+        errors.append("planned-sites movement context should mark site count as a direct operational assumption")
+    if (sites.get("baseline") or {}).get("value") != 4 or (sites.get("current") or {}).get("value") != 16:
+        errors.append("planned-sites movement context should include baseline and current site values")
+    if ((sites.get("movement_from_baseline") or {}).get("relative_to_p50")) != "toward_p50":
+        errors.append("planned-sites movement should identify movement toward P50 when current site count is closer than baseline")
+    if ((sites.get("movement_from_baseline") or {}).get("magnitude")) != "extreme":
+        errors.append("planned-sites movement should classify 4-to-16 site movement as extreme")
+
+    patients_per_site = fields.get("patients_per_site") or {}
+    if patients_per_site.get("value_origin") != "calculated_from_enrollment_and_sites":
+        errors.append("patients-per-site movement context should mark the value as calculated from enrollment and sites")
+    if (patients_per_site.get("current") or {}).get("value") != 6.25:
+        errors.append("patients-per-site movement context should use current planned enrollment/current planned sites")
+    if ((patients_per_site.get("movement_from_baseline") or {}).get("magnitude")) != "major":
+        errors.append("patients-per-site movement should classify 10-to-6.25 movement as major")
+    if "counterbalance" not in str(patients_per_site.get("interpretation_rule") or ""):
+        errors.append("patients-per-site movement context should state percentile counterbalance rule")
+
+    duration = fields.get("planned_duration_months") or {}
+    if duration.get("value_origin") != "direct_operational_assumption":
+        errors.append("duration movement context should mark duration as a direct operational assumption")
+    if (duration.get("baseline") or {}).get("value") != 24 or (duration.get("current") or {}).get("value") != 30:
+        errors.append("duration movement context should include baseline and current duration values")
+    if ((duration.get("movement_from_baseline") or {}).get("relative_to_p50")) != "toward_p50":
+        errors.append("duration movement should identify movement toward P50 when current duration equals benchmark median")
+    if ((duration.get("current") or {}).get("benchmark_position") or {}).get("status") != "typical":
+        errors.append("duration movement context should include residual benchmark status")
+
 
 def _check_storyline_report_compatibility(errors: list[str]) -> None:
     exporter = (ROOT / "scripts" / "export_storyline_review_pack.py").read_text(encoding="utf-8")
@@ -508,6 +853,7 @@ def main() -> int:
     _check_review_continuity_context(errors)
     _check_canonical_values_prefer_compare_values(errors)
     _check_field_and_impact_changes(errors)
+    _check_operational_movement_context(errors)
     _check_storyline_report_compatibility(errors)
 
     if errors:
