@@ -427,8 +427,7 @@ completion_outlook_analysis
 strategy_shift_check
 operational_fit
 reality_check
-central_tension_candidate
-broader_strategic_question_candidate
+tension_question_options
 continuity_update
 ```
 
@@ -441,7 +440,8 @@ Pass 1 should produce:
 - consistency update versus prior XGBoost interpretation;
 - Operational Fit field ratings for enrollment, site footprint, and total duration;
 - combined Operational Fit rating and materiality;
-- Reality Check effect, strength, central tension candidate, allocation targets, and anti-double-counting rationale;
+- Reality Check effect, strength, allocation targets, and anti-double-counting rationale;
+- three complete tension/question options for Pass 2 selection;
 - continuity update for later iterations.
 
 `strategy_shift_check` is required when gated premise-sensitive fields changed. Allowed status values are `supported`, `partly_supported`, `unsupported_or_incoherent`, and `not_applicable`.
@@ -450,11 +450,27 @@ Pass 1 should produce:
 
 `reality_check` should include effect, strength, central reason, and 1-3 allocations. It should not include app-owned Reality Check points.
 
-`central_tension_candidate` should identify the main scenario tension, why it matters, supporting evidence, and related adjustable feature families where useful.
+`tension_question_options` is the canonical Pass 1 structure. It should contain exactly three complete options, with no main/alternative split. Each option pairs one tension with one question topic assigned to that exact tension.
 
-`broader_strategic_question_candidate` should be a reflective, topic-related debate question. It should not always be a direct question about changing a specific field value. It may mention related adjustable feature families as orientation, but the question should feel like a conference or strategy discussion prompt that helps the audience debate the next direction.
+Each option should use this shape:
 
-`alternative_strategic_question_candidates` should provide at least three participant-visible wider debate question options mapped to the selected central tension and the alternative tensions. These are source options for Pass 2 to choose from; they should be broader than operational checklist questions and should frame strategy debates rather than recommended actions.
+```json
+{
+  "tension": {
+    "summary": "...",
+    "why_it_matters": "...",
+    "supporting_evidence": ["..."]
+  },
+  "participant_wider_question": {
+    "question": "...",
+    "supporting_evidence": ["..."]
+  }
+}
+```
+
+Pass 1 should focus on analytical substance for each option: the development issue, why it matters, the trial evidence behind it, and the associated wider-perspective strategic question topic Pass 2 can shape for participants.
+
+The validated contract still projects the first option into `central_tension_candidate`, the remaining options into `alternative_tension_candidates`, and the paired questions into `broader_strategic_question_candidate` / `alternative_strategic_question_candidates` for compatibility with existing storage and history consumers. Providers should treat `tension_question_options` as the source of truth.
 
 The participant-visible `broader_strategic_question` selected by Pass 2 should be stored and passed forward with the participant-visible central tension in `recent_participant_visible_questions`. Later Pass 2 calls should use this history to preserve continuity while avoiding unnecessary repetition: prefer a different wider debate question when the scenario supports a different tension, but reuse or closely echo the previous question when same-state reuse or a clear return to a prior state calls for consistency.
 
@@ -462,7 +478,7 @@ The participant-visible `broader_strategic_question` selected by Pass 2 should b
 
 `continuity_update` should be compact and carry only the active tension, what changed since the previous visible iteration, whether a prior tension was resolved/reopened/worsened, and what to watch next.
 
-Pass 1 proposes the central tension analytically. The application validates that candidate against the scored evidence, and Pass 2 writes the final participant-facing central tension. Pass 2 should not introduce a new analytical basis that was absent from the validated Pass 1 analysis.
+Pass 1 proposes three analytical tension/question options. Pass 2 selects one pair using priority 1 history/continuity, then priority 2 relevance to the current scenario. Pass 2 should not introduce a new analytical basis that was absent from the validated Pass 1 options.
 
 Pass 1 should not write the final participant-facing score narrative, because it does not yet know the app-calculated Operational Fit points, Reality Check points, or final Trial Score.
 
@@ -608,17 +624,17 @@ The packet includes `model_interpretation.model_signal_guidance` so the provider
 
 Hidden-baseline compaction now preserves the baseline Completion Outlook summary when available and carries a compact baseline tension plus next-watch note into the first visible prompt. Hidden baseline output remains qualitative context only: no hidden Trial Score, hidden Operational Fit points, or hidden Reality Check points should be treated as prior visible scores.
 
-Pass 1 should explicitly act as a clinical development, trial design, regulatory strategy, and clinical operations expert. Its goal is to review the evidence package, summarize the current design logic, observe scenario dynamics across iterations, and challenge weak assumptions or tensions. It must stay non-prescriptive: frame trade-offs, uncertainties, and questions rather than recommendations, sponsor instructions, or exact field-change advice.
+Pass 1 should explicitly act as a clinical development, trial design, regulatory strategy, and clinical operations expert. Its goal is to review the evidence package, summarize the current design logic, observe scenario dynamics across iterations, and identify weak assumptions or tensions. Pass 1 should prioritize rich analytical material over participant-facing wording; Pass 2 owns final phrasing and participant-facing style constraints.
 
-Hidden-baseline analysis should be deep enough to anchor the later visible storyline. It should use the trial text, structured fields, model evidence, operational context, therapeutic-area context, and selected reference-pack summaries to explain the actual development problem: population, intervention, endpoints, follow-up windows, oversight needs, scientific purpose, feasibility, and what development decision the evidence package could credibly support. The Pass 1 `analytical_narrative_draft` should read like a substantive source note for the future storyline, not a short score recap: it should name concrete trial facts, endpoint/follow-up logic, safety or monitoring burden, evidence ambition, similar-trial operational pattern, and the decision the baseline evidence can or cannot support. Participant-facing and draft narrative wording should describe operational context as similar-trial patterns or comparable studies, not as benchmark data. Underlying operational benchmark metadata remains available as structured context and audit evidence, but the narrative should translate it into clinical-development language. Validation enforces a minimum total draft depth before Pass 2 receives the draft: at least 120 words for visible reviews and at least 220 words for hidden baseline.
+Hidden-baseline analysis should be deep enough to anchor the later visible storyline. It should use the trial text, structured fields, model evidence, operational context, therapeutic-area context, and selected reference-pack summaries to explain the actual development problem: population, intervention, endpoints, follow-up windows, oversight needs, scientific purpose, feasibility, and what development decision the evidence package could credibly support. The Pass 1 `analytical_narrative_draft` should read like a substantive source note for the future storyline, not a short score recap: it should name concrete trial facts, endpoint/follow-up logic, safety or monitoring burden, evidence ambition, similar-trial operational pattern, and the decision the baseline evidence can or cannot support. Across hidden and visible reviews, Pass 1 should use packet evidence to cover the most relevant supported dimensions: population/setting/clinical context, endpoint interpretability, safety governance, comparator or standard-of-care context, development decision supported, evidence completeness risk, and program-level meaning. When immune markers, disease-control measures, clinically confirmed events, long follow-up, vulnerable populations, or special settings are present, Pass 1 should explain why they matter for interpreting safety, response, feasibility, generalizability, or confidence in the next development step. Participant-facing and draft narrative wording should describe operational context as similar-trial patterns or comparable studies, not as benchmark data. Underlying operational benchmark metadata remains available as structured context and audit evidence, but the narrative should translate it into clinical-development language. Validation enforces a minimum total draft depth before Pass 2 receives the draft: at least 320 words for visible reviews and at least 450 words for hidden baseline.
 
-Pass 1 should also return `alternative_tension_candidates` alongside the selected `central_tension_candidate`. These alternatives are non-prescriptive storyline options, not recommendations. They let later iterations shift the active storyline when the scenario dynamic changes, for example from operational feasibility to evidence interpretability, safety governance, endpoint confidence, or participant/site burden. Pass 1 should also return at least three `alternative_strategic_question_candidates`, each mapped to one of those tension statements, so Pass 2 can choose the wider debate question that best fits the participant-facing narrative.
+Pass 1 should return exactly three `tension_question_options`. They let later iterations continue a prior storyline when history supports continuity, or shift to another tension when the scenario dynamic changes, for example from operational feasibility to evidence interpretability, safety governance, endpoint confidence, or participant/site burden. Each option includes its own wider-perspective strategic question topic so Pass 2 can select and shape a coherent pair without remapping questions after the fact. Tension summaries should prefer analytically specific evidence trade-offs, such as long-term safety confidence versus evidence completeness, over short operational labels when packet evidence supports the richer framing.
 
 Provider repair prompts and Pass 1 validation now use one shared recursive packet-evidence reference helper from the Trial Score contract. This allows provider citations to point to deep movement evidence, such as patients-per-site benchmark position or movement relative to P50 inside `operational_movement_context`, without failing evidence validation.
 
 Current contract refinement: the two-pass role split is asymmetric.
 
-- Pass 1 is the full analyst and rough narrative drafter. It keeps all existing structured outputs for Completion Outlook, Operational Fit, Reality Check, strategy shift, central tension, broader question, and continuity, and now adds `analytical_narrative_draft`.
+- Pass 1 is the full analyst and rough narrative drafter. It keeps structured outputs for Completion Outlook, Operational Fit, Reality Check, strategy shift, `tension_question_options`, and continuity, plus `analytical_narrative_draft`.
 - The Pass 1 draft is provisional and intentionally richer than the final output. It may explain current model state, model movement, Operational Fit reasoning, pre-Reality direction, Reality Check reasoning, central tension, relevant reference-pack implications, and score-aware implications used in the analysis. This draft is not participant-facing, so the final-output score-language rule does not apply here.
 - The implemented shape is:
 

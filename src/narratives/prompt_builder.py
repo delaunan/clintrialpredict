@@ -9,7 +9,6 @@ from typing import Any
 from src.narratives.trial_score_contract import (
     ANALYTICAL_NARRATIVE_DRAFT_FIELDS,
     APP_OWNED_TRIAL_SCORE_FIELDS,
-    MIN_ALTERNATIVE_TENSION_CANDIDATES,
     MIN_ANALYTICAL_DRAFT_WORDS,
     MIN_HIDDEN_BASELINE_ANALYTICAL_DRAFT_WORDS,
     MIN_STRATEGIC_QUESTION_CANDIDATES,
@@ -41,10 +40,7 @@ TRIAL_SCORE_REQUIRED_TOP_LEVEL_OBJECTS = (
     "strategy_shift_check",
     "operational_fit",
     "reality_check",
-    "central_tension_candidate",
-    "alternative_tension_candidates",
-    "broader_strategic_question_candidate",
-    "alternative_strategic_question_candidates",
+    "tension_question_options",
     "continuity_update",
     "analytical_narrative_draft",
 )
@@ -164,7 +160,7 @@ def provider_response_contract() -> dict[str, Any]:
         "forbidden_provider_fields": sorted(APP_OWNED_TRIAL_SCORE_FIELDS),
         "pass1_instructions": [
             "Act as a clinical development, trial design, regulatory strategy, and clinical operations expert reviewing a serious-game scenario.",
-            "Your goal is to review the evidence package, summarize the current design logic, observe scenario dynamics across iterations, and challenge weak assumptions or tensions without prescribing what to do next.",
+            "Your goal is to review the evidence package, summarize the current design logic, observe scenario dynamics across iterations, and identify weak assumptions or tensions.",
             "Return structured analytical judgments, not the final participant narrative.",
             "Interpret XGBoost Completion Outlook as protected model-pattern evidence; do not rewrite model outputs.",
             "For main_model_signals, cite concrete packet evidence from model_signal_guidance, model state, and model movement context; avoid generic pillar slogans.",
@@ -173,21 +169,24 @@ def provider_response_contract() -> dict[str, Any]:
             "Prefer feature label/value with parent pillar/subpillar for main_model_signals; fall back to subpillar, then pillar only if no granular evidence exists.",
             "Separate model state from model movement: state is the current signed impact snapshot; movement is the delta from baseline or previous iteration.",
             "Score only combined_operational_fit numerically through app code; field-level operational ratings are explanatory.",
-            "Use operational_movement_context to separate movement from neutral baseline and residual benchmark position for Operational Fit.",
-            "Benchmark percentiles can counterbalance movement size; do not score absolute distance from P50 alone.",
+            "Use operational_movement_context to separate movement from neutral baseline and residual similar-trial position for Operational Fit.",
+            "Operational percentile context can counterbalance movement size; do not score absolute distance from P50 alone.",
             "Reality Check must include effect, strength, central_reason, evidence_fields, and 1-3 allocations for non-neutral effects.",
             "Reality Check allocations must use allocation_target_id from allowed_reality_check_allocation_targets and include movement_label, rationale, and incremental_check.",
             f"Return analytical_narrative_draft as an extensive rough analytical draft for Pass 2 editing, with at least {MIN_ANALYTICAL_DRAFT_WORDS} words across the required fields.",
             f"For hidden baseline, analytical_narrative_draft must be especially rich, with at least {MIN_HIDDEN_BASELINE_ANALYTICAL_DRAFT_WORDS} words across the required fields.",
             "In analytical_narrative_draft, describe current state, movement, app-calculated score implications, Operational Fit, Reality Check, and central tension; score-aware wording is allowed here because this draft is not participant-facing.",
+            "Do not stop at model-signal recap. Use packet evidence to interpret the clinical-development meaning of the trial design.",
+            "Across analytical_narrative_draft, cover the most relevant supported dimensions: population/setting/clinical context; endpoint interpretability; safety governance; comparator or standard-of-care context; development decision supported; evidence completeness risk; and program-level meaning.",
+            "When the packet includes immune markers, disease-control measures, clinically confirmed events, long follow-up, vulnerable populations, or special settings, explain why they matter for interpreting safety, response, feasibility, generalizability, or confidence in the next development step.",
             "For hidden baseline, analytical_narrative_draft should be a substantive source note for the later storyline: name the actual population, intervention, endpoint/follow-up logic, safety or monitoring burden, evidence ambition, similar-trial operational pattern, and the decision the baseline evidence can or cannot support.",
+            "For hidden baseline, interpret population-specific clinical meaning rather than only reciting model drivers: examples include immunocompromised-population implications, immune-marker or disease-control measures when present, clinically confirmed event follow-up, endpoint interpretability, and why those details matter for the next development decision.",
             "For hidden baseline, avoid generic summaries such as strong scientific foundation or execution constraints unless they are tied to concrete trial facts from text_context, reference_packs, or model evidence.",
-            f"Return at least {MIN_ALTERNATIVE_TENSION_CANDIDATES} alternative_tension_candidates so later iterations can choose a different storyline tension when the scenario evolves.",
-            "All tension candidates must be non-prescriptive: frame trade-offs and questions, not recommendations, next steps, or field-change instructions.",
-            f"Return at least {MIN_STRATEGIC_QUESTION_CANDIDATES} alternative_strategic_question_candidates mapped to the selected central tension and alternative tensions.",
-            "Strategic question candidates are participant-visible wider debate options for Pass 2 to choose from, not hidden facilitator questions or operational checklist prompts.",
+            f"Return exactly {MIN_STRATEGIC_QUESTION_CANDIDATES} tension_question_options. Do not split them into one main option plus alternatives.",
+            "Each tension_question_options item must contain one tension and one participant_wider_question assigned to that exact tension.",
+            "For each tension_question_options item, include the development issue, why it matters, the trial evidence behind it, and the associated wider-perspective strategic question topic Pass 2 can shape for participants.",
+            "Prefer analytically specific tension summaries over short operational labels; for example, prefer evidence-confidence or evidence-completeness trade-offs over labels like Duration vs Feasibility when supported.",
             "Do not return app-owned point values or Trial Score.",
-            "Use conditional clinical-development language and avoid prescriptive language: do not recommend actions, tell the participant what to change, or say what the sponsor should do.",
         ],
         "operational_fit_shape": {
             "field_objects": ["enrollment_fit", "site_footprint_fit", "timeline_fit"],
@@ -215,15 +214,12 @@ def provider_response_contract() -> dict[str, Any]:
             "minimum_total_words": MIN_ANALYTICAL_DRAFT_WORDS,
             "minimum_hidden_baseline_total_words": MIN_HIDDEN_BASELINE_ANALYTICAL_DRAFT_WORDS,
         },
-        "alternative_tension_candidates_shape": {
-            "minimum_items": MIN_ALTERNATIVE_TENSION_CANDIDATES,
-            "required_fields": ["summary", "why_it_matters", "supporting_evidence"],
-            "role": "Additional non-prescriptive tension options for later iteration continuity.",
-        },
-        "alternative_strategic_question_candidates_shape": {
-            "minimum_items": MIN_STRATEGIC_QUESTION_CANDIDATES,
-            "required_fields": ["mapped_tension", "question", "supporting_evidence"],
-            "role": "Participant-visible wider debate question options mapped to the selected and alternative tensions.",
+        "tension_question_options_shape": {
+            "items": MIN_STRATEGIC_QUESTION_CANDIDATES,
+            "required_fields": ["tension", "participant_wider_question"],
+            "tension_required_fields": ["summary", "why_it_matters", "supporting_evidence"],
+            "participant_wider_question_required_fields": ["question", "supporting_evidence"],
+            "role": "Three complete tension/question pairs for Pass 2 selection by history first, then relevance.",
         },
     }
 
@@ -323,42 +319,30 @@ def gemini_response_schema() -> dict[str, Any]:
                 },
                 "required": ["effect", "strength", "central_reason", "evidence_fields", "allocations"],
             },
-            "central_tension_candidate": {
-                "type": "OBJECT",
-                "properties": {
-                    "summary": {"type": "STRING"},
-                    "why_it_matters": {"type": "STRING"},
-                    "supporting_evidence": _string_array_schema(),
-                },
-                "required": ["summary", "why_it_matters", "supporting_evidence"],
-            },
-            "alternative_tension_candidates": {
+            "tension_question_options": {
                 "type": "ARRAY",
                 "items": {
                     "type": "OBJECT",
                     "properties": {
-                        "summary": {"type": "STRING"},
-                        "why_it_matters": {"type": "STRING"},
-                        "supporting_evidence": _string_array_schema(),
+                        "tension": {
+                            "type": "OBJECT",
+                            "properties": {
+                                "summary": {"type": "STRING"},
+                                "why_it_matters": {"type": "STRING"},
+                                "supporting_evidence": _string_array_schema(),
+                            },
+                            "required": ["summary", "why_it_matters", "supporting_evidence"],
+                        },
+                        "participant_wider_question": {
+                            "type": "OBJECT",
+                            "properties": {
+                                "question": {"type": "STRING"},
+                                "supporting_evidence": _string_array_schema(),
+                            },
+                            "required": ["question", "supporting_evidence"],
+                        },
                     },
-                    "required": ["summary", "why_it_matters", "supporting_evidence"],
-                },
-            },
-            "broader_strategic_question_candidate": {
-                "type": "OBJECT",
-                "properties": {"question": {"type": "STRING"}},
-                "required": ["question"],
-            },
-            "alternative_strategic_question_candidates": {
-                "type": "ARRAY",
-                "items": {
-                    "type": "OBJECT",
-                    "properties": {
-                        "mapped_tension": {"type": "STRING"},
-                        "question": {"type": "STRING"},
-                        "supporting_evidence": _string_array_schema(),
-                    },
-                    "required": ["mapped_tension", "question", "supporting_evidence"],
+                    "required": ["tension", "participant_wider_question"],
                 },
             },
             "continuity_update": {
@@ -394,16 +378,16 @@ def build_provider_prompt(packet: dict[str, Any], *, prompt_mode: str | None = N
         f"Prompt template version: {PROMPT_TEMPLATE_VERSION}.\n"
         "Task: produce Pass 1 Analytical Review JSON for a clinical-trial serious-game scenario.\n"
         "Role and goal: act as a clinical development, trial design, regulatory strategy, and clinical operations expert. "
-        "Review the evidence package, summarize the design logic, observe scenario dynamics across iterations, and challenge weak assumptions or tensions. "
-        "Remain non-prescriptive: frame trade-offs and questions rather than recommendations or instructions.\n"
+        "Review the evidence package, summarize the design logic, observe scenario dynamics across iterations, and identify weak assumptions or tensions.\n"
         "Active score stack: Trial Score = Completion Outlook + Operational Fit + Reality Check.\n"
         "Completion Outlook is protected XGBoost output. Do not alter /predict, SHAP, model artifacts, calibration, or model scores.\n"
         "For Completion Outlook, use concrete model state and movement evidence when present: signed current impacts describe the snapshot state, "
         "and deltas describe movement from baseline or previous iteration. Positive impacts are favorable by definition; negative impacts are unfavorable by definition.\n"
         "Operational Fit evaluates only the changed planned enrollment, planned site count, and planned total duration as one combined operational proportionality judgment. "
         "At scenario start Operational Fit is neutral; field-level ratings explain the combined judgment but are not summed. "
-        "For operational changes, distinguish movement from the neutral baseline from residual benchmark percentile position; "
-        "percentiles can counterbalance a large baseline move, and distance from P50 alone must not drive the rating.\n"
+        "For operational changes, distinguish movement from the neutral baseline from residual similar-trial percentile position; "
+        "percentile context can counterbalance a large baseline move, and distance from P50 alone must not drive the rating. "
+        "In narrative fields, translate percentile context into similar-trial or comparable-study language rather than benchmark wording.\n"
         "Reality Check is an after-review judgment about realism, robustness, simplification, and emerging tension. "
         "It may reinforce, soften, offset, or leave neutral the pre-Reality movement, but it must cite packet evidence and avoid double counting Operational Fit or Completion Outlook.\n"
         "For Reality Check allocations, return only allocation_target_id values from the contract enum; "
@@ -413,9 +397,9 @@ def build_provider_prompt(packet: dict[str, Any], *, prompt_mode: str | None = N
         "Do not return app-owned numeric fields such as operational_fit_points, pre_reality_score, reality_check_points, or trial_score. "
         "Write analytical_narrative_draft as an extensive rough analytical draft for Pass 2. It may explain hypotheses, trade-offs, "
         "score direction, score magnitude, and app-calculated score implications when useful, because the draft is not participant-facing. "
-        "Do not return app-owned score fields as structured fields. Return alternative_tension_candidates as non-prescriptive storyline options. "
-        "Return alternative_strategic_question_candidates as wider debate questions mapped to the selected and alternative tensions so Pass 2 can choose the strongest participant-visible wider debate question. "
-        "Use cautious language: may, might, could, appears, would need support. Do not recommend actions, tell the participant exactly which field to change next, or say what the sponsor should do.\n"
+        "Use packet evidence to interpret clinical-development meaning across population/setting context, endpoint interpretability, safety governance, comparator context, development-decision support, evidence-completeness risk, and program-level implications where relevant. "
+        "Do not return app-owned score fields as structured fields. Return exactly three tension_question_options as complete tension/question pairs, with no main/alternative split. "
+        "For each tension_question_options item, pair the development issue with the evidence and wider-perspective strategic question topic that Pass 2 can shape for participants.\n"
         "For hidden_baseline mode, create qualitative baseline context only and set visible false; do not imply visible Trial Score values.\n"
         "For visible modes, focus on the latest changed fields while preserving continuity with prior visible context. "
         "If gated premise-sensitive fields changed, populate strategy_shift_check; otherwise use not_applicable.\n"
@@ -512,6 +496,35 @@ def _score_alignment_notes(scoring: dict[str, Any]) -> dict[str, Any]:
 
 def _strategic_tension_question_options(pass1_review: dict[str, Any]) -> list[dict[str, Any]]:
     """Build three tension/question options for Pass 2 selection."""
+    direct_options = pass1_review.get("tension_question_options") or []
+    if isinstance(direct_options, list):
+        options: list[dict[str, Any]] = []
+        selected_summaries: set[str] = set()
+        for item in direct_options:
+            if not isinstance(item, dict):
+                continue
+            tension = item.get("tension") or {}
+            question = item.get("participant_wider_question") or {}
+            if not isinstance(tension, dict) or not isinstance(question, dict):
+                continue
+            summary = str(tension.get("summary") or "").strip()
+            question_text = str(question.get("question") or "").strip()
+            if not summary or not question_text or summary in selected_summaries:
+                continue
+            selected_summaries.add(summary)
+            mapped_question = {
+                "mapped_tension": summary,
+                "question": question_text,
+                "supporting_evidence": question.get("supporting_evidence") or tension.get("supporting_evidence") or [],
+            }
+            options.append({
+                "option_index": len(options) + 1,
+                "central_tension": deepcopy(tension),
+                "broader_strategic_question": mapped_question,
+            })
+            if len(options) == 3:
+                return options
+
     central_tension = pass1_review.get("central_tension_candidate") or {}
     alternative_tensions = pass1_review.get("alternative_tension_candidates") or []
     strategic_questions = pass1_review.get("alternative_strategic_question_candidates") or []
@@ -613,6 +626,7 @@ def build_pass2_input(
             "reality_check": pass1_review.get("reality_check") or {},
             "reality_check_assessment": scoring.get("reality_check_assessment") or {},
             "reality_check_allocation_points": scoring.get("reality_check_allocation_points") or [],
+            "tension_question_options": pass1_review.get("tension_question_options") or [],
             "central_tension_candidate": pass1_review.get("central_tension_candidate") or {},
             "alternative_tension_candidates": pass1_review.get("alternative_tension_candidates") or [],
             "broader_strategic_question_candidate": pass1_review.get("broader_strategic_question_candidate") or {},
@@ -644,6 +658,8 @@ def build_pass2_input(
             "Selection priority 1 - history: if same_state_reuse is true or recent participant-visible history clearly supports continuity, reuse or closely echo the relevant prior tension/question option.",
             "Selection priority 2 - relevance: otherwise choose the option most relevant to the current scenario evidence and score-aligned movement.",
             "Return central_tension.summary exactly equal to broader_strategic_question.mapped_tension.",
+            "The selected broader_strategic_question must remain a participant-visible wider development-debate question, broader than trial-management or facilitator prompts.",
+            "Do not phrase the selected broader_strategic_question as protocol advice using wording like ensure, optimize, prioritize, mitigate, improve, or what should the study do.",
             "Use score_alignment_notes to calibrate direction and importance without showing numeric values.",
             "Use model_evidence_context only to explain the validated analysis; do not recalculate Completion Outlook.",
             "If trajectory_context.same_state_reuse is true, explain the latest move as a return to a prior reviewed state while preserving the reused scores.",
@@ -667,6 +683,9 @@ def pass2_response_contract() -> dict[str, Any]:
             "Choose one central_tension and associated broader_strategic_question from pass1_analysis.strategic_tension_question_options.",
             "Apply selection priority 1 - history, then priority 2 - relevance.",
             "Return central_tension.summary exactly equal to broader_strategic_question.mapped_tension.",
+            "Keep broader_strategic_question in the style of participant-visible wider development-debate questions, not trial-management or facilitator prompts.",
+            "It should address evidence confidence, safety governance, endpoint interpretability, generalizability, program strategy, or field decision logic.",
+            "Do not phrase participant-visible wider questions as protocol advice using wording such as ensure, optimize, prioritize, mitigate, improve, or what should the study do.",
             "Use participant_visible_history.recent_participant_visible_questions to preserve continuity or avoid unnecessary repetition according to that priority rule.",
             "Optionally return up to three facilitator_questions for a collapsed facilitator/debug section; these are hidden facilitator prompts anchored in the current trial, not the participant-visible wider debate question.",
             "Do not introduce new analysis, new clinical/regulatory claims, or a new central conclusion beyond Pass 1 and score_alignment_notes.",

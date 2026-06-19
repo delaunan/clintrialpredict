@@ -163,41 +163,39 @@ def _pass1_review(
                 },
             ],
         },
-        "central_tension_candidate": {
-            "summary": "Execution support versus evidence interpretability.",
-            "why_it_matters": "The scenario may be more executable without being more decision-ready.",
-            "supporting_evidence": ["operational_assumptions.planned_sites", "phase_ml"],
-        },
-        "alternative_tension_candidates": [
+        "tension_question_options": [
             {
-                "summary": "Operational feasibility versus decision-ready evidence.",
-                "why_it_matters": "This frames whether execution support is enough when the evidence package itself has not become more interpretable.",
-                "supporting_evidence": ["operational_assumptions.planned_sites", "phase_ml"],
+                "tension": {
+                    "summary": "Execution support versus evidence interpretability.",
+                    "why_it_matters": "The scenario may be more executable without being more decision-ready.",
+                    "supporting_evidence": ["operational_assumptions.planned_sites", "phase_ml"],
+                },
+                "participant_wider_question": {
+                    "question": "When should better execution support change confidence in a development scenario, and when does it only make an unresolved evidence question easier to run?",
+                    "supporting_evidence": ["operational_assumptions.planned_sites", "phase_ml"],
+                },
             },
             {
-                "summary": "Execution scale versus endpoint confidence.",
-                "why_it_matters": "This gives later iterations another way to challenge whether the operational footprint supports the endpoint and follow-up logic.",
-                "supporting_evidence": ["operational_assumptions.planned_sites", "primary_duration_months_ml"],
-            },
-        ],
-        "broader_strategic_question_candidate": {
-            "question": "When should operational support compensate for a scenario whose evidence standard has not strengthened?",
-        },
-        "alternative_strategic_question_candidates": [
-            {
-                "mapped_tension": "Execution support versus evidence interpretability.",
-                "question": "When should better execution support change confidence in a development scenario, and when does it only make an unresolved evidence question easier to run?",
-                "supporting_evidence": ["operational_assumptions.planned_sites", "phase_ml"],
+                "tension": {
+                    "summary": "Operational feasibility versus decision-ready evidence.",
+                    "why_it_matters": "This frames whether execution support is enough when the evidence package itself has not become more interpretable.",
+                    "supporting_evidence": ["operational_assumptions.planned_sites", "phase_ml"],
+                },
+                "participant_wider_question": {
+                    "question": "How should a team distinguish operational practicality from evidence that is strong enough to support the intended decision?",
+                    "supporting_evidence": ["operational_assumptions.planned_sites", "phase_ml"],
+                },
             },
             {
-                "mapped_tension": "Operational feasibility versus decision-ready evidence.",
-                "question": "How should a team distinguish operational practicality from evidence that is strong enough to support the intended decision?",
-                "supporting_evidence": ["operational_assumptions.planned_sites", "phase_ml"],
-            },
-            {
-                "mapped_tension": "Execution scale versus endpoint confidence.",
-                "question": "When does adding operational scale improve interpretability, and when does it expose that the endpoint and follow-up logic have not kept pace?",
-                "supporting_evidence": ["operational_assumptions.planned_sites", "primary_duration_months_ml"],
+                "tension": {
+                    "summary": "Execution scale versus endpoint confidence.",
+                    "why_it_matters": "This gives later iterations another way to challenge whether the operational footprint supports the endpoint and follow-up logic.",
+                    "supporting_evidence": ["operational_assumptions.planned_sites", "primary_duration_months_ml"],
+                },
+                "participant_wider_question": {
+                    "question": "When does adding operational scale improve interpretability, and when does it expose that the endpoint and follow-up logic have not kept pace?",
+                    "supporting_evidence": ["operational_assumptions.planned_sites", "primary_duration_months_ml"],
+                },
             },
         ],
         "continuity_update": {
@@ -206,11 +204,11 @@ def _pass1_review(
             "watch_next": "Whether evidence support catches up with operational scale.",
         },
         "analytical_narrative_draft": {
-            "current_state_read": "The current state remains anchored in the protected model-pattern Completion Outlook, while the scenario narrative needs to read the trial as an evidence package rather than a score alone. The relevant context is the relationship between phase, operational support, endpoint timing, and the decision the evidence can credibly support.",
-            "movement_read": "The latest move appears operationally supportive but still needs evidence interpretation. The movement should be summarized as a scenario dynamic, not as a recommendation, and it should challenge whether the changed assumptions actually improve the development argument.",
-            "operational_fit_read": "Operational Fit reads the enrollment and site-footprint change as a proportionality question. The draft should compare the operational footprint with similar trial patterns and explain whether the scenario looks easier to execute without telling the participant what to change.",
-            "reality_check_read": "Reality Check may offset part of the apparent gain if the movement looks shortcut-driven. The review should frame this as a robustness question about the evidence package and operational support, not as a sponsor instruction.",
-            "central_tension_read": "The core tension is execution support versus evidence interpretability. Alternative tensions should remain available for later iterations, including whether operational feasibility is being mistaken for decision-ready evidence and whether endpoint confidence has kept pace with the execution plan.",
+            "current_state_read": "The current state remains anchored in the protected model-pattern Completion Outlook, while the scenario narrative needs to read the trial as an evidence package rather than a score alone. The relevant context is the relationship between phase, population setting, comparator context, operational support, endpoint timing, and the decision the evidence can credibly support.",
+            "movement_read": "The latest move appears operationally supportive but still needs evidence interpretation. The movement should be summarized as a scenario dynamic and should challenge whether the changed assumptions actually improve the development argument, improve evidence completeness, or only make the same endpoint package easier to run.",
+            "operational_fit_read": "Operational Fit reads the enrollment and site-footprint change as a proportionality question. The draft should compare the operational footprint with similar trial patterns and explain whether the scenario looks easier to execute, whether data quality and retention are protected, and whether the revised footprint is consistent with the endpoint and follow-up burden.",
+            "reality_check_read": "Reality Check may offset part of the apparent gain if the movement looks shortcut-driven. The review should frame this as a robustness question about the evidence package and operational support. It should also consider whether comparator choice, safety oversight, endpoint interpretability, or follow-up timing changes confidence beyond the model and Operational Fit read.",
+            "central_tension_read": "The core tension is execution support versus evidence interpretability. Alternative tensions should remain available for later iterations, including whether operational feasibility is being mistaken for decision-ready evidence, whether endpoint confidence has kept pace with the execution plan, and whether the trial can support the next development decision rather than only a narrower feasibility read. The draft should also preserve enough program-level context for Pass 2 to explain why the same score movement may matter differently across phases, populations, and evidence ambitions. It should retain the comparator and standard-of-care implications, the population-specific limits on generalizability, and the possibility that stronger operational support still leaves uncertainty about whether the evidence package is complete enough for the intended development use. That context gives Pass 2 enough material to distinguish execution confidence, clinical interpretability, and program strategy without rerunning the analysis. It should also make clear whether the most relevant future debate is operational durability, endpoint credibility, or broader program confidence.",
         },
     }
 
@@ -666,75 +664,60 @@ def _check_analytical_draft_contract(errors: list[str]) -> None:
     thin_visible_result = score_pass1_review(_packet(), thin_visible)
     if thin_visible_result.get("validation_status") != "invalid":
         errors.append("Visible Pass 1 should reject too-thin analytical_narrative_draft")
-    if not any("at least 120 words" in error for error in thin_visible_result.get("validation_errors") or []):
-        errors.append("Visible thin draft should report the 120-word minimum")
+    if not any("at least 320 words" in error for error in thin_visible_result.get("validation_errors") or []):
+        errors.append("Visible thin draft should report the 320-word minimum")
 
     thin_hidden = _pass1_review()
     thin_hidden["review_metadata"] = {"review_mode": "hidden_baseline", "visible": False}
     thin_hidden_result = score_pass1_review(_packet(changed_fields=[]), thin_hidden)
     if thin_hidden_result.get("validation_status") != "invalid":
         errors.append("Hidden baseline should reject drafts below the hidden-baseline depth floor")
-    if not any("at least 220 words" in error for error in thin_hidden_result.get("validation_errors") or []):
-        errors.append("Hidden thin draft should report the 220-word minimum")
+    if not any("at least 450 words" in error for error in thin_hidden_result.get("validation_errors") or []):
+        errors.append("Hidden thin draft should report the 450-word minimum")
 
-    missing_tensions = _pass1_review()
-    missing_tensions.pop("alternative_tension_candidates", None)
-    missing_tensions_result = score_pass1_review(_packet(), missing_tensions)
-    if missing_tensions_result.get("validation_status") != "invalid":
-        errors.append("Pass 1 should require alternative_tension_candidates")
-    if not any("alternative_tension_candidates must be an array" in error for error in missing_tensions_result.get("validation_errors") or []):
-        errors.append("Missing alternative_tension_candidates should produce a targeted validation error")
+    missing_tension_options = _pass1_review()
+    missing_tension_options.pop("tension_question_options", None)
+    missing_tension_options_result = score_pass1_review(_packet(), missing_tension_options)
+    if missing_tension_options_result.get("validation_status") != "invalid":
+        errors.append("Pass 1 should require tension_question_options")
+    if not any("tension_question_options must be an array" in error for error in missing_tension_options_result.get("validation_errors") or []):
+        errors.append("Missing tension_question_options should produce a targeted validation error")
 
     missing_primary_tension = _pass1_review()
-    missing_primary_tension["central_tension_candidate"].pop("summary", None)
+    missing_primary_tension["tension_question_options"][0]["tension"].pop("summary", None)
     missing_primary_tension_result = score_pass1_review(_packet(), missing_primary_tension)
     if missing_primary_tension_result.get("validation_status") != "invalid":
-        errors.append("Pass 1 should require central_tension_candidate.summary")
-    if not any("central_tension_candidate.summary is required" in error for error in missing_primary_tension_result.get("validation_errors") or []):
-        errors.append("Missing central_tension_candidate.summary should produce a targeted validation error")
+        errors.append("Pass 1 should require tension_question_options tension summary")
+    if not any("tension_question_options[0].tension.summary is required" in error for error in missing_primary_tension_result.get("validation_errors") or []):
+        errors.append("Missing tension summary should produce a targeted validation error")
 
     duplicate_tensions = _pass1_review()
-    duplicate_tensions["alternative_tension_candidates"][0]["summary"] = duplicate_tensions["central_tension_candidate"]["summary"]
+    duplicate_tensions["tension_question_options"][1]["tension"]["summary"] = duplicate_tensions["tension_question_options"][0]["tension"]["summary"]
     duplicate_tensions_result = score_pass1_review(_packet(), duplicate_tensions)
     if duplicate_tensions_result.get("validation_status") != "invalid":
         errors.append("Pass 1 should reject duplicate selected tension summaries")
-    if not any("selected tension summaries must be distinct" in error for error in duplicate_tensions_result.get("validation_errors") or []):
+    if not any("tension_question_options tension summaries must be distinct" in error for error in duplicate_tensions_result.get("validation_errors") or []):
         errors.append("Duplicate selected tensions should produce a targeted validation error")
 
-    missing_questions = _pass1_review()
-    missing_questions.pop("alternative_strategic_question_candidates", None)
-    missing_questions_result = score_pass1_review(_packet(), missing_questions)
-    if missing_questions_result.get("validation_status") != "invalid":
-        errors.append("Pass 1 should require alternative_strategic_question_candidates")
-    if not any("alternative_strategic_question_candidates must be an array" in error for error in missing_questions_result.get("validation_errors") or []):
-        errors.append("Missing alternative_strategic_question_candidates should produce a targeted validation error")
+    missing_question = _pass1_review()
+    missing_question["tension_question_options"][0]["participant_wider_question"].pop("question", None)
+    missing_question_result = score_pass1_review(_packet(), missing_question)
+    if missing_question_result.get("validation_status") != "invalid":
+        errors.append("Pass 1 should require participant_wider_question.question")
+    if not any("tension_question_options[0].participant_wider_question.question is required" in error for error in missing_question_result.get("validation_errors") or []):
+        errors.append("Missing participant wider question should produce a targeted validation error")
 
     too_few_questions = _pass1_review()
-    too_few_questions["alternative_strategic_question_candidates"] = too_few_questions[
-        "alternative_strategic_question_candidates"
-    ][:2]
+    too_few_questions["tension_question_options"] = too_few_questions["tension_question_options"][:2]
     too_few_questions_result = score_pass1_review(_packet(), too_few_questions)
     if too_few_questions_result.get("validation_status") != "invalid":
-        errors.append("Pass 1 should require at least three alternative strategic questions")
-    if not any("at least 3 options" in error for error in too_few_questions_result.get("validation_errors") or []):
-        errors.append("Too few strategic questions should report the 3-option minimum")
-
-    missing_question_coverage = _pass1_review()
-    for item in missing_question_coverage["alternative_strategic_question_candidates"]:
-        item["mapped_tension"] = "Execution support versus evidence interpretability."
-    missing_question_coverage_result = score_pass1_review(_packet(), missing_question_coverage)
-    if missing_question_coverage_result.get("validation_status") != "invalid":
-        errors.append("Pass 1 should reject strategic questions that do not cover the selected tensions")
-    if not any(
-        "one question mapped to each selected tension" in error
-        for error in missing_question_coverage_result.get("validation_errors") or []
-    ):
-        errors.append("Missing strategic question coverage should report the required tension mapping")
+        errors.append("Pass 1 should require exactly three tension/question options")
+    if not any("exactly 3 options" in error for error in too_few_questions_result.get("validation_errors") or []):
+        errors.append("Too few tension/question options should report the 3-option requirement")
 
     combined_messages = [
-        "analytical_narrative_draft must be an extensive interpretation with at least 120 words across required fields",
-        "alternative_tension_candidates must include at least 2 options",
-        "alternative_strategic_question_candidates must include at least 3 options",
+        "analytical_narrative_draft must be an extensive interpretation with at least 320 words across required fields",
+        "tension_question_options must include exactly 3 options",
     ]
     if _pass1_repair_stage(combined_messages) != PASS1_REPAIR_STAGE_NARRATIVE_SCAFFOLD:
         errors.append("Combined draft/tension failures should use one narrative scaffold repair stage")

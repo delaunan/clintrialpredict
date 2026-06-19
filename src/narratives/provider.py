@@ -307,6 +307,8 @@ def _pass1_repair_stage(messages: list[str]) -> str | None:
         return PASS1_REPAIR_STAGE_STRATEGY_SHIFT
     if (
         "analytical_narrative_draft" in joined
+        or "tension_question_options" in joined
+        or "participant_wider_question" in joined
         or "alternative_tension_candidates" in joined
         or "alternative_strategic_question_candidates" in joined
     ):
@@ -362,10 +364,10 @@ def _pass1_repair_prompt(packet: dict[str, Any], review: dict[str, Any] | None, 
             "Return the same review as a complete Pass 1 JSON object with the missing required objects restored."
         ),
         PASS1_REPAIR_STAGE_NARRATIVE_SCAFFOLD: (
-            "Change only analytical_narrative_draft and alternative_tension_candidates. Add or repair the required "
-            "qualitative draft fields, at least two non-prescriptive tension options, and at least three wider strategic "
-            "question candidates mapped to the selected and alternative tensions. Do not change valid ratings, evidence "
-            "fields, strategy_shift_check, or Reality Check allocations. Do not recommend actions or field changes."
+            "Change only analytical_narrative_draft and tension_question_options. Add or repair the required "
+            "qualitative draft fields and exactly three tension/question options. Each option must "
+            "pair one tension with one participant_wider_question. Do not change valid ratings, evidence "
+            "fields, strategy_shift_check, or Reality Check allocations."
         ),
     }.get(stage or "", "Change only the fields named by the validation errors.")
     return (

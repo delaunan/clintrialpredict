@@ -250,8 +250,8 @@ ANALYTICAL_NARRATIVE_DRAFT_FIELDS = (
     "reality_check_read",
     "central_tension_read",
 )
-MIN_ANALYTICAL_DRAFT_WORDS = 120
-MIN_HIDDEN_BASELINE_ANALYTICAL_DRAFT_WORDS = 220
+MIN_ANALYTICAL_DRAFT_WORDS = 320
+MIN_HIDDEN_BASELINE_ANALYTICAL_DRAFT_WORDS = 450
 MIN_ALTERNATIVE_TENSION_CANDIDATES = 2
 MIN_STRATEGIC_QUESTION_CANDIDATES = 3
 
@@ -290,6 +290,91 @@ def _word_count(value: Any) -> int:
     else:
         text = str(value or "")
     return len([part for part in text.replace("/", " ").split() if part.strip()])
+
+
+def _normalize_tension_question_options(review: dict[str, Any]) -> dict[str, Any]:
+    """Return canonical tension/question options plus legacy projections."""
+    raw_options = review.get("tension_question_options")
+    options: list[dict[str, Any]] = []
+    if isinstance(raw_options, list):
+        for item in raw_options:
+            if not isinstance(item, dict):
+                options.append(item)
+                continue
+            tension = deepcopy(item.get("tension") or {})
+            question = deepcopy(item.get("participant_wider_question") or {})
+            if isinstance(question, str):
+                question = {"question": question}
+            options.append({
+                "tension": tension if isinstance(tension, dict) else {},
+                "participant_wider_question": question if isinstance(question, dict) else {},
+            })
+    else:
+        central = review.get("central_tension_candidate") or {}
+        alternatives = review.get("alternative_tension_candidates") or []
+        questions = review.get("alternative_strategic_question_candidates") or []
+        primary_question = review.get("broader_strategic_question_candidate") or {}
+        tensions = [central]
+        if isinstance(alternatives, list):
+            tensions.extend(item for item in alternatives if isinstance(item, dict))
+        for index, tension in enumerate(tensions):
+            if not isinstance(tension, dict):
+                continue
+            summary = str(tension.get("summary") or "").strip()
+            if not summary:
+                continue
+            matched_question: dict[str, Any] = {}
+            if isinstance(questions, list):
+                for question in questions:
+                    if isinstance(question, dict) and str(question.get("mapped_tension") or "").strip() == summary:
+                        matched_question = deepcopy(question)
+                        break
+            if not matched_question and index == 0 and isinstance(primary_question, dict):
+                matched_question = deepcopy(primary_question)
+            options.append({
+                "tension": deepcopy(tension),
+                "participant_wider_question": {
+                    "question": str(matched_question.get("question") or "").strip(),
+                    "supporting_evidence": matched_question.get("supporting_evidence")
+                    or tension.get("supporting_evidence")
+                    or [],
+                },
+            })
+
+    projected_tensions = [
+        deepcopy(item.get("tension") or {})
+        for item in options
+        if isinstance(item, dict) and isinstance(item.get("tension"), dict)
+    ]
+    central_tension = projected_tensions[0] if projected_tensions else deepcopy(review.get("central_tension_candidate") or {})
+    alternative_tensions = projected_tensions[1:] if len(projected_tensions) > 1 else []
+    projected_questions: list[dict[str, Any]] = []
+    for item in options:
+        if not isinstance(item, dict):
+            continue
+        tension = item.get("tension") or {}
+        question = item.get("participant_wider_question") or {}
+        if not isinstance(tension, dict) or not isinstance(question, dict):
+            continue
+        summary = str(tension.get("summary") or "").strip()
+        projected_questions.append({
+            "mapped_tension": summary,
+            "question": str(question.get("question") or "").strip(),
+            "supporting_evidence": question.get("supporting_evidence") or tension.get("supporting_evidence") or [],
+        })
+
+    broader_question = (
+        {"question": projected_questions[0].get("question", "")}
+        if projected_questions
+        else deepcopy(review.get("broader_strategic_question_candidate") or {})
+    )
+    return {
+        "tension_question_options": options,
+        "central_tension_candidate": central_tension,
+        "alternative_tension_candidates": alternative_tensions,
+        "broader_strategic_question_candidate": broader_question,
+        "alternative_strategic_question_candidates": projected_questions,
+    }
 
 
 def _nested_evidence_refs(value: Any, *, prefix: str) -> set[str]:
@@ -790,22 +875,19 @@ def validate_pass1_review(packet: dict[str, Any], review: dict[str, Any]) -> dic
     required_objects = (
         "completion_outlook_analysis",
         "reality_check",
-        "central_tension_candidate",
-        "broader_strategic_question_candidate",
         "continuity_update",
         "analytical_narrative_draft",
     )
     for field in required_objects:
         if not isinstance(review.get(field), dict):
             errors.append(f"{field} must be an object")
-    central_tension_candidate = review.get("central_tension_candidate") or {}
-    if isinstance(central_tension_candidate, dict):
-        for field in ("summary", "why_it_matters"):
-            if not isinstance(central_tension_candidate.get(field), str) or not central_tension_candidate.get(field, "").strip():
-                errors.append(f"central_tension_candidate.{field} is required")
-    has_alternative_tensions = "alternative_tension_candidates" in review
-    if not has_alternative_tensions:
-        errors.append("alternative_tension_candidates must be an array")
+    normalized_tension_options = _normalize_tension_question_options(review)
+    tension_question_options = normalized_tension_options.get("tension_question_options") or []
+    if "tension_question_options" in review and not isinstance(review.get("tension_question_options"), list):
+        errors.append("tension_question_options must be an array")
+        tension_question_options = []
+    elif "tension_question_options" not in review and "central_tension_candidate" not in review:
+        errors.append("tension_question_options must be an array")
     draft = review.get("analytical_narrative_draft") or {}
     if isinstance(draft, dict):
         for field in ANALYTICAL_NARRATIVE_DRAFT_FIELDS:
@@ -825,71 +907,37 @@ def validate_pass1_review(packet: dict[str, Any], review: dict[str, Any]) -> dic
                 f"with at least {minimum_words} words across required fields"
             )
 
-    alternative_tensions = review.get("alternative_tension_candidates") or []
-    if has_alternative_tensions and not isinstance(alternative_tensions, list):
-        errors.append("alternative_tension_candidates must be an array")
-        alternative_tensions = []
-    elif len(alternative_tensions) < MIN_ALTERNATIVE_TENSION_CANDIDATES:
+    if isinstance(tension_question_options, list) and len(tension_question_options) != MIN_STRATEGIC_QUESTION_CANDIDATES:
         errors.append(
-            f"alternative_tension_candidates must include at least {MIN_ALTERNATIVE_TENSION_CANDIDATES} options"
+            f"tension_question_options must include exactly {MIN_STRATEGIC_QUESTION_CANDIDATES} options"
         )
-    for index, item in enumerate(alternative_tensions):
+    tension_summaries: list[str] = []
+    for index, item in enumerate(tension_question_options if isinstance(tension_question_options, list) else []):
         if not isinstance(item, dict):
-            errors.append(f"alternative_tension_candidates[{index}] must be an object")
+            errors.append(f"tension_question_options[{index}] must be an object")
+            continue
+        tension = item.get("tension")
+        question = item.get("participant_wider_question")
+        if not isinstance(tension, dict):
+            errors.append(f"tension_question_options[{index}].tension must be an object")
             continue
         for field in ("summary", "why_it_matters"):
-            if not isinstance(item.get(field), str) or not item.get(field, "").strip():
-                errors.append(f"alternative_tension_candidates[{index}].{field} is required")
-        if not isinstance(item.get("supporting_evidence"), list):
-            errors.append(f"alternative_tension_candidates[{index}].supporting_evidence must be an array")
-
-    strategic_questions = review.get("alternative_strategic_question_candidates") or []
-    if "alternative_strategic_question_candidates" not in review:
-        errors.append("alternative_strategic_question_candidates must be an array")
-    elif not isinstance(strategic_questions, list):
-        errors.append("alternative_strategic_question_candidates must be an array")
-        strategic_questions = []
-    elif len(strategic_questions) < MIN_STRATEGIC_QUESTION_CANDIDATES:
-        errors.append(
-            f"alternative_strategic_question_candidates must include at least {MIN_STRATEGIC_QUESTION_CANDIDATES} options"
-        )
-    for index, item in enumerate(strategic_questions):
-        if not isinstance(item, dict):
-            errors.append(f"alternative_strategic_question_candidates[{index}] must be an object")
+            if not isinstance(tension.get(field), str) or not tension.get(field, "").strip():
+                errors.append(f"tension_question_options[{index}].tension.{field} is required")
+        if not isinstance(tension.get("supporting_evidence"), list):
+            errors.append(f"tension_question_options[{index}].tension.supporting_evidence must be an array")
+        summary = str(tension.get("summary") or "").strip()
+        if summary:
+            tension_summaries.append(summary)
+        if not isinstance(question, dict):
+            errors.append(f"tension_question_options[{index}].participant_wider_question must be an object")
             continue
-        for field in ("mapped_tension", "question"):
-            if not isinstance(item.get(field), str) or not item.get(field, "").strip():
-                errors.append(f"alternative_strategic_question_candidates[{index}].{field} is required")
-        if "supporting_evidence" in item and not isinstance(item.get("supporting_evidence"), list):
-            errors.append(f"alternative_strategic_question_candidates[{index}].supporting_evidence must be an array")
-    required_tension_summaries = [str(central_tension_candidate.get("summary") or "").strip()]
-    required_tension_summaries.extend(
-        str(item.get("summary") or "").strip()
-        for item in alternative_tensions[:MIN_ALTERNATIVE_TENSION_CANDIDATES]
-        if isinstance(item, dict)
-    )
-    required_tension_summaries = [
-        summary for summary in required_tension_summaries[:MIN_STRATEGIC_QUESTION_CANDIDATES] if summary
-    ]
-    if len(required_tension_summaries) < MIN_STRATEGIC_QUESTION_CANDIDATES:
-        errors.append(
-            f"central_tension_candidate plus alternative_tension_candidates must define {MIN_STRATEGIC_QUESTION_CANDIDATES} selected tensions"
-        )
-    elif len(set(required_tension_summaries)) != MIN_STRATEGIC_QUESTION_CANDIDATES:
-        errors.append("selected tension summaries must be distinct")
-    mapped_question_tensions = {
-        str(item.get("mapped_tension") or "").strip()
-        for item in strategic_questions
-        if isinstance(item, dict)
-    }
-    missing_mapped_tensions = [
-        summary for summary in required_tension_summaries if summary not in mapped_question_tensions
-    ]
-    if len(required_tension_summaries) == MIN_STRATEGIC_QUESTION_CANDIDATES and missing_mapped_tensions:
-        errors.append(
-            "alternative_strategic_question_candidates must include one question mapped to each selected tension: "
-            + ", ".join(missing_mapped_tensions)
-        )
+        if not isinstance(question.get("question"), str) or not question.get("question", "").strip():
+            errors.append(f"tension_question_options[{index}].participant_wider_question.question is required")
+        if not isinstance(question.get("supporting_evidence"), list):
+            errors.append(f"tension_question_options[{index}].participant_wider_question.supporting_evidence must be an array")
+    if len(tension_summaries) == MIN_STRATEGIC_QUESTION_CANDIDATES and len(set(tension_summaries)) != MIN_STRATEGIC_QUESTION_CANDIDATES:
+        errors.append("tension_question_options tension summaries must be distinct")
 
     return {
         "validation_status": "valid" if not errors else "invalid",
@@ -901,10 +949,13 @@ def validate_pass1_review(packet: dict[str, Any], review: dict[str, Any]) -> dic
         "operational_fit": deepcopy(operational or {}),
         "operational_fit_assessment": operational_score,
         "reality_check": deepcopy(review.get("reality_check") or {}),
-        "central_tension_candidate": deepcopy(review.get("central_tension_candidate") or {}),
-        "alternative_tension_candidates": deepcopy(alternative_tensions),
-        "broader_strategic_question_candidate": deepcopy(review.get("broader_strategic_question_candidate") or {}),
-        "alternative_strategic_question_candidates": deepcopy(strategic_questions),
+        "tension_question_options": deepcopy(tension_question_options),
+        "central_tension_candidate": deepcopy(normalized_tension_options.get("central_tension_candidate") or {}),
+        "alternative_tension_candidates": deepcopy(normalized_tension_options.get("alternative_tension_candidates") or []),
+        "broader_strategic_question_candidate": deepcopy(normalized_tension_options.get("broader_strategic_question_candidate") or {}),
+        "alternative_strategic_question_candidates": deepcopy(
+            normalized_tension_options.get("alternative_strategic_question_candidates") or []
+        ),
         "continuity_update": deepcopy(review.get("continuity_update") or {}),
         "analytical_narrative_draft": deepcopy(draft),
     }

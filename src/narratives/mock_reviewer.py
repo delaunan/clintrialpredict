@@ -179,52 +179,45 @@ def _synthesized_trial_score_pass1_review(packet: dict[str, Any], fixture: dict[
             "evidence_fields": evidence_fields,
             "allocations": allocations,
         },
-        "central_tension_candidate": {
-            "summary": source.get("main_tension") or "Feasibility vs Evidence Strength.",
-            "why_it_matters": "The scenario should be discussed as a total-score trade-off.",
-            "supporting_evidence": evidence_fields,
-        },
-        "alternative_tension_candidates": [
+        "tension_question_options": [
             {
-                "summary": "Operational feasibility versus evidence interpretability.",
-                "why_it_matters": (
-                    "This frames whether a scenario looks easier to execute while still leaving uncertainty about "
-                    "what decision the resulting evidence could credibly support."
-                ),
-                "supporting_evidence": evidence_fields,
+                "tension": {
+                    "summary": source.get("main_tension") or "Feasibility vs Evidence Strength.",
+                    "why_it_matters": "The scenario should be discussed as a total-score trade-off.",
+                    "supporting_evidence": evidence_fields,
+                },
+                "participant_wider_question": {
+                    "question": "When should operational feasibility change confidence in the development story, and when does it only make an uncertain evidence package easier to run?",
+                    "supporting_evidence": evidence_fields,
+                },
             },
             {
-                "summary": "Safety governance versus participant and site burden.",
-                "why_it_matters": (
-                    "This gives later iterations a non-prescriptive tension for discussing whether oversight, follow-up, "
-                    "or monitoring requirements remain proportionate to the population and study purpose."
-                ),
-                "supporting_evidence": evidence_fields,
-            },
-        ],
-        "broader_strategic_question_candidate": {
-            "question": (
-                participant.get("strategic_development_question")
-                or participant.get("strategic_field_question")
-                or participant.get("clinical_operations_question")
-                or "What broader development tension does this scenario expose?"
-            ),
-        },
-        "alternative_strategic_question_candidates": [
-            {
-                "mapped_tension": source.get("main_tension") or "Feasibility vs Evidence Strength.",
-                "question": "When should operational feasibility change confidence in the development story, and when does it only make an uncertain evidence package easier to run?",
-                "supporting_evidence": evidence_fields,
+                "tension": {
+                    "summary": "Operational feasibility versus evidence interpretability.",
+                    "why_it_matters": (
+                        "This frames whether a scenario looks easier to execute while still leaving uncertainty about "
+                        "what decision the resulting evidence could credibly support."
+                    ),
+                    "supporting_evidence": evidence_fields,
+                },
+                "participant_wider_question": {
+                    "question": "How should a team distinguish a scenario that is operationally practical from one that is genuinely more decision-ready?",
+                    "supporting_evidence": evidence_fields,
+                },
             },
             {
-                "mapped_tension": "Operational feasibility versus evidence interpretability.",
-                "question": "How should a team distinguish a scenario that is operationally practical from one that is genuinely more decision-ready?",
-                "supporting_evidence": evidence_fields,
-            },
-            {
-                "mapped_tension": "Safety governance versus participant and site burden.",
-                "question": "When does additional governance strengthen credibility, and when might it become a burden that changes what the trial can realistically show?",
-                "supporting_evidence": evidence_fields,
+                "tension": {
+                    "summary": "Safety governance versus participant and site burden.",
+                    "why_it_matters": (
+                        "This gives later iterations a non-prescriptive tension for discussing whether oversight, follow-up, "
+                        "or monitoring requirements remain proportionate to the population and study purpose."
+                    ),
+                    "supporting_evidence": evidence_fields,
+                },
+                "participant_wider_question": {
+                    "question": "When does additional governance strengthen credibility, and when might it become a burden that changes what the trial can realistically show?",
+                    "supporting_evidence": evidence_fields,
+                },
             },
         ],
         "continuity_update": {
@@ -237,25 +230,40 @@ def _synthesized_trial_score_pass1_review(packet: dict[str, Any], fixture: dict[
                 "The current state appears mixed, with Completion Outlook acting as the protected model-pattern anchor. "
                 "The scenario should be read through the actual trial population, intervention, endpoint structure, and "
                 "operational footprint rather than through a generic score label. This mock draft deliberately preserves "
-                "enough source context for Pass 2 to shape the final participant narrative without inventing new claims."
+                "enough source context for Pass 2 to shape the final participant narrative without inventing new claims. "
+                "The analytical read should ask what the enrolled population, disease setting, comparator choice, and "
+                "endpoint package can actually tell a development team, and what remains outside the evidence generated "
+                "by this scenario. It should also preserve why the current phase, intervention type, disease severity, "
+                "and population scope affect whether the evidence is closer to an exploratory feasibility signal, a "
+                "decision-ready efficacy read, a safety-governance read, or a program-expansion signal."
             ),
             "movement_read": (
                 "The latest move should be read as a cautious historical-pattern shift rather than proof of causal improvement. "
                 "If no model-facing field changed, the draft should say that Completion Outlook remains anchored while other "
                 "scenario dimensions may still affect the qualitative discussion. If model-facing fields changed, the movement "
-                "should be explained as pattern evidence, not as a recommendation or instruction."
+                "should be explained as pattern evidence. The draft should also indicate whether the movement changes evidence "
+                "interpretability, evidence completeness, development decision support, or only the operational shape around an "
+                "otherwise similar evidence question. When the movement is a baseline or no-op state, the draft should still "
+                "name the analytical baseline that later scenario edits will test, including the main endpoint logic, the "
+                "population constraints, and the evidence risks most likely to become material."
             ),
             "operational_fit_read": (
                 "Operational Fit is interpreted as proportionality between the edited assumptions and the current design. "
                 "The wording should describe whether enrollment, site footprint, duration, and patients-per-site resemble "
-                "similar trial patterns for the current development problem, while avoiding prescriptive advice about what "
-                "the participant should change next."
+                "similar trial patterns for the current development problem. It should connect operational scale to evidence "
+                "completion risk, retention risk, data quality, and the ability of the study to preserve interpretable endpoint "
+                "or safety information over the planned follow-up window. Operational context should be tied back to the "
+                "development question: whether the study can complete enough visits, events, measurements, or safety follow-up "
+                "to support the decision implied by its phase and stated purpose."
             ),
             "reality_check_read": (
                 "Reality Check may reinforce, soften, or leave neutral the pre-Reality read depending on scenario coherence. "
                 "The draft should frame residual concerns as trade-offs, robustness questions, or tensions in the evidence "
-                "package, not as sponsor instructions. It should leave Pass 2 room to summarize the implication in the chosen "
-                "participant-facing format."
+                "package. It should examine whether vulnerable populations, safety oversight, comparator context, endpoint timing, "
+                "or follow-up demands change confidence in the design beyond what the model and Operational Fit already capture. "
+                "It should leave Pass 2 room to summarize the implication in the chosen participant-facing format. The draft "
+                "should distinguish limitations that affect operational delivery from limitations that affect clinical "
+                "interpretability, because those concerns can point to different storyline tensions in later iterations."
             ),
             "central_tension_read": (
                 (
@@ -264,7 +272,11 @@ def _synthesized_trial_score_pass1_review(packet: dict[str, Any], fixture: dict[
                 )
                 + " The selected tension is only one plausible storyline; alternative tensions should remain available "
                 "for later iterations if the participant changes the scenario in a direction that makes another trade-off "
-                "more analytically useful."
+                "more analytically useful. Strong tension options should usually describe development-level evidence trade-offs, "
+                "such as long-term safety confidence versus evidence completeness, endpoint ambition versus interpretability, "
+                "or population specificity versus program-level generalizability, rather than relying only on short operational labels. "
+                "The draft should also retain enough context about comparator relevance, safety oversight, and the decision "
+                "the evidence can support so Pass 2 can choose among those tensions without doing a new analysis."
             ),
         },
     }
