@@ -248,12 +248,19 @@ ANALYTICAL_NARRATIVE_DRAFT_FIELDS = (
     "movement_read",
     "operational_fit_read",
     "reality_check_read",
-    "central_tension_read",
+    "tension_landscape_read",
 )
 MIN_ANALYTICAL_DRAFT_WORDS = 320
 MIN_HIDDEN_BASELINE_ANALYTICAL_DRAFT_WORDS = 450
-MIN_ALTERNATIVE_TENSION_CANDIDATES = 2
-MIN_STRATEGIC_QUESTION_CANDIDATES = 3
+MIN_VISIBLE_TENSION_QUESTION_OPTIONS = 2
+MAX_VISIBLE_TENSION_QUESTION_OPTIONS = 3
+MIN_STRATEGIC_QUESTION_CANDIDATES = MAX_VISIBLE_TENSION_QUESTION_OPTIONS
+OBSOLETE_PASS1_TENSION_FIELDS = {
+    "central_tension_candidate",
+    "alternative_tension_candidates",
+    "broader_strategic_question_candidate",
+    "alternative_strategic_question_candidates",
+}
 
 def _clean_points(value: int | float) -> int | float:
     numeric = round(float(value), 1)
@@ -292,9 +299,8 @@ def _word_count(value: Any) -> int:
     return len([part for part in text.replace("/", " ").split() if part.strip()])
 
 
-def _normalize_tension_question_options(review: dict[str, Any]) -> dict[str, Any]:
-    """Return canonical tension/question options plus legacy projections."""
-    raw_options = review.get("tension_question_options")
+def _normalize_tension_question_options(raw_options: Any) -> list[dict[str, Any]]:
+    """Return canonical tension/question options only."""
     options: list[dict[str, Any]] = []
     if isinstance(raw_options, list):
         for item in raw_options:
@@ -309,72 +315,7 @@ def _normalize_tension_question_options(review: dict[str, Any]) -> dict[str, Any
                 "tension": tension if isinstance(tension, dict) else {},
                 "participant_wider_question": question if isinstance(question, dict) else {},
             })
-    else:
-        central = review.get("central_tension_candidate") or {}
-        alternatives = review.get("alternative_tension_candidates") or []
-        questions = review.get("alternative_strategic_question_candidates") or []
-        primary_question = review.get("broader_strategic_question_candidate") or {}
-        tensions = [central]
-        if isinstance(alternatives, list):
-            tensions.extend(item for item in alternatives if isinstance(item, dict))
-        for index, tension in enumerate(tensions):
-            if not isinstance(tension, dict):
-                continue
-            summary = str(tension.get("summary") or "").strip()
-            if not summary:
-                continue
-            matched_question: dict[str, Any] = {}
-            if isinstance(questions, list):
-                for question in questions:
-                    if isinstance(question, dict) and str(question.get("mapped_tension") or "").strip() == summary:
-                        matched_question = deepcopy(question)
-                        break
-            if not matched_question and index == 0 and isinstance(primary_question, dict):
-                matched_question = deepcopy(primary_question)
-            options.append({
-                "tension": deepcopy(tension),
-                "participant_wider_question": {
-                    "question": str(matched_question.get("question") or "").strip(),
-                    "supporting_evidence": matched_question.get("supporting_evidence")
-                    or tension.get("supporting_evidence")
-                    or [],
-                },
-            })
-
-    projected_tensions = [
-        deepcopy(item.get("tension") or {})
-        for item in options
-        if isinstance(item, dict) and isinstance(item.get("tension"), dict)
-    ]
-    central_tension = projected_tensions[0] if projected_tensions else deepcopy(review.get("central_tension_candidate") or {})
-    alternative_tensions = projected_tensions[1:] if len(projected_tensions) > 1 else []
-    projected_questions: list[dict[str, Any]] = []
-    for item in options:
-        if not isinstance(item, dict):
-            continue
-        tension = item.get("tension") or {}
-        question = item.get("participant_wider_question") or {}
-        if not isinstance(tension, dict) or not isinstance(question, dict):
-            continue
-        summary = str(tension.get("summary") or "").strip()
-        projected_questions.append({
-            "mapped_tension": summary,
-            "question": str(question.get("question") or "").strip(),
-            "supporting_evidence": question.get("supporting_evidence") or tension.get("supporting_evidence") or [],
-        })
-
-    broader_question = (
-        {"question": projected_questions[0].get("question", "")}
-        if projected_questions
-        else deepcopy(review.get("broader_strategic_question_candidate") or {})
-    )
-    return {
-        "tension_question_options": options,
-        "central_tension_candidate": central_tension,
-        "alternative_tension_candidates": alternative_tensions,
-        "broader_strategic_question_candidate": broader_question,
-        "alternative_strategic_question_candidates": projected_questions,
-    }
+    return options
 
 
 def _nested_evidence_refs(value: Any, *, prefix: str) -> set[str]:
@@ -813,7 +754,6 @@ def score_reality_check(
             "strength": "none",
             "fraction": 0.0,
             "central_reason": str(reality_check.get("central_reason") or ""),
-            "central_tension_candidate": deepcopy(reality_check.get("central_tension_candidate") or {}),
             "allocation_points": [],
             "supported_evidence_fields": supported,
             "validation_errors": [],
@@ -826,7 +766,6 @@ def score_reality_check(
         "strength": strength,
         "fraction": fraction,
         "central_reason": str(reality_check.get("central_reason") or ""),
-        "central_tension_candidate": deepcopy(reality_check.get("central_tension_candidate") or {}),
         "allocation_points": allocation_points,
         "supported_evidence_fields": supported,
         "validation_errors": [],
@@ -841,10 +780,14 @@ def validate_pass1_review(packet: dict[str, Any], review: dict[str, Any]) -> dic
 
     for field in sorted(APP_OWNED_TRIAL_SCORE_FIELDS.intersection(review)):
         errors.append(f"{field} is application-owned and must not be returned by Pass 1")
+    for field in sorted(OBSOLETE_PASS1_TENSION_FIELDS.intersection(review)):
+        errors.append(f"{field} is obsolete; use tension_question_options for visible iterations only")
 
     metadata = review.get("review_metadata") or {}
     if not isinstance(metadata, dict):
         errors.append("review_metadata must be an object")
+    review_mode = str((metadata or {}).get("review_mode") or "")
+    is_hidden_baseline = review_mode == "hidden_baseline"
 
     strategy_shift = review.get("strategy_shift_check") or {"status": "not_applicable"}
     if not isinstance(strategy_shift, dict):
@@ -881,23 +824,29 @@ def validate_pass1_review(packet: dict[str, Any], review: dict[str, Any]) -> dic
     for field in required_objects:
         if not isinstance(review.get(field), dict):
             errors.append(f"{field} must be an object")
-    normalized_tension_options = _normalize_tension_question_options(review)
-    tension_question_options = normalized_tension_options.get("tension_question_options") or []
-    if "tension_question_options" in review and not isinstance(review.get("tension_question_options"), list):
+    tension_options_provided = "tension_question_options" in review
+    if tension_options_provided and not isinstance(review.get("tension_question_options"), list):
         errors.append("tension_question_options must be an array")
         tension_question_options = []
-    elif "tension_question_options" not in review and "central_tension_candidate" not in review:
-        errors.append("tension_question_options must be an array")
+    elif not tension_options_provided:
+        if is_hidden_baseline:
+            tension_question_options = []
+        else:
+            errors.append("tension_question_options must be an array")
+            tension_question_options = []
+    else:
+        tension_question_options = _normalize_tension_question_options(review.get("tension_question_options"))
+    if is_hidden_baseline and tension_question_options:
+        errors.append("hidden baseline must not return tension_question_options")
     draft = review.get("analytical_narrative_draft") or {}
     if isinstance(draft, dict):
         for field in ANALYTICAL_NARRATIVE_DRAFT_FIELDS:
             value = draft.get(field)
             if not isinstance(value, str) or not value.strip():
                 errors.append(f"analytical_narrative_draft.{field} must be a non-empty string")
-        review_mode = str((metadata or {}).get("review_mode") or "")
         minimum_words = (
             MIN_HIDDEN_BASELINE_ANALYTICAL_DRAFT_WORDS
-            if review_mode == "hidden_baseline"
+            if is_hidden_baseline
             else MIN_ANALYTICAL_DRAFT_WORDS
         )
         draft_words = _word_count({field: draft.get(field) for field in ANALYTICAL_NARRATIVE_DRAFT_FIELDS})
@@ -907,9 +856,14 @@ def validate_pass1_review(packet: dict[str, Any], review: dict[str, Any]) -> dic
                 f"with at least {minimum_words} words across required fields"
             )
 
-    if isinstance(tension_question_options, list) and len(tension_question_options) != MIN_STRATEGIC_QUESTION_CANDIDATES:
+    if not is_hidden_baseline and isinstance(tension_question_options, list) and not (
+        MIN_VISIBLE_TENSION_QUESTION_OPTIONS
+        <= len(tension_question_options)
+        <= MAX_VISIBLE_TENSION_QUESTION_OPTIONS
+    ):
         errors.append(
-            f"tension_question_options must include exactly {MIN_STRATEGIC_QUESTION_CANDIDATES} options"
+            "tension_question_options must include "
+            f"{MIN_VISIBLE_TENSION_QUESTION_OPTIONS}-{MAX_VISIBLE_TENSION_QUESTION_OPTIONS} options"
         )
     tension_summaries: list[str] = []
     for index, item in enumerate(tension_question_options if isinstance(tension_question_options, list) else []):
@@ -936,10 +890,21 @@ def validate_pass1_review(packet: dict[str, Any], review: dict[str, Any]) -> dic
             errors.append(f"tension_question_options[{index}].participant_wider_question.question is required")
         if not isinstance(question.get("supporting_evidence"), list):
             errors.append(f"tension_question_options[{index}].participant_wider_question.supporting_evidence must be an array")
-    if len(tension_summaries) == MIN_STRATEGIC_QUESTION_CANDIDATES and len(set(tension_summaries)) != MIN_STRATEGIC_QUESTION_CANDIDATES:
+    if len(tension_summaries) >= MIN_VISIBLE_TENSION_QUESTION_OPTIONS and len(set(tension_summaries)) != len(tension_summaries):
         errors.append("tension_question_options tension summaries must be distinct")
 
-    return {
+    continuity_update = deepcopy(review.get("continuity_update") or {})
+    reality_check = deepcopy(review.get("reality_check") or {})
+    if is_hidden_baseline:
+        continuity_update["active_tension"] = ""
+        reality_check = {
+            **reality_check,
+            "effect": "neutral",
+            "strength": "none",
+            "allocations": [],
+        }
+
+    validated = {
         "validation_status": "valid" if not errors else "invalid",
         "validation_errors": errors,
         "validation_notes": list(operational_score.get("validation_notes") or []),
@@ -948,17 +913,13 @@ def validate_pass1_review(packet: dict[str, Any], review: dict[str, Any]) -> dic
         "strategy_shift_check": deepcopy(strategy_shift),
         "operational_fit": deepcopy(operational or {}),
         "operational_fit_assessment": operational_score,
-        "reality_check": deepcopy(review.get("reality_check") or {}),
-        "tension_question_options": deepcopy(tension_question_options),
-        "central_tension_candidate": deepcopy(normalized_tension_options.get("central_tension_candidate") or {}),
-        "alternative_tension_candidates": deepcopy(normalized_tension_options.get("alternative_tension_candidates") or []),
-        "broader_strategic_question_candidate": deepcopy(normalized_tension_options.get("broader_strategic_question_candidate") or {}),
-        "alternative_strategic_question_candidates": deepcopy(
-            normalized_tension_options.get("alternative_strategic_question_candidates") or []
-        ),
-        "continuity_update": deepcopy(review.get("continuity_update") or {}),
+        "reality_check": reality_check,
+        "continuity_update": continuity_update,
         "analytical_narrative_draft": deepcopy(draft),
     }
+    if not is_hidden_baseline:
+        validated["tension_question_options"] = deepcopy(tension_question_options)
+    return validated
 
 
 def score_pass1_review(packet: dict[str, Any], pass1_review: dict[str, Any]) -> dict[str, Any]:
@@ -1153,3 +1114,49 @@ def validate_pass2_review(review: dict[str, Any]) -> dict[str, Any]:
         "broader_strategic_question": deepcopy(broader_question or {}),
         "facilitator_questions": deepcopy(facilitator_questions),
     }
+
+
+def validate_pass2_review_with_input(review: dict[str, Any], pass2_input: dict[str, Any]) -> dict[str, Any]:
+    """Validate Pass 2 shape plus its selected tension/question against Pass 1 options."""
+    validated = validate_pass2_review(review)
+    errors = list(validated.get("validation_errors") or [])
+    notes = list(validated.get("validation_notes") or [])
+    pass1_analysis = pass2_input.get("pass1_analysis") if isinstance(pass2_input, dict) else {}
+    options = (pass1_analysis or {}).get("strategic_tension_question_options") or []
+    option_questions_by_summary: dict[str, str] = {}
+    if isinstance(options, list):
+        for item in options:
+            if not isinstance(item, dict):
+                continue
+            tension = item.get("central_tension") or {}
+            question = item.get("broader_strategic_question") or {}
+            if not isinstance(tension, dict) or not isinstance(question, dict):
+                continue
+            summary = str(tension.get("summary") or "").strip()
+            question_text = str(question.get("question") or "").strip()
+            if summary:
+                option_questions_by_summary[summary] = question_text
+    selected_summary = str((validated.get("central_tension") or {}).get("summary") or "").strip()
+    selected_question = str((validated.get("broader_strategic_question") or {}).get("question") or "").strip()
+    if option_questions_by_summary:
+        expected_question = option_questions_by_summary.get(selected_summary)
+        if selected_summary and expected_question is None:
+            errors.append("central_tension.summary must match one supplied strategic_tension_question_options tension")
+        elif expected_question is not None and selected_question and selected_question != expected_question:
+            errors.append("broader_strategic_question.question must match the question paired with the selected strategic_tension_question_options tension")
+    else:
+        errors.append("pass1_analysis.strategic_tension_question_options must include at least one selectable option")
+    history = pass2_input.get("participant_visible_history") if isinstance(pass2_input, dict) else {}
+    same_state_reuse = bool((history or {}).get("same_state_reuse")) if isinstance(history, dict) else False
+    recent_questions = (history or {}).get("recent_participant_visible_questions") if isinstance(history, dict) else []
+    if selected_question and not same_state_reuse and isinstance(recent_questions, list):
+        for item in recent_questions:
+            if not isinstance(item, dict):
+                continue
+            if selected_question == str(item.get("question") or "").strip():
+                notes.append("broader_strategic_question.question repeats a recent participant-visible question while same_state_reuse is false")
+                break
+    validated["validation_errors"] = errors
+    validated["validation_notes"] = notes
+    validated["validation_status"] = "valid" if not errors else "invalid"
+    return validated

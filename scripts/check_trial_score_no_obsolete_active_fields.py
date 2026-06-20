@@ -93,10 +93,21 @@ def _minimal_packet() -> dict:
             "operational_fit_points": 0.0,
             "reality_check_points": 0.0,
             "reality_check_assessment": {"effect": "neutral", "strength": "none", "points": 0.0},
-            "central_tension_candidate": {"summary": "Prior current tension."},
             "validated_review": {
                 "completion_outlook_analysis": {"risk_pattern_summary": "Prior completion outlook."},
-                "central_tension_candidate": {"summary": "Prior current tension."},
+                "tension_question_options": [
+                    {
+                        "tension": {
+                            "summary": "Prior current tension.",
+                            "why_it_matters": "Prior reason.",
+                            "supporting_evidence": ["phase_ml"],
+                        },
+                        "participant_wider_question": {
+                            "question": "Prior question?",
+                            "supporting_evidence": ["phase_ml"],
+                        },
+                    }
+                ],
                 "continuity_update": {"watch_next": "Prior next consideration."},
                 "key_questions": {
                     "medical_clinical_development_question": "Prior medical question?",

@@ -41,6 +41,7 @@ from src.narratives.trial_score_contract import (
     REALITY_CHECK_STRENGTHS,
     packet_evidence_refs,
     validate_pass2_review,
+    validate_pass2_review_with_input,
 )
 
 MOCK_MODEL_NAME = "fixture_hash_mock_v1"
@@ -309,8 +310,6 @@ def _pass1_repair_stage(messages: list[str]) -> str | None:
         "analytical_narrative_draft" in joined
         or "tension_question_options" in joined
         or "participant_wider_question" in joined
-        or "alternative_tension_candidates" in joined
-        or "alternative_strategic_question_candidates" in joined
     ):
         return PASS1_REPAIR_STAGE_NARRATIVE_SCAFFOLD
     if "evidence_fields" in joined or "packet evidence" in joined:
@@ -365,8 +364,9 @@ def _pass1_repair_prompt(packet: dict[str, Any], review: dict[str, Any] | None, 
         ),
         PASS1_REPAIR_STAGE_NARRATIVE_SCAFFOLD: (
             "Change only analytical_narrative_draft and tension_question_options. Add or repair the required "
-            "qualitative draft fields and exactly three tension/question options. Each option must "
-            "pair one tension with one participant_wider_question. Do not change valid ratings, evidence "
+            "qualitative draft fields. For visible iterations, provide two or three tension/question options, "
+            "each pairing one tension with one participant_wider_question. For hidden baseline, omit tension_question_options. "
+            "Do not change valid ratings, evidence "
             "fields, strategy_shift_check, or Reality Check allocations."
         ),
     }.get(stage or "", "Change only the fields named by the validation errors.")
@@ -465,14 +465,24 @@ def _score_provider_review(
     }
 
 
-def _attach_participant_narrative(result: dict[str, Any], narrative: dict[str, Any] | None) -> dict[str, Any]:
+def _attach_participant_narrative(
+    result: dict[str, Any],
+    narrative: dict[str, Any] | None,
+    pass2_input: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     if narrative is None:
         return result
-    validated = validate_pass2_review(narrative)
+    validated = (
+        validate_pass2_review_with_input(narrative, pass2_input)
+        if isinstance(pass2_input, dict)
+        else validate_pass2_review(narrative)
+    )
     metadata = dict(result.get("provider_metadata") or {})
     metadata["pass2_validation_status"] = validated.get("validation_status")
     if validated.get("validation_errors"):
         metadata["pass2_validation_errors"] = validated.get("validation_errors")
+    if validated.get("validation_notes"):
+        metadata["pass2_validation_notes"] = validated.get("validation_notes")
     updated = dict(result)
     updated["provider_metadata"] = metadata
     if validated.get("validation_status") == "valid":
@@ -482,13 +492,20 @@ def _attach_participant_narrative(result: dict[str, Any], narrative: dict[str, A
     return updated
 
 
-def _pass2_validation_messages(narrative: dict[str, Any] | None) -> tuple[dict[str, Any], list[str]]:
+def _pass2_validation_messages(
+    narrative: dict[str, Any] | None,
+    pass2_input: dict[str, Any] | None = None,
+) -> tuple[dict[str, Any], list[str]]:
     if not isinstance(narrative, dict):
         return (
             {"validation_status": "invalid", "validation_errors": ["Pass 2 provider response was not a JSON object"]},
             ["Pass 2 provider response was not a JSON object"],
         )
-    validated = validate_pass2_review(narrative)
+    validated = (
+        validate_pass2_review_with_input(narrative, pass2_input)
+        if isinstance(pass2_input, dict)
+        else validate_pass2_review(narrative)
+    )
     return validated, [str(item) for item in validated.get("validation_errors") or [] if str(item).strip()]
 
 
@@ -520,6 +537,8 @@ def _pass2_repair_prompt(pass2_input: dict[str, Any], narrative: dict[str, Any] 
         "- Remove exact Trial Score values, point values, and numeric contribution language from participant-facing prose.\n"
         "- Do not reanalyze, re-rate Operational Fit, re-decide Reality Check, or introduce new claims beyond Pass 1.\n"
         "- Keep one integrated Trial Score narrative, central tension, and broader strategic question.\n"
+        "- central_tension.summary must match one supplied pass1_analysis.strategic_tension_question_options central_tension.summary.\n"
+        "- broader_strategic_question.question must match the question paired with that supplied option.\n"
         "- facilitator_questions are optional and must include at most three questions.\n"
         "Pass 2 input JSON:\n"
         f"{input_json}\n"
@@ -604,12 +623,14 @@ def _call_openai_pass2(
         metadata["pass2_latency_ms"] = int(round((time.monotonic() - started_at) * 1000))
     updated = dict(result)
     updated["provider_metadata"] = metadata
-    validated, pass2_errors = _pass2_validation_messages(narrative)
+    validated, pass2_errors = _pass2_validation_messages(narrative, pass2_input)
     metadata["pass2_validation_status"] = validated.get("validation_status")
     if pass2_errors:
         metadata["pass2_validation_errors"] = pass2_errors
+    if validated.get("validation_notes"):
+        metadata["pass2_validation_notes"] = validated.get("validation_notes")
     if validated.get("validation_status") == "valid":
-        return _attach_participant_narrative(updated, narrative)
+        return _attach_participant_narrative(updated, narrative, pass2_input)
 
     repair_prompt = _pass2_repair_prompt(pass2_input, narrative, pass2_errors)
     metadata["pass2_repair_prompt_text"] = repair_prompt
@@ -646,13 +667,15 @@ def _call_openai_pass2(
             break
         finally:
             metadata["pass2_retry_latency_ms"] = int(round((time.monotonic() - retry_started_at) * 1000))
-        retry_validated, retry_errors = _pass2_validation_messages(retry_narrative)
+        retry_validated, retry_errors = _pass2_validation_messages(retry_narrative, pass2_input)
         metadata["pass2_retry_validation_status"] = retry_validated.get("validation_status")
         if retry_errors:
             metadata["pass2_retry_validation_errors"] = retry_errors
+        if retry_validated.get("validation_notes"):
+            metadata["pass2_retry_validation_notes"] = retry_validated.get("validation_notes")
         if retry_validated.get("validation_status") == "valid":
             updated["provider_metadata"] = metadata
-            return _attach_participant_narrative(updated, retry_narrative)
+            return _attach_participant_narrative(updated, retry_narrative, pass2_input)
         pass2_errors = retry_errors
         narrative = retry_narrative
 
@@ -715,12 +738,14 @@ def _call_gemini_pass2(
         metadata["pass2_latency_ms"] = int(round((time.monotonic() - started_at) * 1000))
     updated = dict(result)
     updated["provider_metadata"] = metadata
-    validated, pass2_errors = _pass2_validation_messages(narrative)
+    validated, pass2_errors = _pass2_validation_messages(narrative, pass2_input)
     metadata["pass2_validation_status"] = validated.get("validation_status")
     if pass2_errors:
         metadata["pass2_validation_errors"] = pass2_errors
+    if validated.get("validation_notes"):
+        metadata["pass2_validation_notes"] = validated.get("validation_notes")
     if validated.get("validation_status") == "valid":
-        return _attach_participant_narrative(updated, narrative)
+        return _attach_participant_narrative(updated, narrative, pass2_input)
 
     repair_prompt = _pass2_repair_prompt(pass2_input, narrative, pass2_errors)
     metadata["pass2_repair_prompt_text"] = repair_prompt
@@ -747,13 +772,15 @@ def _call_gemini_pass2(
             break
         finally:
             metadata["pass2_retry_latency_ms"] = int(round((time.monotonic() - retry_started_at) * 1000))
-        retry_validated, retry_errors = _pass2_validation_messages(retry_narrative)
+        retry_validated, retry_errors = _pass2_validation_messages(retry_narrative, pass2_input)
         metadata["pass2_retry_validation_status"] = retry_validated.get("validation_status")
         if retry_errors:
             metadata["pass2_retry_validation_errors"] = retry_errors
+        if retry_validated.get("validation_notes"):
+            metadata["pass2_retry_validation_notes"] = retry_validated.get("validation_notes")
         if retry_validated.get("validation_status") == "valid":
             updated["provider_metadata"] = metadata
-            return _attach_participant_narrative(updated, retry_narrative)
+            return _attach_participant_narrative(updated, retry_narrative, pass2_input)
         pass2_errors = retry_errors
         narrative = retry_narrative
 

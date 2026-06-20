@@ -15,30 +15,23 @@ def _string_list(value: Any) -> list[str]:
 def build_storyline_state(validated_review: dict[str, Any] | None) -> dict[str, Any]:
     """Build compact continuity state from a validated review."""
     validated_review = validated_review or {}
-    strategic_review = validated_review.get("strategic_review") or {}
     reality_check = validated_review.get("reality_check") or {}
-    central_tension = validated_review.get("central_tension_candidate") or {}
     continuity_update = validated_review.get("continuity_update") or {}
     continuity = validated_review.get("continuity") or {}
-    active_tension = (
-        central_tension.get("summary")
-        or strategic_review.get("current_tension")
-        or validated_review.get("main_tension")
-        or continuity_update.get("active_tension")
-        or ""
-    )
+    metadata = validated_review.get("review_metadata") or {}
+    is_hidden_baseline = str(metadata.get("review_mode") or "") == "hidden_baseline"
+    active_tension = ""
     return {
         "active_tension": str(active_tension).strip(),
-        "active_tension_status": str(strategic_review.get("tension_status") or "not_applicable"),
-        "last_effect_label": str(reality_check.get("effect") or strategic_review.get("effect_label") or ""),
-        "last_move_classification": _string_list(strategic_review.get("move_classification")),
+        "active_tension_status": "not_applicable" if is_hidden_baseline else "",
+        "last_effect_label": str(reality_check.get("effect") or ""),
+        "last_move_classification": [],
         "protected_gains": _string_list(continuity.get("prior_concerns_resolved")),
         "regression_watch": _string_list(continuity.get("prior_concerns_worsened")),
         "active_carryover": _string_list(continuity.get("prior_concerns_unchanged")),
         "new_concerns": _string_list(continuity.get("new_concerns")),
         "next_consideration": str(
             continuity_update.get("watch_next")
-            or strategic_review.get("next_consideration")
             or ""
         ).strip(),
         "storyline_update": str(

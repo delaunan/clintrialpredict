@@ -963,8 +963,10 @@ def _model_signal_guidance() -> dict[str, Any]:
             "by definition."
         ),
         "preferred_signal_format": (
-            "Feature label/value under Pillar / Subpillar with signed current impact or signed delta, for example "
-            "'Placebo control under Execution Framework / Methodological Setup (+2.0 vs previous)'."
+            "Feature Label: Value under Pillar / Subpillar with signed current impact or signed delta, for example "
+            "'DMC Involvement Status: Yes under Execution Framework / Methodological Setup (-5.7)' or "
+            "'Maximum Primary Endpoint Duration: 38.0 months under Execution Framework / Trial Complexity Footprint (-5.4)'. "
+            "Do not emit bare feature values without labels."
         ),
         "avoid": [
             "Scientific Challenge alignment",
@@ -1411,19 +1413,11 @@ def _compact_review_context(
     participant = validated.get("key_questions") or validated.get("participant_review") or {}
     completion_outlook = validated.get("completion_outlook_analysis") or validated.get("completion_outlook_review") or {}
     operational_fit = validated.get("operational_fit") or trace.get("operational_fit") or {}
-    central_tension_candidate = (
-        validated.get("central_tension_candidate")
-        or trace.get("central_tension_candidate")
-        or {}
-    )
-    broader_question_candidate = (
-        validated.get("broader_strategic_question_candidate")
-        or trace.get("broader_strategic_question_candidate")
-        or {}
-    )
+    draft = validated.get("analytical_narrative_draft") or {}
+    tension_landscape = str(draft.get("tension_landscape_read") or "").strip()
+    tension_question_options = validated.get("tension_question_options") or trace.get("tension_question_options") or []
     participant_central_tension = trace.get("participant_central_tension") or {}
     participant_broader_question = trace.get("participant_broader_strategic_question") or {}
-    tradeoff_review = validated.get("tradeoff_review") or {}
     trial_score = trace.get("trial_score")
     storyline_state = merge_storyline_state(trace)
     completion_summary = (
@@ -1432,21 +1426,27 @@ def _compact_review_context(
         or completion_outlook.get("summary")
     )
     central_tension_summary = (
-        central_tension_candidate.get("summary")
+        participant_central_tension.get("summary")
         or trace.get("central_tension")
-        or validated.get("main_tension")
-        or tradeoff_review.get("central_tension")
     )
     compact_storyline_memory = trace.get("compact_storyline_memory") or ""
-    if not include_quality_scores and central_tension_summary:
+    if not include_quality_scores:
+        central_tension_summary = ""
+        tension_question_options = []
+        participant_central_tension = {}
+        participant_broader_question = {}
+        storyline_state = deepcopy(storyline_state)
+        storyline_state["active_tension"] = ""
+        storyline_state["active_tension_status"] = "not_applicable"
         next_watch = (
             storyline_state.get("next_consideration")
             or (validated.get("continuity_update") or {}).get("watch_next")
             or ""
         )
-        compact_storyline_memory = f"Baseline tension: {central_tension_summary}"
         if next_watch:
-            compact_storyline_memory = f"{compact_storyline_memory} Next watch: {next_watch}"
+            compact_storyline_memory = f"Baseline watch: {next_watch}"
+        elif tension_landscape:
+            compact_storyline_memory = f"Baseline orientation: {tension_landscape[:220]}"
     participant_visible_question_history = trace.get("recent_participant_visible_questions")
     if not include_quality_scores:
         participant_visible_question_history = []
@@ -1476,8 +1476,9 @@ def _compact_review_context(
         "score_delta": trace.get("score_delta", trace.get("score_movement")),
         "completion_outlook_summary": completion_summary,
         "central_tension": central_tension_summary,
-        "central_tension_candidate": deepcopy(central_tension_candidate),
-        "broader_strategic_question_candidate": deepcopy(broader_question_candidate),
+        "tension_question_options": deepcopy(tension_question_options),
+        "participant_central_tension": deepcopy(participant_central_tension),
+        "participant_broader_strategic_question": deepcopy(participant_broader_question),
         "recent_participant_visible_questions": deepcopy(participant_visible_question_history),
         "key_questions": {
             "completion_outlook_summary": completion_outlook.get("risk_pattern_summary"),
@@ -1514,6 +1515,7 @@ def _compact_review_context(
 
     if not include_quality_scores:
         compact["baseline_completion_outlook_summary"] = completion_summary
+        compact["baseline_tension_landscape"] = tension_landscape
         compact["baseline_consistency_flags"] = {}
 
     return json_safe(compact)
@@ -1530,7 +1532,6 @@ def _trial_score_continuity(previous_review_trace: dict[str, Any] | None) -> dic
         }
 
     storyline_state = previous.get("storyline_state") or {}
-    central_tension = previous.get("central_tension_candidate") or {}
     reality_check = previous.get("reality_check_assessment") or {}
     return json_safe({
         "available": True,
@@ -1540,7 +1541,7 @@ def _trial_score_continuity(previous_review_trace: dict[str, Any] | None) -> dic
         "previous_pre_reality_score": previous.get("pre_reality_score"),
         "previous_operational_fit_points": previous.get("operational_fit_points"),
         "previous_reality_check_points": previous.get("reality_check_points"),
-        "active_tension": storyline_state.get("active_tension") or central_tension.get("summary") or previous.get("central_tension"),
+        "active_tension": storyline_state.get("active_tension") or previous.get("central_tension"),
         "last_reality_check_effect": reality_check.get("effect"),
         "protected_gains": storyline_state.get("protected_gains") or [],
         "regression_watch": storyline_state.get("regression_watch") or [],

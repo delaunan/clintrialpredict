@@ -1,9 +1,11 @@
-"""Static contract fixtures for the serious-game narrative V1 layer.
+"""Legacy static scenario fixtures used as packet-building test inputs.
 
-These fixtures are intentionally provider-free. They define the scenarios,
-input packet shape, expected structured review shape, and expected behavior
-that later packet-builder, validation, scoring, mock-reviewer, and UI work
-must preserve.
+These fixtures were created for the superseded Design Confidence contract.
+Active Trial Score tests still reuse their scenario packets through
+``build_review_packet_from_fixture`` so prompt, storage, and UI checks can run
+against stable scenario inputs. Do not treat this module as the active Trial
+Score response contract source; the current contract lives in
+``src/narratives/trial_score_contract.py``.
 """
 
 from __future__ import annotations

@@ -68,7 +68,6 @@ def main() -> int:
         "strategy_shift_check",
         "operational_fit",
         "reality_check",
-        "tension_question_options",
         "continuity_update",
         "analytical_narrative_draft",
     }:
@@ -112,9 +111,11 @@ def main() -> int:
         "XGBoost Completion Outlook",
         "model_signal_guidance",
         "latest movement signals first",
-        "feature label/value with parent pillar/subpillar",
+        "Feature Label: Value under Pillar / Subpillar",
+        "never list a bare value",
         "combined_operational_fit",
         "Reality Check allocations",
+        "Reality Check must stay neutral with strength none and no allocations",
         "analytical_narrative_draft",
         "extensive rough analytical draft",
         "score-aware wording is allowed here",
@@ -155,6 +156,7 @@ def main() -> int:
     reality_properties = reality_schema.get("properties") or {}
     allocation_schema = ((((reality_properties.get("allocations") or {}).get("items") or {}).get("properties") or {}))
     metadata_schema = schema_properties.get("review_metadata") or {}
+    continuity_schema = schema_properties.get("continuity_update") or {}
     draft_schema = schema_properties.get("analytical_narrative_draft") or {}
     tension_options_schema = schema_properties.get("tension_question_options") or {}
     tension_options_item_schema = (tension_options_schema.get("items") or {}).get("properties") or {}
@@ -194,9 +196,11 @@ def main() -> int:
         "movement_read",
         "operational_fit_read",
         "reality_check_read",
-        "central_tension_read",
+        "tension_landscape_read",
     }:
         errors.append("Gemini response schema should require all analytical narrative draft fields")
+    if set(continuity_schema.get("required") or []) != {"what_changed", "watch_next"}:
+        errors.append("Gemini response schema should not require continuity_update.active_tension")
     if set((tension_options_schema.get("items") or {}).get("required") or []) != {
         "tension",
         "participant_wider_question",
@@ -214,12 +218,15 @@ def main() -> int:
         "Review the evidence package, summarize the design logic, observe scenario dynamics across iterations, and identify weak assumptions or tensions",
         "Operational Fit evaluates only the changed planned enrollment",
         "At scenario start Operational Fit is neutral",
-        "Reality Check is an after-review judgment",
+        "Reality Check is an after-review scoring judgment",
+        "must not select the participant-visible central tension",
         "allocation_target_id values from the contract enum",
         "Do not return app-owned numeric fields",
         "strategy_shift_check",
         "combined_operational_fit",
         "tension_question_options",
+        "For hidden_baseline mode",
+        "keep Reality Check neutral with strength none and no allocations",
         "analytical_narrative_draft",
         "participant_wider_question",
         "Reality Check allocations",
@@ -323,7 +330,7 @@ def main() -> int:
             "movement_read": "The latest move appears operationally supportive but should be interpreted cautiously as a scenario dynamic rather than as proof that the design is better. The draft should challenge whether the move improves endpoint interpretability, protects evidence completeness, or only changes the operational shape around the same clinical question.",
             "operational_fit_read": "Operational Fit reads the site and enrollment changes as proportionality evidence. It should describe whether the revised footprint resembles similar trial patterns, whether retention and data quality remain credible, and whether the operational scale supports the endpoint and follow-up demands.",
             "reality_check_read": "Reality Check remains neutral unless the movement creates a realism or robustness concern. If concerns emerge, they should be framed as issues in evidence confidence, comparator relevance, safety governance, endpoint timing, or whether the trial can support the intended next development decision.",
-            "central_tension_read": "The scenario tension is execution support versus evidence ambition, with alternative tensions preserved so a later iteration can shift the storyline if endpoint confidence, safety governance, evidence completeness, population generalizability, or operational feasibility becomes the sharper issue. The source note should also preserve the program-level meaning of the move so Pass 2 can distinguish a narrower feasibility signal from evidence that could support a broader development decision. It should retain enough context for Pass 2 to decide whether continuity with prior participant-visible questions is warranted or whether a different tension is now more relevant. It should also preserve comparator relevance, standard-of-care context, and the specific evidence gaps that would remain even if the operational assumptions look more proportional. This gives Pass 2 sufficient material to separate execution support from true decision readiness and to choose a strategic question without inventing new analytical premises. It also keeps the current scenario tied to the broader evidence strategy.",
+            "tension_landscape_read": "The scenario tension landscape includes execution support versus evidence ambition, with alternative pressures preserved so a later iteration can shift the storyline if endpoint confidence, safety governance, evidence completeness, population generalizability, or operational feasibility becomes the sharper issue. The source note should also preserve the program-level meaning of the move so Pass 2 can distinguish a narrower feasibility signal from evidence that could support a broader development decision. It should retain enough context for Pass 2 to decide whether continuity with prior participant-visible questions is warranted or whether a different tension is now more relevant. It should also preserve comparator relevance, standard-of-care context, and the specific evidence gaps that would remain even if the operational assumptions look more proportional. This gives Pass 2 sufficient material to separate execution support from true decision readiness and to choose a strategic question without inventing new analytical premises. It also keeps the current scenario tied to the broader evidence strategy.",
         },
     }
     pass1_scoring = score_pass1_review(packet, pass1_review)
@@ -361,8 +368,8 @@ def main() -> int:
     if not isinstance(history.get("recent_participant_visible_questions"), list):
         errors.append("Pass 2 participant-visible history should use a recent-question list")
     tension_question_options = (pass2_input.get("pass1_analysis") or {}).get("strategic_tension_question_options") or []
-    if len(tension_question_options) != 3:
-        errors.append("Pass 2 input should expose exactly three strategic tension/question options")
+    if not 2 <= len(tension_question_options) <= 3:
+        errors.append("Pass 2 input should expose two or three strategic tension/question options")
     for index, option in enumerate(tension_question_options):
         tension_summary = ((option.get("central_tension") or {}).get("summary") or "").strip()
         mapped_tension = ((option.get("broader_strategic_question") or {}).get("mapped_tension") or "").strip()
@@ -410,12 +417,13 @@ def main() -> int:
         "exact point contributions in final participant-facing prose",
         "app_calculated_scores",
         "model_signal_guidance",
-        "central_tension_candidate",
+        "tension_question_options",
         "participant_visible_history",
         "recent_participant_visible_questions",
         "strategic_tension_question_options",
         "Selection priority 1 - history",
         "Selection priority 2 - relevance",
+        "avoid unnecessary repetition",
         "central_tension.summary exactly equal to broader_strategic_question.mapped_tension",
         "participant-visible wider debate question",
         "wider development-debate questions",

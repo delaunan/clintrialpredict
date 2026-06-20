@@ -11489,10 +11489,8 @@ def _pass2_pass1_analysis_debug_view(pass1_analysis):
         "completion_outlook_analysis": pass1_analysis.get("completion_outlook_analysis") or {},
         "operational_fit_provider_answer": pass1_analysis.get("operational_fit") or {},
         "reality_check_provider_answer": pass1_analysis.get("reality_check") or {},
-        "central_tension_candidate": pass1_analysis.get("central_tension_candidate") or {},
-        "alternative_tension_candidates": pass1_analysis.get("alternative_tension_candidates") or [],
-        "broader_strategic_question_candidate": pass1_analysis.get("broader_strategic_question_candidate") or {},
-        "alternative_strategic_question_candidates": pass1_analysis.get("alternative_strategic_question_candidates") or [],
+        "tension_question_options": pass1_analysis.get("tension_question_options") or [],
+        "strategic_tension_question_options": pass1_analysis.get("strategic_tension_question_options") or [],
         "continuity_update": pass1_analysis.get("continuity_update") or {},
         "analytical_narrative_draft": pass1_analysis.get("analytical_narrative_draft") or {},
     }
@@ -11665,10 +11663,10 @@ def persist_scenario_review_audit_bundle(trace, row=None, snapshot=None):
             "points": scoring.get("reality_check_points"),
         },
         "tension_and_questions": {
-            "pass1_central_tension_candidate": trace_for_bundle.get("central_tension_candidate") or {},
-            "pass1_broader_question_candidate": trace_for_bundle.get("broader_strategic_question_candidate") or {},
-            "pass2_central_tension": trace_for_bundle.get("participant_central_tension") or {},
-            "pass2_broader_question": trace_for_bundle.get("participant_broader_strategic_question") or {},
+            "pass1_tension_question_options": ((trace_for_bundle.get("validated_review") or {}).get("tension_question_options") or []),
+            "pass2_selected_central_tension": trace_for_bundle.get("participant_central_tension") or {},
+            "pass2_selected_broader_question": trace_for_bundle.get("participant_broader_strategic_question") or {},
+            "recent_participant_visible_questions": trace_for_bundle.get("recent_participant_visible_questions") or [],
             "facilitator_questions": trace_for_bundle.get("facilitator_questions") or [],
         },
         "ui_narrative_mapping": {
@@ -11854,16 +11852,6 @@ def render_scenario_review_report(row, trace=None, snapshot=None):
     operational_assessment = trace.get("operational_fit_assessment") or {}
     reality_check = validated_review.get("reality_check") or {}
     reality_assessment = trace.get("reality_check_assessment") or {}
-    central_tension_candidate = (
-        validated_review.get("central_tension_candidate")
-        or trace.get("central_tension_candidate")
-        or {}
-    )
-    broader_question_candidate = (
-        validated_review.get("broader_strategic_question_candidate")
-        or trace.get("broader_strategic_question_candidate")
-        or {}
-    )
     continuity_update = (
         validated_review.get("continuity_update")
         or trace.get("continuity_update")
@@ -11900,11 +11888,7 @@ def render_scenario_review_report(row, trace=None, snapshot=None):
 
     central_tension = (
         participant_central_tension.get("summary")
-        or central_tension_candidate.get("summary")
-        or continuity_update.get("active_tension")
         or trace.get("central_tension")
-        or validated_review.get("main_tension")
-        or ((trace.get("validated_review") or {}).get("tradeoff_review") or {}).get("central_tension")
     )
     report_title = "Baseline Reality Check" if trace.get("hidden_baseline") else "Trial Score Review"
     pending_review_html = (
@@ -11947,7 +11931,6 @@ def render_scenario_review_report(row, trace=None, snapshot=None):
     )
     strategic_question = (
         participant_broader_question.get("question")
-        or broader_question_candidate.get("question")
         or continuity_update.get("watch_next")
         or key_questions.get("strategic_development_question")
         or participant.get("strategic_development_question")

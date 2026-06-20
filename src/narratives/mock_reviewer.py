@@ -14,7 +14,7 @@ from src.narratives.contract_fixtures import get_contract_fixtures
 from src.narratives.packet_builder import build_review_packet_from_fixture, stable_packet_hash
 from src.narratives.prompt_builder import build_pass2_input
 from src.narratives.scoring import validate_and_score_review
-from src.narratives.trial_score_contract import GATED_PREMISE_SENSITIVE_FIELDS, validate_pass2_review
+from src.narratives.trial_score_contract import GATED_PREMISE_SENSITIVE_FIELDS, validate_pass2_review_with_input
 
 FAILURE_PROVIDER_ERROR = "provider_error"
 FAILURE_MALFORMED_JSON = "malformed_json"
@@ -146,9 +146,11 @@ def _synthesized_trial_score_pass1_review(packet: dict[str, Any], fixture: dict[
         )
         operational_fit_materiality = "moderate" if len(operational_changed) >= 2 else "minor"
         operational_interaction = "unmodeled_support" if expected_reality_check > 0 else "under_supported"
-    return {
+    review_mode = (source.get("review_metadata") or {}).get("review_mode", "first_visible_iteration")
+    is_hidden_baseline = str(review_mode) == "hidden_baseline"
+    review = {
         "review_metadata": {
-            "review_mode": (source.get("review_metadata") or {}).get("review_mode", "first_visible_iteration"),
+            "review_mode": review_mode,
             "visible": bool((source.get("review_metadata") or {}).get("visible", True)),
         },
         "completion_outlook_analysis": completion,
@@ -179,49 +181,8 @@ def _synthesized_trial_score_pass1_review(packet: dict[str, Any], fixture: dict[
             "evidence_fields": evidence_fields,
             "allocations": allocations,
         },
-        "tension_question_options": [
-            {
-                "tension": {
-                    "summary": source.get("main_tension") or "Feasibility vs Evidence Strength.",
-                    "why_it_matters": "The scenario should be discussed as a total-score trade-off.",
-                    "supporting_evidence": evidence_fields,
-                },
-                "participant_wider_question": {
-                    "question": "When should operational feasibility change confidence in the development story, and when does it only make an uncertain evidence package easier to run?",
-                    "supporting_evidence": evidence_fields,
-                },
-            },
-            {
-                "tension": {
-                    "summary": "Operational feasibility versus evidence interpretability.",
-                    "why_it_matters": (
-                        "This frames whether a scenario looks easier to execute while still leaving uncertainty about "
-                        "what decision the resulting evidence could credibly support."
-                    ),
-                    "supporting_evidence": evidence_fields,
-                },
-                "participant_wider_question": {
-                    "question": "How should a team distinguish a scenario that is operationally practical from one that is genuinely more decision-ready?",
-                    "supporting_evidence": evidence_fields,
-                },
-            },
-            {
-                "tension": {
-                    "summary": "Safety governance versus participant and site burden.",
-                    "why_it_matters": (
-                        "This gives later iterations a non-prescriptive tension for discussing whether oversight, follow-up, "
-                        "or monitoring requirements remain proportionate to the population and study purpose."
-                    ),
-                    "supporting_evidence": evidence_fields,
-                },
-                "participant_wider_question": {
-                    "question": "When does additional governance strengthen credibility, and when might it become a burden that changes what the trial can realistically show?",
-                    "supporting_evidence": evidence_fields,
-                },
-            },
-        ],
         "continuity_update": {
-            "active_tension": source.get("main_tension") or "Feasibility vs Evidence Strength.",
+            "active_tension": "" if is_hidden_baseline else source.get("main_tension") or "Feasibility vs Evidence Strength.",
             "what_changed": "Fixture-backed mock review evaluated the latest scenario change.",
             "watch_next": "Stress-test whether the score movement remains defensible.",
         },
@@ -265,12 +226,13 @@ def _synthesized_trial_score_pass1_review(packet: dict[str, Any], fixture: dict[
                 "should distinguish limitations that affect operational delivery from limitations that affect clinical "
                 "interpretability, because those concerns can point to different storyline tensions in later iterations."
             ),
-            "central_tension_read": (
+            "tension_landscape_read": (
                 (
                     source.get("main_tension")
-                    or "The scenario tension is feasibility versus evidence strength."
+                    or "The scenario pressure points include feasibility, evidence strength, and decision readiness."
                 )
-                + " The selected tension is only one plausible storyline; alternative tensions should remain available "
+                + " This is a landscape of plausible storyline pressures rather than a selected participant-visible tension. "
+                "Alternative tensions should remain available "
                 "for later iterations if the participant changes the scenario in a direction that makes another trade-off "
                 "more analytically useful. Strong tension options should usually describe development-level evidence trade-offs, "
                 "such as long-term safety confidence versus evidence completeness, endpoint ambition versus interpretability, "
@@ -280,6 +242,49 @@ def _synthesized_trial_score_pass1_review(packet: dict[str, Any], fixture: dict[
             ),
         },
     }
+    if not is_hidden_baseline:
+        review["tension_question_options"] = [
+            {
+                "tension": {
+                    "summary": source.get("main_tension") or "Feasibility vs Evidence Strength.",
+                    "why_it_matters": "The scenario should be discussed as a total-score trade-off.",
+                    "supporting_evidence": evidence_fields,
+                },
+                "participant_wider_question": {
+                    "question": "When should operational feasibility change confidence in the development story, and when does it only make an uncertain evidence package easier to run?",
+                    "supporting_evidence": evidence_fields,
+                },
+            },
+            {
+                "tension": {
+                    "summary": "Operational feasibility versus evidence interpretability.",
+                    "why_it_matters": (
+                        "This frames whether a scenario looks easier to execute while still leaving uncertainty about "
+                        "what decision the resulting evidence could credibly support."
+                    ),
+                    "supporting_evidence": evidence_fields,
+                },
+                "participant_wider_question": {
+                    "question": "How should a team distinguish a scenario that is operationally practical from one that is genuinely more decision-ready?",
+                    "supporting_evidence": evidence_fields,
+                },
+            },
+            {
+                "tension": {
+                    "summary": "Safety governance versus participant and site burden.",
+                    "why_it_matters": (
+                        "This gives later iterations a non-prescriptive tension for discussing whether oversight, follow-up, "
+                        "or monitoring requirements remain proportionate to the population and study purpose."
+                    ),
+                    "supporting_evidence": evidence_fields,
+                },
+                "participant_wider_question": {
+                    "question": "When does additional governance strengthen credibility, and when might it become a burden that changes what the trial can realistically show?",
+                    "supporting_evidence": evidence_fields,
+                },
+            },
+        ]
+    return review
 
 
 def _synthesized_pass2_narrative(
@@ -297,8 +302,9 @@ def _synthesized_pass2_narrative(
     safe_summary = alignment.get("participant_safe_summary") or {}
     operational_assessment = analysis.get("operational_fit_assessment") or {}
     reality_assessment = analysis.get("reality_check_assessment") or {}
-    tension = analysis.get("central_tension_candidate") or {}
-    broader_question = analysis.get("broader_strategic_question_candidate") or {}
+    selected_option = ((analysis.get("strategic_tension_question_options") or [{}])[0] or {})
+    tension = selected_option.get("central_tension") or {}
+    broader_question = selected_option.get("broader_strategic_question") or {}
     continuity = analysis.get("continuity_update") or {}
     completion = analysis.get("completion_outlook_analysis") or {}
 
@@ -455,7 +461,8 @@ def review_packet_with_mock(
     if failure_mode != FAILURE_MALFORMED_JSON and scored["scoring"].get("validation_status") == "valid":
         pass2_review = _synthesized_pass2_narrative(packet, scored["validated_review"], scored["scoring"])
         if pass2_review is not None:
-            validated_pass2 = validate_pass2_review(pass2_review)
+            pass2_input = build_pass2_input(packet, scored["validated_review"], scored["scoring"])
+            validated_pass2 = validate_pass2_review_with_input(pass2_review, pass2_input)
     status = "malformed_response" if failure_mode == FAILURE_MALFORMED_JSON else "reviewed"
     if validated_pass2.get("validation_status") != "valid":
         status = "malformed_response"

@@ -13,10 +13,13 @@ if str(ROOT) not in sys.path:
 
 from src.narratives.trial_score_contract import (  # noqa: E402
     score_pass1_review,
+    validate_pass1_review,
     validate_pass2_review,
+    validate_pass2_review_with_input,
 )
 from src.narratives.provider import (  # noqa: E402
     PASS1_REPAIR_STAGE_NARRATIVE_SCAFFOLD,
+    _attach_participant_narrative,
     _pass1_repair_stage,
 )
 from frontend.utils.scenario_review_plot_data import design_subcategory_impacts  # noqa: E402
@@ -208,7 +211,7 @@ def _pass1_review(
             "movement_read": "The latest move appears operationally supportive but still needs evidence interpretation. The movement should be summarized as a scenario dynamic and should challenge whether the changed assumptions actually improve the development argument, improve evidence completeness, or only make the same endpoint package easier to run.",
             "operational_fit_read": "Operational Fit reads the enrollment and site-footprint change as a proportionality question. The draft should compare the operational footprint with similar trial patterns and explain whether the scenario looks easier to execute, whether data quality and retention are protected, and whether the revised footprint is consistent with the endpoint and follow-up burden.",
             "reality_check_read": "Reality Check may offset part of the apparent gain if the movement looks shortcut-driven. The review should frame this as a robustness question about the evidence package and operational support. It should also consider whether comparator choice, safety oversight, endpoint interpretability, or follow-up timing changes confidence beyond the model and Operational Fit read.",
-            "central_tension_read": "The core tension is execution support versus evidence interpretability. Alternative tensions should remain available for later iterations, including whether operational feasibility is being mistaken for decision-ready evidence, whether endpoint confidence has kept pace with the execution plan, and whether the trial can support the next development decision rather than only a narrower feasibility read. The draft should also preserve enough program-level context for Pass 2 to explain why the same score movement may matter differently across phases, populations, and evidence ambitions. It should retain the comparator and standard-of-care implications, the population-specific limits on generalizability, and the possibility that stronger operational support still leaves uncertainty about whether the evidence package is complete enough for the intended development use. That context gives Pass 2 enough material to distinguish execution confidence, clinical interpretability, and program strategy without rerunning the analysis. It should also make clear whether the most relevant future debate is operational durability, endpoint credibility, or broader program confidence.",
+            "tension_landscape_read": "The tension landscape includes execution support versus evidence interpretability. Alternative pressures should remain available for later iterations, including whether operational feasibility is being mistaken for decision-ready evidence, whether endpoint confidence has kept pace with the execution plan, and whether the trial can support the next development decision rather than only a narrower feasibility read. The draft should also preserve enough program-level context for Pass 2 to explain why the same score movement may matter differently across phases, populations, and evidence ambitions. It should retain the comparator and standard-of-care implications, the population-specific limits on generalizability, and the possibility that stronger operational support still leaves uncertainty about whether the evidence package is complete enough for the intended development use. That context gives Pass 2 enough material to distinguish execution confidence, clinical interpretability, and program strategy without rerunning the analysis. It should also make clear whether the most relevant future debate is operational durability, endpoint credibility, or broader program confidence.",
         },
     }
 
@@ -587,6 +590,115 @@ def _check_app_owned_fields(errors: list[str]) -> None:
     ):
         errors.append("Pass 2 mismatch error should identify central tension/question mapping")
 
+    pass2_input = {
+        "participant_visible_history": {
+            "recent_participant_visible_questions": [],
+            "same_state_reuse": False,
+        },
+        "pass1_analysis": {
+            "strategic_tension_question_options": [
+                {
+                    "central_tension": {
+                        "summary": "Execution support versus evidence interpretability.",
+                        "why_it_matters": "It affects how the scenario should be defended.",
+                    },
+                    "broader_strategic_question": {
+                        "mapped_tension": "Execution support versus evidence interpretability.",
+                        "question": "When should execution support change confidence in evidence interpretability?",
+                    },
+                },
+                {
+                    "central_tension": {
+                        "summary": "Endpoint confidence versus operational ease.",
+                        "why_it_matters": "A simpler design may still leave endpoint uncertainty.",
+                    },
+                    "broader_strategic_question": {
+                        "mapped_tension": "Endpoint confidence versus operational ease.",
+                        "question": "When does operational ease strengthen endpoint confidence, and when does it leave the core evidence question unchanged?",
+                    },
+                },
+            ],
+        },
+    }
+    pass2_supplied_pair = {
+        **pass2_without_questions,
+        "broader_strategic_question": {
+            "mapped_tension": "Execution support versus evidence interpretability.",
+            "question": "When should execution support change confidence in evidence interpretability?",
+        },
+    }
+    contextual_validated = validate_pass2_review_with_input(pass2_supplied_pair, pass2_input)
+    if contextual_validated.get("validation_status") != "valid":
+        errors.append("Pass 2 contextual validation should accept supplied tension selections")
+    invented_pass2 = {
+        **pass2_without_questions,
+        "central_tension": {
+            "summary": "Invented tension outside Pass 1.",
+            "why_it_matters": "This should not be accepted.",
+        },
+        "broader_strategic_question": {
+            "mapped_tension": "Invented tension outside Pass 1.",
+            "question": "Should invented questions be accepted?",
+        },
+    }
+    invented_validated = validate_pass2_review_with_input(invented_pass2, pass2_input)
+    if invented_validated.get("validation_status") != "invalid":
+        errors.append("Pass 2 contextual validation should reject tensions outside supplied options")
+    if not any("strategic_tension_question_options" in error for error in invented_validated.get("validation_errors") or []):
+        errors.append("Invented Pass 2 tension should report supplied-option mismatch")
+
+    invented_question_pass2 = {
+        **pass2_without_questions,
+        "broader_strategic_question": {
+            "mapped_tension": "Execution support versus evidence interpretability.",
+            "question": "This question is not the one paired with the selected option.",
+        },
+    }
+    invented_question_validated = validate_pass2_review_with_input(invented_question_pass2, pass2_input)
+    if invented_question_validated.get("validation_status") != "invalid":
+        errors.append("Pass 2 contextual validation should reject questions outside the selected supplied pair")
+    if not any("question paired with the selected" in error for error in invented_question_validated.get("validation_errors") or []):
+        errors.append("Invented Pass 2 question should report selected-pair mismatch")
+
+    repeated_question_input = {
+        **pass2_input,
+        "participant_visible_history": {
+            "recent_participant_visible_questions": [
+                {
+                    "question": "When should execution support change confidence in evidence interpretability?",
+                    "mapped_tension": "Execution support versus evidence interpretability.",
+                }
+            ],
+            "same_state_reuse": False,
+        },
+    }
+    repeated_question_validated = validate_pass2_review_with_input(pass2_supplied_pair, repeated_question_input)
+    if repeated_question_validated.get("validation_status") != "valid":
+        errors.append("Repeated visible question should be a non-blocking Pass 2 validation note")
+    if not any("repeats a recent participant-visible question" in note for note in repeated_question_validated.get("validation_notes") or []):
+        errors.append("Repeated visible question should produce a validation note when same_state_reuse is false")
+
+    repeated_reuse_input = {
+        **repeated_question_input,
+        "participant_visible_history": {
+            **repeated_question_input["participant_visible_history"],
+            "same_state_reuse": True,
+        },
+    }
+    repeated_reuse_validated = validate_pass2_review_with_input(pass2_supplied_pair, repeated_reuse_input)
+    if any("repeats a recent participant-visible question" in note for note in repeated_reuse_validated.get("validation_notes") or []):
+        errors.append("Repeated visible question should not produce a validation note when same_state_reuse is true")
+    attached_repeat = _attach_participant_narrative(
+        {"provider_metadata": {}},
+        pass2_supplied_pair,
+        repeated_question_input,
+    )
+    if not any(
+        "repeats a recent participant-visible question" in note
+        for note in (attached_repeat.get("provider_metadata") or {}).get("pass2_validation_notes") or []
+    ):
+        errors.append("Provider metadata should preserve non-blocking repeated-question Pass 2 validation notes")
+
     pass2_too_many_questions = {
         **pass2_without_questions,
         "facilitator_questions": [
@@ -669,6 +781,7 @@ def _check_analytical_draft_contract(errors: list[str]) -> None:
 
     thin_hidden = _pass1_review()
     thin_hidden["review_metadata"] = {"review_mode": "hidden_baseline", "visible": False}
+    thin_hidden.pop("tension_question_options", None)
     thin_hidden_result = score_pass1_review(_packet(changed_fields=[]), thin_hidden)
     if thin_hidden_result.get("validation_status") != "invalid":
         errors.append("Hidden baseline should reject drafts below the hidden-baseline depth floor")
@@ -708,16 +821,55 @@ def _check_analytical_draft_contract(errors: list[str]) -> None:
         errors.append("Missing participant wider question should produce a targeted validation error")
 
     too_few_questions = _pass1_review()
-    too_few_questions["tension_question_options"] = too_few_questions["tension_question_options"][:2]
+    too_few_questions["tension_question_options"] = too_few_questions["tension_question_options"][:1]
     too_few_questions_result = score_pass1_review(_packet(), too_few_questions)
     if too_few_questions_result.get("validation_status") != "invalid":
-        errors.append("Pass 1 should require exactly three tension/question options")
-    if not any("exactly 3 options" in error for error in too_few_questions_result.get("validation_errors") or []):
-        errors.append("Too few tension/question options should report the 3-option requirement")
+        errors.append("Pass 1 should require at least two visible tension/question options")
+    if not any("2-3 options" in error for error in too_few_questions_result.get("validation_errors") or []):
+        errors.append("Too few tension/question options should report the 2-3 option requirement")
+
+    hidden_with_tensions = _pass1_review()
+    hidden_with_tensions["review_metadata"] = {"review_mode": "hidden_baseline", "visible": False}
+    hidden_with_tensions_result = score_pass1_review(_packet(changed_fields=[]), hidden_with_tensions)
+    if hidden_with_tensions_result.get("validation_status") != "invalid":
+        errors.append("Hidden baseline should reject tension_question_options")
+    if not any("hidden baseline must not return tension_question_options" in error for error in hidden_with_tensions_result.get("validation_errors") or []):
+        errors.append("Hidden baseline tension options should produce a targeted validation error")
+
+    hidden_reward = _pass1_review()
+    hidden_reward["review_metadata"] = {"review_mode": "hidden_baseline", "visible": False}
+    hidden_reward.pop("tension_question_options", None)
+    hidden_reward["reality_check"] = {
+        "effect": "reward_coherence",
+        "strength": "moderate",
+        "central_reason": "Baseline coherence.",
+        "evidence_fields": ["phase_ml"],
+        "allocations": [
+            {
+                "allocation_target_id": "therapeutic_context.development_phase_and_goal",
+                "share": 1,
+                "movement_label": "Baseline coherence",
+                "rationale": "Baseline-only coherence should not score.",
+                "incremental_check": "Supported",
+            }
+        ],
+    }
+    hidden_reward_result = validate_pass1_review(_packet(changed_fields=[]), hidden_reward)
+    hidden_reality = hidden_reward_result.get("reality_check") or {}
+    if hidden_reality.get("effect") != "neutral" or hidden_reality.get("strength") != "none" or hidden_reality.get("allocations") != []:
+        errors.append("Hidden baseline should normalize Reality Check to neutral/none with no allocations")
+
+    obsolete_tension_field = _pass1_review()
+    obsolete_tension_field["central_tension_candidate"] = {"summary": "Obsolete field."}
+    obsolete_tension_field_result = score_pass1_review(_packet(), obsolete_tension_field)
+    if obsolete_tension_field_result.get("validation_status") != "invalid":
+        errors.append("Pass 1 should reject obsolete tension candidate fields")
+    if not any("central_tension_candidate is obsolete" in error for error in obsolete_tension_field_result.get("validation_errors") or []):
+        errors.append("Obsolete tension candidate fields should produce a targeted validation error")
 
     combined_messages = [
         "analytical_narrative_draft must be an extensive interpretation with at least 320 words across required fields",
-        "tension_question_options must include exactly 3 options",
+        "tension_question_options must include 2-3 options",
     ]
     if _pass1_repair_stage(combined_messages) != PASS1_REPAIR_STAGE_NARRATIVE_SCAFFOLD:
         errors.append("Combined draft/tension failures should use one narrative scaffold repair stage")

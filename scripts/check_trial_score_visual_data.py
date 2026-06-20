@@ -293,8 +293,7 @@ def main() -> int:
             "completion_outlook_analysis": {},
             "operational_fit": {},
             "reality_check": {},
-            "central_tension_candidate": {},
-            "broader_strategic_question_candidate": {},
+            "tension_question_options": [],
             "continuity_update": {"what_changed": "Stale prior movement"},
         },
         "validated_participant_narrative": {
@@ -476,6 +475,17 @@ def main() -> int:
             errors.append(f"Audit bundle UI binding should confirm renderer cache match: {ui_binding!r}.")
         if decision_map.get("operational_fit", {}).get("points") != 0.3:
             errors.append(f"Audit bundle decision map should expose Operational Fit points: {decision_map!r}.")
+        tension_map = decision_map.get("tension_and_questions") or {}
+        if "pass1_tension_question_options" not in tension_map:
+            errors.append("Audit bundle decision map should expose current Pass 1 tension_question_options.")
+        for obsolete_key in (
+            "pass1_central_tension_candidate",
+            "pass1_broader_question_candidate",
+            "central_tension_candidate",
+            "broader_strategic_question_candidate",
+        ):
+            if obsolete_key in tension_map:
+                errors.append(f"Audit bundle decision map should not expose obsolete tension key {obsolete_key!r}.")
         retry_dir = bundle_dir / "pass1_repair_attempts"
         expected_retry_files = {
             "attempt_01_summary.json",
@@ -499,6 +509,54 @@ def main() -> int:
         repair_history = decision_map.get("pass1_validation", {}).get("repair_history") or []
         if repair_history and any("prompt_text" in item or "response_text" in item for item in repair_history):
             errors.append("Decision map retry history should omit bulky raw prompt/response text.")
+
+    pass1_debug = ts._pass2_pass1_analysis_debug_view({
+        "completion_outlook_analysis": {},
+        "operational_fit": {},
+        "reality_check": {},
+        "central_tension_candidate": {"summary": "obsolete"},
+        "broader_strategic_question_candidate": {"question": "obsolete?"},
+        "tension_question_options": [
+            {
+                "tension": {"summary": "Current option.", "why_it_matters": "Current.", "supporting_evidence": []},
+                "participant_wider_question": {"question": "Current question?", "supporting_evidence": []},
+            }
+        ],
+        "strategic_tension_question_options": [
+            {
+                "central_tension": {"summary": "Current option.", "why_it_matters": "Current."},
+                "broader_strategic_question": {"mapped_tension": "Current option.", "question": "Current question?"},
+            }
+        ],
+    })
+    if "tension_question_options" not in pass1_debug or "strategic_tension_question_options" not in pass1_debug:
+        errors.append("Pass 2 debug summary should expose current tension option structures.")
+    for obsolete_key in (
+        "central_tension_candidate",
+        "alternative_tension_candidates",
+        "broader_strategic_question_candidate",
+        "alternative_strategic_question_candidates",
+    ):
+        if obsolete_key in pass1_debug:
+            errors.append(f"Pass 2 debug summary should not expose obsolete key {obsolete_key!r}.")
+
+    frontend_source = (ROOT / "frontend/views/trial_simulator.py").read_text(encoding="utf-8")
+    for obsolete_token in (
+        "central_tension_candidate",
+        "alternative_tension_candidates",
+        "broader_strategic_question_candidate",
+        "alternative_strategic_question_candidates",
+        "pass1_central_tension_candidate",
+        "pass1_broader_question_candidate",
+        "central_tension_read",
+        "tradeoff_review",
+        "Design Confidence",
+        "Total Scenario Score",
+        "design_confidence",
+        "total_scenario_score",
+    ):
+        if obsolete_token in frontend_source:
+            errors.append(f"frontend trial simulator should not contain obsolete debug/display token {obsolete_token!r}.")
 
     if errors:
         for error in errors:

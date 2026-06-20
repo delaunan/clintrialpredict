@@ -71,9 +71,9 @@ def main() -> int:
         errors.append("stored trace should expose app-owned storyline_state")
     if storyline_state.get("active_tension") != first.get("central_tension"):
         errors.append("storyline_state active_tension should mirror stored central_tension")
-    expected_main_tension = ((first.get("validated_review") or {}).get("central_tension_candidate") or {}).get("summary")
+    expected_main_tension = (first.get("participant_central_tension") or {}).get("summary")
     if first.get("central_tension") != expected_main_tension:
-        errors.append("stored trace central_tension should prefer validated central_tension_candidate.summary")
+        errors.append("stored trace central_tension should prefer Pass 2 participant central_tension.summary")
     if "strategic_context_2026_v1" not in set(first.get("reference_pack_ids_available") or []):
         errors.append("stored trace should preserve available reference pack IDs")
     if first.get("unsupported_reference_pack_ids_used"):
@@ -216,6 +216,182 @@ def main() -> int:
         errors.append("participant-visible question history should retain previous questions and append current question")
     elif visible_history[-1].get("question") != current_question:
         errors.append("participant-visible question history should put the current question last")
+
+    invalid_pass2_result = {
+        "review_needed": True,
+        "reuse_previous_review": False,
+        "provider": "mock",
+        "model_name": "fixture_hash_mock_v1",
+        "provider_metadata": {"deterministic": True},
+        "status": "reviewed",
+        "failure_reason": None,
+        "review": first.get("output_json"),
+        "participant_narrative": {"central_tension": {"summary": "Invalid Pass 2 was not selected."}},
+        "participant_narrative_status": "invalid",
+        "participant_narrative_warning": "Synthetic invalid Pass 2 check.",
+        "validated_review": {
+            **(first.get("validated_review") or {}),
+            "tension_question_options": [
+                {
+                    "tension": {
+                        "summary": "First Pass 1 option should remain only a candidate.",
+                        "why_it_matters": "Pass 2 did not validly select it.",
+                        "supporting_evidence": ["phase_ml"],
+                    },
+                    "participant_wider_question": {
+                        "question": "This candidate question should not become visible history.",
+                        "supporting_evidence": ["phase_ml"],
+                    },
+                },
+                {
+                    "tension": {
+                        "summary": "Second Pass 1 option should also remain only a candidate.",
+                        "why_it_matters": "Pass 2 did not validly select it.",
+                        "supporting_evidence": ["endpoint_rigor_ml"],
+                    },
+                    "participant_wider_question": {
+                        "question": "This second candidate should not become visible history either.",
+                        "supporting_evidence": ["endpoint_rigor_ml"],
+                    },
+                },
+            ],
+        },
+        "validated_participant_narrative": {},
+        "scoring": {
+            "validation_status": first.get("validation_status"),
+            "validation_errors": first.get("validation_errors") or [],
+            "operational_fit_points": first.get("operational_fit_points"),
+            "reality_check_points": first.get("reality_check_points"),
+            "trial_score": first.get("trial_score"),
+            "operational_fit_assessment": first.get("operational_fit_assessment") or {},
+            "reality_check_assessment": first.get("reality_check_assessment") or {},
+            "input_hash": f"{packet['input_hash']}-manual-invalid-pass2-check",
+        },
+    }
+    invalid_pass2_trace = store_review_trace(
+        state,
+        packet={
+            **packet,
+            "input_hash": f"{packet['input_hash']}-manual-invalid-pass2-check",
+            "review_context": {
+                "previous_review": {
+                    "recent_participant_visible_questions": [
+                        {
+                            "question": "Previously visible question should remain the only history item.",
+                            "mapped_tension": "Previously visible tension.",
+                        },
+                    ],
+                },
+            },
+        },
+        review_result=invalid_pass2_result,
+        session_id="invalid-pass2-session-manual",
+    )
+    if invalid_pass2_trace.get("central_tension"):
+        errors.append("invalid Pass 2 should not promote the first Pass 1 option to central_tension")
+    invalid_storyline = invalid_pass2_trace.get("storyline_state") or {}
+    if invalid_storyline.get("active_tension"):
+        errors.append("invalid Pass 2 should not promote the first Pass 1 option to storyline_state.active_tension")
+    invalid_history = invalid_pass2_trace.get("recent_participant_visible_questions") or []
+    if len(invalid_history) != 1 or invalid_history[-1].get("question") != "Previously visible question should remain the only history item.":
+        errors.append("invalid Pass 2 should not append Pass 1 candidate questions to participant-visible history")
+
+    second_option_result = {
+        **invalid_pass2_result,
+        "participant_narrative": {
+            "central_tension": {
+                "summary": "Second Pass 1 option should be selectable.",
+                "why_it_matters": "Pass 2 selected the second option.",
+            },
+            "broader_strategic_question": {
+                "mapped_tension": "Second Pass 1 option should be selectable.",
+                "question": "When should the second option become the visible debate?",
+            },
+        },
+        "participant_narrative_status": "valid",
+        "participant_narrative_warning": None,
+        "validated_review": {
+            **(first.get("validated_review") or {}),
+            "tension_question_options": [
+                {
+                    "tension": {
+                        "summary": "First Pass 1 option should not be selected.",
+                        "why_it_matters": "Pass 2 chose another option.",
+                        "supporting_evidence": ["phase_ml"],
+                    },
+                    "participant_wider_question": {
+                        "question": "This first candidate should not become visible.",
+                        "supporting_evidence": ["phase_ml"],
+                    },
+                },
+                {
+                    "tension": {
+                        "summary": "Second Pass 1 option should be selectable.",
+                        "why_it_matters": "Pass 2 selected the second option.",
+                        "supporting_evidence": ["endpoint_rigor_ml"],
+                    },
+                    "participant_wider_question": {
+                        "question": "When should the second option become the visible debate?",
+                        "supporting_evidence": ["endpoint_rigor_ml"],
+                    },
+                },
+            ],
+        },
+        "validated_participant_narrative": {
+            "central_tension": {
+                "summary": "Second Pass 1 option should be selectable.",
+                "why_it_matters": "Pass 2 selected the second option.",
+            },
+            "broader_strategic_question": {
+                "mapped_tension": "Second Pass 1 option should be selectable.",
+                "question": "When should the second option become the visible debate?",
+            },
+        },
+        "scoring": {
+            **invalid_pass2_result["scoring"],
+            "input_hash": f"{packet['input_hash']}-manual-second-option-check",
+        },
+    }
+    second_option_trace = store_review_trace(
+        state,
+        packet={**packet, "input_hash": f"{packet['input_hash']}-manual-second-option-check"},
+        review_result=second_option_result,
+        session_id="second-option-session-manual",
+    )
+    if second_option_trace.get("central_tension") != "Second Pass 1 option should be selectable.":
+        errors.append("valid Pass 2 second-option selection should become stored central_tension")
+    second_option_history = second_option_trace.get("recent_participant_visible_questions") or []
+    if not second_option_history or second_option_history[-1].get("mapped_tension") != "Second Pass 1 option should be selectable.":
+        errors.append("valid Pass 2 second-option selection should become participant-visible history")
+
+    app_reality_effect_result = {
+        **second_option_result,
+        "validated_review": {
+            **(second_option_result.get("validated_review") or {}),
+            "reality_check": {
+                **((second_option_result.get("validated_review") or {}).get("reality_check") or {}),
+                "effect": "penalize_incoherence",
+                "strength": "moderate",
+            },
+        },
+        "scoring": {
+            **second_option_result["scoring"],
+            "input_hash": f"{packet['input_hash']}-manual-app-reality-effect-check",
+            "reality_check_assessment": {
+                **(second_option_result["scoring"].get("reality_check_assessment") or {}),
+                "effect": "neutral",
+                "strength": "none",
+            },
+        },
+    }
+    app_reality_effect_trace = store_review_trace(
+        state,
+        packet={**packet, "input_hash": f"{packet['input_hash']}-manual-app-reality-effect-check"},
+        review_result=app_reality_effect_result,
+        session_id="app-reality-effect-session-manual",
+    )
+    if (app_reality_effect_trace.get("storyline_state") or {}).get("last_effect_label") != "neutral":
+        errors.append("storyline_state.last_effect_label should use app-scored Reality Check effect")
 
     missing_key_config = load_narrative_provider_config({
         "NARRATIVE_LLM_PROVIDER": "openai",

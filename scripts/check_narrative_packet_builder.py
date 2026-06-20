@@ -128,6 +128,27 @@ def _check_review_continuity_context(errors: list[str]) -> None:
         "changed_fields": [],
         "score_delta": 0,
         "central_tension": "Baseline central tension.",
+        "tension_question_options": [
+            {
+                "tension": {
+                    "summary": "Hidden baseline option must be scrubbed.",
+                    "why_it_matters": "Participants never saw this.",
+                    "supporting_evidence": ["phase_ml"],
+                },
+                "participant_wider_question": {
+                    "question": "Hidden baseline question must be scrubbed?",
+                    "supporting_evidence": ["phase_ml"],
+                },
+            },
+        ],
+        "participant_central_tension": {
+            "summary": "Hidden selected tension must be scrubbed.",
+            "why_it_matters": "Participants never saw this.",
+        },
+        "participant_broader_strategic_question": {
+            "question": "Hidden selected question must be scrubbed?",
+            "mapped_tension": "Hidden selected tension must be scrubbed.",
+        },
         "recent_participant_visible_questions": [
             {
                 "question": "Hidden baseline should not consume this participant topic.",
@@ -158,12 +179,18 @@ def _check_review_continuity_context(errors: list[str]) -> None:
                 "strategic_field_question": "What broader field challenge does this scenario expose?",
             },
             "continuity_update": {
+                "active_tension": "Hidden baseline active tension must be scrubbed.",
                 "watch_next": "Watch whether later edits preserve the baseline evidence-operational balance.",
             },
             "continuity": {
                 "new_concerns": [],
                 "storyline_update": "Baseline memory",
             },
+        },
+        "storyline_state": {
+            "active_tension": "Hidden baseline stored storyline tension must be scrubbed.",
+            "active_tension_status": "active",
+            "next_consideration": "Watch whether later edits preserve the baseline evidence-operational balance.",
         },
         "compact_storyline_memory": "Baseline memory",
     }
@@ -186,11 +213,11 @@ def _check_review_continuity_context(errors: list[str]) -> None:
         "recent_participant_visible_questions": [
             {
                 "question": "How should teams debate feasibility gains when evidence strength remains uncertain?",
-                "mapped_tension": "Participant-visible feasibility tension.",
+                "mapped_tension": "Feasibility vs Evidence Strength",
             },
         ],
         "participant_central_tension": {
-            "summary": "Participant-visible feasibility tension.",
+            "summary": "Feasibility vs Evidence Strength",
             "why_it_matters": "This was shown to the participant.",
         },
         "participant_broader_strategic_question": {
@@ -206,11 +233,41 @@ def _check_review_continuity_context(errors: list[str]) -> None:
                 "evidence_fields": ["endpoint_rigor_ml"],
                 "allocations": [],
             },
-            "central_tension_candidate": {
-                "summary": "Feasibility vs Evidence Strength",
-                "why_it_matters": "Endpoint credibility remains partly active.",
-                "supporting_evidence": ["endpoint_rigor_ml"],
-            },
+            "tension_question_options": [
+                {
+                    "tension": {
+                        "summary": "Feasibility vs Evidence Strength",
+                        "why_it_matters": "Endpoint credibility remains partly active.",
+                        "supporting_evidence": ["endpoint_rigor_ml"],
+                    },
+                    "participant_wider_question": {
+                        "question": "How should teams debate feasibility gains when evidence strength remains uncertain?",
+                        "supporting_evidence": ["endpoint_rigor_ml"],
+                    },
+                },
+                {
+                    "tension": {
+                        "summary": "Evidence completeness vs execution support",
+                        "why_it_matters": "The prior move may change feasibility faster than interpretability.",
+                        "supporting_evidence": ["operational_assumptions.planned_enrollment"],
+                    },
+                    "participant_wider_question": {
+                        "question": "When does feasibility strengthen evidence confidence, and when does it mainly expose what remains uncertain?",
+                        "supporting_evidence": ["operational_assumptions.planned_enrollment"],
+                    },
+                },
+                {
+                    "tension": {
+                        "summary": "Population focus vs broader development confidence",
+                        "why_it_matters": "A narrower population can clarify one question while limiting program-level inference.",
+                        "supporting_evidence": ["patient_severity_ml"],
+                    },
+                    "participant_wider_question": {
+                        "question": "When does a focused population create stronger evidence, and when does it narrow the strategic value of the result?",
+                        "supporting_evidence": ["patient_severity_ml"],
+                    },
+                },
+            ],
             "continuity_update": {
                 "active_tension": "Feasibility vs Evidence Strength",
                 "what_changed": "Previous strategic storyline memory.",
@@ -272,15 +329,26 @@ def _check_review_continuity_context(errors: list[str]) -> None:
         errors.append("previous visible review context should preserve reality_check_points")
     if context.get("previous_review", {}).get("trial_score") != 66:
         errors.append("previous visible review context should preserve trial_score")
-    if context.get("baseline_review", {}).get("central_tension") != "Baseline central tension.":
-        errors.append("hidden baseline review context should preserve trace central_tension when present")
+    if context.get("baseline_review", {}).get("central_tension"):
+        errors.append("hidden baseline review context should not expose an active central_tension")
+    if context.get("baseline_review", {}).get("tension_question_options") != []:
+        errors.append("hidden baseline review context should scrub tension_question_options")
+    if context.get("baseline_review", {}).get("participant_central_tension") != {}:
+        errors.append("hidden baseline review context should scrub participant_central_tension")
+    if context.get("baseline_review", {}).get("participant_broader_strategic_question") != {}:
+        errors.append("hidden baseline review context should scrub participant_broader_strategic_question")
+    baseline_storyline = context.get("baseline_review", {}).get("storyline_state") or {}
+    if baseline_storyline.get("active_tension"):
+        errors.append("hidden baseline review context should scrub storyline_state.active_tension")
+    if baseline_storyline.get("active_tension_status") != "not_applicable":
+        errors.append("hidden baseline review context should reset storyline_state.active_tension_status")
     if context.get("baseline_review", {}).get("recent_participant_visible_questions") != []:
         errors.append("hidden baseline review context must not mark baseline questions as participant-visible history")
     baseline_memory = context.get("baseline_review", {}).get("compact_storyline_memory") or ""
-    if "Baseline tension:" not in baseline_memory or "Next watch:" not in baseline_memory:
-        errors.append("hidden baseline review context should compact useful baseline tension and next-watch memory")
+    if "Baseline watch:" not in baseline_memory:
+        errors.append("hidden baseline review context should compact useful baseline watch memory")
     if context.get("previous_review", {}).get("central_tension") != "Feasibility vs Evidence Strength":
-        errors.append("previous visible review context should prefer current central_tension_candidate summary")
+        errors.append("previous visible review context should preserve current participant-selected central tension")
     previous_questions = context.get("previous_review", {}).get("key_questions") or {}
     if previous_questions.get("medical_clinical_development_question") != "What evidence standard matters most?":
         errors.append("previous visible review context should expose new medical/clinical-development question field")
@@ -297,7 +365,7 @@ def _check_review_continuity_context(errors: list[str]) -> None:
     latest_visible = visible_history[-1] if visible_history else {}
     if latest_visible.get("question") != "How should teams debate feasibility gains when evidence strength remains uncertain?":
         errors.append("previous visible review context should preserve participant-visible strategic question")
-    if latest_visible.get("mapped_tension") != "Participant-visible feasibility tension.":
+    if latest_visible.get("mapped_tension") != "Feasibility vs Evidence Strength":
         errors.append("previous visible review context should preserve participant-visible mapped tension")
     trial_score_continuity = continuity_packet.get("iteration_context", {}).get("trial_score_continuity") or {}
     if trial_score_continuity.get("available") is not True:

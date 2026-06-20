@@ -50,16 +50,14 @@ def compact_storyline_from_trace(trace: dict[str, Any] | None) -> str:
         return ""
     validated = trace.get("validated_review") or {}
     metadata = validated.get("review_metadata") or {}
-    central_tension = validated.get("central_tension_candidate") or {}
     continuity_update = validated.get("continuity_update") or {}
     if str(metadata.get("review_mode") or "") == "hidden_baseline":
-        summary = str(central_tension.get("summary") or "").strip()
-        if summary:
-            watch_next = str(continuity_update.get("watch_next") or "").strip()
-            memory = f"Baseline tension: {summary}"
-            if watch_next:
-                memory = f"{memory} Next watch: {watch_next}"
-            return memory
+        watch_next = str(continuity_update.get("watch_next") or "").strip()
+        if watch_next:
+            return f"Baseline watch: {watch_next}"
+        landscape = str(((validated.get("analytical_narrative_draft") or {}).get("tension_landscape_read")) or "").strip()
+        if landscape:
+            return f"Baseline orientation: {landscape[:220]}"
     if isinstance(continuity_update.get("what_changed"), str) and continuity_update.get("what_changed").strip():
         return continuity_update["what_changed"].strip()
     continuity = validated.get("continuity") or {}
@@ -121,8 +119,7 @@ def _build_trace(
     trial_score = scoring.get("trial_score")
     provider_trace = (validated_review or {}).get("trace") or {}
     operational_fit = (validated_review or {}).get("operational_fit") or {}
-    central_tension_candidate = (validated_review or {}).get("central_tension_candidate") or {}
-    broader_strategic_question_candidate = (validated_review or {}).get("broader_strategic_question_candidate") or {}
+    tension_question_options = (validated_review or {}).get("tension_question_options") or []
     participant_central_tension = (validated_participant_narrative or {}).get("central_tension") or {}
     participant_broader_strategic_question = (
         (validated_participant_narrative or {}).get("broader_strategic_question") or {}
@@ -136,13 +133,16 @@ def _build_trace(
         ),
     )
     continuity_update = (validated_review or {}).get("continuity_update") or {}
-    tradeoff_review = (validated_review or {}).get("tradeoff_review") or {}
     main_tension = (
-        central_tension_candidate.get("summary")
-        or (validated_review or {}).get("main_tension")
-        or tradeoff_review.get("central_tension")
+        participant_central_tension.get("summary")
+        or ""
     )
     storyline_state = build_storyline_state(validated_review)
+    if reality_check_assessment.get("effect"):
+        storyline_state["last_effect_label"] = str(reality_check_assessment.get("effect") or "")
+    if participant_central_tension.get("summary"):
+        storyline_state["active_tension"] = str(participant_central_tension.get("summary") or "").strip()
+        storyline_state["active_tension_status"] = "active"
     reference_pack_ids_available = [
         pack.get("pack_id")
         for pack in packet.get("reference_packs") or []
@@ -215,8 +215,7 @@ def _build_trace(
         },
         "trial_score": trial_score,
         "operational_fit": deepcopy(operational_fit),
-        "central_tension_candidate": deepcopy(central_tension_candidate),
-        "broader_strategic_question_candidate": deepcopy(broader_strategic_question_candidate),
+        "tension_question_options": deepcopy(tension_question_options),
         "continuity_update": deepcopy(continuity_update),
         "storyline_state": deepcopy(storyline_state),
         "completion_outlook_analysis": deepcopy(
