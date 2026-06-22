@@ -219,65 +219,59 @@ def _synthesized_trial_score_pass1_review(packet: dict[str, Any], fixture: dict[
             ),
             "reality_check_read": (
                 "Reality Check may reinforce, soften, or leave neutral the pre-Reality read depending on scenario coherence. "
-                "The draft should frame residual concerns as trade-offs, robustness questions, or tensions in the evidence "
+                "The draft should frame residual concerns as trade-offs, robustness questions, or development issues in the evidence "
                 "package. It should examine whether vulnerable populations, safety oversight, comparator context, endpoint timing, "
                 "or follow-up demands change confidence in the design beyond what the model and Operational Fit already capture. "
                 "It should leave Pass 2 room to summarize the implication in the chosen participant-facing format. The draft "
                 "should distinguish limitations that affect operational delivery from limitations that affect clinical "
-                "interpretability, because those concerns can point to different storyline tensions in later iterations."
+                "interpretability, because those concerns can point to different storyline issues in later iterations."
             ),
-            "tension_landscape_read": (
+            "development_landscape_read": (
                 (
                     source.get("main_tension")
-                    or "The scenario pressure points include feasibility, evidence strength, and decision readiness."
+                    or "The scenario development issues include feasibility, evidence strength, and decision readiness."
                 )
-                + " This is a landscape of plausible storyline pressures rather than a selected participant-visible tension. "
-                "Alternative tensions should remain available "
+                + " This is a landscape of plausible storyline issues rather than a selected participant-visible development issue. "
+                "Alternative development issues should remain available "
                 "for later iterations if the participant changes the scenario in a direction that makes another trade-off "
-                "more analytically useful. Strong tension options should usually describe development-level evidence trade-offs, "
+                "more analytically useful. Strong development discussion options should usually describe development-level evidence trade-offs, "
                 "such as long-term safety confidence versus evidence completeness, endpoint ambition versus interpretability, "
                 "or population specificity versus program-level generalizability, rather than relying only on short operational labels. "
                 "The draft should also retain enough context about comparator relevance, safety oversight, and the decision "
-                "the evidence can support so Pass 2 can choose among those tensions without doing a new analysis."
+                "the evidence can support so Pass 2 can choose among those development issues without doing a new analysis."
             ),
         },
     }
     if not is_hidden_baseline:
-        review["tension_question_options"] = [
+        review["development_discussion_options"] = [
             {
-                "tension": {
-                    "summary": source.get("main_tension") or "Feasibility vs Evidence Strength.",
-                    "why_it_matters": "The scenario should be discussed as a total-score trade-off.",
-                    "supporting_evidence": evidence_fields,
-                },
+                "topic": source.get("main_tension") or "Feasibility vs Evidence Strength.",
+                "why_it_matters": "The scenario should be discussed as a total-score trade-off.",
+                "supporting_evidence": evidence_fields,
                 "participant_wider_question": {
                     "question": "When should operational feasibility change confidence in the development story, and when does it only make an uncertain evidence package easier to run?",
                     "supporting_evidence": evidence_fields,
                 },
             },
             {
-                "tension": {
-                    "summary": "Operational feasibility versus evidence interpretability.",
-                    "why_it_matters": (
-                        "This frames whether a scenario looks easier to execute while still leaving uncertainty about "
-                        "what decision the resulting evidence could credibly support."
-                    ),
-                    "supporting_evidence": evidence_fields,
-                },
+                "topic": "Operational feasibility versus evidence interpretability.",
+                "why_it_matters": (
+                    "This frames whether a scenario looks easier to execute while still leaving uncertainty about "
+                    "what decision the resulting evidence could credibly support."
+                ),
+                "supporting_evidence": evidence_fields,
                 "participant_wider_question": {
                     "question": "How should a team distinguish a scenario that is operationally practical from one that is genuinely more decision-ready?",
                     "supporting_evidence": evidence_fields,
                 },
             },
             {
-                "tension": {
-                    "summary": "Safety governance versus participant and site burden.",
-                    "why_it_matters": (
-                        "This gives later iterations a non-prescriptive tension for discussing whether oversight, follow-up, "
-                        "or monitoring requirements remain proportionate to the population and study purpose."
-                    ),
-                    "supporting_evidence": evidence_fields,
-                },
+                "topic": "Safety governance versus participant and site burden.",
+                "why_it_matters": (
+                    "This gives later iterations a non-prescriptive topic for discussing whether oversight, follow-up, "
+                    "or monitoring requirements remain proportionate to the population and study purpose."
+                ),
+                "supporting_evidence": evidence_fields,
                 "participant_wider_question": {
                     "question": "When does additional governance strengthen credibility, and when might it become a burden that changes what the trial can realistically show?",
                     "supporting_evidence": evidence_fields,
@@ -302,16 +296,76 @@ def _synthesized_pass2_narrative(
     safe_summary = alignment.get("participant_safe_summary") or {}
     operational_assessment = analysis.get("operational_fit_assessment") or {}
     reality_assessment = analysis.get("reality_check_assessment") or {}
-    selected_option = ((analysis.get("strategic_tension_question_options") or [{}])[0] or {})
-    tension = selected_option.get("central_tension") or {}
-    broader_question = selected_option.get("broader_strategic_question") or {}
+    selected_option = ((analysis.get("development_discussion_options") or [{}])[0] or {})
+    topic = str(selected_option.get("topic") or "Development discussion").strip()
+    tension = {
+        "summary": topic,
+        "why_it_matters": str(selected_option.get("why_it_matters") or "This discussion point reflects the most material development trade-off.").strip(),
+    }
+    broader_question = {
+        "mapped_tension": topic,
+        "question": ((selected_option.get("participant_wider_question") or {}).get("question") or ""),
+    }
     continuity = analysis.get("continuity_update") or {}
     completion = analysis.get("completion_outlook_analysis") or {}
 
     review_mode = (pass2_input.get("review_metadata") or {}).get("review_mode") or "first_visible_iteration"
     trial_direction = str(safe_summary.get("trial_score_direction") or "mixed")
     pre_reality_direction = str(safe_summary.get("pre_reality_direction") or "mixed")
+    direction_phrase = str(safe_summary.get("required_direction_phrase") or trial_direction)
+    operational_importance = str(safe_summary.get("operational_fit_importance") or "not_available")
+    operational_instruction = str(safe_summary.get("operational_fit_wording_instruction") or "").strip()
     reality_importance = str(safe_summary.get("reality_check_importance") or "not_available")
+    reality_direction = str(safe_summary.get("reality_check_direction") or "neutral")
+    reality_is_material = reality_importance not in {"none", "not_available"} or reality_direction not in {
+        "neutral",
+        "not_available",
+    }
+    if operational_importance == "none":
+        execution_reading = (
+            operational_instruction
+            or "Operational Fit has no app-scored participant-facing effect in this scenario."
+        )
+    else:
+        execution_reading = (
+            operational_assessment.get("central_reason")
+            or operational_instruction
+            or "Operational Fit is interpreted as execution proportionality within the total score."
+        )
+    if reality_is_material:
+        movement_reading = (
+            f"Before Reality Check, the scenario appears {pre_reality_direction}. Reality Check has "
+            f"{reality_importance} qualitative importance, so the final wording should remain cautious and integrated."
+        )
+    else:
+        movement_reading = (
+            f"Before any realism adjustment, the scenario appears {pre_reality_direction}. No additional "
+            "realism adjustment changes the final read."
+        )
+    pillar_reading = [
+        {
+            "pillar": "Execution Framework",
+            "reading": execution_reading,
+        },
+        {
+            "pillar": "Scientific Challenge",
+            "reading": (
+                completion.get("summary")
+                or completion.get("risk_pattern_summary")
+                or "Completion Outlook remains the protected model-pattern anchor for the scientific and design read."
+            ),
+        },
+    ]
+    if reality_is_material:
+        pillar_reading.append(
+            {
+                "pillar": "Reality Check",
+                "reading": (
+                    reality_assessment.get("central_reason")
+                    or "Reality Check reads whether the scenario movement appears coherent and realistic."
+                ),
+            }
+        )
     return {
         "review_metadata": {
             "review_mode": review_mode,
@@ -319,53 +373,28 @@ def _synthesized_pass2_narrative(
         },
         "trial_score_narrative": {
             "summary": (
-                f"The final reading appears {trial_direction}. The model-pattern Completion Outlook, operational "
-                "proportionality, and after-review realism check need to be read together."
+                f"The final reading appears {direction_phrase}. The model-pattern Completion Outlook and app-scored "
+                "review layers need to be read together."
             ),
-            "movement_reading": (
-                f"Before Reality Check, the scenario appears {pre_reality_direction}. Reality Check has "
-                f"{reality_importance} qualitative importance, so the final wording should remain cautious and integrated."
-            ),
+            "movement_reading": movement_reading,
             "score_interpretation": (
                 completion.get("summary")
                 or completion.get("risk_pattern_summary")
                 or "Completion Outlook remains the protected model-pattern anchor, while the app-owned review layers interpret scenario coherence."
             ),
         },
-        "pillar_reading": [
-            {
-                "pillar": "Execution Framework",
-                "reading": (
-                    operational_assessment.get("central_reason")
-                    or "Operational Fit is interpreted as execution proportionality within the total score."
-                ),
-            },
-            {
-                "pillar": "Reality Check",
-                "reading": (
-                    reality_assessment.get("central_reason")
-                    or "Reality Check reads whether the scenario movement appears coherent and realistic."
-                ),
-            },
-        ],
+        "pillar_reading": pillar_reading,
         "central_tension": {
             "summary": tension.get("summary") or continuity.get("active_tension") or "Completion favorability versus scenario defensibility.",
             "why_it_matters": (
                 tension.get("why_it_matters")
-                or "This tension shapes how participants should defend the current Trial Score movement."
+                or "This development issue shapes how participants should defend the current Trial Score movement."
             ),
         },
         "broader_strategic_question": {
             "mapped_tension": tension.get("summary") or continuity.get("active_tension") or "Completion favorability versus scenario defensibility.",
             "question": broader_question.get("question") or "What broader development trade-off does this scenario expose?",
         },
-        "facilitator_questions": [
-            {
-                "question": "What evidence would make the current Trial Score movement defensible?",
-                "why_it_matters": "It tests whether the score movement reflects a coherent development scenario rather than a shortcut.",
-                "related_feature_families": ["evidence", "population", "operations"],
-            }
-        ],
     }
 
 

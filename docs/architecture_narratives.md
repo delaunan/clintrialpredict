@@ -106,7 +106,7 @@ The current prototype initializes the baseline review when Simulation Mode opens
 
 The baseline review context passed to later LLM calls is qualitative-only. It may include baseline strengths, concerns, consistency flags, participant-review text, continuity fields, and compact memory. It must not expose hidden baseline component scores, hidden Trial Score values, or other hidden numeric quality scores to later prompt logic as prior visible scores.
 
-The compacted hidden-baseline context should preserve a useful baseline Completion Outlook summary when available and a short storyline memory, preferably baseline tension plus next-watch focus, so the first visible prompt receives qualitative orientation rather than empty or self-referential baseline text.
+The compacted hidden-baseline context should preserve a useful baseline Completion Outlook summary when available and a short storyline memory, preferably baseline orientation plus next-watch focus, so the first visible prompt receives qualitative orientation rather than empty or self-referential baseline text.
 
 Temporary simulator debug output may expose the same structured review-context inspection for hidden baseline and visible iterations. In hidden-baseline mode, `baseline_context_shared_with_current_prompt` and `previous_review_context_shared_with_current_prompt` are expected to be empty; the compacted hidden-baseline payload is what should appear as baseline context in the first visible iteration. For visible iterations, the debug payload should show the current prompt context, Pass 1 provider output, and Pass 2 participant-narrative input/output when available, without requiring the full rendered prompt text. Because Pass 2 legitimately receives app-calculated scores for calibration, the live debug summary may show `app_calculated_scores_shared_with_pass2`; the final-output score-language restriction applies only to participant-facing prose, not to Pass 2 input or Pass 1 draft. The live Pass 2 section is intentionally named `pass2_editor_input_debug_summary`; full raw Pass 2 input remains available in the audit bundle.
 
@@ -114,11 +114,13 @@ The same debug output may expose `current_model_state_evidence_shared_with_promp
 
 `completion_outlook_analysis.main_model_signals` should use this model evidence at the most concrete useful level. Hidden baseline should use current state only. Visible iterations should list latest movement signals first, then current-state anchors that still matter. The preferred wording is `Feature Label: Value under Pillar / Subpillar (+/-impact)`; for example, `DMC Involvement Status: Yes under Execution Framework / Methodological Setup (-5.7)`. Bare values such as `Yes` or `38.0 months` are not readable enough without the feature label. Subpillar is the fallback, and pillar-only language is the last fallback. Generic entries such as `Scientific Challenge alignment`, `Patient Profile fit`, or `Execution Framework constraints` are discouraged unless no granular evidence exists.
 
-The current narrative-production workflow is intentionally asymmetric. Pass 1 is the full analytical pass and rough narrative drafter: it returns structured judgments plus `analytical_narrative_draft`, grounded in current model state, model movement, Operational Fit, Reality Check, the visible-iteration tension landscape, and packet evidence. Hidden baseline provides orientation only and does not create participant-visible tension/question options. The application validates Pass 1, calculates app-owned scores, and creates `score_alignment_notes` that translate internal points into participant-safe direction and materiality labels. Pass 2 is an editor/storyline selector: it receives the Pass 1 draft, validated structured analysis, score-alignment notes, trajectory/reuse context, compact model evidence, and participant-visible history, then selects one supplied tension/question pair and restructures the result into participant-facing sections. Pass 2 must not re-rate Operational Fit, re-decide Reality Check, reinterpret model movement, or introduce new clinical/regulatory claims.
+The current narrative-production workflow is intentionally asymmetric. Pass 1 is the full analytical pass and rough narrative drafter: it returns structured judgments plus `analytical_narrative_draft`, grounded in current model state, model movement, Operational Fit, Reality Check, the visible-iteration development landscape, and packet evidence. Hidden baseline provides orientation only and does not create participant-visible development discussion options. The application validates Pass 1, calculates app-owned scores, and creates `score_alignment_notes` that translate internal points into participant-safe direction and materiality labels. Pass 2 is an editor/storyline selector: it receives the Pass 1 draft, validated structured analysis, score-alignment notes, trajectory/reuse context, compact model evidence, and participant-visible history, then selects one supplied development discussion pair and restructures the result into participant-facing sections. Pass 2 must not re-rate Operational Fit, re-decide Reality Check, reinterpret model movement, or introduce new clinical/regulatory claims.
 
-This workflow uses the existing provider validation and repair system. Pass 1 validation checks the draft shape and non-empty draft fields for both hidden baseline and visible reviews; targeted Pass 1 repair can fix the draft without changing valid ratings or evidence fields. Pass 1 draft text may be extensive and score-aware because it is not participant-facing and feeds the Pass 2 editor. Pass 2 validation mirrors the response schema shape and rejects returned app-owned score fields. Numeric wording inside prose is not a validation blocker; exact score/point wording is only discouraged for the final participant-facing Pass 2 output. Pass 2 repair removes invalid narrative fields while preserving the app-calculated score basis. The active versions are `trial_score_pass1_schema_v2`, `trial_score_pass2_schema_v2`, and `trial_score_two_pass_prompt_v1_4`.
+This workflow uses the existing provider validation and repair system. Pass 1 validation checks the draft shape and non-empty draft fields for both hidden baseline and visible reviews; targeted Pass 1 repair can fix the draft without changing valid ratings or evidence fields. Pass 1 draft text may be extensive and score-aware because it is not participant-facing and feeds the Pass 2 editor. Pass 2 validation mirrors the response schema shape, rejects returned app-owned score fields, and requires two to four material pillar-reading bullets. Numeric wording inside prose is not a validation blocker; exact score/point wording is only discouraged for the final participant-facing Pass 2 output. Pass 2 repair removes invalid narrative fields while preserving the app-calculated score basis. The active versions are `trial_score_pass1_schema_v3`, `trial_score_pass2_schema_v2`, and `trial_score_two_pass_prompt_v1_8`.
 
-The hidden baseline review should include qualitative baseline analysis. It should interpret the prerecorded Completion Score when baseline decomposition is available. The provider should use baseline `structured_features`, `text_context` Trial description fields, Completion Score, pillar impacts, and feature/subcategory impacts to summarize why the original trial appears completion-like or risky in clinical trial / pharma development language. This is baseline reasoning context, not a visible participant score and not a new XGBoost calculation. If only a registry score is available without pillar or feature decomposition, the baseline review should explicitly treat the score interpretation as lower-detail and avoid inventing missing driver analysis. It may also identify baseline strengths, concerns, consistency flags, and candidate tensions for later context, but it must not expose a visible baseline component adjustment, Trial Score, or hidden numeric quality score to the participant.
+The hidden baseline review should include qualitative baseline analysis. It should interpret the prerecorded Completion Score when baseline decomposition is available. The provider should use baseline `structured_features`, `text_context` Trial description fields, Completion Score, pillar impacts, and feature/subcategory impacts to summarize why the original trial appears completion-like or risky in clinical trial / pharma development language. This is baseline reasoning context, not a visible participant score and not a new XGBoost calculation. If only a registry score is available without pillar or feature decomposition, the baseline review should explicitly treat the score interpretation as lower-detail and avoid inventing missing driver analysis. It may describe baseline strengths, concerns, consistency flags, and development issues inside `analytical_narrative_draft.development_landscape_read`, but it must not produce participant-visible development discussion options, an active participant storyline, a visible baseline component adjustment, Trial Score, or hidden numeric quality score.
+
+If a later visible scenario returns exactly to the hidden baseline scenario state, the app still lets Pass 1/Pass 2 produce the visible narrative, but app-owned scoring neutralizes Operational Fit and Reality Check to prevent path-dependent score drift. In that case Trial Score equals the baseline Completion Outlook for the restored state, and the narrative should describe the return to baseline rather than reward or penalize the path taken to get there.
 
 The stored baseline review should include:
 
@@ -165,9 +167,12 @@ Near-term target:
 
 - show `Trial Score` as the assessed serious-game score;
 - keep the development `Completion Outlook` view visible during transition, with exact UI semantics owned by `docs/trial_score_narrative_direction.md`;
-- fold `Operational Fit` and `Reality Check` into the total-score explanation rather than presenting them as repetitive standalone essays;
-- surface one central tension;
-- end with one broader strategic question;
+- fold material `Operational Fit` into the relevant pillar/subpillar reading, usually under Execution Framework, rather than presenting it as a separate participant-visible score component;
+- mention `Reality Check` only when it materially changes, qualifies, or conflicts with the score interpretation, and frame it as a realism/coherence qualifier rather than numeric points;
+- use two to four selective pillar-reading bullets, combining related pillars/subpillars when clearer instead of listing every pillar mechanically;
+- render the participant card with at most three main titles: `Trial Score`, `What Is Driving The Score`, and `Discussion Point`;
+- surface one selected discussion topic as explanatory prose, using the title-like summary for history/validation and the `why_it_matters` sentence for display;
+- end the discussion point with one broader strategic question;
 - keep detailed component evidence available for facilitator/debug trace where useful.
 
 Suggested participant UI wording:
@@ -318,7 +323,7 @@ Provider prompts define the top-level boundary positively: Completion Outlook ex
 
 Narrative validation reports warn when Completion Outlook direction conflicts with `score_delta`, when stable-score Completion Outlook uses unsupported movement language, or when a Design Confidence subcategory moves materially without citing current relevant changed evidence or explaining resolution, offset, worsening, restoration, reversal, new strength, or new weakness. These warnings are diagnostics, not deterministic score caps.
 
-Provider-facing duration labels should keep endpoint timing separate from operational planning. Use `Max Endpoint Duration` for `primary_duration_months_ml` and `Planned Total Timeline` for `operational_assumptions.planned_duration_months`. The internal operational key remains `planned_duration_months`; the label exists to prevent the LLM from treating an operational timeline change as a changed primary endpoint duration.
+Provider-facing duration labels should keep endpoint timing separate from operational planning. Use `Max Endpoint Duration` for `primary_duration_months_ml` and `Planned Total Timeline` for `operational_assumptions.planned_duration_months`. These fields are related because endpoint timing can influence the total trial timeline, but they are not interchangeable. The internal operational key remains `planned_duration_months`; the label exists to prevent the LLM from treating endpoint-duration changes as changed operational timelines or operational timeline changes as changed primary endpoint duration.
 
 For V1, do not make a numeric `Coherence Score` or `Quality Score` the primary user-facing concept. Use:
 
@@ -578,7 +583,7 @@ This is conceptual JSON for planning only, not an implementation contract yet:
     "endpoint_rigor_ml": "Type and evidentiary rigor of the primary endpoint, such as hard clinical, subjective/PRO, surrogate, or unknown."
   },
   "text_context_field_meanings": {
-    "summary_ui": "Brief study summary used to interpret scenario intent and possible structured/text tensions.",
+    "summary_ui": "Brief study summary used to interpret scenario intent and possible structured/text development issues.",
     "primary_outcomes_ui": "Primary outcome text used to cross-check endpoint intent and evidence interpretation."
   },
   "reference_packs": [
@@ -753,18 +758,19 @@ Pass 1 should return:
 {
   "review_metadata": {"review_mode": "hidden_baseline | first_visible_iteration | later_visible_iteration", "visible": true},
   "completion_outlook_analysis": {"summary": "...", "main_model_signals": [], "model_boundary_note": "..."},
-  "strategy_shift_check": {"status": "not_applicable | detected", "rationale": "..."},
+  "strategy_shift_check": {"status": "supported | partly_supported | unsupported_or_incoherent | not_applicable", "rationale": "..."},
   "operational_fit": {"combined_operational_fit": {"rating": "...", "materiality": "...", "interaction_with_completion_outlook": "...", "central_reason": "...", "evidence_fields": []}},
-  "reality_check": {"effect": "neutral | reinforce_gain | reinforce_decline | offset_gain | offset_decline | reversal", "strength": "none | weak | moderate | strong", "central_reason": "...", "evidence_fields": [], "allocations": []},
-  "tension_question_options": [{"tension": {"summary": "...", "why_it_matters": "...", "supporting_evidence": []}, "participant_wider_question": {"question": "...", "supporting_evidence": []}}],
+  "reality_check": {"effect": "neutral | reinforce_gain | reinforce_decline | offset_gain | soften_decline | reward_coherence | penalize_incoherence | reversal", "strength": "none | slight | moderate | strong | reversal", "central_reason": "...", "evidence_fields": [], "allocations": []},
+  "reality_check_carryover_assessment": {"status": "still_relevant | partly_mitigated | resolved_or_superseded", "current_issue_relation": "same_issue | new_independent_issue | mixed_or_unclear", "reason": "...", "evidence_fields": []},
+  "development_discussion_options": [{"topic": "...", "why_it_matters": "...", "supporting_evidence": [], "participant_wider_question": {"question": "...", "supporting_evidence": []}}],
   "continuity_update": {"what_changed": "...", "watch_next": "..."},
-  "analytical_narrative_draft": {"current_state_read": "...", "movement_read": "...", "operational_fit_read": "...", "reality_check_read": "...", "tension_landscape_read": "..."}
+  "analytical_narrative_draft": {"current_state_read": "...", "movement_read": "...", "operational_fit_read": "...", "reality_check_read": "...", "development_landscape_read": "..."}
 }
 ```
 
-Hidden baseline is qualitative context only. It must not return `tension_question_options`, participant-visible questions, or an active selected tension. Baseline pressure points belong only in `analytical_narrative_draft.tension_landscape_read` and compact baseline orientation/watch context.
+Hidden baseline is qualitative context only. It must not return `development_discussion_options`, participant-visible questions, or an active selected discussion point. Baseline development issues belong only in `analytical_narrative_draft.development_landscape_read` and compact baseline orientation/watch context.
 
-Visible iterations should return two or three `tension_question_options`. Each option pairs one tension with exactly one participant-visible wider debate question. Pass 2 must select one supplied pair using priority 1 history/continuity and priority 2 current relevance.
+Visible iterations should return two or three `development_discussion_options`. Each option pairs one concise title-style development discussion topic with exactly one participant-visible wider debate question. Pass 1 should include at least one option anchored in a newly changed material issue when the latest scenario supplies one. Pass 2 must select one supplied pair using priority 1 state reuse/direct continuity, priority 2 latest material change, and priority 3 history diversity.
 
 Pass 2 should return:
 
@@ -774,14 +780,27 @@ Pass 2 should return:
   "trial_score_narrative": {"summary": "...", "movement_reading": "...", "score_interpretation": "..."},
   "pillar_reading": [{"pillar": "...", "reading": "..."}],
   "central_tension": {"summary": "...", "why_it_matters": "..."},
-  "broader_strategic_question": {"mapped_tension": "...", "question": "..."},
-  "facilitator_questions": [{"question": "...", "why_it_matters": "...", "related_feature_families": []}]
+  "broader_strategic_question": {"mapped_tension": "...", "question": "..."}
 }
 ```
 
-Provider validation enforces that Pass 2 `central_tension.summary` matches one supplied `strategic_tension_question_options` summary and that `broader_strategic_question.question` matches the question paired with that selected option. Repeating a recent participant-visible question when same-state reuse is false is recorded as a non-blocking validation note.
+The stable JSON fields are rendered into three participant-facing sections:
 
-Reality Check is a scoring correction / realism adjustment. It should explain whether pre-Reality score movement is coherent, realistic, and incrementally supported by scenario evidence. It must not select the participant-visible central tension or broader strategic question.
+- `Trial Score`: combines three labeled subparagraphs into one integrated read: `trial_score_narrative.summary` as `Overall Evolution`, `movement_reading` as `Completion Outlook`, and `score_interpretation` as `Reality Check`.
+- `What Is Driving The Score`: renders `pillar_reading` as two to four material bullets. Each bullet may cover one pillar or combine related pillars/subpillars; it should not mechanically list every pillar or repeat the same central message from the Trial Score section.
+- `Discussion Point: <topic>`: renders the selected concise `central_tension.summary` as the section title, followed by `central_tension.why_it_matters` and the paired wider `broader_strategic_question.question`.
+
+Provider validation enforces that Pass 2 `central_tension.summary` matches one supplied `development_discussion_options.topic` and that `broader_strategic_question.question` matches the `participant_wider_question.question` paired with that selected option. Repetition avoidance is prompt-level selection guidance, not a validation blocker: Pass 2 compares candidate discussion topics against recent participant-visible history. Same-state reuse or direct storyline continuity may keep the same topic. Otherwise, Pass 2 should prefer a supplied option anchored in a newly changed material issue when available, and use history diversity to avoid repeating the same development issue or wider-question framing among similarly relevant options. A prior issue that remains unresolved can stay visible in the Trial Score narrative or Reality Check when material without automatically becoming the selected `Discussion Point`.
+
+Reality Check is a scoring correction / realism adjustment. It should explain whether pre-Reality score movement is coherent, realistic, and incrementally supported by scenario evidence. It must not select the participant-visible discussion point.
+
+When the immediately previous visible review has a material negative Reality Check, the packet may include `iteration_context.reality_check_carryover_candidate`. Pass 1 then returns `reality_check_carryover_assessment` to classify whether that prior concern remains active, is partly mitigated, or has been resolved/superseded by the latest scenario change. The app applies this as a controlled scoring carryover: an unresolved prior negative Reality Check acts as a floor, a partly mitigated concern keeps half of the prior penalty, and a resolved/superseded concern is released. If the latest Reality Check identifies a new independent concern caused by the latest changed fields, the app may cumulate the current negative adjustment with the active carryover under a bounded negative cap. If the issue is the same or unclear, the app uses the more negative of the current adjustment and the carryover floor rather than adding both.
+
+Gated premise-sensitive field changes do not automatically reset carryover. They are strong context for Pass 1 to decide whether the prior concern has been superseded by a new development premise. Exact same-state reuse remains the higher-priority path: if the scenario state matches a prior visible review, the app reuses that prior score trace instead of recalculating carryover.
+
+Participant-facing Reality Check wording should explain the direction of the adjustment in plain language when material: it may offset an apparent gain, reinforce a movement, rarely soften a decline when the app-scored adjustment supports it, or reverse a misleading pre-Reality movement. It should not expose points or exact score arithmetic.
+
+Participant-facing operational wording should not expose Operational Fit as a separate component. When app-rated operational evidence matters, Pass 2 should absorb it into the relevant pillar or Completion Outlook read using plain language such as right scale, footprint, duration, size, or operational dimensions.
 
 ## 13. Plot Integration Guidance
 
@@ -789,20 +808,20 @@ The active score views are Completion Outlook, Reality Check, and Trial Score. C
 
 Debug and audit JSON should expose current structures only:
 
-- Pass 1 analytical basis: `completion_outlook_analysis`, `operational_fit`, `reality_check`, `tension_question_options`, `strategic_tension_question_options`, `continuity_update`, and `analytical_narrative_draft`.
-- Pass 2 participant result: `trial_score_narrative`, `pillar_reading`, selected `central_tension`, selected `broader_strategic_question`, and optional `facilitator_questions`.
-- Participant-visible history: only Pass 2 selected tension/question pairs in `recent_participant_visible_questions`.
-- Hidden baseline compact context: completion outlook summary, baseline orientation/watch context, and `baseline_tension_landscape`; no active tension or participant question history.
+- Pass 1 analytical basis: `completion_outlook_analysis`, `operational_fit`, `reality_check`, optional `reality_check_carryover_assessment`, `development_discussion_options`, `continuity_update`, and `analytical_narrative_draft`.
+- Pass 2 participant result: `trial_score_narrative`, `pillar_reading`, selected `central_tension`, and selected `broader_strategic_question`.
+- Participant-visible history: only Pass 2 selected development discussion pairs in `recent_participant_visible_questions`.
+- Hidden baseline compact context: completion outlook summary, baseline orientation/watch context, and `baseline_development_landscape`; no active discussion topic or participant question history.
 
-Do not expose legacy Design Confidence, Total Scenario Score, main/alternative Pass 1 candidate tension fields, or old Strategic Review fields in active debug JSON.
+Do not expose legacy Design Confidence, Total Scenario Score, main/alternative Pass 1 candidate development discussion fields, or old Strategic Review fields in active debug JSON.
 
 ## 14. Narrative Tone Rules
 
-Pass 1 prioritizes analytical depth, not participant-facing style. It should use packet evidence, reference-pack summaries, model evidence, operational context, and trial text to explain clinical-development meaning.
+Pass 1 prioritizes analytical depth, not participant-facing style. It should use packet evidence, model evidence, operational context, trial text, relevant reference-pack summaries, and general clinical-development expertise to explain clinical-development meaning. Reference packs can support interpretation, but the provider must not imply a document supports a claim unless the pack actually provides that support.
 
-Pass 2 owns final participant-facing wording. It should use the validated Pass 1 analysis and app-calculated score context without recalculating scores, re-rating Operational Fit, re-deciding Reality Check, or adding unsupported clinical/regulatory claims.
+Pass 2 owns final participant-facing wording. It should use the validated Pass 1 analysis and app-calculated score context without recalculating scores, re-rating Operational Fit, re-deciding Reality Check, or adding unsupported clinical/regulatory claims. It should write in conditional clinical-development language because the narrative is an interpretation of scenario evidence, not a claim of fact.
 
-The participant-visible wider question should be a broad development-debate question mapped to the selected tension. Facilitator questions are separate hidden/collapsed prompts and may be more anchored to the current trial.
+The participant-visible wider question should be a broad development-debate question mapped to the selected discussion topic. Facilitator questions are deferred out of the main Pass 2 participant-narrative contract and should be generated separately if reintroduced.
 
 ## 15. Memory And Iteration Policy
 
@@ -850,24 +869,29 @@ Provider selection and secret handling:
   - `GEMINI_NARRATIVE_MODEL=gemini-3.1-flash-lite`
   - `NARRATIVE_LLM_TEMPERATURE`
   - `NARRATIVE_LLM_SEED`, only for providers/models that support seed-like reproducibility.
-  - `NARRATIVE_LLM_MAX_OUTPUT_TOKENS=12000`
+  - `NARRATIVE_LLM_MAX_OUTPUT_TOKENS=20000`
   - `NARRATIVE_LLM_TIMEOUT_SECONDS`
   - `NARRATIVE_LLM_MAX_RETRIES`
 - Current setup status: local `.env` can hold these values, and `src/narratives/provider_config.py` reads and validates them without making any LLM API call. `scripts/check_narrative_openai_smoke.py` and `scripts/check_narrative_gemini_smoke.py` can run opt-in API smoke tests when `RUN_NARRATIVE_OPENAI_SMOKE=1` or `RUN_NARRATIVE_GEMINI_SMOKE=1` is set; they skip by default to avoid accidental network calls or API spend. `src/narratives/provider.py` contains real OpenAI and Gemini invocation helpers behind the same normalized provider result shape. `frontend/views/trial_simulator.py` uses the deterministic mock provider by default and routes both hidden baseline and visible Scenario Review calls through the live provider chain only when `NARRATIVE_LIVE_REVIEW_ENABLED=1`. Live wrapper checks have validated full fixture reviews using the normalized provider boundary.
 - Historical provider config, prompt/schema fixtures, opt-in OpenAI/Gemini smoke testing, and opt-in simulator UI routing originally targeted an earlier Scenario Review contract. Those artifacts remain useful only as provenance or stable scenario inputs. The active contract is Trial Score V1 in `docs/trial_score_narrative_direction.md` and `src/narratives/trial_score_contract.py`.
-- Active provider prompts use packet-section names consistently. `Completion Outlook score` is `model_interpretation.completion_score`; readable score evidence is supplied through `model_interpretation`; `Trial description fields` live under `text_context` with keys such as `title`, `summary_ui`, `conditions_ui`, `interventions_ui`, and `primary_outcomes_ui`; planning assumptions are `operational_assumptions.planned_enrollment`, `planned_sites`, and `planned_duration_months`; Pass 1 analytical output is `completion_outlook_analysis`, `operational_fit`, `reality_check`, `tension_question_options`, `continuity_update`, and `analytical_narrative_draft`.
+- Active provider prompts use packet-section names consistently. `Completion Outlook score` is `model_interpretation.completion_score`; readable score evidence is supplied through `model_interpretation`; `Trial description fields` live under `text_context` with keys such as `title`, `summary_ui`, `conditions_ui`, `interventions_ui`, and `primary_outcomes_ui`; planning assumptions are `operational_assumptions.planned_enrollment`, `planned_sites`, and `planned_duration_months`; Pass 1 analytical output is `completion_outlook_analysis`, `operational_fit`, `reality_check`, `development_discussion_options`, `continuity_update`, and `analytical_narrative_draft`.
 - Participant-facing Completion Outlook wording should avoid internal model vocabulary. Use plain phrases such as `Completion Outlook score inputs`, `score inputs`, `score pattern`, `score-driving fields`, or `early-termination risk pattern` when explaining the scoring boundary; avoid phrases such as `model-facing`, `model signal`, `model-score inputs`, `model suggests`, `model indicates`, `model registers`, `model-derived`, `model interpretation`, `in the model`, `model's...`, or `the model reflects`. The provider prompt asks the model to replace any remaining internal model-language phrase before finalizing participant-facing text.
 - Planning-assumption fields are outside Completion Outlook: planned enrollment, planned site count, and planned total duration do not feed the XGBoost score. They feed Operational Fit and may inform Reality Check or the analytical narrative when they affect proportionality, retention, evidence completeness, or execution realism.
 - Mixed structured-plus-planning changes should keep source boundaries clear. Completion Outlook explains score-input movement; Operational Fit explains planning-assumption proportionality; Reality Check explains whether the combined pre-Reality movement is coherent and incrementally supported.
+- Visible-iteration narratives should privilege latest movement over persistent state. A field changed in an earlier iteration may remain an unresolved current-state constraint, but it should not be described as driving the latest score movement unless model movement evidence shows that field's impact changed again. A previously negative unchanged field should not become a positive argument in a later iteration unless the latest change demonstrably improves its fit or model impact; otherwise it remains an unresolved constraint or quality concern. If another latest field changes the weight or interpretation of a persistent field, the narrative should explain that interaction explicitly.
+- Non-operational structured changes, such as rare-disease status, can change the context around unchanged enrollment, site count, or duration. That context should not create Operational Fit points by itself. If the unchanged operational plan becomes implausible for the revised scenario, Reality Check and the participant narrative should explain the mismatch while preserving Operational Fit's boundary as the scoring layer for explicit planning-assumption edits.
+- `primary_duration_months_ml` alone is not Operational Fit scoring evidence. If an endpoint-duration change is already reflected in Completion Outlook as endpoint maturity or follow-up evidence movement, Reality Check should stay neutral unless there is an incremental contradiction, shortcut, unsupported assumption, or realism problem beyond that model movement. Non-neutral Reality Check allocation `incremental_check` text should explain this non-duplication explicitly.
+- Reality Check is a conservative challenge layer. It should default to neutral unless there is a clear incremental reason not already captured by Completion Outlook or Operational Fit. It should be more willing to challenge favorable movements than to soften unfavorable movements. For negative pre-Reality movement, `soften_decline` should be rare and should require a material decline plus a newly changed, concrete compensating strength. Unchanged strengths can provide context, but should not be the main basis for a non-neutral adjustment.
+- Reality Check can be aggressive when model-favorable simplification is clinically misleading. If a positive pre-Reality movement is mainly caused by weakening governance, oversight, evidence collection, or critical-to-quality design protections, `offset_gain` with strength `strong` may be appropriate for a strong offset. A true reversal requires both `effect: reversal` and `strength: reversal`; `effect: reversal` with `strength: strong` is only a strong offset and will not cross through neutral.
 - Resource, staffing, and budget implications remain qualitative only unless explicit financial inputs exist. Added resource intensity should be discussed through operational proportionality and evidence-completeness risk, not as a cost model.
-- Operational simplification may improve Operational Fit when it genuinely improves executability. When simplification is achieved mainly by weakening comparator, masking, allocation, endpoint rigor, or evidence ambition, Reality Check may soften or offset the apparent gain if the movement looks shortcut-driven.
+- Operational simplification may improve Operational Fit when it genuinely improves executability. When simplification is achieved mainly by weakening comparator, masking, allocation, endpoint rigor, or evidence ambition, Reality Check may offset the apparent gain if the movement looks shortcut-driven.
 - For hard product-boundary cases, the app may pass narrow `review_controls` to the provider. These controls should define the Completion Outlook mode, latest-change focus, and forbidden latest fields for Completion Outlook; they should not turn Operational Fit, Reality Check, or Pass 2 narrative selection into templates.
-- The deterministic Completion Outlook boundary is shared in `src/narratives/review_controls.py`. For operational-only and stable non-score-input modes, Completion Outlook wording may be normalized while Operational Fit, Reality Check, tension options, and Pass 2 narrative remain governed by the active Trial Score contract.
+- The deterministic Completion Outlook boundary is shared in `src/narratives/review_controls.py`. For operational-only and stable non-score-input modes, Completion Outlook wording may be normalized while Operational Fit, Reality Check, development discussion options, and Pass 2 narrative remain governed by the active Trial Score contract.
 - When `review_controls` are present, participant-facing narratives should explain the latest change without re-labeling older cumulative issues as newly changed. Older issues may remain relevant to the current full scenario, but they should not be described as if they were introduced by the latest edit.
-- For later visible iterations, Pass 1 proposes two or three tension/question options and Pass 2 selects one participant-visible wider debate question using history first, then current relevance. Facilitator questions are separate optional hidden prompts and may be more trial-specific.
+- For later visible iterations, Pass 1 proposes two or three development discussion options and Pass 2 selects one participant-visible wider debate question using history first, then current relevance. Facilitator questions are deferred out of the main Pass 2 participant-narrative contract.
 - Trial description fields do not directly feed the Completion Outlook score. They may support the Completion Outlook narrative only when they align with, clarify, or add non-conflicting detail to selected Completion Outlook score inputs. This conflict rule applies across all Trial description fields in `text_context` and all relevant `structured_features`, not only intervention descriptions. Completion Outlook score inputs define the score-interpreted scenario when they directly conflict with Trial description fields. Only the conflicting Trial description field detail should be treated as stale scenario text superseded by the structured_features value; it should not be used as Completion Outlook evidence or as evidence that the selected structured design has the contradicted modality, delivery burden, endpoint, or population feature. Non-conflicting Trial description field details and latest `text_context` changes remain valid context when they clarify population, endpoints, intervention rationale, or trial context. In the participant warning, "text is used as supporting context" means aligned or non-conflicting Trial description field content; the directly conflicting detail remains stale scenario text superseded by the corresponding `structured_features` value.
-- `structured_features` / `text_context` conflict is a scenario-readiness warning. It may affect the analytical draft, Reality Check, or facilitator questions when it weakens interpretability, but it should not be converted into a separate obsolete scoring layer.
-- When only the three planning-assumption fields changed and the Completion Outlook score delta is `0.0`, the app may deterministically set the participant-facing Completion Outlook boundary sentence before storing/reporting the trace. This fixed sentence is exclusive to the planning-assumption-only boundary mode and must not be reused for `structured_features` / `text_context` consistency cases or intervention-modality changes. This is a product boundary, not a clinical judgment, and should not alter Operational Fit, Reality Check, tension options, or Pass 2 narrative selection.
+- `structured_features` / `text_context` conflict is a scenario-readiness warning. It may affect the analytical draft or Reality Check when it weakens interpretability, but it should not be converted into a separate obsolete scoring layer.
+- When only the three planning-assumption fields changed and the Completion Outlook score delta is `0.0`, the app may deterministically set the participant-facing Completion Outlook boundary sentence before storing/reporting the trace. This fixed sentence is exclusive to the planning-assumption-only boundary mode and must not be reused for `structured_features` / `text_context` consistency cases or intervention-modality changes. This is a product boundary, not a clinical judgment, and should not alter Operational Fit, Reality Check, development discussion options, or Pass 2 narrative selection.
 - Do not add post-narrative deterministic cleanup for participant wording or question rewriting at this stage. Internal-language leaks and repeated/similar questions should be handled by prompt wording and eval findings only, except for the existing fixed planning-assumption Completion Outlook boundary sentence and provider-neutral unavailable-review error formatting.
 - Latest three-trial live Gemini run `first_wave_operational_shortcut_cap_3trials_1` returned 12/12 reviewed visible iterations, 0 failed checks, and 3 warning checks. The operational shortcut cap behaved as intended, with shortcut-driven simplification receiving only limited operational credit. Remaining warnings were question opening-frame repetition and one scenario-readiness dominance review item, so no urgent prompt change is required before the next broader wave.
 - Broader five-trial live run `first_wave_broader_trials_5_1` returned 20/20 reviewed visible iterations, 3 failed checks, and 10 warning checks. Follow-up adjustments are eval/prompt-boundary only: avoid `model signals` by using score-pattern wording, avoid over-crediting patient-relevance when the synthetic population edit conflicts with a prevention/vaccine-style trial objective, and require operational-only medical questions to reference planning burden, scale, or proportionality.
@@ -904,7 +928,7 @@ Live-provider latency experiments run during the June 2026 implementation sessio
 Implementation-time cost-control decision after the first billing check:
 
 - During active coding and UI iteration, keep live review disabled by default with `NARRATIVE_LIVE_REVIEW_ENABLED=0`. This makes the deterministic mock path the default and prevents accidental API spend.
-- For many low-cost live tests per day, use a single cheap primary provider rather than a fallback chain. The current validated local development profile is Gemini-only with no effective fallback: `NARRATIVE_LLM_PROVIDER=gemini`, `NARRATIVE_LLM_FALLBACK_PROVIDER=gemini`, `GEMINI_NARRATIVE_MODEL=gemini-3.1-flash-lite`, `NARRATIVE_LLM_MAX_OUTPUT_TOKENS=12000`, `NARRATIVE_LLM_TIMEOUT_SECONDS=60`, and `NARRATIVE_LLM_MAX_RETRIES=0`. The config loader collapses same-provider fallback to `None`.
+- For many low-cost live tests per day, use a single cheap primary provider rather than a fallback chain. The current validated local development profile is Gemini-only with no effective fallback: `NARRATIVE_LLM_PROVIDER=gemini`, `NARRATIVE_LLM_FALLBACK_PROVIDER=gemini`, `GEMINI_NARRATIVE_MODEL=gemini-3.1-flash-lite`, `GEMINI_THINKING_LEVEL=high`, `NARRATIVE_LLM_MAX_OUTPUT_TOKENS=20000`, `NARRATIVE_LLM_TIMEOUT_SECONDS=90`, and `NARRATIVE_LLM_MAX_RETRIES=0`. The config loader collapses same-provider fallback to `None`. The larger token budget preserves high-thinking quality while reducing mid-JSON truncation risk; the 90-second per-call timeout gives margin for longer high-thinking Pass 1 or Pass 2 calls.
 - Keep the OpenAI model configured as a cheaper reserve option, such as `gpt-5.4-mini`, rather than `gpt-5.5` during implementation. `gpt-5.5` should be reserved for rare high-quality/offline validation, not repeated local development testing.
 - This implementation-time profile is intentionally different from the later production resilience design. Production can re-enable a primary/fallback chain after latency, reliability, budget, and provider-output quality are calibrated.
 
@@ -984,7 +1008,7 @@ Recommended trace fields to store for each narrative pass:
 
 Trace robustness staging:
 
-- Current prototype trace should remain simple and session-state compatible. It should store `input_packet`, provider/mock Pass 1 `output_json`, `validated_review`, Pass 2 participant narrative JSON, validation status/errors, app-owned Operational Fit points, Reality Check points, Trial Score, changed fields, score movement, provider/model identity, selected participant tension/question, participant-visible question history, and compact storyline memory.
+- Current prototype trace should remain simple and session-state compatible. It should store `input_packet`, provider/mock Pass 1 `output_json`, `validated_review`, Pass 2 participant narrative JSON, validation status/errors, app-owned Operational Fit points, Reality Check points, Trial Score, changed fields, score movement, provider/model identity, selected participant development discussion, participant-visible question history, and compact storyline memory.
 - Current real-provider traces store prompt template version, response schema version, configured/applied generation controls, attempts, latency, parse status, response text length, token usage when available, finish metadata when available, malformed-JSON retry metadata, Pass 2 validation metadata, and fallback-after metadata in provider metadata. The UI may expose these fields in a compact technical diagnostics expander when live Scenario Review is unavailable, without showing API keys, raw prompts, or raw provider output. Add prompt template hashes only if prompt version strings are not enough for audit.
 - Defer until durable provider tracing: raw provider response, parsed JSON response, provider response ID, system fingerprint, and provider-specific safety/refusal metadata beyond compact finish/safety counts. These fields are not meaningful for the deterministic mock reviewer and are not required for the current mock-default simulator path.
 - Defer until durable storage: database/file persistence, shared trial-level baseline review records, cross-team replay, facilitator export, retention policy, privacy controls, and schema migration strategy.
@@ -1003,15 +1027,15 @@ Provider abstraction should be thin. The application should own payload construc
 
 Real-provider prompts use a funnel instruction, currently implemented in `src/narratives/prompt_builder.py` and validated by `scripts/check_narrative_prompt_builder.py`:
 
-- Use prompt mode `hidden_baseline` for the original trial before participant changes. This mode creates hidden qualitative baseline context, baseline orientation/watch context, and a rich analytical draft. It must not expose participant-facing baseline Trial Score, Operational Fit points, Reality Check points, tension/question options, or an active participant storyline.
-- Use prompt mode `first_visible_iteration` for the first participant-modified scenario. This mode can compare Completion Outlook to the visible original Completion Score, but participant-visible tension/question history starts only after Pass 2 selects a visible pair.
-- Use prompt mode `later_visible_iteration` for later participant-modified scenarios. This mode can use previous visible review context for continuity, but tension/question reuse should be driven by participant-visible history and same-state reuse, not by hidden baseline topics or raw Pass 1 options.
+- Use prompt mode `hidden_baseline` for the original trial before participant changes. This mode creates hidden qualitative baseline context, baseline orientation/watch context, and a rich analytical draft. It must not expose participant-facing baseline Trial Score, Operational Fit points, Reality Check points, development discussion options, or an active participant storyline.
+- Use prompt mode `first_visible_iteration` for the first participant-modified scenario. This mode can compare Completion Outlook to the visible original Completion Score, but participant-visible development discussion history starts only after Pass 2 selects a visible pair.
+- Use prompt mode `later_visible_iteration` for later participant-modified scenarios. This mode can use previous visible review context for continuity, but development discussion reuse should be driven by participant-visible history and same-state reuse, not by hidden baseline topics or raw Pass 1 options.
 - In visible modes, use `iteration_context.field_changes` to identify what the participant changed.
 - Use `model_interpretation.xgboost_impact_changes` to understand model movement and materiality. In `hidden_baseline` mode, do not invent participant edits when `field_changes` is empty.
 - Treat XGBoost/SHAP movement as model explanation evidence, not proof of clinical causality.
 - Translate score evidence into clinical trial / pharma development language for participant-facing text. Explain why the revised scenario may look more or less completion-like, robust, feasible, governed, strategically aligned, risk-reduced, simplified, or less evidence-generating in terms of supported evidence such as endpoint timing, comparator choice, population scope, oversight, operational burden, scientific challenge, or development strategy rather than exposing raw model vocabulary. Total duration, planned enrollment, planned site count, and operational benchmark assumptions must not be cited as Completion Outlook drivers; maximum primary endpoint duration may be used only when present as Completion Outlook score evidence. Do not equate a higher Completion Score with simplification by default, but do flag simplification or value loss when the evidence points that way.
 - Participant-facing narratives should state unresolved concerns rather than prescribe exact redesign paths. It is acceptable to say a scenario has unresolved bias-control, interpretability, proportionality, or scenario-readiness concerns; it should not tell participants to switch to a specific comparator, randomization, blinding, endpoint, modality, or population.
-- Produce Completion Outlook analysis, Operational Fit classification, Reality Check classification/allocation, visible-iteration tension/question options, continuity update, and analytical draft for Pass 2.
+- Produce Completion Outlook analysis, Operational Fit classification, Reality Check classification/allocation, visible-iteration development discussion options, continuity update, and analytical draft for Pass 2.
 - Do not calculate or return app-owned score fields such as `operational_fit_points`, `reality_check_points`, `pre_reality_score`, or `trial_score`. The application calculates those from validated Pass 1 structures and model score inputs.
 
 Use a deterministic input hash based on prompt version, rubric version, baseline snapshot, current snapshot, storyline memory, and `text_context` Trial description fields. If the same input hash is reviewed again with the same provider/model cache namespace, reuse the stored validated review instead of calling the provider again. Generate the baseline review once per selected study and store it for the session. Hashable review context should avoid session-specific trace IDs; use stable input hashes and iteration IDs instead.
@@ -1039,8 +1063,8 @@ Trial Description / Structured-Feature Conflict Handling:
 
 - This rule applies across all Trial description fields in `text_context` and all relevant `structured_features`, not only intervention descriptions.
 - For obvious material mismatches, pause the prediction workflow before new scoring and ask the participant to correct the scenario or add an explanation.
-- For softer tensions, continue Scenario Review and flag the inconsistency in narrative context.
-- Route it to the relevant analytical narrative, Reality Check rationale, facilitator question, or participant tension when supported.
+- For softer development issues, continue Scenario Review and flag the inconsistency in narrative context.
+- Route it to the relevant analytical narrative, Reality Check rationale, hidden discussion prompt, or participant development issue when supported.
 - Require supported evidence before it can affect app-owned scoring.
 - Treat missing, brief, or noisy text as low-confidence context rather than a direct penalty.
 - Do not let the LLM silently choose whether structured fields or text fields are true. For Completion Score, structured Trial Features are authoritative. For Scenario Review, structured fields remain primary context, while text and user explanations provide clarification, contradiction evidence, or scenario rationale.
@@ -1330,7 +1354,7 @@ The field set should support the active Trial Score review by giving Pass 1 enou
 - Reality Check coherence, realism, simplification risk, and incremental evidence support.
 - Endpoint and evidence interpretability.
 - Population, setting, comparator, governance, and follow-up implications.
-- Visible-iteration tension/question options for Pass 2 selection.
+- Visible-iteration development discussion options for Pass 2 selection.
 
 Examples:
 
@@ -1370,8 +1394,8 @@ The stored serious-game snapshot should include:
 - Operational Fit assessment and points.
 - Reality Check assessment, allocation, and points.
 - Trial Score.
-- Pass 1 tension/question options for visible iterations.
-- Pass 2 selected participant tension and broader strategic question.
+- Pass 1 development discussion options for visible iterations.
+- Pass 2 selected participant discussion topic and broader strategic question.
 - Participant-visible question history.
 - Input hash.
 - Prompt version.
@@ -1380,7 +1404,7 @@ The stored serious-game snapshot should include:
 - Failure reason, if any.
 - Compact storyline memory.
 
-Storage should keep validated Pass 1 analysis, app-owned score diagnostics, Pass 2 participant narrative, selected tension/question pair, and participant-visible question history as explicit fields rather than storing only a derived narrative explanation.
+Storage should keep validated Pass 1 analysis, app-owned score diagnostics, Pass 2 participant narrative, selected development discussion pair, and participant-visible question history as explicit fields rather than storing only a derived narrative explanation.
 
 ## 19. Non-Goals And Boundaries
 
@@ -1419,7 +1443,7 @@ Near-term narrative work should:
 - continue implementation from the V1 Operational Fit and Reality Check contract in `src/narratives/trial_score_contract.py`;
 - make the participant narrative assess only the final `Trial Score`;
 - avoid separate repetitive component narratives;
-- surface one central tension and one broader strategic question;
+- surface one central discussion topic and one broader strategic question;
 - keep only pieces compatible with the new direction when touching remaining legacy UI, eval, or fixture code.
 
 Obsolete roadmap items tied to `Design Confidence`, `Total Scenario Score`, and first-generation rigid `Strategic Review` scoring should not guide new implementation.

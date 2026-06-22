@@ -20,6 +20,7 @@ from src.narratives.trial_score_contract import (  # noqa: E402
 from src.narratives.provider import (  # noqa: E402
     PASS1_REPAIR_STAGE_NARRATIVE_SCAFFOLD,
     _attach_participant_narrative,
+    _pass1_repair_prompt,
     _pass1_repair_stage,
 )
 from frontend.utils.scenario_review_plot_data import design_subcategory_impacts  # noqa: E402
@@ -32,6 +33,8 @@ def _packet(
     changed_fields: list[str] | None = None,
     field_changes: list[dict] | None = None,
     previous_operational_fit_points: float | None = None,
+    carryover_candidate: dict | None = None,
+    returned_to_hidden_baseline_state: bool = False,
 ) -> dict:
     iteration_context = {
         "changed_fields": changed_fields
@@ -45,6 +48,10 @@ def _packet(
         iteration_context["trial_score_continuity"] = {
             "previous_operational_fit_points": previous_operational_fit_points,
         }
+    if carryover_candidate is not None:
+        iteration_context["reality_check_carryover_candidate"] = carryover_candidate
+    if returned_to_hidden_baseline_state:
+        iteration_context["returned_to_hidden_baseline_state"] = True
     return {
         "input_hash": "trial-score-contract-check",
         "structured_features": {
@@ -102,8 +109,10 @@ def _pass1_review(
     fit_materiality: str = "major",
     reality_effect: str = "offset_gain",
     reality_strength: str = "moderate",
+    carryover_status: str | None = None,
+    carryover_relation: str = "mixed_or_unclear",
 ) -> dict:
-    return {
+    review = {
         "review_metadata": {"review_mode": "first_visible_iteration", "visible": True},
         "completion_outlook_analysis": {
             "summary": "Completion Outlook improved on model-visible score inputs.",
@@ -166,35 +175,29 @@ def _pass1_review(
                 },
             ],
         },
-        "tension_question_options": [
+        "development_discussion_options": [
             {
-                "tension": {
-                    "summary": "Execution support versus evidence interpretability.",
-                    "why_it_matters": "The scenario may be more executable without being more decision-ready.",
-                    "supporting_evidence": ["operational_assumptions.planned_sites", "phase_ml"],
-                },
+                "topic": "Execution support versus evidence interpretability.",
+                "why_it_matters": "The scenario may be more executable without being more decision-ready.",
+                "supporting_evidence": ["operational_assumptions.planned_sites", "phase_ml"],
                 "participant_wider_question": {
                     "question": "When should better execution support change confidence in a development scenario, and when does it only make an unresolved evidence question easier to run?",
                     "supporting_evidence": ["operational_assumptions.planned_sites", "phase_ml"],
                 },
             },
             {
-                "tension": {
-                    "summary": "Operational feasibility versus decision-ready evidence.",
-                    "why_it_matters": "This frames whether execution support is enough when the evidence package itself has not become more interpretable.",
-                    "supporting_evidence": ["operational_assumptions.planned_sites", "phase_ml"],
-                },
+                "topic": "Operational feasibility versus decision-ready evidence.",
+                "why_it_matters": "This frames whether execution support is enough when the evidence package itself has not become more interpretable.",
+                "supporting_evidence": ["operational_assumptions.planned_sites", "phase_ml"],
                 "participant_wider_question": {
                     "question": "How should a team distinguish operational practicality from evidence that is strong enough to support the intended decision?",
                     "supporting_evidence": ["operational_assumptions.planned_sites", "phase_ml"],
                 },
             },
             {
-                "tension": {
-                    "summary": "Execution scale versus endpoint confidence.",
-                    "why_it_matters": "This gives later iterations another way to challenge whether the operational footprint supports the endpoint and follow-up logic.",
-                    "supporting_evidence": ["operational_assumptions.planned_sites", "primary_duration_months_ml"],
-                },
+                "topic": "Execution scale versus endpoint confidence.",
+                "why_it_matters": "This gives later iterations another way to challenge whether the operational footprint supports the endpoint and follow-up logic.",
+                "supporting_evidence": ["operational_assumptions.planned_sites", "primary_duration_months_ml"],
                 "participant_wider_question": {
                     "question": "When does adding operational scale improve interpretability, and when does it expose that the endpoint and follow-up logic have not kept pace?",
                     "supporting_evidence": ["operational_assumptions.planned_sites", "primary_duration_months_ml"],
@@ -211,9 +214,17 @@ def _pass1_review(
             "movement_read": "The latest move appears operationally supportive but still needs evidence interpretation. The movement should be summarized as a scenario dynamic and should challenge whether the changed assumptions actually improve the development argument, improve evidence completeness, or only make the same endpoint package easier to run.",
             "operational_fit_read": "Operational Fit reads the enrollment and site-footprint change as a proportionality question. The draft should compare the operational footprint with similar trial patterns and explain whether the scenario looks easier to execute, whether data quality and retention are protected, and whether the revised footprint is consistent with the endpoint and follow-up burden.",
             "reality_check_read": "Reality Check may offset part of the apparent gain if the movement looks shortcut-driven. The review should frame this as a robustness question about the evidence package and operational support. It should also consider whether comparator choice, safety oversight, endpoint interpretability, or follow-up timing changes confidence beyond the model and Operational Fit read.",
-            "tension_landscape_read": "The tension landscape includes execution support versus evidence interpretability. Alternative pressures should remain available for later iterations, including whether operational feasibility is being mistaken for decision-ready evidence, whether endpoint confidence has kept pace with the execution plan, and whether the trial can support the next development decision rather than only a narrower feasibility read. The draft should also preserve enough program-level context for Pass 2 to explain why the same score movement may matter differently across phases, populations, and evidence ambitions. It should retain the comparator and standard-of-care implications, the population-specific limits on generalizability, and the possibility that stronger operational support still leaves uncertainty about whether the evidence package is complete enough for the intended development use. That context gives Pass 2 enough material to distinguish execution confidence, clinical interpretability, and program strategy without rerunning the analysis. It should also make clear whether the most relevant future debate is operational durability, endpoint credibility, or broader program confidence.",
+            "development_landscape_read": "The development landscape includes execution support versus evidence interpretability. Alternative pressures should remain available for later iterations, including whether operational feasibility is being mistaken for decision-ready evidence, whether endpoint confidence has kept pace with the execution plan, and whether the trial can support the next development decision rather than only a narrower feasibility read. The draft should also preserve enough program-level context for Pass 2 to explain why the same score movement may matter differently across phases, populations, and evidence ambitions. It should retain the comparator and standard-of-care implications, the population-specific limits on generalizability, and the possibility that stronger operational support still leaves uncertainty about whether the evidence package is complete enough for the intended development use. That context gives Pass 2 enough material to distinguish execution confidence, clinical interpretability, and program strategy without rerunning the analysis. It should also make clear whether the most relevant future debate is operational durability, endpoint credibility, or broader program confidence.",
         },
     }
+    if carryover_status is not None:
+        review["reality_check_carryover_assessment"] = {
+            "status": carryover_status,
+            "current_issue_relation": carryover_relation,
+            "reason": "The prior concern remains relevant unless the latest change directly restores the missing evidence support.",
+            "evidence_fields": ["phase_ml"],
+        }
+    return review
 
 
 def _check_operational_fit_mapping(errors: list[str]) -> None:
@@ -255,6 +266,188 @@ def _check_incompatible_effect_downgrade(errors: list[str]) -> None:
         errors.append("movement-incompatible Reality Check effect should downgrade to neutral")
     if not any("incompatible" in note for note in result.get("validation_notes") or []):
         errors.append("Reality Check incompatibility downgrade should be reported")
+
+    positive_penalty_result = score_pass1_review(
+        _packet(completion_score=78, previous_trial_score=70),
+        _pass1_review(
+            fit_rating="neutral_or_unclear",
+            fit_materiality="minor",
+            reality_effect="penalize_incoherence",
+            reality_strength="strong",
+        ),
+    )
+    if positive_penalty_result.get("reality_check_points") != 0:
+        errors.append("penalize_incoherence should downgrade to neutral for positive pre-Reality movement")
+    if not any("incompatible" in note for note in positive_penalty_result.get("validation_notes") or []):
+        errors.append("positive movement penalize_incoherence downgrade should be reported")
+
+    positive_offset_result = score_pass1_review(
+        _packet(completion_score=78, previous_trial_score=70),
+        _pass1_review(
+            fit_rating="neutral_or_unclear",
+            fit_materiality="minor",
+            reality_effect="offset_gain",
+            reality_strength="strong",
+        ),
+    )
+    if positive_offset_result.get("reality_check_points") != -5.6:
+        errors.append("strong offset_gain should subtract 70% of positive pre-Reality movement")
+
+
+def _carryover_candidate(points: float = -7.1) -> dict:
+    return {
+        "active": True,
+        "source_iteration_id": 2,
+        "source_input_hash": "prior",
+        "previous_reality_check_points": points,
+        "previous_reality_check_assessment": {
+            "effect": "offset_gain",
+            "strength": "strong",
+            "central_reason": "Prior simplification weakened evidence confidence.",
+            "allocation_points": [
+                {
+                    "allocation_target_id": "execution_framework.methodological_setup",
+                    "pillar": "Execution Framework",
+                    "subpillar": "Methodological Setup",
+                    "points": points,
+                }
+            ],
+        },
+        "previous_reality_check_allocation_points": [
+            {
+                "allocation_target_id": "execution_framework.methodological_setup",
+                "pillar": "Execution Framework",
+                "subpillar": "Methodological Setup",
+                "points": points,
+            }
+        ],
+    }
+
+
+def _check_reality_check_carryover_floor(errors: list[str]) -> None:
+    packet = _packet(
+        completion_score=78,
+        previous_trial_score=70,
+        changed_fields=["phase_ml"],
+        carryover_candidate=_carryover_candidate(),
+    )
+    review = _pass1_review(
+        fit_rating="neutral_or_unclear",
+        fit_materiality="minor",
+        reality_effect="neutral",
+        reality_strength="none",
+        carryover_status="still_relevant",
+        carryover_relation="same_issue",
+    )
+    review["strategy_shift_check"] = {
+        "status": "supported",
+        "rationale": "Phase change is coherent for this carryover test.",
+    }
+    result = score_pass1_review(packet, review)
+    if result.get("reality_check_points") != -7.1:
+        errors.append("still-relevant negative Reality Check carryover should remain as a floor")
+    if not (result.get("reality_check_assessment") or {}).get("carryover_assessment"):
+        errors.append("carryover scoring should preserve the carryover assessment in diagnostics")
+
+
+def _check_reality_check_carryover_cumulates_for_new_issue(errors: list[str]) -> None:
+    packet = _packet(
+        completion_score=78,
+        previous_trial_score=70,
+        changed_fields=["phase_ml"],
+        carryover_candidate=_carryover_candidate(),
+    )
+    review = _pass1_review(
+        fit_rating="neutral_or_unclear",
+        fit_materiality="minor",
+        reality_effect="offset_gain",
+        reality_strength="strong",
+        carryover_status="still_relevant",
+        carryover_relation="new_independent_issue",
+    )
+    review["strategy_shift_check"] = {
+        "status": "supported",
+        "rationale": "Phase change is coherent for this carryover test.",
+    }
+    result = score_pass1_review(packet, review)
+    if result.get("reality_check_points") != -12.7:
+        errors.append("new independent current concern should cumulate with active carryover under the cap")
+
+
+def _check_reality_check_carryover_partial_and_resolved(errors: list[str]) -> None:
+    packet = _packet(
+        completion_score=78,
+        previous_trial_score=70,
+        changed_fields=["phase_ml"],
+        carryover_candidate=_carryover_candidate(),
+    )
+    partial_review = _pass1_review(
+        fit_rating="neutral_or_unclear",
+        fit_materiality="minor",
+        reality_effect="neutral",
+        reality_strength="none",
+        carryover_status="partly_mitigated",
+        carryover_relation="mixed_or_unclear",
+    )
+    partial_review["strategy_shift_check"] = {
+        "status": "supported",
+        "rationale": "Phase change is coherent for this carryover test.",
+    }
+    partial = score_pass1_review(packet, partial_review)
+    if partial.get("reality_check_points") != -3.5:
+        errors.append("partly mitigated carryover should keep half of the previous negative penalty")
+
+    resolved_review = _pass1_review(
+        fit_rating="neutral_or_unclear",
+        fit_materiality="minor",
+        reality_effect="neutral",
+        reality_strength="none",
+        carryover_status="resolved_or_superseded",
+        carryover_relation="mixed_or_unclear",
+    )
+    resolved_review["strategy_shift_check"] = {
+        "status": "supported",
+        "rationale": "Phase change is coherent for this carryover test.",
+    }
+    resolved = score_pass1_review(packet, resolved_review)
+    if resolved.get("reality_check_points") != 0:
+        errors.append("resolved carryover should release the previous negative penalty")
+
+
+def _check_reality_check_carryover_ignored_on_hidden_baseline_return(errors: list[str]) -> None:
+    packet = _packet(
+        completion_score=65,
+        previous_trial_score=70,
+        carryover_candidate=_carryover_candidate(),
+        returned_to_hidden_baseline_state=True,
+    )
+    result = score_pass1_review(
+        packet,
+        _pass1_review(
+            fit_rating="neutral_or_unclear",
+            fit_materiality="minor",
+            reality_effect="neutral",
+            reality_strength="none",
+        ),
+    )
+    if result.get("validation_status") != "valid":
+        errors.append("hidden-baseline return should not require carryover assessment")
+    if result.get("reality_check_points") != 0:
+        errors.append("hidden-baseline return should neutralize Reality Check despite prior carryover")
+
+
+def _check_reality_check_carryover_repair_prompt(errors: list[str]) -> None:
+    messages = ["reality_check_carryover_assessment must be an object when a carryover candidate is active"]
+    if _pass1_repair_stage(messages) != "reality_check":
+        errors.append("carryover assessment errors should route through Reality Check repair")
+    prompt = _pass1_repair_prompt(
+        _packet(carryover_candidate=_carryover_candidate()),
+        _pass1_review(reality_effect="neutral", reality_strength="none"),
+        _pass1_repair_stage(messages),
+        messages,
+    )
+    if "reality_check_carryover_assessment" not in prompt or "new_independent_issue" not in prompt:
+        errors.append("Reality Check repair prompt should explain carryover assessment repair")
 
 
 def _check_non_operational_fit_no_points(errors: list[str]) -> None:
@@ -464,6 +657,54 @@ def _check_allocation_target_id_contract(errors: list[str]) -> None:
         errors.append("Operational Fit allocation should preserve canonical target ID")
 
 
+def _check_allocation_share_fallback(errors: list[str]) -> None:
+    single_row = _pass1_review()
+    single_row["reality_check"]["allocations"] = [
+        {
+            "allocation_target_id": "execution_framework.methodological_setup",
+            "share": 0.6,
+            "movement_label": "Reality Check: governance",
+            "rationale": "The apparent gain depends on reduced oversight.",
+            "incremental_check": "This is incremental because it checks governance realism beyond Completion Outlook.",
+        }
+    ]
+    single_result = score_pass1_review(_packet(), single_row)
+    single_allocations = single_result.get("reality_check_allocation_points") or []
+    if single_result.get("reality_check_points") == 0:
+        errors.append("non-summing single allocation share should not neutralize Reality Check")
+    if not single_allocations or single_allocations[0].get("share") != 1.0:
+        errors.append("single non-summing Reality Check allocation should be assigned 100% app-owned share")
+    if not any("assigned equally by the app" in note for note in single_result.get("validation_notes") or []):
+        errors.append("app-owned allocation share fallback should leave an explicit validation note")
+
+    four_rows = _pass1_review()
+    four_rows["reality_check"]["allocations"] = [
+        {
+            "allocation_target_id": target_id,
+            "share": 0.1,
+            "movement_label": f"Reality Check: target {index}",
+            "rationale": "The apparent gain leaves a distinct traceability concern.",
+            "incremental_check": "This is incremental because it checks a separate realism concern beyond scored movement.",
+        }
+        for index, target_id in enumerate(
+            [
+                "execution_framework.methodological_setup",
+                "execution_framework.trial_complexity_footprint",
+                "patient_profile.clinical_severity",
+                "scientific_challenge.protocol_architecture",
+            ],
+            start=1,
+        )
+    ]
+    four_result = score_pass1_review(_packet(), four_rows)
+    four_allocations = four_result.get("reality_check_allocation_points") or []
+    if len(four_allocations) != 4:
+        errors.append("Reality Check should allow four traceability allocations")
+        return
+    if [item.get("share") for item in four_allocations] != [0.25, 0.25, 0.25, 0.25]:
+        errors.append("four non-summing Reality Check allocations should be assigned 25% shares")
+
+
 def _check_text_only_allocation_target_rejected(errors: list[str]) -> None:
     review = _pass1_review()
     review["reality_check"]["allocations"] = [
@@ -538,7 +779,10 @@ def _check_app_owned_fields(errors: list[str]) -> None:
             "movement_reading": "The movement appears directionally favorable.",
             "score_interpretation": "The result should remain cautious.",
         },
-        "pillar_reading": [{"pillar": "Execution Framework", "reading": "Operational support improved."}],
+        "pillar_reading": [
+            {"pillar": "Execution Framework", "reading": "Operational support improved."},
+            {"pillar": "Scientific Challenge", "reading": "Evidence interpretability remains the main caution."},
+        ],
         "central_tension": {
             "summary": "Execution support versus evidence interpretability.",
             "why_it_matters": "It affects how the scenario should be defended.",
@@ -560,7 +804,10 @@ def _check_app_owned_fields(errors: list[str]) -> None:
             "movement_reading": "The movement appears directionally favorable.",
             "score_interpretation": "The result should remain cautious.",
         },
-        "pillar_reading": [{"pillar": "Execution Framework", "reading": "Operational support improved."}],
+        "pillar_reading": [
+            {"pillar": "Execution Framework", "reading": "Operational support improved."},
+            {"pillar": "Scientific Challenge", "reading": "Evidence interpretability remains the main caution."},
+        ],
         "central_tension": {
             "summary": "Execution support versus evidence interpretability.",
             "why_it_matters": "It affects how the scenario should be defended.",
@@ -572,23 +819,23 @@ def _check_app_owned_fields(errors: list[str]) -> None:
     }
     validated_optional = validate_pass2_review(pass2_without_questions)
     if validated_optional.get("validation_status") != "valid":
-        errors.append("Pass 2 facilitator_questions should be optional")
+        errors.append("Pass 2 should be valid with only required participant narrative fields")
 
     pass2_mismatched_pair = {
         **pass2_without_questions,
         "broader_strategic_question": {
-            "mapped_tension": "Different tension.",
+            "mapped_tension": "Different discussion topic.",
             "question": "What trade-off should the team defend?",
         },
     }
     validated_mismatched_pair = validate_pass2_review(pass2_mismatched_pair)
     if validated_mismatched_pair.get("validation_status") != "invalid":
-        errors.append("Pass 2 should reject mismatched central tension and broader question mapping")
+        errors.append("Pass 2 should reject mismatched central discussion topic and broader question mapping")
     if not any(
         "mapped_tension must match central_tension.summary" in error
         for error in validated_mismatched_pair.get("validation_errors") or []
     ):
-        errors.append("Pass 2 mismatch error should identify central tension/question mapping")
+        errors.append("Pass 2 mismatch error should identify central development discussion mapping")
 
     pass2_input = {
         "participant_visible_history": {
@@ -596,25 +843,23 @@ def _check_app_owned_fields(errors: list[str]) -> None:
             "same_state_reuse": False,
         },
         "pass1_analysis": {
-            "strategic_tension_question_options": [
+            "development_discussion_options": [
                 {
-                    "central_tension": {
-                        "summary": "Execution support versus evidence interpretability.",
-                        "why_it_matters": "It affects how the scenario should be defended.",
-                    },
-                    "broader_strategic_question": {
-                        "mapped_tension": "Execution support versus evidence interpretability.",
+                    "topic": "Execution support versus evidence interpretability.",
+                    "why_it_matters": "It affects how the scenario should be defended.",
+                    "supporting_evidence": ["phase_ml"],
+                    "participant_wider_question": {
                         "question": "When should execution support change confidence in evidence interpretability?",
+                        "supporting_evidence": ["phase_ml"],
                     },
                 },
                 {
-                    "central_tension": {
-                        "summary": "Endpoint confidence versus operational ease.",
-                        "why_it_matters": "A simpler design may still leave endpoint uncertainty.",
-                    },
-                    "broader_strategic_question": {
-                        "mapped_tension": "Endpoint confidence versus operational ease.",
+                    "topic": "Endpoint confidence versus operational ease.",
+                    "why_it_matters": "A simpler design may still leave endpoint uncertainty.",
+                    "supporting_evidence": ["primary_duration_months_ml"],
+                    "participant_wider_question": {
                         "question": "When does operational ease strengthen endpoint confidence, and when does it leave the core evidence question unchanged?",
+                        "supporting_evidence": ["primary_duration_months_ml"],
                     },
                 },
             ],
@@ -629,23 +874,23 @@ def _check_app_owned_fields(errors: list[str]) -> None:
     }
     contextual_validated = validate_pass2_review_with_input(pass2_supplied_pair, pass2_input)
     if contextual_validated.get("validation_status") != "valid":
-        errors.append("Pass 2 contextual validation should accept supplied tension selections")
+        errors.append("Pass 2 contextual validation should accept supplied discussion selections")
     invented_pass2 = {
         **pass2_without_questions,
         "central_tension": {
-            "summary": "Invented tension outside Pass 1.",
+            "summary": "Invented supplied discussion topic outside Pass 1.",
             "why_it_matters": "This should not be accepted.",
         },
         "broader_strategic_question": {
-            "mapped_tension": "Invented tension outside Pass 1.",
+            "mapped_tension": "Invented supplied discussion topic outside Pass 1.",
             "question": "Should invented questions be accepted?",
         },
     }
     invented_validated = validate_pass2_review_with_input(invented_pass2, pass2_input)
     if invented_validated.get("validation_status") != "invalid":
-        errors.append("Pass 2 contextual validation should reject tensions outside supplied options")
-    if not any("strategic_tension_question_options" in error for error in invented_validated.get("validation_errors") or []):
-        errors.append("Invented Pass 2 tension should report supplied-option mismatch")
+        errors.append("Pass 2 contextual validation should reject discussion topics outside supplied options")
+    if not any("development_discussion_options" in error for error in invented_validated.get("validation_errors") or []):
+        errors.append("Invented Pass 2 discussion topic should report supplied-option mismatch")
 
     invented_question_pass2 = {
         **pass2_without_questions,
@@ -660,7 +905,7 @@ def _check_app_owned_fields(errors: list[str]) -> None:
     if not any("question paired with the selected" in error for error in invented_question_validated.get("validation_errors") or []):
         errors.append("Invented Pass 2 question should report selected-pair mismatch")
 
-    repeated_question_input = {
+    repeated_history_input = {
         **pass2_input,
         "participant_visible_history": {
             "recent_participant_visible_questions": [
@@ -672,57 +917,9 @@ def _check_app_owned_fields(errors: list[str]) -> None:
             "same_state_reuse": False,
         },
     }
-    repeated_question_validated = validate_pass2_review_with_input(pass2_supplied_pair, repeated_question_input)
-    if repeated_question_validated.get("validation_status") != "valid":
-        errors.append("Repeated visible question should be a non-blocking Pass 2 validation note")
-    if not any("repeats a recent participant-visible question" in note for note in repeated_question_validated.get("validation_notes") or []):
-        errors.append("Repeated visible question should produce a validation note when same_state_reuse is false")
-
-    repeated_reuse_input = {
-        **repeated_question_input,
-        "participant_visible_history": {
-            **repeated_question_input["participant_visible_history"],
-            "same_state_reuse": True,
-        },
-    }
-    repeated_reuse_validated = validate_pass2_review_with_input(pass2_supplied_pair, repeated_reuse_input)
-    if any("repeats a recent participant-visible question" in note for note in repeated_reuse_validated.get("validation_notes") or []):
-        errors.append("Repeated visible question should not produce a validation note when same_state_reuse is true")
-    attached_repeat = _attach_participant_narrative(
-        {"provider_metadata": {}},
-        pass2_supplied_pair,
-        repeated_question_input,
-    )
-    if not any(
-        "repeats a recent participant-visible question" in note
-        for note in (attached_repeat.get("provider_metadata") or {}).get("pass2_validation_notes") or []
-    ):
-        errors.append("Provider metadata should preserve non-blocking repeated-question Pass 2 validation notes")
-
-    pass2_too_many_questions = {
-        **pass2_without_questions,
-        "facilitator_questions": [
-            {"question": str(index), "why_it_matters": "test", "related_feature_families": []}
-            for index in range(4)
-        ],
-    }
-    validated_too_many = validate_pass2_review(pass2_too_many_questions)
-    if validated_too_many.get("validation_status") != "invalid":
-        errors.append("Pass 2 facilitator_questions should be capped at 3")
-
-    pass2_malformed_question = {
-        **pass2_without_questions,
-        "facilitator_questions": [
-            {"why_it_matters": "Missing question", "related_feature_families": []},
-            {"question": "What should be discussed?", "related_feature_families": "operations"},
-        ],
-    }
-    validated_malformed_question = validate_pass2_review(pass2_malformed_question)
-    if validated_malformed_question.get("validation_status") != "invalid":
-        errors.append("Pass 2 malformed facilitator question objects should invalidate the review")
-    malformed_errors = " ".join(validated_malformed_question.get("validation_errors") or [])
-    if "question is required" not in malformed_errors or "array of strings" not in malformed_errors:
-        errors.append("Pass 2 malformed facilitator question errors should identify the bad fields")
+    repeated_history_validated = validate_pass2_review_with_input(pass2_supplied_pair, repeated_history_input)
+    if repeated_history_validated.get("validation_status") != "valid":
+        errors.append("Participant-visible history should guide Pass 2 selection but should not invalidate an otherwise valid supplied pair")
 
     malformed_pass2_shape = {
         "review_metadata": {"review_mode": "first_visible_iteration", "visible": True},
@@ -781,64 +978,64 @@ def _check_analytical_draft_contract(errors: list[str]) -> None:
 
     thin_hidden = _pass1_review()
     thin_hidden["review_metadata"] = {"review_mode": "hidden_baseline", "visible": False}
-    thin_hidden.pop("tension_question_options", None)
+    thin_hidden.pop("development_discussion_options", None)
     thin_hidden_result = score_pass1_review(_packet(changed_fields=[]), thin_hidden)
     if thin_hidden_result.get("validation_status") != "invalid":
         errors.append("Hidden baseline should reject drafts below the hidden-baseline depth floor")
     if not any("at least 450 words" in error for error in thin_hidden_result.get("validation_errors") or []):
         errors.append("Hidden thin draft should report the 450-word minimum")
 
-    missing_tension_options = _pass1_review()
-    missing_tension_options.pop("tension_question_options", None)
-    missing_tension_options_result = score_pass1_review(_packet(), missing_tension_options)
-    if missing_tension_options_result.get("validation_status") != "invalid":
-        errors.append("Pass 1 should require tension_question_options")
-    if not any("tension_question_options must be an array" in error for error in missing_tension_options_result.get("validation_errors") or []):
-        errors.append("Missing tension_question_options should produce a targeted validation error")
+    missing_discussion_options = _pass1_review()
+    missing_discussion_options.pop("development_discussion_options", None)
+    missing_discussion_options_result = score_pass1_review(_packet(), missing_discussion_options)
+    if missing_discussion_options_result.get("validation_status") != "invalid":
+        errors.append("Pass 1 should require development_discussion_options")
+    if not any("development_discussion_options must be an array" in error for error in missing_discussion_options_result.get("validation_errors") or []):
+        errors.append("Missing development_discussion_options should produce a targeted validation error")
 
-    missing_primary_tension = _pass1_review()
-    missing_primary_tension["tension_question_options"][0]["tension"].pop("summary", None)
-    missing_primary_tension_result = score_pass1_review(_packet(), missing_primary_tension)
-    if missing_primary_tension_result.get("validation_status") != "invalid":
-        errors.append("Pass 1 should require tension_question_options tension summary")
-    if not any("tension_question_options[0].tension.summary is required" in error for error in missing_primary_tension_result.get("validation_errors") or []):
-        errors.append("Missing tension summary should produce a targeted validation error")
+    missing_primary_topic = _pass1_review()
+    missing_primary_topic["development_discussion_options"][0].pop("topic", None)
+    missing_primary_topic_result = score_pass1_review(_packet(), missing_primary_topic)
+    if missing_primary_topic_result.get("validation_status") != "invalid":
+        errors.append("Pass 1 should require development_discussion_options topic")
+    if not any("development_discussion_options[0].topic is required" in error for error in missing_primary_topic_result.get("validation_errors") or []):
+        errors.append("Missing discussion topic should produce a targeted validation error")
 
-    duplicate_tensions = _pass1_review()
-    duplicate_tensions["tension_question_options"][1]["tension"]["summary"] = duplicate_tensions["tension_question_options"][0]["tension"]["summary"]
-    duplicate_tensions_result = score_pass1_review(_packet(), duplicate_tensions)
-    if duplicate_tensions_result.get("validation_status") != "invalid":
-        errors.append("Pass 1 should reject duplicate selected tension summaries")
-    if not any("tension_question_options tension summaries must be distinct" in error for error in duplicate_tensions_result.get("validation_errors") or []):
-        errors.append("Duplicate selected tensions should produce a targeted validation error")
+    duplicate_topics = _pass1_review()
+    duplicate_topics["development_discussion_options"][1]["topic"] = duplicate_topics["development_discussion_options"][0]["topic"]
+    duplicate_topics_result = score_pass1_review(_packet(), duplicate_topics)
+    if duplicate_topics_result.get("validation_status") != "invalid":
+        errors.append("Pass 1 should reject duplicate selected discussion topics")
+    if not any("development_discussion_options topics must be distinct" in error for error in duplicate_topics_result.get("validation_errors") or []):
+        errors.append("Duplicate selected topics should produce a targeted validation error")
 
     missing_question = _pass1_review()
-    missing_question["tension_question_options"][0]["participant_wider_question"].pop("question", None)
+    missing_question["development_discussion_options"][0]["participant_wider_question"].pop("question", None)
     missing_question_result = score_pass1_review(_packet(), missing_question)
     if missing_question_result.get("validation_status") != "invalid":
         errors.append("Pass 1 should require participant_wider_question.question")
-    if not any("tension_question_options[0].participant_wider_question.question is required" in error for error in missing_question_result.get("validation_errors") or []):
+    if not any("development_discussion_options[0].participant_wider_question.question is required" in error for error in missing_question_result.get("validation_errors") or []):
         errors.append("Missing participant wider question should produce a targeted validation error")
 
     too_few_questions = _pass1_review()
-    too_few_questions["tension_question_options"] = too_few_questions["tension_question_options"][:1]
+    too_few_questions["development_discussion_options"] = too_few_questions["development_discussion_options"][:1]
     too_few_questions_result = score_pass1_review(_packet(), too_few_questions)
     if too_few_questions_result.get("validation_status") != "invalid":
-        errors.append("Pass 1 should require at least two visible tension/question options")
+        errors.append("Pass 1 should require at least two visible development discussion options")
     if not any("2-3 options" in error for error in too_few_questions_result.get("validation_errors") or []):
-        errors.append("Too few tension/question options should report the 2-3 option requirement")
+        errors.append("Too few development discussion options should report the 2-3 option requirement")
 
-    hidden_with_tensions = _pass1_review()
-    hidden_with_tensions["review_metadata"] = {"review_mode": "hidden_baseline", "visible": False}
-    hidden_with_tensions_result = score_pass1_review(_packet(changed_fields=[]), hidden_with_tensions)
-    if hidden_with_tensions_result.get("validation_status") != "invalid":
-        errors.append("Hidden baseline should reject tension_question_options")
-    if not any("hidden baseline must not return tension_question_options" in error for error in hidden_with_tensions_result.get("validation_errors") or []):
-        errors.append("Hidden baseline tension options should produce a targeted validation error")
+    hidden_with_discussion_options = _pass1_review()
+    hidden_with_discussion_options["review_metadata"] = {"review_mode": "hidden_baseline", "visible": False}
+    hidden_with_discussion_options_result = score_pass1_review(_packet(changed_fields=[]), hidden_with_discussion_options)
+    if hidden_with_discussion_options_result.get("validation_status") != "invalid":
+        errors.append("Hidden baseline should reject development_discussion_options")
+    if not any("hidden baseline must not return development_discussion_options" in error for error in hidden_with_discussion_options_result.get("validation_errors") or []):
+        errors.append("Hidden baseline development discussion options should produce a targeted validation error")
 
     hidden_reward = _pass1_review()
     hidden_reward["review_metadata"] = {"review_mode": "hidden_baseline", "visible": False}
-    hidden_reward.pop("tension_question_options", None)
+    hidden_reward.pop("development_discussion_options", None)
     hidden_reward["reality_check"] = {
         "effect": "reward_coherence",
         "strength": "moderate",
@@ -859,20 +1056,12 @@ def _check_analytical_draft_contract(errors: list[str]) -> None:
     if hidden_reality.get("effect") != "neutral" or hidden_reality.get("strength") != "none" or hidden_reality.get("allocations") != []:
         errors.append("Hidden baseline should normalize Reality Check to neutral/none with no allocations")
 
-    obsolete_tension_field = _pass1_review()
-    obsolete_tension_field["central_tension_candidate"] = {"summary": "Obsolete field."}
-    obsolete_tension_field_result = score_pass1_review(_packet(), obsolete_tension_field)
-    if obsolete_tension_field_result.get("validation_status") != "invalid":
-        errors.append("Pass 1 should reject obsolete tension candidate fields")
-    if not any("central_tension_candidate is obsolete" in error for error in obsolete_tension_field_result.get("validation_errors") or []):
-        errors.append("Obsolete tension candidate fields should produce a targeted validation error")
-
     combined_messages = [
         "analytical_narrative_draft must be an extensive interpretation with at least 320 words across required fields",
-        "tension_question_options must include 2-3 options",
+        "development_discussion_options must include 2-3 options",
     ]
     if _pass1_repair_stage(combined_messages) != PASS1_REPAIR_STAGE_NARRATIVE_SCAFFOLD:
-        errors.append("Combined draft/tension failures should use one narrative scaffold repair stage")
+        errors.append("Combined draft/discussion option failures should use one narrative scaffold repair stage")
 
     pass2_numeric = {
         "review_metadata": {"review_mode": "first_visible_iteration", "visible": True},
@@ -881,7 +1070,10 @@ def _check_analytical_draft_contract(errors: list[str]) -> None:
             "movement_reading": "Operational Fit contributes 2 points in the draft wording.",
             "score_interpretation": "Reality Check remains a 1-point concern in this wording.",
         },
-        "pillar_reading": [{"pillar": "Execution Framework", "reading": "Operational support improved."}],
+        "pillar_reading": [
+            {"pillar": "Execution Framework", "reading": "Operational support improved."},
+            {"pillar": "Scientific Challenge", "reading": "Evidence interpretability remains the main caution."},
+        ],
         "central_tension": {
             "summary": "Execution support versus evidence interpretability.",
             "why_it_matters": "It affects how the 2-part scenario is defended.",
@@ -920,6 +1112,11 @@ def main() -> int:
     _check_operational_fit_mapping(errors)
     _check_positive_reinforcement_cap(errors)
     _check_incompatible_effect_downgrade(errors)
+    _check_reality_check_carryover_floor(errors)
+    _check_reality_check_carryover_cumulates_for_new_issue(errors)
+    _check_reality_check_carryover_partial_and_resolved(errors)
+    _check_reality_check_carryover_ignored_on_hidden_baseline_return(errors)
+    _check_reality_check_carryover_repair_prompt(errors)
     _check_non_operational_fit_no_points(errors)
     _check_gated_strategy_shift_required(errors)
     _check_extreme_operational_fit_guardrail(errors)
@@ -927,6 +1124,7 @@ def main() -> int:
     _check_operational_fit_previous_state_reuse(errors)
     _check_allocation_validation(errors)
     _check_allocation_target_id_contract(errors)
+    _check_allocation_share_fallback(errors)
     _check_text_only_allocation_target_rejected(errors)
     _check_duplicate_reality_check_allocation(errors)
     _check_deep_operational_movement_evidence_refs(errors)

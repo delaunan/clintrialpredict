@@ -22,7 +22,10 @@ from src.narratives.provider_config import (
 )
 from src.narratives.prompt_builder import (
     PROMPT_TEMPLATE_VERSION,
+    PASS2_OPERATIONAL_WORDING_GUIDANCE,
+    PASS2_RICHNESS_GUIDANCE,
     RESPONSE_SCHEMA_VERSION,
+    WIDER_STRATEGIC_QUESTION_GUIDANCE,
     build_pass2_input,
     build_pass2_provider_prompt,
     build_provider_prompt,
@@ -50,9 +53,10 @@ GEMINI_MIN_SCHEMA_OUTPUT_TOKENS = 12000
 GEMINI_PRIMARY_THINKING_LEVEL = "high"
 GEMINI_RETRY_THINKING_LEVEL = "low"
 GEMINI_RETRY_OUTPUT_TOKENS = 16000
-GEMINI_MALFORMED_JSON_RETRY_ATTEMPTS = 1
+NARRATIVE_REPAIR_RETRY_ATTEMPTS = 2
+GEMINI_MALFORMED_JSON_RETRY_ATTEMPTS = NARRATIVE_REPAIR_RETRY_ATTEMPTS
 PROVIDER_VALIDATION_RETRY_ATTEMPTS = 3
-PASS2_VALIDATION_RETRY_ATTEMPTS = 1
+PASS2_VALIDATION_RETRY_ATTEMPTS = NARRATIVE_REPAIR_RETRY_ATTEMPTS
 FAILURE_UNSUPPORTED_PROVIDER = "unsupported_provider"
 FAILURE_PROVIDER_UNAVAILABLE = "provider_unavailable"
 FAILURE_PROVIDER_ERROR = "provider_error"
@@ -308,7 +312,7 @@ def _pass1_repair_stage(messages: list[str]) -> str | None:
         return PASS1_REPAIR_STAGE_STRATEGY_SHIFT
     if (
         "analytical_narrative_draft" in joined
-        or "tension_question_options" in joined
+        or "development_discussion_options" in joined
         or "participant_wider_question" in joined
     ):
         return PASS1_REPAIR_STAGE_NARRATIVE_SCAFFOLD
@@ -349,7 +353,10 @@ def _pass1_repair_prompt(packet: dict[str, Any], review: dict[str, Any] | None, 
         ),
         PASS1_REPAIR_STAGE_REALITY_CHECK: (
             "Change only invalid reality_check fields, especially allocations[].allocation_target_id, "
-            "effect, strength, evidence_fields, or incremental_check. Do not add pillar/subpillar fields."
+            "effect, strength, evidence_fields, incremental_check, or reality_check_carryover_assessment when the "
+            "packet has an active carryover candidate. For carryover, use status still_relevant, partly_mitigated, "
+            "or resolved_or_superseded; use current_issue_relation same_issue, new_independent_issue, or "
+            "mixed_or_unclear. Do not add pillar/subpillar fields."
         ),
         PASS1_REPAIR_STAGE_STRATEGY_SHIFT: (
             "Change only strategy_shift_check. Because a gated premise-sensitive field changed, "
@@ -363,9 +370,9 @@ def _pass1_repair_prompt(packet: dict[str, Any], review: dict[str, Any] | None, 
             "Return the same review as a complete Pass 1 JSON object with the missing required objects restored."
         ),
         PASS1_REPAIR_STAGE_NARRATIVE_SCAFFOLD: (
-            "Change only analytical_narrative_draft and tension_question_options. Add or repair the required "
-            "qualitative draft fields. For visible iterations, provide two or three tension/question options, "
-            "each pairing one tension with one participant_wider_question. For hidden baseline, omit tension_question_options. "
+            "Change only analytical_narrative_draft and development_discussion_options. Add or repair the required "
+            "qualitative draft fields. For visible iterations, provide two or three development discussion options, "
+            "each pairing one topic with one participant_wider_question. For hidden baseline, omit development_discussion_options. "
             "Do not change valid ratings, evidence "
             "fields, strategy_shift_check, or Reality Check allocations."
         ),
@@ -379,8 +386,8 @@ def _pass1_repair_prompt(packet: dict[str, Any], review: dict[str, Any] | None, 
         "- Return exactly one JSON object and no markdown.\n"
         "- Do not return app-owned score fields such as operational_fit_points, reality_check_points, or trial_score.\n"
         "- analytical_narrative_draft may be extensive and score-aware because it is not participant-facing; do not add app-owned score fields as structured fields.\n"
-        "- Tension candidates must frame trade-offs and questions, not recommendations, next steps, or sponsor instructions.\n"
-        "- Strategic question candidates must be wider facilitator debate questions mapped to tensions, not narrow checklist questions.\n"
+        "- development_discussion_options must frame evidence trade-offs and questions, not recommendations, next steps, or sponsor instructions.\n"
+        f"- {WIDER_STRATEGIC_QUESTION_GUIDANCE}\n"
         "- Use only canonical Reality Check allocation_target_id values; do not use free-text pillar/subpillar targets.\n"
         "Allowed Reality Check allocation_target_id values:\n"
         f"{chr(10).join(target_lines)}\n"
@@ -521,9 +528,21 @@ def _pass2_provider_error_message(error_type: str, *, retry: bool = False) -> st
     return f"Participant narrative failed during {stage}: {error_type}"
 
 
-def _pass2_repair_prompt(pass2_input: dict[str, Any], narrative: dict[str, Any] | None, messages: list[str]) -> str:
+def _pass2_repair_prompt(
+    pass2_input: dict[str, Any],
+    narrative: dict[str, Any] | None,
+    messages: list[str],
+    *,
+    raw_response_text: str = "",
+) -> str:
     input_json = json.dumps(pass2_input, sort_keys=True, separators=(",", ":"), default=str)
     previous_json = json.dumps(narrative or {}, sort_keys=True, separators=(",", ":"), default=str)
+    raw_response_block = (
+        "Previous raw Pass 2 response text, included because it did not parse as a JSON object:\n"
+        f"{str(raw_response_text).strip()[:6000]}\n"
+        if raw_response_text and not isinstance(narrative, dict)
+        else ""
+    )
     return (
         "You are repairing a previous Pass 2 Participant Narrative JSON response. "
         "Do not rerun Pass 1, do not change scores, and do not change the analytical basis.\n"
@@ -536,12 +555,24 @@ def _pass2_repair_prompt(pass2_input: dict[str, Any], narrative: dict[str, Any] 
         "- Use score_alignment_notes only to calibrate qualitative direction/materiality.\n"
         "- Remove exact Trial Score values, point values, and numeric contribution language from participant-facing prose.\n"
         "- Do not reanalyze, re-rate Operational Fit, re-decide Reality Check, or introduce new claims beyond Pass 1.\n"
-        "- Keep one integrated Trial Score narrative, central tension, and broader strategic question.\n"
-        "- central_tension.summary must match one supplied pass1_analysis.strategic_tension_question_options central_tension.summary.\n"
-        "- broader_strategic_question.question must match the question paired with that supplied option.\n"
-        "- facilitator_questions are optional and must include at most three questions.\n"
+        "- Keep one integrated Trial Score narrative and one selected development discussion pair.\n"
+        "- Use trial_score_narrative.summary as Overall Evolution: final direction versus previous scenario and main latest driver.\n"
+        "- Use trial_score_narrative.movement_reading as Completion Outlook: pre-Reality completion outlook from model-visible movement plus app-rated execution scale/footprint/duration evidence when material.\n"
+        "- Use trial_score_narrative.score_interpretation as Reality Check: realism/coherence calibration only, short when neutral or non-material.\n"
+        "- Keep those three Trial Score paragraphs non-repetitive.\n"
+        "- Return pillar_reading as 2-4 material bullets; combine related pillars/subpillars when clearer, do not mechanically list every pillar, and avoid repeating the same central message across bullets.\n"
+        "- Use score_alignment_notes.participant_safe_summary.required_direction_phrase in the final wording.\n"
+        f"- {PASS2_OPERATIONAL_WORDING_GUIDANCE}\n"
+        f"- {PASS2_RICHNESS_GUIDANCE}\n"
+        "- Mention Reality Check only if material, conflict-relevant, or interpretation-changing; frame it as a realism/coherence qualifier, not points.\n"
+        "- central_tension.summary must match one supplied pass1_analysis.development_discussion_options topic.\n"
+        "- broader_strategic_question.question must match the participant_wider_question.question paired with that supplied option.\n"
+        f"- {WIDER_STRATEGIC_QUESTION_GUIDANCE}\n"
+        "- Compare candidate option topics against participant_visible_history.recent_participant_visible_questions. Unless same_state_reuse is true, do not select a question that exactly repeats recent participant-visible history; prefer a supplied option anchored in the latest material changed fields when available.\n"
+        "- Copy the selected supplied participant_wider_question.question verbatim into broader_strategic_question.question; shape only the surrounding narrative.\n"
         "Pass 2 input JSON:\n"
         f"{input_json}\n"
+        f"{raw_response_block}"
         "Previous Pass 2 JSON to repair:\n"
         f"{previous_json}"
     )
@@ -613,6 +644,7 @@ def _call_openai_pass2(
         metadata["pass2_parsed_json_object"] = isinstance(narrative, dict)
     except Exception as exc:
         metadata["pass2_error_type"] = exc.__class__.__name__
+        metadata["pass2_failure_stage"] = "initial_generation_exception"
         return _pass2_result_with_warning(
             result,
             metadata=metadata,
@@ -632,7 +664,13 @@ def _call_openai_pass2(
     if validated.get("validation_status") == "valid":
         return _attach_participant_narrative(updated, narrative, pass2_input)
 
-    repair_prompt = _pass2_repair_prompt(pass2_input, narrative, pass2_errors)
+    metadata["pass2_failure_stage"] = "initial_validation_failed"
+    repair_prompt = _pass2_repair_prompt(
+        pass2_input,
+        narrative,
+        pass2_errors,
+        raw_response_text=metadata.get("pass2_response_text") or "",
+    )
     metadata["pass2_repair_prompt_text"] = repair_prompt
     metadata["pass2_retry_reason"] = _pass2_repair_failure_message(pass2_errors)
     for retry_attempt in range(1, PASS2_VALIDATION_RETRY_ATTEMPTS + 1):
@@ -663,6 +701,7 @@ def _call_openai_pass2(
             metadata["pass2_retry_parsed_json_object"] = isinstance(retry_narrative, dict)
         except Exception as exc:
             metadata["pass2_retry_error_type"] = exc.__class__.__name__
+            metadata["pass2_failure_stage"] = "repair_generation_exception"
             pass2_errors = [_pass2_provider_error_message(exc.__class__.__name__, retry=True)]
             break
         finally:
@@ -676,6 +715,7 @@ def _call_openai_pass2(
         if retry_validated.get("validation_status") == "valid":
             updated["provider_metadata"] = metadata
             return _attach_participant_narrative(updated, retry_narrative, pass2_input)
+        metadata["pass2_failure_stage"] = "repair_validation_failed"
         pass2_errors = retry_errors
         narrative = retry_narrative
 
@@ -728,6 +768,7 @@ def _call_gemini_pass2(
         metadata["pass2_parsed_json_object"] = isinstance(narrative, dict)
     except Exception as exc:
         metadata["pass2_error_type"] = exc.__class__.__name__
+        metadata["pass2_failure_stage"] = "initial_generation_exception"
         return _pass2_result_with_warning(
             result,
             metadata=metadata,
@@ -747,7 +788,13 @@ def _call_gemini_pass2(
     if validated.get("validation_status") == "valid":
         return _attach_participant_narrative(updated, narrative, pass2_input)
 
-    repair_prompt = _pass2_repair_prompt(pass2_input, narrative, pass2_errors)
+    metadata["pass2_failure_stage"] = "initial_validation_failed"
+    repair_prompt = _pass2_repair_prompt(
+        pass2_input,
+        narrative,
+        pass2_errors,
+        raw_response_text=metadata.get("pass2_response_text") or "",
+    )
     metadata["pass2_repair_prompt_text"] = repair_prompt
     metadata["pass2_retry_reason"] = _pass2_repair_failure_message(pass2_errors)
     for retry_attempt in range(1, PASS2_VALIDATION_RETRY_ATTEMPTS + 1):
@@ -768,6 +815,7 @@ def _call_gemini_pass2(
             metadata["pass2_retry_parsed_json_object"] = isinstance(retry_narrative, dict)
         except Exception as exc:
             metadata["pass2_retry_error_type"] = exc.__class__.__name__
+            metadata["pass2_failure_stage"] = "repair_generation_exception"
             pass2_errors = [_pass2_provider_error_message(exc.__class__.__name__, retry=True)]
             break
         finally:
@@ -781,6 +829,7 @@ def _call_gemini_pass2(
         if retry_validated.get("validation_status") == "valid":
             updated["provider_metadata"] = metadata
             return _attach_participant_narrative(updated, retry_narrative, pass2_input)
+        metadata["pass2_failure_stage"] = "repair_validation_failed"
         pass2_errors = retry_errors
         narrative = retry_narrative
 
@@ -986,6 +1035,18 @@ def _call_gemini_pass1_initial(
     metadata["parsed_json_object"] = isinstance(review, dict)
     should_retry = review is None or _gemini_finished_max_tokens(metadata)
     if should_retry and client is not None and generation_config is not None:
+        retry_reason = (
+            "max_tokens"
+            if _gemini_finished_max_tokens(metadata)
+            else "malformed_or_non_json_response"
+        )
+        metadata["malformed_json_retry_reason"] = retry_reason
+        metadata["malformed_json_first_attempt"] = {
+            "finish_metadata": metadata.get("finish_metadata") or {},
+            "parsed_json_object": bool(metadata.get("parsed_json_object")),
+            "parsed_payload_type": metadata.get("parsed_payload_type"),
+            "response_text_length": len(response_text),
+        }
         retry_generation_config = types.GenerateContentConfig(
             **_gemini_generation_config_kwargs(
                 config,

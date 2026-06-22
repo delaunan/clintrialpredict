@@ -13,9 +13,11 @@ from copy import deepcopy
 from typing import Any
 
 TRIAL_SCORE_CONTRACT_VERSION = "trial_score_v1"
-PASS1_SCHEMA_VERSION = "trial_score_pass1_schema_v2"
+PASS1_SCHEMA_VERSION = "trial_score_pass1_schema_v3"
 PASS2_SCHEMA_VERSION = "trial_score_pass2_schema_v2"
-PROMPT_TEMPLATE_VERSION = "trial_score_two_pass_prompt_v1_6"
+PROMPT_TEMPLATE_VERSION = "trial_score_two_pass_prompt_v1_8"
+MIN_PASS2_PILLAR_READINGS = 2
+MAX_PASS2_PILLAR_READINGS = 4
 
 XGBOOST_COMPLETION_OUTLOOK_LABEL = "XGBoost Completion Outlook"
 COMPLETION_OUTLOOK_LABEL = "Completion Outlook"
@@ -175,6 +177,21 @@ REALITY_CHECK_FRACTIONS = {
     "reversal": 1.25,
 }
 
+REALITY_CHECK_CARRYOVER_STATUSES = {
+    "still_relevant",
+    "partly_mitigated",
+    "resolved_or_superseded",
+}
+
+REALITY_CHECK_CURRENT_ISSUE_RELATIONS = {
+    "same_issue",
+    "new_independent_issue",
+    "mixed_or_unclear",
+}
+
+REALITY_CHECK_CARRYOVER_MATERIALITY_THRESHOLD = -1.0
+REALITY_CHECK_CARRYOVER_NEGATIVE_CAP = -15.0
+
 REALITY_CHECK_ALLOWED_SUBPILLARS = {
     "Therapeutic Context": {
         "Therapeutic Area Profile",
@@ -248,19 +265,13 @@ ANALYTICAL_NARRATIVE_DRAFT_FIELDS = (
     "movement_read",
     "operational_fit_read",
     "reality_check_read",
-    "tension_landscape_read",
+    "development_landscape_read",
 )
 MIN_ANALYTICAL_DRAFT_WORDS = 320
 MIN_HIDDEN_BASELINE_ANALYTICAL_DRAFT_WORDS = 450
-MIN_VISIBLE_TENSION_QUESTION_OPTIONS = 2
-MAX_VISIBLE_TENSION_QUESTION_OPTIONS = 3
-MIN_STRATEGIC_QUESTION_CANDIDATES = MAX_VISIBLE_TENSION_QUESTION_OPTIONS
-OBSOLETE_PASS1_TENSION_FIELDS = {
-    "central_tension_candidate",
-    "alternative_tension_candidates",
-    "broader_strategic_question_candidate",
-    "alternative_strategic_question_candidates",
-}
+MIN_VISIBLE_DEVELOPMENT_DISCUSSION_OPTIONS = 2
+MAX_VISIBLE_DEVELOPMENT_DISCUSSION_OPTIONS = 3
+MIN_STRATEGIC_QUESTION_CANDIDATES = MAX_VISIBLE_DEVELOPMENT_DISCUSSION_OPTIONS
 
 def _clean_points(value: int | float) -> int | float:
     numeric = round(float(value), 1)
@@ -299,20 +310,21 @@ def _word_count(value: Any) -> int:
     return len([part for part in text.replace("/", " ").split() if part.strip()])
 
 
-def _normalize_tension_question_options(raw_options: Any) -> list[dict[str, Any]]:
-    """Return canonical tension/question options only."""
+def _normalize_development_discussion_options(raw_options: Any) -> list[dict[str, Any]]:
+    """Return canonical visible discussion options only."""
     options: list[dict[str, Any]] = []
     if isinstance(raw_options, list):
         for item in raw_options:
             if not isinstance(item, dict):
                 options.append(item)
                 continue
-            tension = deepcopy(item.get("tension") or {})
             question = deepcopy(item.get("participant_wider_question") or {})
             if isinstance(question, str):
                 question = {"question": question}
             options.append({
-                "tension": tension if isinstance(tension, dict) else {},
+                "topic": str(item.get("topic") or "").strip(),
+                "why_it_matters": str(item.get("why_it_matters") or "").strip(),
+                "supporting_evidence": deepcopy(item.get("supporting_evidence") or []),
                 "participant_wider_question": question if isinstance(question, dict) else {},
             })
     return options
@@ -574,7 +586,11 @@ def score_operational_fit(operational_fit: dict[str, Any], packet: dict[str, Any
     }
 
 
-def _reference_score(packet: dict[str, Any]) -> float | None:
+def _reference_trial_score(packet: dict[str, Any]) -> float | None:
+    continuity = (packet.get("iteration_context") or {}).get("trial_score_continuity") or {}
+    previous_continuity_trial_score = _number(continuity.get("previous_trial_score"))
+    if previous_continuity_trial_score is not None:
+        return previous_continuity_trial_score
     model = packet.get("model_interpretation") or {}
     previous_trial_score = _number(model.get("previous_trial_score"))
     if previous_trial_score is not None:
@@ -586,6 +602,116 @@ def _reference_score(packet: dict[str, Any]) -> float | None:
     if baseline is not None:
         return baseline
     return _number(model.get("completion_score"))
+
+
+def _reference_pre_reality_score(packet: dict[str, Any]) -> float | None:
+    continuity = (packet.get("iteration_context") or {}).get("trial_score_continuity") or {}
+    previous_pre_reality_score = _number(continuity.get("previous_pre_reality_score"))
+    if previous_pre_reality_score is not None:
+        return previous_pre_reality_score
+    model = packet.get("model_interpretation") or {}
+    previous_completion = _number(model.get("previous_completion_score"))
+    if previous_completion is not None:
+        return previous_completion
+    baseline = _number(model.get("baseline_completion_score"))
+    if baseline is not None:
+        return baseline
+    return _number(model.get("completion_score"))
+
+
+def _neutral_operational_fit_assessment(reason: str) -> dict[str, Any]:
+    return {
+        "points": 0.0,
+        "rating": "neutral_or_unclear",
+        "materiality": "minor",
+        "interaction_with_completion_outlook": "aligned",
+        "central_reason": reason,
+        "evidence_fields": [],
+        "supported_evidence_fields": [],
+        "validation_errors": [],
+        "validation_notes": [reason],
+    }
+
+
+def _neutral_reality_check_assessment(reason: str) -> dict[str, Any]:
+    return {
+        "points": 0.0,
+        "effect": "neutral",
+        "strength": "none",
+        "fraction": 0.0,
+        "central_reason": reason,
+        "allocation_points": [],
+        "supported_evidence_fields": [],
+        "validation_errors": [],
+        "validation_notes": [reason],
+    }
+
+
+def _carryover_candidate(packet: dict[str, Any]) -> dict[str, Any]:
+    candidate = ((packet.get("iteration_context") or {}).get("reality_check_carryover_candidate") or {})
+    return candidate if isinstance(candidate, dict) else {}
+
+
+def _same_state_reuse(packet_or_pass2_input: dict[str, Any]) -> bool:
+    if not isinstance(packet_or_pass2_input, dict):
+        return False
+    history = packet_or_pass2_input.get("participant_visible_history")
+    if isinstance(history, dict) and bool(history.get("same_state_reuse")):
+        return True
+    trajectory = packet_or_pass2_input.get("trajectory_context")
+    if isinstance(trajectory, dict) and bool(trajectory.get("same_state_reuse")):
+        return True
+    state_equivalence = (packet_or_pass2_input.get("iteration_context") or {}).get("state_equivalence_review")
+    return isinstance(state_equivalence, dict) and bool(state_equivalence.get("available"))
+
+
+def _validate_reality_check_carryover_assessment(
+    packet: dict[str, Any],
+    review: dict[str, Any],
+    *,
+    is_hidden_baseline: bool,
+) -> tuple[dict[str, Any], list[str]]:
+    errors: list[str] = []
+    candidate = _carryover_candidate(packet)
+    candidate_active = bool(candidate.get("active"))
+    raw = review.get("reality_check_carryover_assessment")
+    returned_to_hidden_baseline = bool((packet.get("iteration_context") or {}).get("returned_to_hidden_baseline_state"))
+    if is_hidden_baseline or returned_to_hidden_baseline or not candidate_active:
+        if isinstance(raw, dict):
+            return deepcopy(raw), errors
+        return {}, errors
+    if not isinstance(raw, dict):
+        return {}, ["reality_check_carryover_assessment must be an object when a carryover candidate is active"]
+
+    status = raw.get("status")
+    relation = raw.get("current_issue_relation")
+    if status not in REALITY_CHECK_CARRYOVER_STATUSES:
+        errors.append(
+            "reality_check_carryover_assessment.status must be one of "
+            f"{sorted(REALITY_CHECK_CARRYOVER_STATUSES)}"
+        )
+    if relation not in REALITY_CHECK_CURRENT_ISSUE_RELATIONS:
+        errors.append(
+            "reality_check_carryover_assessment.current_issue_relation must be one of "
+            f"{sorted(REALITY_CHECK_CURRENT_ISSUE_RELATIONS)}"
+        )
+    reason = raw.get("reason")
+    if not isinstance(reason, str) or not reason.strip():
+        errors.append("reality_check_carryover_assessment.reason is required")
+    evidence_fields = _string_list(raw.get("evidence_fields"))
+    if not evidence_fields:
+        errors.append("reality_check_carryover_assessment.evidence_fields must include packet evidence")
+    supported = [field for field in evidence_fields if field in _packet_evidence_refs(packet)]
+    if evidence_fields and not supported:
+        errors.append("reality_check_carryover_assessment.evidence_fields do not reference packet evidence")
+
+    return {
+        "status": status,
+        "current_issue_relation": relation,
+        "reason": str(reason or ""),
+        "evidence_fields": evidence_fields,
+        "supported_evidence_fields": supported,
+    }, errors
 
 
 def _effect_sign(effect: str, delta: float) -> int:
@@ -679,10 +805,11 @@ def score_reality_check(
     allocation_errors: list[str] = []
     allocation_points: list[dict[str, Any]] = []
     if points:
-        if not isinstance(allocations, list) or not 1 <= len(allocations) <= 3:
-            allocation_errors.append("reality_check.allocations must include 1-3 allocations for non-neutral effects")
+        if not isinstance(allocations, list) or not 1 <= len(allocations) <= 4:
+            allocation_errors.append("reality_check.allocations must include 1-4 allocations for non-neutral effects")
         else:
             share_total = 0.0
+            provider_shares: list[float | None] = []
             for index, allocation in enumerate(allocations):
                 if not isinstance(allocation, dict):
                     allocation_errors.append(f"reality_check.allocations[{index}] must be an object")
@@ -698,9 +825,11 @@ def score_reality_check(
                         f"reality_check.allocations[{index}] must target an allowed allocation_target_id"
                     )
                 if share is None or share <= 0:
-                    allocation_errors.append(f"reality_check.allocations[{index}].share must be positive")
+                    provider_shares.append(None)
                     share = 0.0
-                share_total += share
+                else:
+                    provider_shares.append(share)
+                    share_total += share
                 for field_name in ("movement_label", "rationale", "incremental_check"):
                     if not isinstance(allocation.get(field_name), str) or not allocation.get(field_name).strip():
                         allocation_errors.append(f"reality_check.allocations[{index}].{field_name} is required")
@@ -739,8 +868,18 @@ def score_reality_check(
                     "rationale": str(allocation.get("rationale") or ""),
                     "incremental_check": str(allocation.get("incremental_check") or ""),
                 })
-            if allocation_points and abs(share_total - 1.0) > 0.02:
-                allocation_errors.append("reality_check.allocations shares must sum to 1.0")
+            if allocation_points and (
+                len(provider_shares) != len(allocation_points)
+                or any(share is None for share in provider_shares)
+                or abs(share_total - 1.0) > 0.02
+            ):
+                equal_share = 1.0 / len(allocation_points)
+                normalized_shares = [equal_share for _ in allocation_points]
+                normalized_shares[-1] = max(0.0, 1.0 - sum(normalized_shares[:-1]))
+                for item, share in zip(allocation_points, normalized_shares):
+                    item["share"] = share
+                    item["points"] = _clean_points(float(points) * share)
+                notes.append("Reality Check allocation shares were assigned equally by the app")
     elif allocations:
         notes.append("Neutral Reality Check ignores allocation rows")
 
@@ -773,6 +912,139 @@ def score_reality_check(
     }
 
 
+def _scaled_allocation_points(allocation_points: list[dict[str, Any]], factor: float) -> list[dict[str, Any]]:
+    scaled: list[dict[str, Any]] = []
+    for allocation in allocation_points or []:
+        if not isinstance(allocation, dict):
+            continue
+        row = deepcopy(allocation)
+        points = _number(row.get("points"))
+        if points is not None:
+            row["points"] = _clean_points(points * factor)
+        row["carryover"] = True
+        scaled.append(row)
+    return scaled
+
+
+def _apply_reality_check_carryover(
+    *,
+    packet: dict[str, Any],
+    current_assessment: dict[str, Any],
+    carryover_assessment: dict[str, Any],
+) -> dict[str, Any]:
+    candidate = _carryover_candidate(packet)
+    previous_points = _number(candidate.get("previous_reality_check_points"))
+    if not candidate.get("active") or previous_points is None or previous_points >= 0:
+        return current_assessment
+    if not isinstance(carryover_assessment, dict) or not carryover_assessment:
+        return current_assessment
+
+    precheck = candidate.get("app_state_precheck") or {}
+    if isinstance(precheck, dict) and precheck.get("status") == "resolved_by_field_return":
+        relation = str(carryover_assessment.get("current_issue_relation") or "mixed_or_unclear")
+        if relation == "new_independent_issue":
+            resolved = deepcopy(current_assessment)
+            resolved["carryover_assessment"] = {
+                **deepcopy(carryover_assessment),
+                "status": "resolved_or_superseded",
+                "app_state_precheck": deepcopy(precheck),
+            }
+            resolved["carryover_candidate"] = deepcopy(candidate)
+            resolved.setdefault("validation_notes", []).append(
+                "Previous negative Reality Check carryover was resolved by app state precheck; latest Reality Check kept as a new independent issue"
+            )
+            return resolved
+        if relation != "new_independent_issue":
+            reason = str(
+                precheck.get("reason")
+                or "Previous negative Reality Check carryover evidence returned to baseline; no same-issue carryover was applied."
+            )
+            resolved = _neutral_reality_check_assessment(reason)
+            resolved["carryover_assessment"] = {
+                **deepcopy(carryover_assessment),
+                "status": "resolved_or_superseded",
+                "app_state_precheck": deepcopy(precheck),
+            }
+            resolved["carryover_candidate"] = deepcopy(candidate)
+            resolved["validation_notes"] = [
+                *list(resolved.get("validation_notes") or []),
+                "Previous negative Reality Check carryover was resolved by app state precheck",
+            ]
+            return resolved
+
+    status = carryover_assessment.get("status")
+    if status == "resolved_or_superseded":
+        relation = str(carryover_assessment.get("current_issue_relation") or "mixed_or_unclear")
+        if relation != "new_independent_issue":
+            resolved = _neutral_reality_check_assessment(
+                "Previous negative Reality Check carryover was resolved or superseded; no additional same-issue Reality Check adjustment was applied."
+            )
+            resolved["carryover_assessment"] = deepcopy(carryover_assessment)
+            return resolved
+        resolved = deepcopy(current_assessment)
+        resolved["carryover_assessment"] = deepcopy(carryover_assessment)
+        resolved.setdefault("validation_notes", []).append(
+            "Previous negative Reality Check carryover was resolved or superseded; latest Reality Check kept because it was classified as a new independent issue"
+        )
+        return resolved
+    if status not in {"still_relevant", "partly_mitigated"}:
+        return current_assessment
+
+    factor = 1.0 if status == "still_relevant" else 0.5
+    carryover_points = _clean_points(float(previous_points) * factor)
+    current_points = float(current_assessment.get("points") or 0.0)
+    relation = str(carryover_assessment.get("current_issue_relation") or "mixed_or_unclear")
+    combine = relation == "new_independent_issue" and current_points < 0
+    if combine:
+        final_points = max(REALITY_CHECK_CARRYOVER_NEGATIVE_CAP, carryover_points + current_points)
+    else:
+        final_points = min(current_points, carryover_points)
+
+    if final_points == current_points:
+        merged = deepcopy(current_assessment)
+        merged["carryover_assessment"] = deepcopy(carryover_assessment)
+        merged.setdefault("validation_notes", []).append(
+            "Previous negative Reality Check carryover remained active but did not exceed the current adjustment"
+        )
+        return merged
+
+    previous_assessment = candidate.get("previous_reality_check_assessment") or {}
+    previous_allocations = (
+        candidate.get("previous_reality_check_allocation_points")
+        or previous_assessment.get("allocation_points")
+        or []
+    )
+    if combine:
+        allocation_points = [
+            *_scaled_allocation_points(previous_allocations, factor),
+            *deepcopy(current_assessment.get("allocation_points") or []),
+        ]
+        reason = (
+            "Previous negative Reality Check carryover remains active and the latest Reality Check identifies a "
+            "new independent concern."
+        )
+    else:
+        allocation_points = _scaled_allocation_points(previous_allocations, factor)
+        reason = "Previous negative Reality Check carryover remains active."
+
+    notes = [
+        *list(current_assessment.get("validation_notes") or []),
+        reason,
+    ]
+    return {
+        **deepcopy(current_assessment),
+        "points": _clean_points(final_points),
+        "effect": previous_assessment.get("effect") or current_assessment.get("effect"),
+        "strength": previous_assessment.get("strength") or current_assessment.get("strength"),
+        "fraction": current_assessment.get("fraction"),
+        "central_reason": str(carryover_assessment.get("reason") or previous_assessment.get("central_reason") or reason),
+        "allocation_points": allocation_points,
+        "carryover_assessment": deepcopy(carryover_assessment),
+        "carryover_candidate": deepcopy(candidate),
+        "validation_notes": notes,
+    }
+
+
 def validate_pass1_review(packet: dict[str, Any], review: dict[str, Any]) -> dict[str, Any]:
     errors: list[str] = []
     if not isinstance(review, dict):
@@ -780,9 +1052,6 @@ def validate_pass1_review(packet: dict[str, Any], review: dict[str, Any]) -> dic
 
     for field in sorted(APP_OWNED_TRIAL_SCORE_FIELDS.intersection(review)):
         errors.append(f"{field} is application-owned and must not be returned by Pass 1")
-    for field in sorted(OBSOLETE_PASS1_TENSION_FIELDS.intersection(review)):
-        errors.append(f"{field} is obsolete; use tension_question_options for visible iterations only")
-
     metadata = review.get("review_metadata") or {}
     if not isinstance(metadata, dict):
         errors.append("review_metadata must be an object")
@@ -824,20 +1093,22 @@ def validate_pass1_review(packet: dict[str, Any], review: dict[str, Any]) -> dic
     for field in required_objects:
         if not isinstance(review.get(field), dict):
             errors.append(f"{field} must be an object")
-    tension_options_provided = "tension_question_options" in review
-    if tension_options_provided and not isinstance(review.get("tension_question_options"), list):
-        errors.append("tension_question_options must be an array")
-        tension_question_options = []
-    elif not tension_options_provided:
+    discussion_options_provided = "development_discussion_options" in review
+    if discussion_options_provided and not isinstance(review.get("development_discussion_options"), list):
+        errors.append("development_discussion_options must be an array")
+        development_discussion_options = []
+    elif not discussion_options_provided:
         if is_hidden_baseline:
-            tension_question_options = []
+            development_discussion_options = []
         else:
-            errors.append("tension_question_options must be an array")
-            tension_question_options = []
+            errors.append("development_discussion_options must be an array")
+            development_discussion_options = []
     else:
-        tension_question_options = _normalize_tension_question_options(review.get("tension_question_options"))
-    if is_hidden_baseline and tension_question_options:
-        errors.append("hidden baseline must not return tension_question_options")
+        development_discussion_options = _normalize_development_discussion_options(
+            review.get("development_discussion_options")
+        )
+    if is_hidden_baseline and development_discussion_options:
+        errors.append("hidden baseline must not return development_discussion_options")
     draft = review.get("analytical_narrative_draft") or {}
     if isinstance(draft, dict):
         for field in ANALYTICAL_NARRATIVE_DRAFT_FIELDS:
@@ -856,42 +1127,55 @@ def validate_pass1_review(packet: dict[str, Any], review: dict[str, Any]) -> dic
                 f"with at least {minimum_words} words across required fields"
             )
 
-    if not is_hidden_baseline and isinstance(tension_question_options, list) and not (
-        MIN_VISIBLE_TENSION_QUESTION_OPTIONS
-        <= len(tension_question_options)
-        <= MAX_VISIBLE_TENSION_QUESTION_OPTIONS
+    if not is_hidden_baseline and isinstance(development_discussion_options, list) and not (
+        MIN_VISIBLE_DEVELOPMENT_DISCUSSION_OPTIONS
+        <= len(development_discussion_options)
+        <= MAX_VISIBLE_DEVELOPMENT_DISCUSSION_OPTIONS
     ):
         errors.append(
-            "tension_question_options must include "
-            f"{MIN_VISIBLE_TENSION_QUESTION_OPTIONS}-{MAX_VISIBLE_TENSION_QUESTION_OPTIONS} options"
+            "development_discussion_options must include "
+            f"{MIN_VISIBLE_DEVELOPMENT_DISCUSSION_OPTIONS}-{MAX_VISIBLE_DEVELOPMENT_DISCUSSION_OPTIONS} options"
         )
-    tension_summaries: list[str] = []
-    for index, item in enumerate(tension_question_options if isinstance(tension_question_options, list) else []):
+    discussion_topics: list[str] = []
+    for index, item in enumerate(
+        development_discussion_options if isinstance(development_discussion_options, list) else []
+    ):
         if not isinstance(item, dict):
-            errors.append(f"tension_question_options[{index}] must be an object")
+            errors.append(f"development_discussion_options[{index}] must be an object")
             continue
-        tension = item.get("tension")
+        topic = item.get("topic")
+        why_it_matters = item.get("why_it_matters")
+        supporting_evidence = item.get("supporting_evidence")
         question = item.get("participant_wider_question")
-        if not isinstance(tension, dict):
-            errors.append(f"tension_question_options[{index}].tension must be an object")
-            continue
-        for field in ("summary", "why_it_matters"):
-            if not isinstance(tension.get(field), str) or not tension.get(field, "").strip():
-                errors.append(f"tension_question_options[{index}].tension.{field} is required")
-        if not isinstance(tension.get("supporting_evidence"), list):
-            errors.append(f"tension_question_options[{index}].tension.supporting_evidence must be an array")
-        summary = str(tension.get("summary") or "").strip()
-        if summary:
-            tension_summaries.append(summary)
+        if not isinstance(topic, str) or not topic.strip():
+            errors.append(f"development_discussion_options[{index}].topic is required")
+        if not isinstance(why_it_matters, str) or not why_it_matters.strip():
+            errors.append(f"development_discussion_options[{index}].why_it_matters is required")
+        if not isinstance(supporting_evidence, list):
+            errors.append(f"development_discussion_options[{index}].supporting_evidence must be an array")
+        topic_text = str(topic or "").strip()
+        if topic_text:
+            discussion_topics.append(topic_text)
         if not isinstance(question, dict):
-            errors.append(f"tension_question_options[{index}].participant_wider_question must be an object")
+            errors.append(f"development_discussion_options[{index}].participant_wider_question must be an object")
             continue
         if not isinstance(question.get("question"), str) or not question.get("question", "").strip():
-            errors.append(f"tension_question_options[{index}].participant_wider_question.question is required")
+            errors.append(f"development_discussion_options[{index}].participant_wider_question.question is required")
         if not isinstance(question.get("supporting_evidence"), list):
-            errors.append(f"tension_question_options[{index}].participant_wider_question.supporting_evidence must be an array")
-    if len(tension_summaries) >= MIN_VISIBLE_TENSION_QUESTION_OPTIONS and len(set(tension_summaries)) != len(tension_summaries):
-        errors.append("tension_question_options tension summaries must be distinct")
+            errors.append(
+                f"development_discussion_options[{index}].participant_wider_question.supporting_evidence must be an array"
+            )
+    if (
+        len(discussion_topics) >= MIN_VISIBLE_DEVELOPMENT_DISCUSSION_OPTIONS
+        and len(set(discussion_topics)) != len(discussion_topics)
+    ):
+        errors.append("development_discussion_options topics must be distinct")
+    carryover_assessment, carryover_errors = _validate_reality_check_carryover_assessment(
+        packet,
+        review,
+        is_hidden_baseline=is_hidden_baseline,
+    )
+    errors.extend(carryover_errors)
 
     continuity_update = deepcopy(review.get("continuity_update") or {})
     reality_check = deepcopy(review.get("reality_check") or {})
@@ -914,11 +1198,12 @@ def validate_pass1_review(packet: dict[str, Any], review: dict[str, Any]) -> dic
         "operational_fit": deepcopy(operational or {}),
         "operational_fit_assessment": operational_score,
         "reality_check": reality_check,
+        "reality_check_carryover_assessment": deepcopy(carryover_assessment),
         "continuity_update": continuity_update,
         "analytical_narrative_draft": deepcopy(draft),
     }
     if not is_hidden_baseline:
-        validated["tension_question_options"] = deepcopy(tension_question_options)
+        validated["development_discussion_options"] = deepcopy(development_discussion_options)
     return validated
 
 
@@ -971,10 +1256,49 @@ def score_pass1_review(packet: dict[str, Any], pass1_review: dict[str, Any]) -> 
             "input_hash": input_hash,
         }
 
+    returned_to_hidden_baseline = bool(iteration.get("returned_to_hidden_baseline_state"))
+    if returned_to_hidden_baseline:
+        reference_trial_score = _reference_trial_score(packet)
+        reference_pre_reality_score = _reference_pre_reality_score(packet)
+        pre_reality_delta = (
+            float(completion_score) - float(reference_pre_reality_score)
+            if reference_pre_reality_score is not None
+            else 0.0
+        )
+        reason = (
+            "Current scenario state matches the hidden baseline state; Operational Fit and Reality Check are neutralized "
+            "to prevent path-dependent score drift on a full baseline return."
+        )
+        return {
+            "validation_status": "valid",
+            "validation_errors": [],
+            "validation_notes": [*list(validated.get("validation_notes") or []), reason],
+            "xgboost_completion_outlook": _clean_points(completion_score),
+            "operational_fit_points": 0.0,
+            "pre_reality_score": _clean_points(completion_score),
+            "pre_reality_delta": _clean_points(pre_reality_delta),
+            "reality_check_points": 0.0,
+            "reality_check_allocation_points": [],
+            "trial_score": _clean_points(completion_score),
+            "delta_vs_previous_trial_score": (
+                _clean_points(float(completion_score) - float(reference_trial_score))
+                if reference_trial_score is not None
+                else None
+            ),
+            "delta_vs_previous_pre_reality_score": _clean_points(pre_reality_delta),
+            "delta_vs_baseline_xgboost": 0.0,
+            "operational_fit_assessment": _neutral_operational_fit_assessment(reason),
+            "reality_check_assessment": _neutral_reality_check_assessment(reason),
+            "input_hash": input_hash,
+        }
+
     operational_points = float(validated["operational_fit_assessment"]["points"])
     pre_reality_score = float(completion_score) + operational_points
-    reference_score = _reference_score(packet)
-    pre_reality_delta = pre_reality_score - float(reference_score if reference_score is not None else completion_score)
+    reference_trial_score = _reference_trial_score(packet)
+    reference_pre_reality_score = _reference_pre_reality_score(packet)
+    pre_reality_delta = pre_reality_score - float(
+        reference_pre_reality_score if reference_pre_reality_score is not None else completion_score
+    )
     reality_assessment = score_reality_check(
         validated["reality_check"],
         pre_reality_delta=pre_reality_delta,
@@ -1000,6 +1324,19 @@ def score_pass1_review(packet: dict[str, Any], pass1_review: dict[str, Any]) -> 
             "input_hash": input_hash,
         }
 
+    reality_assessment = _apply_reality_check_carryover(
+        packet=packet,
+        current_assessment=reality_assessment,
+        carryover_assessment=validated.get("reality_check_carryover_assessment") or {},
+    )
+    validation_notes = [
+        *list(validation_notes),
+        *[
+            note
+            for note in list(reality_assessment.get("validation_notes") or [])
+            if note not in validation_notes
+        ],
+    ]
     reality_points = float(reality_assessment["points"])
     trial_score = clamp(pre_reality_score + reality_points, 0, 100)
     return {
@@ -1013,7 +1350,11 @@ def score_pass1_review(packet: dict[str, Any], pass1_review: dict[str, Any]) -> 
         "reality_check_points": _clean_points(reality_points),
         "reality_check_allocation_points": deepcopy(reality_assessment.get("allocation_points") or []),
         "trial_score": trial_score,
-        "delta_vs_previous_trial_score": _clean_points(float(trial_score) - float(reference_score)),
+        "delta_vs_previous_trial_score": _clean_points(
+            float(trial_score) - float(reference_trial_score)
+            if reference_trial_score is not None
+            else float(trial_score) - float(completion_score)
+        ),
         "delta_vs_previous_pre_reality_score": _clean_points(pre_reality_delta),
         "delta_vs_baseline_xgboost": _clean_points(float(trial_score) - float(model.get("baseline_completion_score", completion_score))),
         "operational_fit_assessment": deepcopy(validated["operational_fit_assessment"]),
@@ -1049,6 +1390,10 @@ def validate_pass2_review(review: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(pillar_reading, list):
         errors.append("pillar_reading must be an array")
         pillar_reading = []
+    elif not MIN_PASS2_PILLAR_READINGS <= len(pillar_reading) <= MAX_PASS2_PILLAR_READINGS:
+        errors.append(
+            f"pillar_reading must include {MIN_PASS2_PILLAR_READINGS}-{MAX_PASS2_PILLAR_READINGS} material bullets"
+        )
     for index, item in enumerate(pillar_reading):
         if not isinstance(item, dict):
             errors.append(f"pillar_reading[{index}] must be an object")
@@ -1082,28 +1427,6 @@ def validate_pass2_review(review: dict[str, Any]) -> dict[str, Any]:
     ):
         errors.append("broader_strategic_question.mapped_tension must match central_tension.summary")
 
-    facilitator_questions = review.get("facilitator_questions") or []
-    if not isinstance(facilitator_questions, list):
-        errors.append("facilitator_questions must be an array when present")
-        facilitator_questions = []
-    elif len(facilitator_questions) > 3:
-        errors.append("facilitator_questions must include at most 3 questions")
-    for index, item in enumerate(facilitator_questions):
-        if not isinstance(item, dict):
-            errors.append(f"facilitator_questions[{index}] must be an object")
-            continue
-        if not isinstance(item.get("question"), str) or not item.get("question", "").strip():
-            errors.append(f"facilitator_questions[{index}].question is required")
-        why_it_matters = item.get("why_it_matters")
-        if why_it_matters is not None and (
-            not isinstance(why_it_matters, str) or not why_it_matters.strip()
-        ):
-            errors.append(f"facilitator_questions[{index}].why_it_matters must be non-empty when present")
-        related = item.get("related_feature_families", [])
-        if related is None:
-            related = []
-        if not isinstance(related, list) or not all(isinstance(value, str) for value in related):
-            errors.append(f"facilitator_questions[{index}].related_feature_families must be an array of strings")
     return {
         "validation_status": "valid" if not errors else "invalid",
         "validation_errors": errors,
@@ -1112,27 +1435,25 @@ def validate_pass2_review(review: dict[str, Any]) -> dict[str, Any]:
         "pillar_reading": deepcopy(pillar_reading or []),
         "central_tension": deepcopy(central_tension or {}),
         "broader_strategic_question": deepcopy(broader_question or {}),
-        "facilitator_questions": deepcopy(facilitator_questions),
     }
 
 
 def validate_pass2_review_with_input(review: dict[str, Any], pass2_input: dict[str, Any]) -> dict[str, Any]:
-    """Validate Pass 2 shape plus its selected tension/question against Pass 1 options."""
+    """Validate Pass 2 shape plus its selected discussion topic/question against Pass 1 options."""
     validated = validate_pass2_review(review)
     errors = list(validated.get("validation_errors") or [])
     notes = list(validated.get("validation_notes") or [])
     pass1_analysis = pass2_input.get("pass1_analysis") if isinstance(pass2_input, dict) else {}
-    options = (pass1_analysis or {}).get("strategic_tension_question_options") or []
+    options = (pass1_analysis or {}).get("development_discussion_options") or []
     option_questions_by_summary: dict[str, str] = {}
     if isinstance(options, list):
         for item in options:
             if not isinstance(item, dict):
                 continue
-            tension = item.get("central_tension") or {}
-            question = item.get("broader_strategic_question") or {}
-            if not isinstance(tension, dict) or not isinstance(question, dict):
+            question = item.get("participant_wider_question") or {}
+            if not isinstance(question, dict):
                 continue
-            summary = str(tension.get("summary") or "").strip()
+            summary = str(item.get("topic") or "").strip()
             question_text = str(question.get("question") or "").strip()
             if summary:
                 option_questions_by_summary[summary] = question_text
@@ -1141,21 +1462,11 @@ def validate_pass2_review_with_input(review: dict[str, Any], pass2_input: dict[s
     if option_questions_by_summary:
         expected_question = option_questions_by_summary.get(selected_summary)
         if selected_summary and expected_question is None:
-            errors.append("central_tension.summary must match one supplied strategic_tension_question_options tension")
+            errors.append("central_tension.summary must match one supplied development_discussion_options topic")
         elif expected_question is not None and selected_question and selected_question != expected_question:
-            errors.append("broader_strategic_question.question must match the question paired with the selected strategic_tension_question_options tension")
+            errors.append("broader_strategic_question.question must match the question paired with the selected development_discussion_options topic")
     else:
-        errors.append("pass1_analysis.strategic_tension_question_options must include at least one selectable option")
-    history = pass2_input.get("participant_visible_history") if isinstance(pass2_input, dict) else {}
-    same_state_reuse = bool((history or {}).get("same_state_reuse")) if isinstance(history, dict) else False
-    recent_questions = (history or {}).get("recent_participant_visible_questions") if isinstance(history, dict) else []
-    if selected_question and not same_state_reuse and isinstance(recent_questions, list):
-        for item in recent_questions:
-            if not isinstance(item, dict):
-                continue
-            if selected_question == str(item.get("question") or "").strip():
-                notes.append("broader_strategic_question.question repeats a recent participant-visible question while same_state_reuse is false")
-                break
+        errors.append("pass1_analysis.development_discussion_options must include at least one selectable option")
     validated["validation_errors"] = errors
     validated["validation_notes"] = notes
     validated["validation_status"] = "valid" if not errors else "invalid"

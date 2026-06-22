@@ -293,7 +293,7 @@ def main() -> int:
             "completion_outlook_analysis": {},
             "operational_fit": {},
             "reality_check": {},
-            "tension_question_options": [],
+            "development_discussion_options": [],
             "continuity_update": {"what_changed": "Stale prior movement"},
         },
         "validated_participant_narrative": {
@@ -306,9 +306,9 @@ def main() -> int:
                 "score_interpretation": "Prior interpretation.",
             },
             "pillar_reading": [],
-            "central_tension": {"summary": "Prior tension.", "why_it_matters": "Prior reason."},
+            "central_tension": {"summary": "Prior discussion topic.", "why_it_matters": "Prior reason."},
             "broader_strategic_question": {
-                "mapped_tension": "Prior tension.",
+                "mapped_tension": "Prior discussion topic.",
                 "question": "Prior question?",
             },
         },
@@ -475,17 +475,17 @@ def main() -> int:
             errors.append(f"Audit bundle UI binding should confirm renderer cache match: {ui_binding!r}.")
         if decision_map.get("operational_fit", {}).get("points") != 0.3:
             errors.append(f"Audit bundle decision map should expose Operational Fit points: {decision_map!r}.")
-        tension_map = decision_map.get("tension_and_questions") or {}
-        if "pass1_tension_question_options" not in tension_map:
-            errors.append("Audit bundle decision map should expose current Pass 1 tension_question_options.")
+        discussion_map = decision_map.get("development_discussion_and_questions") or {}
+        if "pass1_development_discussion_options" not in discussion_map:
+            errors.append("Audit bundle decision map should expose current Pass 1 development_discussion_options.")
         for obsolete_key in (
             "pass1_central_tension_candidate",
             "pass1_broader_question_candidate",
             "central_tension_candidate",
             "broader_strategic_question_candidate",
         ):
-            if obsolete_key in tension_map:
-                errors.append(f"Audit bundle decision map should not expose obsolete tension key {obsolete_key!r}.")
+            if obsolete_key in discussion_map:
+                errors.append(f"Audit bundle decision map should not expose obsolete discussion key {obsolete_key!r}.")
         retry_dir = bundle_dir / "pass1_repair_attempts"
         expected_retry_files = {
             "attempt_01_summary.json",
@@ -516,21 +516,17 @@ def main() -> int:
         "reality_check": {},
         "central_tension_candidate": {"summary": "obsolete"},
         "broader_strategic_question_candidate": {"question": "obsolete?"},
-        "tension_question_options": [
+        "development_discussion_options": [
             {
-                "tension": {"summary": "Current option.", "why_it_matters": "Current.", "supporting_evidence": []},
+                "topic": "Current option.",
+                "why_it_matters": "Current.",
+                "supporting_evidence": [],
                 "participant_wider_question": {"question": "Current question?", "supporting_evidence": []},
             }
         ],
-        "strategic_tension_question_options": [
-            {
-                "central_tension": {"summary": "Current option.", "why_it_matters": "Current."},
-                "broader_strategic_question": {"mapped_tension": "Current option.", "question": "Current question?"},
-            }
-        ],
     })
-    if "tension_question_options" not in pass1_debug or "strategic_tension_question_options" not in pass1_debug:
-        errors.append("Pass 2 debug summary should expose current tension option structures.")
+    if "development_discussion_options" not in pass1_debug:
+        errors.append("Pass 2 debug summary should expose current development discussion option structures.")
     for obsolete_key in (
         "central_tension_candidate",
         "alternative_tension_candidates",
@@ -541,6 +537,21 @@ def main() -> int:
             errors.append(f"Pass 2 debug summary should not expose obsolete key {obsolete_key!r}.")
 
     frontend_source = (ROOT / "frontend/views/trial_simulator.py").read_text(encoding="utf-8")
+    for required_token in (
+        "_participant_pillar_reading_html",
+        "_scenario_review_multi_text_block",
+        "_discussion_point_html",
+        "participant_pillar_reading",
+        "Trial Score",
+        "Overall Evolution",
+        "Completion Outlook",
+        "Reality Check",
+        "What Is Driving The Score",
+        "Discussion Point",
+        "Discussion Point:",
+    ):
+        if required_token not in frontend_source:
+            errors.append(f"frontend trial simulator should render Pass 2 participant format token {required_token!r}.")
     for obsolete_token in (
         "central_tension_candidate",
         "alternative_tension_candidates",
@@ -557,6 +568,70 @@ def main() -> int:
     ):
         if obsolete_token in frontend_source:
             errors.append(f"frontend trial simulator should not contain obsolete debug/display token {obsolete_token!r}.")
+
+    captured_markdown: list[str] = []
+    original_markdown = ts.st.markdown
+    original_get_snapshot = ts.get_latest_prediction_snapshot
+    original_pending = ts.has_pending_simulation_changes
+    original_prompt_debug = ts._render_prompt_review_context_debug
+    original_quality_diagnostics = ts._quality_review_diagnostics
+    invalid_pass2_trace = _trace(3, xgb_pillars=_pillars())
+    invalid_pass2_trace.update({
+        "participant_narrative_status": "invalid",
+        "participant_narrative_warning": (
+            "Participant narrative failed after the Pass 2 repair retry: "
+            "pillar_reading must include 2-4 material bullets"
+        ),
+        "validated_participant_narrative": {},
+        "trial_score_narrative": {},
+        "participant_pillar_reading": [],
+        "participant_central_tension": {},
+        "participant_broader_strategic_question": {},
+        "central_tension": "",
+        "validated_review": {
+            "review_metadata": {"review_mode": "later_visible_iteration", "visible": True},
+            "completion_outlook_analysis": {"summary": "This old fallback summary should not render."},
+            "operational_fit": {
+                "combined_operational_fit": {
+                    "central_reason": "This old Operational Fit fallback should not render."
+                }
+            },
+            "reality_check": {"central_reason": "This old Reality Check fallback should not render."},
+            "key_questions": {
+                "strategic_development_question": "This old Strategic Development Question should not render?"
+            },
+        },
+    })
+    try:
+        ts.st.session_state["global_edit_mode"] = True
+        ts.st.markdown = lambda body, *args, **kwargs: captured_markdown.append(str(body))
+        ts.get_latest_prediction_snapshot = lambda nct_id: {
+            "snapshot_id": "invalid-pass2-snapshot",
+            "source": "simulation_ptc",
+            "score": 64.7,
+        }
+        ts.has_pending_simulation_changes = lambda row: False
+        ts._render_prompt_review_context_debug = lambda trace: None
+        ts._quality_review_diagnostics = lambda trace, row=None, snapshot=None: None
+        ts.render_scenario_review_report(pd.Series({"nct_id": NCT_ID}), trace=invalid_pass2_trace)
+    finally:
+        ts.st.markdown = original_markdown
+        ts.get_latest_prediction_snapshot = original_get_snapshot
+        ts.has_pending_simulation_changes = original_pending
+        ts._render_prompt_review_context_debug = original_prompt_debug
+        ts._quality_review_diagnostics = original_quality_diagnostics
+    rendered = "\n".join(captured_markdown)
+    if "Participant Narrative Unavailable" not in rendered:
+        errors.append("Invalid Pass 2 UI fallback should render Participant Narrative Unavailable.")
+    if "Reason:" not in rendered or "pillar_reading must include 2-4 material bullets" not in rendered:
+        errors.append("Invalid Pass 2 UI fallback should render the participant narrative warning reason.")
+    for hidden_old_title in (
+        "Completion Outlook Analysis",
+        "Operational Fit",
+        "Strategic Development Question",
+    ):
+        if hidden_old_title in rendered:
+            errors.append(f"Invalid Pass 2 UI fallback should not render old fallback title {hidden_old_title!r}.")
 
     if errors:
         for error in errors:

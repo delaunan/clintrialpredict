@@ -25,6 +25,7 @@ from src.narratives.provider import (  # noqa: E402
     GEMINI_RETRY_OUTPUT_TOKENS,
     GEMINI_RETRY_THINKING_LEVEL,
     MOCK_MODEL_NAME,
+    NARRATIVE_REPAIR_RETRY_ATTEMPTS,
     PROVIDER_MOCK,
     PROVIDER_VALIDATION_RETRY_ATTEMPTS,
     PASS2_VALIDATION_RETRY_ATTEMPTS,
@@ -80,16 +81,18 @@ def _check_openai_validation_retry(packet: dict, fixture: dict, errors: list[str
                 "movement_reading": "Operational Fit and Reality Check should be read together.",
                 "score_interpretation": "Completion Outlook remains the protected model-pattern anchor.",
             },
-            "pillar_reading": [{"pillar": "Execution Framework", "reading": "Operational proportionality matters."}],
+            "pillar_reading": [
+                {"pillar": "Execution Framework", "reading": "Operational proportionality matters."},
+                {"pillar": "Scientific Challenge", "reading": "Evidence interpretability remains relevant to the participant read."},
+            ],
             "central_tension": {
-                "summary": "Execution support versus evidence ambition.",
+                "summary": "The main tension is whether completion favorability and design defensibility move in the same direction.",
                 "why_it_matters": "It frames the participant discussion.",
             },
             "broader_strategic_question": {
-                "mapped_tension": "Execution support versus evidence ambition.",
-                "question": "When should operational support change how a development scenario is defended?",
+                "mapped_tension": "The main tension is whether completion favorability and design defensibility move in the same direction.",
+                "question": "When should operational feasibility change confidence in the development story, and when does it only make an uncertain evidence package easier to run?",
             },
-            "facilitator_questions": [],
         }
 
         def fake_post(*args, **kwargs):
@@ -104,6 +107,8 @@ def _check_openai_validation_retry(packet: dict, fixture: dict, errors: list[str
                     errors.append("OpenAI validation retry prompt should include canonical allocation target IDs")
                 if "Allowed packet evidence references" not in prompt_text:
                     errors.append("OpenAI validation retry prompt should include allowed packet evidence refs")
+                if "usable beyond this exact trial" not in prompt_text:
+                    errors.append("OpenAI validation retry prompt should include broader-question abstraction guidance")
             if calls["count"] == 3:
                 return _FakeResponse({"output_text": provider_module.json.dumps(pass2_review)})
             return _FakeResponse({"output_text": provider_module.json.dumps(retry_review)})
@@ -172,16 +177,18 @@ def _check_openai_validation_retry(packet: dict, fixture: dict, errors: list[str
             "movement_reading": "Operational Fit and Reality Check should be read together.",
             "score_interpretation": "Completion Outlook remains the protected model-pattern anchor.",
         },
-        "pillar_reading": [{"pillar": "Execution Framework", "reading": "Operational proportionality matters."}],
+        "pillar_reading": [
+                {"pillar": "Execution Framework", "reading": "Operational proportionality matters."},
+                {"pillar": "Scientific Challenge", "reading": "Evidence interpretability remains relevant to the participant read."},
+            ],
         "central_tension": {
-            "summary": "Execution support versus evidence ambition.",
+            "summary": "The main tension is whether completion favorability and design defensibility move in the same direction.",
             "why_it_matters": "It frames the participant discussion.",
         },
         "broader_strategic_question": {
-            "mapped_tension": "Execution support versus evidence ambition.",
-            "question": "When should operational support change how a development scenario is defended?",
+            "mapped_tension": "The main tension is whether completion favorability and design defensibility move in the same direction.",
+            "question": "When should operational feasibility change confidence in the development story, and when does it only make an uncertain evidence package easier to run?",
         },
-        "facilitator_questions": [],
     }
 
     def fake_post_multi_repair(*args, **kwargs):
@@ -229,16 +236,18 @@ def _check_openai_pass2_retry(packet: dict, fixture: dict, errors: list[str]) ->
             "movement_reading": "Operational Fit and Reality Check should be read together.",
             "score_interpretation": "Completion Outlook remains the protected model-pattern anchor.",
         },
-        "pillar_reading": [{"pillar": "Execution Framework", "reading": "Operational proportionality matters."}],
+        "pillar_reading": [
+                {"pillar": "Execution Framework", "reading": "Operational proportionality matters."},
+                {"pillar": "Scientific Challenge", "reading": "Evidence interpretability remains relevant to the participant read."},
+            ],
         "central_tension": {
-            "summary": "Execution support versus evidence ambition.",
+            "summary": "The main tension is whether completion favorability and design defensibility move in the same direction.",
             "why_it_matters": "It frames the participant discussion.",
         },
         "broader_strategic_question": {
-            "mapped_tension": "Execution support versus evidence ambition.",
-            "question": "When should operational support change how a development scenario is defended?",
+            "mapped_tension": "The main tension is whether completion favorability and design defensibility move in the same direction.",
+            "question": "When should operational feasibility change confidence in the development story, and when does it only make an uncertain evidence package easier to run?",
         },
-        "facilitator_questions": [],
     }
 
     def fake_post(*args, **kwargs):
@@ -268,6 +277,68 @@ def _check_openai_pass2_retry(packet: dict, fixture: dict, errors: list[str]) ->
         errors.append("OpenAI Pass 2 retry should attach a valid participant narrative")
     if result.get("scoring", {}).get("trial_score") is None:
         errors.append("OpenAI Pass 2 retry should preserve Trial Score scoring")
+
+
+def _check_openai_pass2_non_json_repair(packet: dict, fixture: dict, errors: list[str]) -> None:
+    config = load_narrative_provider_config({
+        "NARRATIVE_LLM_PROVIDER": "openai",
+        "OPENAI_API_KEY": "test-key",
+        "OPENAI_NARRATIVE_MODEL": "test-openai-model",
+        "NARRATIVE_LLM_MAX_RETRIES": "0",
+    })
+    original_post = provider_module.requests.post
+    calls = {"count": 0, "raw_text_seen": False}
+    pass1_review = _synthesized_trial_score_pass1_review(packet, fixture)
+    raw_pass2_text = "This is not JSON but it contains useful Pass 2 narrative text."
+    repaired_pass2 = {
+        "review_metadata": {"review_mode": "first_visible_iteration", "visible": True},
+        "trial_score_narrative": {
+            "summary": "The Trial Score reading is mixed but defensible.",
+            "movement_reading": "The latest movement should be read through the supplied score alignment notes.",
+            "score_interpretation": "The final read follows the app-calibrated direction without exposing points.",
+        },
+        "pillar_reading": [
+            {"pillar": "Execution Framework", "reading": "Execution evidence is material to this participant read."},
+            {"pillar": "Scientific Challenge", "reading": "Evidence interpretability remains part of the selected read."},
+        ],
+        "central_tension": {
+            "summary": "The main tension is whether completion favorability and design defensibility move in the same direction.",
+            "why_it_matters": "This frames whether the scenario is easier to run or actually more development-informative.",
+        },
+        "broader_strategic_question": {
+            "mapped_tension": "The main tension is whether completion favorability and design defensibility move in the same direction.",
+            "question": "When should operational feasibility change confidence in the development story, and when does it only make an uncertain evidence package easier to run?",
+        },
+    }
+
+    def fake_post(*args, **kwargs):
+        calls["count"] += 1
+        prompt_text = str((kwargs.get("json") or {}).get("input") or "")
+        if calls["count"] == 1:
+            return _FakeResponse({"output_text": provider_module.json.dumps(pass1_review)})
+        if calls["count"] == 2:
+            return _FakeResponse({"output_text": raw_pass2_text})
+        if "Previous raw Pass 2 response text" not in prompt_text or raw_pass2_text not in prompt_text:
+            errors.append("OpenAI Pass 2 non-JSON repair prompt should include the raw malformed Pass 2 response")
+        calls["raw_text_seen"] = True
+        return _FakeResponse({"output_text": provider_module.json.dumps(repaired_pass2)})
+
+    provider_module.requests.post = fake_post
+    try:
+        result = provider_module.review_packet_with_provider(packet, provider="openai", config=config)
+    finally:
+        provider_module.requests.post = original_post
+    metadata = result.get("provider_metadata") or {}
+    if calls["count"] != 3:
+        errors.append("OpenAI non-JSON Pass 2 should make one repair call after the initial malformed text")
+    if not calls["raw_text_seen"]:
+        errors.append("OpenAI non-JSON Pass 2 repair path should observe raw text in the repair prompt")
+    if metadata.get("pass2_failure_stage") != "initial_validation_failed":
+        errors.append("OpenAI non-JSON Pass 2 should classify the initial failure as validation/parsing failure before repair")
+    if metadata.get("pass2_retry_attempts") != 1:
+        errors.append("OpenAI non-JSON Pass 2 should record one repair attempt")
+    if result.get("participant_narrative_status") != "valid":
+        errors.append("OpenAI non-JSON Pass 2 should recover when repair returns valid JSON")
 
 
 def _check_openai_pass2_exception_warning(packet: dict, fixture: dict, errors: list[str]) -> None:
@@ -328,16 +399,18 @@ def _check_gemini_validation_retry(packet: dict, fixture: dict, errors: list[str
             "movement_reading": "Operational Fit and Reality Check should be read together.",
             "score_interpretation": "Completion Outlook remains the protected model-pattern anchor.",
         },
-        "pillar_reading": [{"pillar": "Execution Framework", "reading": "Operational proportionality matters."}],
+        "pillar_reading": [
+                {"pillar": "Execution Framework", "reading": "Operational proportionality matters."},
+                {"pillar": "Scientific Challenge", "reading": "Evidence interpretability remains relevant to the participant read."},
+            ],
         "central_tension": {
-            "summary": "Execution support versus evidence ambition.",
+            "summary": "The main tension is whether completion favorability and design defensibility move in the same direction.",
             "why_it_matters": "It frames the participant discussion.",
         },
         "broader_strategic_question": {
-            "mapped_tension": "Execution support versus evidence ambition.",
-            "question": "When should operational support change how a development scenario is defended?",
+            "mapped_tension": "The main tension is whether completion favorability and design defensibility move in the same direction.",
+            "question": "When should operational feasibility change confidence in the development story, and when does it only make an uncertain evidence package easier to run?",
         },
-        "facilitator_questions": [],
     }
 
     class FakeModels:
@@ -351,12 +424,16 @@ def _check_gemini_validation_retry(packet: dict, fixture: dict, errors: list[str
                     errors.append("Gemini validation retry should use a targeted repair prompt")
                 if "Allowed Reality Check allocation_target_id values" not in prompt_text:
                     errors.append("Gemini validation retry prompt should include canonical allocation target IDs")
+                if "usable beyond this exact trial" not in prompt_text:
+                    errors.append("Gemini validation retry prompt should include broader-question abstraction guidance")
                 calls["repair_prompt_seen"] = True
                 return _FakeGeminiResponse(parsed=retry_review)
             if calls["count"] == 3:
                 return _FakeGeminiResponse(parsed=invalid_pass2)
             if "repairing a previous Pass 2 Participant Narrative JSON response" not in prompt_text:
                 errors.append("Gemini Pass 2 retry should use a targeted Pass 2 repair prompt")
+            if "usable beyond this exact trial" not in prompt_text:
+                errors.append("Gemini Pass 2 retry prompt should include broader-question abstraction guidance")
             return _FakeGeminiResponse(parsed=pass2_review)
 
     class FakeClient:
@@ -449,16 +526,18 @@ def _check_gemini_multi_validation_retry(packet: dict, fixture: dict, errors: li
             "movement_reading": "Operational Fit and Reality Check should be read together.",
             "score_interpretation": "Completion Outlook remains the protected model-pattern anchor.",
         },
-        "pillar_reading": [{"pillar": "Execution Framework", "reading": "Operational proportionality matters."}],
+        "pillar_reading": [
+                {"pillar": "Execution Framework", "reading": "Operational proportionality matters."},
+                {"pillar": "Scientific Challenge", "reading": "Evidence interpretability remains relevant to the participant read."},
+            ],
         "central_tension": {
-            "summary": "Execution support versus evidence ambition.",
+            "summary": "The main tension is whether completion favorability and design defensibility move in the same direction.",
             "why_it_matters": "It frames the participant discussion.",
         },
         "broader_strategic_question": {
-            "mapped_tension": "Execution support versus evidence ambition.",
-            "question": "When should operational support change how a development scenario is defended?",
+            "mapped_tension": "The main tension is whether completion favorability and design defensibility move in the same direction.",
+            "question": "When should operational feasibility change confidence in the development story, and when does it only make an uncertain evidence package easier to run?",
         },
-        "facilitator_questions": [],
     }
 
     class FakeModels:
@@ -732,12 +811,14 @@ def main() -> int:
         errors.append("Gemini malformed/MAX_TOKENS retry should lower thinking level for completion reliability")
     if GEMINI_RETRY_OUTPUT_TOKENS < 16000:
         errors.append("Gemini retry output budget should be at least 16000 tokens")
-    if GEMINI_MALFORMED_JSON_RETRY_ATTEMPTS != 1:
-        errors.append("Gemini malformed JSON retry should stay bounded to one explicit retry")
+    if NARRATIVE_REPAIR_RETRY_ATTEMPTS != 2:
+        errors.append("narrative repair/retry cap should stay bounded to two explicit retries")
+    if GEMINI_MALFORMED_JSON_RETRY_ATTEMPTS != NARRATIVE_REPAIR_RETRY_ATTEMPTS:
+        errors.append("Gemini malformed JSON retry cap should match narrative repair/retry cap")
     if PROVIDER_VALIDATION_RETRY_ATTEMPTS != 3:
-        errors.append("provider validation retry should stay bounded to three explicit retries")
-    if PASS2_VALIDATION_RETRY_ATTEMPTS != 1:
-        errors.append("Pass 2 validation retry should stay bounded to one explicit retry")
+        errors.append("provider validation repair cap should stay bounded to three explicit retries")
+    if PASS2_VALIDATION_RETRY_ATTEMPTS != NARRATIVE_REPAIR_RETRY_ATTEMPTS:
+        errors.append("Pass 2 validation repair cap should match narrative repair/retry cap")
     fake_usage = type("FakeUsage", (), {
         "prompt_token_count": 100,
         "candidates_token_count": 40,
@@ -808,6 +889,7 @@ def main() -> int:
     _check_validation_stage_classifier(errors)
     _check_openai_validation_retry(packet, fixture, errors)
     _check_openai_pass2_retry(packet, fixture, errors)
+    _check_openai_pass2_non_json_repair(packet, fixture, errors)
     _check_openai_pass2_exception_warning(packet, fixture, errors)
     _check_gemini_validation_retry(packet, fixture, errors)
     _check_gemini_multi_validation_retry(packet, fixture, errors)

@@ -4732,7 +4732,7 @@ def inject_custom_styles():
 
             html body .quality-review-title {{
                 color: #1f2937 !important;
-                font-size: 0.88rem !important;
+                font-size: 0.96rem !important;
                 font-weight: 850 !important;
                 line-height: 1.1 !important;
                 margin-bottom: 7px !important;
@@ -4785,7 +4785,7 @@ def inject_custom_styles():
 
             html body .quality-review-section-title {{
                 color: #334155 !important;
-                font-size: 0.72rem !important;
+                font-size: 0.86rem !important;
                 font-weight: 850 !important;
                 line-height: 1.12 !important;
                 text-transform: uppercase !important;
@@ -4899,8 +4899,8 @@ def inject_custom_styles():
 
             html body .quality-review-text {{
                 color: #475569 !important;
-                font-size: 0.74rem !important;
-                line-height: 1.32 !important;
+                font-size: 0.82rem !important;
+                line-height: 1.38 !important;
                 margin-top: 6px !important;
                 font-weight: 500 !important;
             }}
@@ -6686,6 +6686,7 @@ def _prompt_review_context_debug_payload(trace):
             "raw_narrative": (trace or {}).get("participant_narrative") or {},
             "validation_status": provider_metadata.get("pass2_validation_status"),
             "validation_errors": provider_metadata.get("pass2_validation_errors") or [],
+            "pass2_repair_debug_summary": _pass2_repair_debug_summary(trace),
         },
         "compacted_hidden_baseline_output_for_first_visible_prompt": compacted_hidden_baseline or {},
         "baseline_context_shared_with_current_prompt": baseline_context,
@@ -10928,6 +10929,98 @@ def _scenario_review_text_block(title, text):
     )
 
 
+def _scenario_review_multi_text_block(title, paragraphs):
+    clean = [
+        str(item).strip()
+        for item in paragraphs
+        if isinstance(item, str) and str(item).strip()
+    ]
+    if not clean:
+        return ""
+    body = "".join(f"<p>{html.escape(item)}</p>" for item in clean)
+    return (
+        "<div class='quality-review-section-title'>"
+        f"{html.escape(title)}</div>"
+        f"<div class='quality-review-text'>{body}</div>"
+    )
+
+
+def _trial_score_narrative_html(consistency_text, trial_score_narrative):
+    if not isinstance(trial_score_narrative, dict):
+        trial_score_narrative = {}
+    rows = []
+    if isinstance(consistency_text, str) and consistency_text.strip():
+        rows.append(("Scenario Consistency", consistency_text.strip()))
+    for label, key in (
+        ("Overall Evolution", "summary"),
+        ("Completion Outlook", "movement_reading"),
+        ("Reality Check", "score_interpretation"),
+    ):
+        value = trial_score_narrative.get(key)
+        if isinstance(value, str) and value.strip():
+            rows.append((label, value.strip()))
+    if not rows:
+        return ""
+    body = "".join(
+        "<p>"
+        f"<strong>{html.escape(label)}:</strong> {html.escape(text)}"
+        "</p>"
+        for label, text in rows
+    )
+    return (
+        "<div class='quality-review-section-title'>Trial Score</div>"
+        f"<div class='quality-review-text'>{body}</div>"
+    )
+
+
+def _participant_pillar_reading_html(pillar_reading):
+    if not isinstance(pillar_reading, list):
+        return ""
+    bullet_items = []
+    for item in pillar_reading:
+        if not isinstance(item, dict):
+            continue
+        pillar = str(item.get("pillar") or "").strip()
+        reading = str(item.get("reading") or "").strip()
+        if not pillar and not reading:
+            continue
+        bullet_items.append(
+            "<li>"
+            f"<strong>{html.escape(pillar)}</strong>"
+            f"{': ' if pillar and reading else ''}"
+            f"{html.escape(reading)}"
+            "</li>"
+        )
+    if not bullet_items:
+        return ""
+    return (
+        "<div class='quality-review-section-title'>What Is Driving The Score</div>"
+        "<div class='quality-review-text'><ul>"
+        f"{''.join(bullet_items)}"
+        "</ul></div>"
+    )
+
+
+def _discussion_point_html(topic, tension, question):
+    topic_text = str(topic or "").strip()
+    tension_text = str(tension or "").strip()
+    question_text = str(question or "").strip()
+    if not topic_text and not tension_text and not question_text:
+        return ""
+    parts = []
+    if tension_text:
+        parts.append(f"<p>{html.escape(tension_text)}</p>")
+    if question_text:
+        parts.append(f"<p><strong>{html.escape(question_text)}</strong></p>")
+    title = "Discussion Point"
+    if topic_text:
+        title = f"Discussion Point: {topic_text}"
+    return (
+        f"<div class='quality-review-section-title'>{html.escape(title)}</div>"
+        f"<div class='quality-review-text'>{''.join(parts)}</div>"
+    )
+
+
 def _reality_check_structured_html(reality_check, key_questions):
     if not isinstance(reality_check, dict):
         return ""
@@ -11489,8 +11582,7 @@ def _pass2_pass1_analysis_debug_view(pass1_analysis):
         "completion_outlook_analysis": pass1_analysis.get("completion_outlook_analysis") or {},
         "operational_fit_provider_answer": pass1_analysis.get("operational_fit") or {},
         "reality_check_provider_answer": pass1_analysis.get("reality_check") or {},
-        "tension_question_options": pass1_analysis.get("tension_question_options") or [],
-        "strategic_tension_question_options": pass1_analysis.get("strategic_tension_question_options") or [],
+        "development_discussion_options": pass1_analysis.get("development_discussion_options") or [],
         "continuity_update": pass1_analysis.get("continuity_update") or {},
         "analytical_narrative_draft": pass1_analysis.get("analytical_narrative_draft") or {},
     }
@@ -11526,6 +11618,24 @@ def _pass2_input_debug_view(pass2_input):
             "The score-language restriction applies to final participant-facing prose, not to Pass 1 draft or Pass 2 input."
         ),
         "full_pass2_input_available_in_audit_bundle": True,
+    }
+
+
+def _pass2_repair_debug_summary(trace):
+    metadata = (trace or {}).get("provider_metadata") or {}
+    return {
+        "participant_narrative_status": (trace or {}).get("participant_narrative_status"),
+        "participant_narrative_warning": (trace or {}).get("participant_narrative_warning"),
+        "failure_stage": metadata.get("pass2_failure_stage"),
+        "initial_error_type": metadata.get("pass2_error_type"),
+        "initial_validation_status": metadata.get("pass2_validation_status"),
+        "initial_validation_errors": metadata.get("pass2_validation_errors") or [],
+        "repair_attempts": metadata.get("pass2_retry_attempts"),
+        "repair_reason": metadata.get("pass2_retry_reason"),
+        "repair_error_type": metadata.get("pass2_retry_error_type"),
+        "repair_validation_status": metadata.get("pass2_retry_validation_status"),
+        "repair_validation_errors": metadata.get("pass2_retry_validation_errors") or [],
+        "repair_final_error": metadata.get("pass2_retry_final_error"),
     }
 
 
@@ -11662,12 +11772,13 @@ def persist_scenario_review_audit_bundle(trace, row=None, snapshot=None):
             "allocation_points": scoring.get("reality_check_allocation_points") or [],
             "points": scoring.get("reality_check_points"),
         },
-        "tension_and_questions": {
-            "pass1_tension_question_options": ((trace_for_bundle.get("validated_review") or {}).get("tension_question_options") or []),
+        "development_discussion_and_questions": {
+            "pass1_development_discussion_options": (
+                (trace_for_bundle.get("validated_review") or {}).get("development_discussion_options") or []
+            ),
             "pass2_selected_central_tension": trace_for_bundle.get("participant_central_tension") or {},
             "pass2_selected_broader_question": trace_for_bundle.get("participant_broader_strategic_question") or {},
             "recent_participant_visible_questions": trace_for_bundle.get("recent_participant_visible_questions") or [],
-            "facilitator_questions": trace_for_bundle.get("facilitator_questions") or [],
         },
         "ui_narrative_mapping": {
             "trial_score_narrative": trace_for_bundle.get("trial_score_narrative") or {},
@@ -11748,47 +11859,6 @@ def _quality_review_diagnostics(trace, row=None, snapshot=None):
     diagnostics = scenario_review_diagnostics_payload(trace)
     with st.expander("Scenario Review timing and diagnostics", expanded=False):
         st.json(diagnostics)
-
-
-def _render_facilitator_questions(trace):
-    questions = (trace or {}).get("facilitator_questions") or []
-    if not isinstance(questions, list):
-        return
-    visible_questions = [item for item in questions if isinstance(item, dict) and str(item.get("question") or "").strip()]
-    visible_questions = visible_questions[:3]
-    if not visible_questions:
-        return
-
-    with st.expander("Facilitator questions", expanded=False):
-        for index, item in enumerate(visible_questions, start=1):
-            question = str(item.get("question") or "").strip()
-            why_it_matters = str(item.get("why_it_matters") or "").strip()
-            related_feature_families = item.get("related_feature_families") or []
-            if not isinstance(related_feature_families, list):
-                related_feature_families = []
-            families = [
-                str(value).strip()
-                for value in related_feature_families
-                if str(value).strip()
-            ]
-            details = []
-            if why_it_matters:
-                details.append(f"<div class='quality-review-text'>{html.escape(why_it_matters)}</div>")
-            if families:
-                details.append(
-                    "<div class='quality-review-muted'>Related: "
-                    f"{html.escape(', '.join(families[:4]))}</div>"
-                )
-            st.markdown(
-                (
-                    "<div class='quality-review-section'>"
-                    f"<div class='quality-review-section-title'>Question {index}</div>"
-                    f"<div class='quality-review-text'><strong>{html.escape(question)}</strong></div>"
-                    f"{''.join(details)}"
-                    "</div>"
-                ),
-                unsafe_allow_html=True,
-            )
 
 
 def render_scenario_review_report(row, trace=None, snapshot=None):
@@ -11890,6 +11960,7 @@ def render_scenario_review_report(row, trace=None, snapshot=None):
         participant_central_tension.get("summary")
         or trace.get("central_tension")
     )
+    participant_pillar_reading = trace.get("participant_pillar_reading") or []
     report_title = "Baseline Reality Check" if trace.get("hidden_baseline") else "Trial Score Review"
     pending_review_html = (
         "<div class='simulation-stale-notice scenario-review-pending-notice'>"
@@ -11937,25 +12008,58 @@ def render_scenario_review_report(row, trace=None, snapshot=None):
         or key_questions.get("strategic_field_question")
         or participant.get("strategic_field_question")
     )
-    narrative_html = "".join([
-        _scenario_review_text_block("Scenario Consistency", consistency_text),
-        _scenario_review_text_block("Trial Score Reading", trial_score_narrative.get("summary")),
-        _scenario_review_text_block("Completion Outlook Analysis", completion_text),
-        _scenario_review_text_block("Operational Fit", operational_text),
-        structured_strategic_html or _scenario_review_text_block("Reality Check", strategic_text),
-        "" if structured_strategic_html else _scenario_review_text_block("Current Tension", central_tension),
-        "" if structured_strategic_html else _scenario_review_text_block("Next Consideration", continuity_update.get("watch_next") or reality_check.get("next_consideration")),
-        _scenario_review_text_block("Medical / Clinical Development Question", medical_question),
-        "" if structured_strategic_html else _scenario_review_text_block("Strategic Development Question", strategic_question),
+    participant_central_tension_text = participant_central_tension.get("summary")
+    participant_central_tension_reason = participant_central_tension.get("why_it_matters")
+    participant_wider_question_text = participant_broader_question.get("question")
+    participant_narrative_available = any([
+        isinstance(trial_score_narrative.get("summary"), str) and trial_score_narrative.get("summary", "").strip(),
+        isinstance(trial_score_narrative.get("movement_reading"), str) and trial_score_narrative.get("movement_reading", "").strip(),
+        isinstance(trial_score_narrative.get("score_interpretation"), str) and trial_score_narrative.get("score_interpretation", "").strip(),
+        isinstance(participant_pillar_reading, list) and bool(participant_pillar_reading),
+        isinstance(participant_central_tension_text, str) and participant_central_tension_text.strip(),
+        isinstance(participant_wider_question_text, str) and participant_wider_question_text.strip(),
     ])
+    participant_narrative_warning = str(trace.get("participant_narrative_warning") or "").strip()
+    participant_narrative_warning_rendered = False
+    if participant_narrative_available:
+        narrative_html = "".join([
+            _trial_score_narrative_html(consistency_text, trial_score_narrative),
+            _participant_pillar_reading_html(participant_pillar_reading),
+            _discussion_point_html(
+                participant_central_tension_text,
+                participant_central_tension_reason or participant_central_tension_text,
+                participant_wider_question_text,
+            ),
+        ])
+    elif participant_narrative_warning and not trace.get("hidden_baseline"):
+        participant_narrative_warning_rendered = True
+        narrative_html = (
+            "<div class='quality-review-section'>"
+            "<div class='quality-review-section-title'>Participant Narrative Unavailable</div>"
+            "<div class='quality-review-text'>The score and diagnostic trace are available, but the participant narrative did not pass Pass 2 validation.</div>"
+            "<div class='quality-review-muted'><strong>Reason:</strong> "
+            f"{html.escape(participant_narrative_warning)}</div>"
+            "</div>"
+        )
+    else:
+        narrative_html = "".join([
+            _scenario_review_text_block("Scenario Consistency", consistency_text),
+            _scenario_review_text_block("Trial Score Reading", trial_score_narrative.get("summary")),
+            _scenario_review_text_block("Completion Outlook Analysis", completion_text),
+            _scenario_review_text_block("Operational Fit", operational_text),
+            structured_strategic_html or _scenario_review_text_block("Reality Check", strategic_text),
+            "" if structured_strategic_html else _scenario_review_text_block("Discussion Topic", central_tension),
+            "" if structured_strategic_html else _scenario_review_text_block("Next Consideration", continuity_update.get("watch_next") or reality_check.get("next_consideration")),
+            _scenario_review_text_block("Medical / Clinical Development Question", medical_question),
+            "" if structured_strategic_html else _scenario_review_text_block("Strategic Development Question", strategic_question),
+        ])
 
     cached_note = narrative_trace_provider_note(trace)
-    participant_narrative_warning = str(trace.get("participant_narrative_warning") or "").strip()
     participant_narrative_warning_html = (
         "<div class='quality-review-muted'>"
         f"{html.escape(participant_narrative_warning)}"
         "</div>"
-        if participant_narrative_warning
+        if participant_narrative_warning and not participant_narrative_warning_rendered
         else ""
     )
     st.markdown(
@@ -11971,7 +12075,6 @@ def render_scenario_review_report(row, trace=None, snapshot=None):
         ),
         unsafe_allow_html=True,
     )
-    _render_facilitator_questions(trace)
     _render_prompt_review_context_debug(trace)
     _quality_review_diagnostics(trace, row=row, snapshot=snapshot)
 

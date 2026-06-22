@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -29,6 +30,8 @@ from src.narratives.prompt_builder import (  # noqa: E402
 )
 from src.narratives.trial_score_contract import (  # noqa: E402
     APP_OWNED_TRIAL_SCORE_FIELDS,
+    MAX_PASS2_PILLAR_READINGS,
+    MIN_PASS2_PILLAR_READINGS,
     OPERATIONAL_FIT_MATERIALITIES,
     OPERATIONAL_FIT_RATINGS,
     OPERATIONAL_INTERACTION_LABELS,
@@ -38,6 +41,7 @@ from src.narratives.trial_score_contract import (  # noqa: E402
     REALITY_CHECK_EFFECTS,
     REALITY_CHECK_STRENGTHS,
     score_pass1_review,
+    validate_pass2_review,
 )
 
 
@@ -115,6 +119,18 @@ def main() -> int:
         "never list a bare value",
         "combined_operational_fit",
         "Reality Check allocations",
+        "positive pre-Reality movement",
+        "be more willing to challenge the gain than to reinforce it",
+        "use soften_decline only rarely",
+        "Do not use unchanged strengths as the main basis",
+        "Incompatible effects are downgraded to neutral",
+        "Route evidence by section",
+        "completion_outlook_analysis should use XGBoost score",
+        "operational_fit evidence mainly to planned enrollment",
+        "Route reality_check evidence to pre-Reality movement direction",
+        "general clinical-development expertise",
+        "do not imply a document supports a claim",
+        "2-4 substantive sentences",
         "Reality Check must stay neutral with strength none and no allocations",
         "analytical_narrative_draft",
         "extensive rough analytical draft",
@@ -128,17 +144,27 @@ def main() -> int:
         "evidence completeness risk",
         "program-level meaning",
         "immune markers, disease-control measures, clinically confirmed events",
-        "tension_question_options",
-        "Do not split them into one main option plus alternatives",
+        "development_discussion_options",
+        "with no main/alternative split",
         "participant_wider_question",
         "population-specific clinical meaning",
         "clinically confirmed event follow-up",
         "next development decision",
         "development issue",
         "trial evidence behind it",
-        "associated wider-perspective strategic question topic Pass 2 can shape",
-        "Prefer analytically specific tension summaries",
-        "evidence-confidence or evidence-completeness trade-offs",
+        "final participant-visible wider question text that Pass 2 must select verbatim",
+        "newly changed material issue",
+        "prior unresolved issue",
+        "suitable for display after 'Discussion Point:'",
+        "broader clinical-development debate",
+        "usable beyond this exact trial",
+        "therapeutic area, modality, indication",
+        "rather than asking how this exact trial should manage the issue",
+        "when a development approach can work",
+        "Avoid narrow participant_wider_question wording",
+        "specific duration, sample size, site count, arm count",
+        "Prefer analytically specific topics",
+        "evidence-confidence or evidence-completeness topics",
         "review the evidence package",
         "observe scenario dynamics",
         "identify weak assumptions",
@@ -158,8 +184,8 @@ def main() -> int:
     metadata_schema = schema_properties.get("review_metadata") or {}
     continuity_schema = schema_properties.get("continuity_update") or {}
     draft_schema = schema_properties.get("analytical_narrative_draft") or {}
-    tension_options_schema = schema_properties.get("tension_question_options") or {}
-    tension_options_item_schema = (tension_options_schema.get("items") or {}).get("properties") or {}
+    discussion_options_schema = schema_properties.get("development_discussion_options") or {}
+    discussion_options_item_schema = (discussion_options_schema.get("items") or {}).get("properties") or {}
     if schema.get("type") != "OBJECT":
         errors.append("Gemini response schema should require a top-level object")
     if set(schema.get("required") or []) != set(contract.get("required_top_level_objects") or []):
@@ -196,18 +222,20 @@ def main() -> int:
         "movement_read",
         "operational_fit_read",
         "reality_check_read",
-        "tension_landscape_read",
+        "development_landscape_read",
     }:
         errors.append("Gemini response schema should require all analytical narrative draft fields")
     if set(continuity_schema.get("required") or []) != {"what_changed", "watch_next"}:
         errors.append("Gemini response schema should not require continuity_update.active_tension")
-    if set((tension_options_schema.get("items") or {}).get("required") or []) != {
-        "tension",
+    if set((discussion_options_schema.get("items") or {}).get("required") or []) != {
+        "topic",
+        "why_it_matters",
+        "supporting_evidence",
         "participant_wider_question",
     }:
-        errors.append("Gemini response schema should require tension/question option fields")
-    if not tension_options_item_schema.get("tension") or not tension_options_item_schema.get("participant_wider_question"):
-        errors.append("Gemini response schema should expose tension and participant_wider_question fields")
+        errors.append("Gemini response schema should require development discussion option fields")
+    if not discussion_options_item_schema.get("topic") or not discussion_options_item_schema.get("participant_wider_question"):
+        errors.append("Gemini response schema should expose topic and participant_wider_question fields")
 
     required_prompt_terms = [
         PROMPT_TEMPLATE_VERSION,
@@ -215,16 +243,16 @@ def main() -> int:
         "Trial Score = Completion Outlook + Operational Fit + Reality Check",
         "Pass 1 Analytical Review",
         "clinical development, trial design, regulatory strategy, and clinical operations expert",
-        "Review the evidence package, summarize the design logic, observe scenario dynamics across iterations, and identify weak assumptions or tensions",
+        "Review the evidence package, summarize the design logic, observe scenario dynamics across iterations, and identify weak assumptions or development issues",
         "Operational Fit evaluates only the changed planned enrollment",
         "At scenario start Operational Fit is neutral",
         "Reality Check is an after-review scoring judgment",
-        "must not select the participant-visible central tension",
+        "must not select the participant-visible discussion point",
         "allocation_target_id values from the contract enum",
         "Do not return app-owned numeric fields",
         "strategy_shift_check",
         "combined_operational_fit",
-        "tension_question_options",
+        "development_discussion_options",
         "For hidden_baseline mode",
         "keep Reality Check neutral with strength none and no allocations",
         "analytical_narrative_draft",
@@ -285,35 +313,29 @@ def main() -> int:
             "evidence_fields": ["operational_assumptions.planned_sites"],
             "allocations": [],
         },
-        "tension_question_options": [
+        "development_discussion_options": [
             {
-                "tension": {
-                    "summary": "Execution support versus evidence ambition.",
-                    "why_it_matters": "The score movement needs a defensible operational rationale.",
-                    "supporting_evidence": ["operational_assumptions.planned_sites"],
-                },
+                "topic": "Execution support versus evidence ambition.",
+                "why_it_matters": "The score movement needs a defensible operational rationale.",
+                "supporting_evidence": ["operational_assumptions.planned_sites"],
                 "participant_wider_question": {
                     "question": "When should operational support change confidence in the development argument, and when does it only make an unresolved evidence question easier to run?",
                     "supporting_evidence": ["operational_assumptions.planned_sites"],
                 },
             },
             {
-                "tension": {
-                    "summary": "Operational feasibility versus decision-ready evidence.",
-                    "why_it_matters": "This gives Pass 2 another analytical option if later scenario moves make evidence interpretation more important than execution support.",
-                    "supporting_evidence": ["operational_assumptions.planned_sites"],
-                },
+                "topic": "Operational feasibility versus decision-ready evidence.",
+                "why_it_matters": "This gives Pass 2 another analytical option if later scenario moves make evidence interpretation more important than execution support.",
+                "supporting_evidence": ["operational_assumptions.planned_sites"],
                 "participant_wider_question": {
                     "question": "How should a team distinguish operational practicality from evidence that can credibly support the intended decision?",
                     "supporting_evidence": ["operational_assumptions.planned_sites"],
                 },
             },
             {
-                "tension": {
-                    "summary": "Execution scale versus endpoint confidence.",
-                    "why_it_matters": "This gives later iterations a way to challenge whether operational expansion is matched by endpoint and follow-up logic.",
-                    "supporting_evidence": ["primary_duration_months_ml"],
-                },
+                "topic": "Execution scale versus endpoint confidence.",
+                "why_it_matters": "This gives later iterations a way to challenge whether operational expansion is matched by endpoint and follow-up logic.",
+                "supporting_evidence": ["primary_duration_months_ml"],
                 "participant_wider_question": {
                     "question": "When does increasing execution scale strengthen a scenario, and when does it reveal that endpoint confidence has not kept pace?",
                     "supporting_evidence": ["primary_duration_months_ml"],
@@ -330,7 +352,7 @@ def main() -> int:
             "movement_read": "The latest move appears operationally supportive but should be interpreted cautiously as a scenario dynamic rather than as proof that the design is better. The draft should challenge whether the move improves endpoint interpretability, protects evidence completeness, or only changes the operational shape around the same clinical question.",
             "operational_fit_read": "Operational Fit reads the site and enrollment changes as proportionality evidence. It should describe whether the revised footprint resembles similar trial patterns, whether retention and data quality remain credible, and whether the operational scale supports the endpoint and follow-up demands.",
             "reality_check_read": "Reality Check remains neutral unless the movement creates a realism or robustness concern. If concerns emerge, they should be framed as issues in evidence confidence, comparator relevance, safety governance, endpoint timing, or whether the trial can support the intended next development decision.",
-            "tension_landscape_read": "The scenario tension landscape includes execution support versus evidence ambition, with alternative pressures preserved so a later iteration can shift the storyline if endpoint confidence, safety governance, evidence completeness, population generalizability, or operational feasibility becomes the sharper issue. The source note should also preserve the program-level meaning of the move so Pass 2 can distinguish a narrower feasibility signal from evidence that could support a broader development decision. It should retain enough context for Pass 2 to decide whether continuity with prior participant-visible questions is warranted or whether a different tension is now more relevant. It should also preserve comparator relevance, standard-of-care context, and the specific evidence gaps that would remain even if the operational assumptions look more proportional. This gives Pass 2 sufficient material to separate execution support from true decision readiness and to choose a strategic question without inventing new analytical premises. It also keeps the current scenario tied to the broader evidence strategy.",
+            "development_landscape_read": "The scenario development landscape includes execution support versus evidence ambition, with alternative pressures preserved so a later iteration can shift the storyline if endpoint confidence, safety governance, evidence completeness, population generalizability, or operational feasibility becomes the sharper issue. The source note should also preserve the program-level meaning of the move so Pass 2 can distinguish a narrower feasibility signal from evidence that could support a broader development decision. It should retain enough context for Pass 2 to decide whether continuity with prior participant-visible questions is warranted or whether a different discussion topic is now more relevant. It should also preserve comparator relevance, standard-of-care context, and the specific evidence gaps that would remain even if the operational assumptions look more proportional. This gives Pass 2 sufficient material to separate execution support from true decision readiness and to choose a strategic question without inventing new analytical premises. It also keeps the current scenario tied to the broader evidence strategy.",
         },
     }
     pass1_scoring = score_pass1_review(packet, pass1_review)
@@ -348,8 +370,13 @@ def main() -> int:
         "broader_strategic_question",
     }:
         errors.append("Pass 2 contract should require participant narrative objects")
-    if pass2_contract.get("optional_top_level_objects") != ["facilitator_questions"]:
-        errors.append("Pass 2 contract should make facilitator_questions optional")
+    if pass2_contract.get("optional_top_level_objects") != []:
+        errors.append("Pass 2 contract should not expose optional participant-narrative objects")
+    removed_hidden_question_field = "facilitator" + "_questions"
+    if removed_hidden_question_field in (pass2_schema.get("properties") or {}):
+        errors.append("Pass 2 Gemini schema should not include optional hidden question fields")
+    if removed_hidden_question_field in pass2_prompt:
+        errors.append("Pass 2 prompt should not mention removed hidden question fields")
     if set(pass2_contract.get("forbidden_provider_fields") or []) != APP_OWNED_TRIAL_SCORE_FIELDS:
         errors.append("Pass 2 contract should forbid app-owned score fields")
     if set(pass2_schema.get("required") or []) != set(pass2_contract.get("required_top_level_objects") or []):
@@ -357,6 +384,25 @@ def main() -> int:
     broader_question_schema = (pass2_schema.get("properties") or {}).get("broader_strategic_question") or {}
     if set(broader_question_schema.get("required") or []) != {"mapped_tension", "question"}:
         errors.append("Pass 2 broader strategic question should require mapped_tension and question")
+    too_short_pass2 = {
+        "review_metadata": {"review_mode": "first_visible_iteration", "visible": True},
+        "trial_score_narrative": {
+            "summary": "The Trial Score appears directionally supported.",
+            "movement_reading": "The latest movement appears modest.",
+            "score_interpretation": "The final interpretation remains cautious.",
+        },
+        "pillar_reading": [{"pillar": "Execution Framework", "reading": "Operational support appears material."}],
+        "central_tension": {
+            "summary": "Execution support versus evidence ambition.",
+            "why_it_matters": "The storyline depends on whether execution support changes decision confidence.",
+        },
+        "broader_strategic_question": {
+            "mapped_tension": "Execution support versus evidence ambition.",
+            "question": "When should operational support change confidence in the development argument, and when does it only make an unresolved evidence question easier to run?",
+        },
+    }
+    if validate_pass2_review(too_short_pass2).get("validation_status") != "invalid":
+        errors.append("Pass 2 validation should require at least two material pillar_reading bullets")
     app_scores = pass2_input.get("app_calculated_scores") or {}
     if app_scores.get("trial_score") is None or app_scores.get("operational_fit_points") is None:
         errors.append("Pass 2 input should include app-calculated scores")
@@ -367,38 +413,43 @@ def main() -> int:
         errors.append("Pass 2 input should expose participant-visible question history with stable keys")
     if not isinstance(history.get("recent_participant_visible_questions"), list):
         errors.append("Pass 2 participant-visible history should use a recent-question list")
-    tension_question_options = (pass2_input.get("pass1_analysis") or {}).get("strategic_tension_question_options") or []
-    if not 2 <= len(tension_question_options) <= 3:
-        errors.append("Pass 2 input should expose two or three strategic tension/question options")
-    for index, option in enumerate(tension_question_options):
-        tension_summary = ((option.get("central_tension") or {}).get("summary") or "").strip()
-        mapped_tension = ((option.get("broader_strategic_question") or {}).get("mapped_tension") or "").strip()
-        if not tension_summary or tension_summary != mapped_tension:
-            errors.append(f"Pass 2 option {index + 1} should map question to the associated tension")
-    duplicate_tension_pass1_review = {
+    trajectory = pass2_input.get("trajectory_context") or {}
+    for key in ("same_state_reuse", "changed_fields", "field_changes"):
+        if key not in trajectory:
+            errors.append(f"Pass 2 trajectory_context should expose {key!r} for discussion-option selection")
+    development_discussion_options = (pass2_input.get("pass1_analysis") or {}).get("development_discussion_options") or []
+    if not 2 <= len(development_discussion_options) <= 3:
+        errors.append("Pass 2 input should expose two or three strategic development discussion options")
+    for index, option in enumerate(development_discussion_options):
+        topic = (option.get("topic") or "").strip()
+        question = ((option.get("participant_wider_question") or {}).get("question") or "").strip()
+        if not topic or not question:
+            errors.append(f"Pass 2 option {index + 1} should include a topic and paired wider question")
+    duplicate_topic_pass1_review = {
         **pass1_review,
-        "tension_question_options": [
-            pass1_review["tension_question_options"][0],
+        "development_discussion_options": [
+            pass1_review["development_discussion_options"][0],
             {
-                **pass1_review["tension_question_options"][1],
-                "tension": {
-                    **pass1_review["tension_question_options"][1]["tension"],
-                    "summary": pass1_review["tension_question_options"][0]["tension"]["summary"],
-                },
+                **pass1_review["development_discussion_options"][1],
+                "topic": pass1_review["development_discussion_options"][0]["topic"],
             },
-            pass1_review["tension_question_options"][2],
+            pass1_review["development_discussion_options"][2],
         ],
     }
-    duplicate_tension_pass2_input = build_pass2_input(packet, duplicate_tension_pass1_review, pass1_scoring)
-    duplicate_tension_options = (
-        duplicate_tension_pass2_input.get("pass1_analysis") or {}
-    ).get("strategic_tension_question_options") or []
-    if len(duplicate_tension_options) == 3:
-        errors.append("Pass 2 option builder should not produce three options from duplicate selected tensions")
+    duplicate_topic_pass2_input = build_pass2_input(packet, duplicate_topic_pass1_review, pass1_scoring)
+    duplicate_topic_options = (
+        duplicate_topic_pass2_input.get("pass1_analysis") or {}
+    ).get("development_discussion_options") or []
+    if len(duplicate_topic_options) == 3:
+        errors.append("Pass 2 option builder should not produce three options from duplicate selected topics")
     alignment_notes = pass2_input.get("score_alignment_notes") or {}
     safe_summary = alignment_notes.get("participant_safe_summary") or {}
     if not safe_summary.get("trial_score_direction") or not safe_summary.get("wording_calibration"):
         errors.append("Pass 2 input should include participant-safe score alignment notes")
+    if not safe_summary.get("required_direction_phrase"):
+        errors.append("Pass 2 input should include required_direction_phrase for app-owned movement wording")
+    if not safe_summary.get("operational_fit_wording_instruction"):
+        errors.append("Pass 2 input should include operational_fit_wording_instruction for app-owned Operational Fit wording")
     model_context = pass2_input.get("model_evidence_context") or {}
     if not model_context.get("model_signal_guidance"):
         errors.append("Pass 2 input should include model signal guidance")
@@ -417,24 +468,59 @@ def main() -> int:
         "exact point contributions in final participant-facing prose",
         "app_calculated_scores",
         "model_signal_guidance",
-        "tension_question_options",
+        "development_discussion_options",
         "participant_visible_history",
         "recent_participant_visible_questions",
-        "strategic_tension_question_options",
-        "Selection priority 1 - history",
-        "Selection priority 2 - relevance",
+        "development_discussion_options",
+        "Selection priority 1 - same-state reuse",
+        "Selection priority 2 - latest material change",
+        "Selection priority 3 - unresolved prior issue",
+        "Selection priority 4 - history diversity",
+        "prior unresolved issue",
         "avoid unnecessary repetition",
-        "central_tension.summary exactly equal to broader_strategic_question.mapped_tension",
-        "participant-visible wider debate question",
-        "wider development-debate questions",
-        "broader than trial-management or facilitator prompts",
-        "evidence confidence, safety governance, endpoint interpretability, generalizability, program strategy, or field decision logic",
-        "Do not phrase participant-visible wider questions as protocol advice",
-        "hidden in a collapsed facilitator/debug section",
-        "medical, development, endpoint, governance, or operations prompts",
+        "Compare candidate option topics against participant_visible_history.recent_participant_visible_questions",
+        "newly changed material issue",
+        "Copy the selected supplied participant_wider_question.question verbatim",
+        "one integrated Trial Score section",
+        "trial_score_narrative.summary is Overall Evolution",
+        "movement_reading is Completion Outlook",
+        "score_interpretation is Reality Check",
+        "three non-repetitive paragraphs",
+        "avoid repeating the same central message across bullets",
+        "required_direction_phrase",
+        "operational_fit_wording_instruction",
+        f"{MIN_PASS2_PILLAR_READINGS}-{MAX_PASS2_PILLAR_READINGS} material bullets",
+        "combine related pillars/subpillars",
+        "do not mechanically list every pillar",
+        "right scale, footprint, duration, size, or operational dimensions",
+        "Participant prose should present app-rated operational evidence only as part of the relevant score driver",
+        "If operational_fit_importance is none, do not say the operational scale, footprint, duration, size, or fit improved or worsened",
+        "Use pass1_draft and pass1_analysis as the source for richer interpretation",
+        "carry forward the most relevant rationale, illustration, or clinical-development implication",
+        "instead of reducing the read to generic score movement language",
+        "Mention Reality Check only if material",
+        "realism/coherence qualifier",
+        "may, might, could, appears, suggests, would need support",
+        "why_it_matters must be a complete explanatory sentence suitable for display",
+        "central_tension.summary exactly equal to the selected option.topic",
+        "broader clinical-development debate",
+        "usable beyond this exact trial",
+        "therapeutic area, modality, indication",
+        "field-level framing rather than protocol-management advice",
     ):
         if term not in pass2_prompt:
             errors.append(f"Pass 2 prompt missing required term: {term}")
+    guardrails_text = "\n".join(str(item) for item in pass2_input.get("participant_guardrails") or [])
+    alignment_text = json.dumps(pass2_input.get("score_alignment_notes") or {}, sort_keys=True, default=str)
+    for forbidden in (
+        "Completion Outlook explains the model-visible completion-likelihood movement",
+        "Operational Fit has no app-scored participant-facing effect",
+        "Operational Fit is material enough to fold into the relevant pillar/subpillar reading",
+        "Operational Fit wording should reflect",
+        "Operational Fit wording must stay neutral",
+    ):
+        if forbidden in pass2_prompt or forbidden in guardrails_text or forbidden in alignment_text:
+            errors.append(f"Pass 2 prompt/input still contains stale wording: {forbidden}")
 
     if infer_prompt_mode(packet) != PROMPT_MODE_FIRST_VISIBLE_ITERATION:
         errors.append("edited fixture should infer first_visible_iteration prompt mode")

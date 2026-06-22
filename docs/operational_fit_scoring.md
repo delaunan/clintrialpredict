@@ -44,6 +44,8 @@ Operational Fit should move only when the participant changes one or more of:
 - planned site count;
 - planned total duration.
 
+Changes to cohort-defining structured fields, such as rare-disease status, may change the context used to interpret the same operational plan. They should not by themselves create Operational Fit points when planned enrollment, planned sites, and planned total duration are unchanged. If the unchanged plan becomes incoherent or under-supported in the new clinical context, the concern belongs in Reality Check and the analytical narrative.
+
 The LLM should not ask:
 
 ```text
@@ -398,6 +400,8 @@ Operational Fit should ask:
 ```text
 Does the operational plan make the current completion-pattern movement more credible, less credible, or materially unresolved?
 ```
+
+For unchanged operational assumptions after a non-operational scenario change, Operational Fit should remain score-neutral. The narrative may still explain that the operational plan now looks more or less proportionate for the revised scenario, and Reality Check may correct the total score if that mismatch makes the pre-Reality movement unrealistic or under-supported.
 
 Useful interaction labels:
 

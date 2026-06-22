@@ -127,14 +127,12 @@ def _check_review_continuity_context(errors: list[str]) -> None:
         "trial_score": 68,
         "changed_fields": [],
         "score_delta": 0,
-        "central_tension": "Baseline central tension.",
-        "tension_question_options": [
+        "central_tension": "Baseline central discussion topic.",
+        "development_discussion_options": [
             {
-                "tension": {
-                    "summary": "Hidden baseline option must be scrubbed.",
-                    "why_it_matters": "Participants never saw this.",
-                    "supporting_evidence": ["phase_ml"],
-                },
+                "topic": "Hidden baseline option must be scrubbed.",
+                "why_it_matters": "Participants never saw this.",
+                "supporting_evidence": ["phase_ml"],
                 "participant_wider_question": {
                     "question": "Hidden baseline question must be scrubbed?",
                     "supporting_evidence": ["phase_ml"],
@@ -142,22 +140,22 @@ def _check_review_continuity_context(errors: list[str]) -> None:
             },
         ],
         "participant_central_tension": {
-            "summary": "Hidden selected tension must be scrubbed.",
+            "summary": "Hidden selected discussion topic must be scrubbed.",
             "why_it_matters": "Participants never saw this.",
         },
         "participant_broader_strategic_question": {
             "question": "Hidden selected question must be scrubbed?",
-            "mapped_tension": "Hidden selected tension must be scrubbed.",
+            "mapped_tension": "Hidden selected discussion topic must be scrubbed.",
         },
         "recent_participant_visible_questions": [
             {
                 "question": "Hidden baseline should not consume this participant topic.",
-                "mapped_tension": "Hidden baseline seed tension.",
+                "mapped_tension": "Hidden baseline seed development issue.",
             },
         ],
         "validated_review": {
             "review_metadata": {"review_mode": "hidden_baseline", "participant_visible": False},
-            "main_tension": "Baseline main tension from dedicated field.",
+            "main_tension": "Baseline main development issue from dedicated field.",
             "completion_outlook_analysis": {
                 "risk_pattern_summary": "Baseline score reflects an acceptable original design profile.",
             },
@@ -179,7 +177,7 @@ def _check_review_continuity_context(errors: list[str]) -> None:
                 "strategic_field_question": "What broader field challenge does this scenario expose?",
             },
             "continuity_update": {
-                "active_tension": "Hidden baseline active tension must be scrubbed.",
+                "active_tension": "Hidden baseline active discussion topic must be scrubbed.",
                 "watch_next": "Watch whether later edits preserve the baseline evidence-operational balance.",
             },
             "continuity": {
@@ -188,7 +186,7 @@ def _check_review_continuity_context(errors: list[str]) -> None:
             },
         },
         "storyline_state": {
-            "active_tension": "Hidden baseline stored storyline tension must be scrubbed.",
+            "active_tension": "Hidden baseline stored storyline development issue must be scrubbed.",
             "active_tension_status": "active",
             "next_consideration": "Watch whether later edits preserve the baseline evidence-operational balance.",
         },
@@ -206,7 +204,24 @@ def _check_review_continuity_context(errors: list[str]) -> None:
             "effect": "offset_gain",
             "strength": "moderate",
             "points": -2,
+            "central_reason": "The prior move simplified evidence.",
+            "allocation_points": [
+                {
+                    "allocation_target_id": "scientific_challenge.protocol_architecture",
+                    "pillar": "Scientific Challenge",
+                    "subpillar": "Protocol Architecture",
+                    "points": -2,
+                }
+            ],
         },
+        "reality_check_allocation_points": [
+            {
+                "allocation_target_id": "scientific_challenge.protocol_architecture",
+                "pillar": "Scientific Challenge",
+                "subpillar": "Protocol Architecture",
+                "points": -2,
+            }
+        ],
         "changed_fields": ["operational_assumptions.planned_enrollment"],
         "score_delta": 0,
         "central_tension": "",
@@ -225,7 +240,7 @@ def _check_review_continuity_context(errors: list[str]) -> None:
         },
         "validated_review": {
             **baseline_trace["validated_review"],
-            "main_tension": "Previous main tension from dedicated field.",
+            "main_tension": "Previous main development issue from dedicated field.",
             "reality_check": {
                 "effect": "offset_gain",
                 "strength": "moderate",
@@ -233,35 +248,29 @@ def _check_review_continuity_context(errors: list[str]) -> None:
                 "evidence_fields": ["endpoint_rigor_ml"],
                 "allocations": [],
             },
-            "tension_question_options": [
+            "development_discussion_options": [
                 {
-                    "tension": {
-                        "summary": "Feasibility vs Evidence Strength",
-                        "why_it_matters": "Endpoint credibility remains partly active.",
-                        "supporting_evidence": ["endpoint_rigor_ml"],
-                    },
+                    "topic": "Feasibility vs Evidence Strength",
+                    "why_it_matters": "Endpoint credibility remains partly active.",
+                    "supporting_evidence": ["endpoint_rigor_ml"],
                     "participant_wider_question": {
                         "question": "How should teams debate feasibility gains when evidence strength remains uncertain?",
                         "supporting_evidence": ["endpoint_rigor_ml"],
                     },
                 },
                 {
-                    "tension": {
-                        "summary": "Evidence completeness vs execution support",
-                        "why_it_matters": "The prior move may change feasibility faster than interpretability.",
-                        "supporting_evidence": ["operational_assumptions.planned_enrollment"],
-                    },
+                    "topic": "Evidence completeness vs execution support",
+                    "why_it_matters": "The prior move may change feasibility faster than interpretability.",
+                    "supporting_evidence": ["operational_assumptions.planned_enrollment"],
                     "participant_wider_question": {
                         "question": "When does feasibility strengthen evidence confidence, and when does it mainly expose what remains uncertain?",
                         "supporting_evidence": ["operational_assumptions.planned_enrollment"],
                     },
                 },
                 {
-                    "tension": {
-                        "summary": "Population focus vs broader development confidence",
-                        "why_it_matters": "A narrower population can clarify one question while limiting program-level inference.",
-                        "supporting_evidence": ["patient_severity_ml"],
-                    },
+                    "topic": "Population focus vs broader development confidence",
+                    "why_it_matters": "A narrower population can clarify one question while limiting program-level inference.",
+                    "supporting_evidence": ["patient_severity_ml"],
                     "participant_wider_question": {
                         "question": "When does a focused population create stronger evidence, and when does it narrow the strategic value of the result?",
                         "supporting_evidence": ["patient_severity_ml"],
@@ -331,8 +340,8 @@ def _check_review_continuity_context(errors: list[str]) -> None:
         errors.append("previous visible review context should preserve trial_score")
     if context.get("baseline_review", {}).get("central_tension"):
         errors.append("hidden baseline review context should not expose an active central_tension")
-    if context.get("baseline_review", {}).get("tension_question_options") != []:
-        errors.append("hidden baseline review context should scrub tension_question_options")
+    if context.get("baseline_review", {}).get("development_discussion_options") != []:
+        errors.append("hidden baseline review context should scrub development_discussion_options")
     if context.get("baseline_review", {}).get("participant_central_tension") != {}:
         errors.append("hidden baseline review context should scrub participant_central_tension")
     if context.get("baseline_review", {}).get("participant_broader_strategic_question") != {}:
@@ -348,7 +357,7 @@ def _check_review_continuity_context(errors: list[str]) -> None:
     if "Baseline watch:" not in baseline_memory:
         errors.append("hidden baseline review context should compact useful baseline watch memory")
     if context.get("previous_review", {}).get("central_tension") != "Feasibility vs Evidence Strength":
-        errors.append("previous visible review context should preserve current participant-selected central tension")
+        errors.append("previous visible review context should preserve current participant-selected central discussion topic")
     previous_questions = context.get("previous_review", {}).get("key_questions") or {}
     if previous_questions.get("medical_clinical_development_question") != "What evidence standard matters most?":
         errors.append("previous visible review context should expose new medical/clinical-development question field")
@@ -366,7 +375,7 @@ def _check_review_continuity_context(errors: list[str]) -> None:
     if latest_visible.get("question") != "How should teams debate feasibility gains when evidence strength remains uncertain?":
         errors.append("previous visible review context should preserve participant-visible strategic question")
     if latest_visible.get("mapped_tension") != "Feasibility vs Evidence Strength":
-        errors.append("previous visible review context should preserve participant-visible mapped tension")
+        errors.append("previous visible review context should preserve participant-visible mapped development issue")
     trial_score_continuity = continuity_packet.get("iteration_context", {}).get("trial_score_continuity") or {}
     if trial_score_continuity.get("available") is not True:
         errors.append("later visible continuity packet should include Trial Score continuity anchors")
@@ -382,6 +391,18 @@ def _check_review_continuity_context(errors: list[str]) -> None:
         errors.append("Trial Score continuity should carry regression watch")
     if trial_score_continuity.get("next_consideration") != "Restore evidence credibility without returning fully to baseline burden.":
         errors.append("Trial Score continuity should carry next consideration")
+    carryover_candidate = continuity_packet.get("iteration_context", {}).get("reality_check_carryover_candidate") or {}
+    if carryover_candidate.get("active") is not True:
+        errors.append("material previous negative Reality Check should create an active carryover candidate")
+    if carryover_candidate.get("previous_reality_check_points") != -2.0:
+        errors.append("carryover candidate should preserve previous negative Reality Check points")
+    if (
+        (carryover_candidate.get("previous_reality_check_assessment") or {}).get("central_reason")
+        != "The prior move simplified evidence."
+    ):
+        errors.append("carryover candidate should preserve previous Reality Check reason")
+    if not carryover_candidate.get("previous_reality_check_allocation_points"):
+        errors.append("carryover candidate should preserve previous Reality Check allocations")
     if "strategic_review_continuity" in (continuity_packet.get("iteration_context") or {}):
         errors.append("packet should not send legacy Strategic Review continuity to the provider")
     if "design_confidence_continuity" in (continuity_packet.get("iteration_context") or {}):
@@ -416,6 +437,33 @@ def _check_review_continuity_context(errors: list[str]) -> None:
     )
     if "design_confidence_continuity" in (hidden_baseline_packet.get("iteration_context") or {}):
         errors.append("hidden baseline packet should not include legacy Design Confidence continuity")
+
+    baseline_return_packet = build_review_packet(
+        current_snapshot={
+            "snapshot_id": "returned-baseline",
+            "structured_features": packet.get("structured_features", {}),
+            "operational_assumptions": packet.get("operational_assumptions", {}),
+            "model_interpretation": packet.get("model_interpretation", {}),
+            "changed_fields": [],
+        },
+        previous_snapshot={
+            "snapshot_id": "previous-visible",
+            "iteration_context": {"iteration_number": 1},
+            "score": 68,
+        },
+        baseline_snapshot={
+            "snapshot_id": "baseline-snapshot",
+            "structured_features": packet.get("structured_features", {}),
+            "operational_assumptions": packet.get("operational_assumptions", {}),
+            "model_interpretation": packet.get("model_interpretation", {}),
+        },
+        baseline_review_trace=baseline_trace,
+        previous_review_trace=previous_trace,
+    )
+    if baseline_return_packet.get("iteration_context", {}).get("returned_to_hidden_baseline_state") is not True:
+        errors.append("baseline-return packet should identify the hidden-baseline scenario state")
+    if (baseline_return_packet.get("iteration_context", {}).get("reality_check_carryover_candidate") or {}).get("active"):
+        errors.append("baseline-return packet should suppress Reality Check carryover candidate")
 
 
 def _check_canonical_values_prefer_compare_values(errors: list[str]) -> None:

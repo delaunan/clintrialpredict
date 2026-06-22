@@ -63,6 +63,17 @@ def _check_fixture(fixture: dict, errors: list[str]) -> None:
         errors.append(f"{fixture_id}: expected Pass 2 Trial Score narrative summary")
     if not (pass2.get("central_tension") or {}).get("summary"):
         errors.append(f"{fixture_id}: expected Pass 2 central tension")
+    if scoring.get("reality_check_points") == 0:
+        pillar_names = {
+            str((item or {}).get("pillar") or "").strip()
+            for item in (pass2.get("pillar_reading") or [])
+            if isinstance(item, dict)
+        }
+        movement_reading = str((pass2.get("trial_score_narrative") or {}).get("movement_reading") or "")
+        if "Reality Check" in pillar_names:
+            errors.append(f"{fixture_id}: neutral Reality Check should not render as a Pass 2 pillar")
+        if "Reality Check has none qualitative importance" in movement_reading:
+            errors.append(f"{fixture_id}: neutral Reality Check should not produce awkward Pass 2 wording")
     if "trial_score" in (result.get("participant_narrative") or {}):
         errors.append(f"{fixture_id}: Pass 2 provider object should not return app-owned trial_score")
 

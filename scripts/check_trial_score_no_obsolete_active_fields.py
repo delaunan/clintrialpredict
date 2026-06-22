@@ -95,13 +95,11 @@ def _minimal_packet() -> dict:
             "reality_check_assessment": {"effect": "neutral", "strength": "none", "points": 0.0},
             "validated_review": {
                 "completion_outlook_analysis": {"risk_pattern_summary": "Prior completion outlook."},
-                "tension_question_options": [
+                "development_discussion_options": [
                     {
-                        "tension": {
-                            "summary": "Prior current tension.",
-                            "why_it_matters": "Prior reason.",
-                            "supporting_evidence": ["phase_ml"],
-                        },
+                        "topic": "Prior current development issue.",
+                        "why_it_matters": "Prior reason.",
+                        "supporting_evidence": ["phase_ml"],
                         "participant_wider_question": {
                             "question": "Prior question?",
                             "supporting_evidence": ["phase_ml"],
@@ -115,7 +113,7 @@ def _minimal_packet() -> dict:
                 },
             },
             "storyline_state": {
-                "active_tension": "Prior current tension.",
+                "active_tension": "Prior current development issue.",
                 "protected_gains": ["prior gain"],
                 "regression_watch": ["prior watch"],
                 "next_consideration": "Prior next consideration.",

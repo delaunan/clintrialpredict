@@ -55,7 +55,7 @@ def compact_storyline_from_trace(trace: dict[str, Any] | None) -> str:
         watch_next = str(continuity_update.get("watch_next") or "").strip()
         if watch_next:
             return f"Baseline watch: {watch_next}"
-        landscape = str(((validated.get("analytical_narrative_draft") or {}).get("tension_landscape_read")) or "").strip()
+        landscape = str(((validated.get("analytical_narrative_draft") or {}).get("development_landscape_read")) or "").strip()
         if landscape:
             return f"Baseline orientation: {landscape[:220]}"
     if isinstance(continuity_update.get("what_changed"), str) and continuity_update.get("what_changed").strip():
@@ -119,7 +119,7 @@ def _build_trace(
     trial_score = scoring.get("trial_score")
     provider_trace = (validated_review or {}).get("trace") or {}
     operational_fit = (validated_review or {}).get("operational_fit") or {}
-    tension_question_options = (validated_review or {}).get("tension_question_options") or []
+    development_discussion_options = (validated_review or {}).get("development_discussion_options") or []
     participant_central_tension = (validated_participant_narrative or {}).get("central_tension") or {}
     participant_broader_strategic_question = (
         (validated_participant_narrative or {}).get("broader_strategic_question") or {}
@@ -215,7 +215,7 @@ def _build_trace(
         },
         "trial_score": trial_score,
         "operational_fit": deepcopy(operational_fit),
-        "tension_question_options": deepcopy(tension_question_options),
+        "development_discussion_options": deepcopy(development_discussion_options),
         "continuity_update": deepcopy(continuity_update),
         "storyline_state": deepcopy(storyline_state),
         "completion_outlook_analysis": deepcopy(
@@ -227,7 +227,6 @@ def _build_trace(
         "participant_central_tension": deepcopy(participant_central_tension),
         "participant_broader_strategic_question": deepcopy(participant_broader_strategic_question),
         "recent_participant_visible_questions": participant_visible_question_history,
-        "facilitator_questions": deepcopy((validated_participant_narrative or {}).get("facilitator_questions") or []),
         "scenario_consistency_note": deepcopy((validated_review or {}).get("scenario_consistency_note") or {}),
         "central_tension": main_tension,
         "reference_pack_ids_available": reference_pack_ids_available,

@@ -52,20 +52,18 @@ def main() -> int:
     if not (first.get("trial_score_narrative") or {}).get("summary"):
         errors.append("stored trace should preserve Pass 2 Trial Score narrative")
     if not (first.get("participant_central_tension") or {}).get("summary"):
-        errors.append("stored trace should preserve Pass 2 participant central tension")
+        errors.append("stored trace should preserve Pass 2 participant central discussion topic")
     if not (first.get("participant_broader_strategic_question") or {}).get("question"):
         errors.append("stored trace should preserve Pass 2 broader strategic question")
     if not (first.get("participant_broader_strategic_question") or {}).get("mapped_tension"):
-        errors.append("stored trace should preserve Pass 2 broader strategic question mapped tension")
+        errors.append("stored trace should preserve Pass 2 broader strategic question mapped development issue")
     first_visible_history = first.get("recent_participant_visible_questions") or []
     if len(first_visible_history) != 1:
         errors.append("first stored trace should initialize participant-visible question history")
     elif first_visible_history[-1].get("mapped_tension") != (
         first.get("participant_broader_strategic_question") or {}
     ).get("mapped_tension"):
-        errors.append("participant-visible question history should preserve selected question mapped tension")
-    if not isinstance(first.get("facilitator_questions"), list):
-        errors.append("stored trace should preserve Pass 2 facilitator questions as a list")
+        errors.append("participant-visible question history should preserve selected question mapped development issue")
     storyline_state = first.get("storyline_state") or {}
     if not storyline_state:
         errors.append("stored trace should expose app-owned storyline_state")
@@ -231,24 +229,20 @@ def main() -> int:
         "participant_narrative_warning": "Synthetic invalid Pass 2 check.",
         "validated_review": {
             **(first.get("validated_review") or {}),
-            "tension_question_options": [
+            "development_discussion_options": [
                 {
-                    "tension": {
-                        "summary": "First Pass 1 option should remain only a candidate.",
-                        "why_it_matters": "Pass 2 did not validly select it.",
-                        "supporting_evidence": ["phase_ml"],
-                    },
+                    "topic": "First Pass 1 option should remain only a candidate.",
+                    "why_it_matters": "Pass 2 did not validly select it.",
+                    "supporting_evidence": ["phase_ml"],
                     "participant_wider_question": {
                         "question": "This candidate question should not become visible history.",
                         "supporting_evidence": ["phase_ml"],
                     },
                 },
                 {
-                    "tension": {
-                        "summary": "Second Pass 1 option should also remain only a candidate.",
-                        "why_it_matters": "Pass 2 did not validly select it.",
-                        "supporting_evidence": ["endpoint_rigor_ml"],
-                    },
+                    "topic": "Second Pass 1 option should also remain only a candidate.",
+                    "why_it_matters": "Pass 2 did not validly select it.",
+                    "supporting_evidence": ["endpoint_rigor_ml"],
                     "participant_wider_question": {
                         "question": "This second candidate should not become visible history either.",
                         "supporting_evidence": ["endpoint_rigor_ml"],
@@ -278,7 +272,7 @@ def main() -> int:
                     "recent_participant_visible_questions": [
                         {
                             "question": "Previously visible question should remain the only history item.",
-                            "mapped_tension": "Previously visible tension.",
+                            "mapped_tension": "Previously visible development issue.",
                         },
                     ],
                 },
@@ -312,24 +306,20 @@ def main() -> int:
         "participant_narrative_warning": None,
         "validated_review": {
             **(first.get("validated_review") or {}),
-            "tension_question_options": [
+            "development_discussion_options": [
                 {
-                    "tension": {
-                        "summary": "First Pass 1 option should not be selected.",
-                        "why_it_matters": "Pass 2 chose another option.",
-                        "supporting_evidence": ["phase_ml"],
-                    },
+                    "topic": "First Pass 1 option should not be selected.",
+                    "why_it_matters": "Pass 2 chose another option.",
+                    "supporting_evidence": ["phase_ml"],
                     "participant_wider_question": {
                         "question": "This first candidate should not become visible.",
                         "supporting_evidence": ["phase_ml"],
                     },
                 },
                 {
-                    "tension": {
-                        "summary": "Second Pass 1 option should be selectable.",
-                        "why_it_matters": "Pass 2 selected the second option.",
-                        "supporting_evidence": ["endpoint_rigor_ml"],
-                    },
+                    "topic": "Second Pass 1 option should be selectable.",
+                    "why_it_matters": "Pass 2 selected the second option.",
+                    "supporting_evidence": ["endpoint_rigor_ml"],
                     "participant_wider_question": {
                         "question": "When should the second option become the visible debate?",
                         "supporting_evidence": ["endpoint_rigor_ml"],

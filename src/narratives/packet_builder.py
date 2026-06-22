@@ -19,6 +19,7 @@ from src.narratives.question_history import (
     participant_visible_question_entry,
 )
 from src.narratives.storyline import merge_storyline_state
+from src.narratives.trial_score_contract import REALITY_CHECK_CARRYOVER_MATERIALITY_THRESHOLD
 
 MODE_EXISTING_STUDY = "existing_study"
 FIELD_DICTIONARY_VERSION = "taxonomy_01_narrative_v1"
@@ -181,22 +182,74 @@ def stable_packet_hash(packet: dict[str, Any]) -> str:
     return sha256(payload.encode("utf-8")).hexdigest()
 
 
+def _scenario_state_payload(
+    *,
+    field_dictionary_version: Any,
+    mode: Any,
+    trial_identity: dict[str, Any],
+    text_context: dict[str, Any],
+    structured_features: dict[str, Any],
+    operational_assumptions: dict[str, Any],
+    completion_score: Any,
+    pillar_impacts: list[Any],
+    direct_xgboost_shap_fields: list[Any],
+) -> dict[str, Any]:
+    return {
+        "field_dictionary_version": field_dictionary_version,
+        "mode": mode,
+        "trial_identity": trial_identity or {},
+        "structured_features": structured_features or {},
+        "text_context": text_context or {},
+        "operational_assumptions": operational_assumptions or {},
+        "model_interpretation": {
+            "completion_score": completion_score,
+            "pillar_impacts": pillar_impacts or [],
+            "direct_xgboost_shap_fields": direct_xgboost_shap_fields or [],
+        },
+    }
+
+
 def scenario_state_hash_from_packet(packet: dict[str, Any]) -> str:
     """Hash the current scenario state without storyline or iteration context."""
     model = packet.get("model_interpretation") or {}
-    state_payload = {
-        "field_dictionary_version": packet.get("field_dictionary_version"),
-        "mode": packet.get("mode"),
-        "trial_identity": packet.get("trial_identity") or {},
-        "structured_features": packet.get("structured_features") or {},
-        "text_context": packet.get("text_context") or {},
-        "operational_assumptions": packet.get("operational_assumptions") or {},
-        "model_interpretation": {
-            "completion_score": model.get("completion_score"),
-            "pillar_impacts": model.get("pillar_impacts") or [],
-            "direct_xgboost_shap_fields": model.get("direct_xgboost_shap_fields") or [],
-        },
-    }
+    state_payload = _scenario_state_payload(
+        field_dictionary_version=packet.get("field_dictionary_version"),
+        mode=packet.get("mode"),
+        trial_identity=packet.get("trial_identity") or {},
+        text_context=packet.get("text_context") or {},
+        structured_features=packet.get("structured_features") or {},
+        operational_assumptions=packet.get("operational_assumptions") or {},
+        completion_score=model.get("completion_score"),
+        pillar_impacts=model.get("pillar_impacts") or [],
+        direct_xgboost_shap_fields=model.get("direct_xgboost_shap_fields") or [],
+    )
+    return stable_packet_hash(state_payload)
+
+
+def _baseline_scenario_state_hash(
+    packet: dict[str, Any],
+    baseline_snapshot: dict[str, Any] | None,
+    *,
+    baseline_text_context: dict[str, Any] | None = None,
+    baseline_trial_identity: dict[str, Any] | None = None,
+) -> str | None:
+    if not baseline_snapshot:
+        return None
+    baseline_values = _snapshot_values(baseline_snapshot)
+    state_payload = _scenario_state_payload(
+        field_dictionary_version=packet.get("field_dictionary_version"),
+        mode=packet.get("mode"),
+        trial_identity=_select_keys(baseline_trial_identity or {}, TRIAL_IDENTITY_KEYS),
+        text_context=_select_keys(baseline_text_context or {}, TEXT_CONTEXT_KEYS),
+        structured_features=_select_keys(baseline_values, STRUCTURED_FEATURE_KEYS),
+        operational_assumptions=_select_keys(
+            baseline_snapshot.get("operational_assumptions") or {},
+            ACTIVE_OPERATIONAL_ASSUMPTION_KEYS,
+        ),
+        completion_score=_completion_score(baseline_snapshot),
+        pillar_impacts=_pillar_impacts(baseline_snapshot),
+        direct_xgboost_shap_fields=list(DIRECT_XGBOOST_SHAP_FIELDS),
+    )
     return stable_packet_hash(state_payload)
 
 
@@ -1414,8 +1467,10 @@ def _compact_review_context(
     completion_outlook = validated.get("completion_outlook_analysis") or validated.get("completion_outlook_review") or {}
     operational_fit = validated.get("operational_fit") or trace.get("operational_fit") or {}
     draft = validated.get("analytical_narrative_draft") or {}
-    tension_landscape = str(draft.get("tension_landscape_read") or "").strip()
-    tension_question_options = validated.get("tension_question_options") or trace.get("tension_question_options") or []
+    development_landscape = str(draft.get("development_landscape_read") or "").strip()
+    development_discussion_options = (
+        validated.get("development_discussion_options") or trace.get("development_discussion_options") or []
+    )
     participant_central_tension = trace.get("participant_central_tension") or {}
     participant_broader_question = trace.get("participant_broader_strategic_question") or {}
     trial_score = trace.get("trial_score")
@@ -1432,7 +1487,7 @@ def _compact_review_context(
     compact_storyline_memory = trace.get("compact_storyline_memory") or ""
     if not include_quality_scores:
         central_tension_summary = ""
-        tension_question_options = []
+        development_discussion_options = []
         participant_central_tension = {}
         participant_broader_question = {}
         storyline_state = deepcopy(storyline_state)
@@ -1445,8 +1500,8 @@ def _compact_review_context(
         )
         if next_watch:
             compact_storyline_memory = f"Baseline watch: {next_watch}"
-        elif tension_landscape:
-            compact_storyline_memory = f"Baseline orientation: {tension_landscape[:220]}"
+        elif development_landscape:
+            compact_storyline_memory = f"Baseline orientation: {development_landscape[:220]}"
     participant_visible_question_history = trace.get("recent_participant_visible_questions")
     if not include_quality_scores:
         participant_visible_question_history = []
@@ -1476,7 +1531,7 @@ def _compact_review_context(
         "score_delta": trace.get("score_delta", trace.get("score_movement")),
         "completion_outlook_summary": completion_summary,
         "central_tension": central_tension_summary,
-        "tension_question_options": deepcopy(tension_question_options),
+        "development_discussion_options": deepcopy(development_discussion_options),
         "participant_central_tension": deepcopy(participant_central_tension),
         "participant_broader_strategic_question": deepcopy(participant_broader_question),
         "recent_participant_visible_questions": deepcopy(participant_visible_question_history),
@@ -1515,7 +1570,7 @@ def _compact_review_context(
 
     if not include_quality_scores:
         compact["baseline_completion_outlook_summary"] = completion_summary
-        compact["baseline_tension_landscape"] = tension_landscape
+        compact["baseline_development_landscape"] = development_landscape
         compact["baseline_consistency_flags"] = {}
 
     return json_safe(compact)
@@ -1549,7 +1604,131 @@ def _trial_score_continuity(previous_review_trace: dict[str, Any] | None) -> dic
         "storyline_update": storyline_state.get("storyline_update"),
         "instruction": (
             "Use this compact state to decide whether the latest move resolves, preserves, "
-            "reopens, supersedes, or leaves active prior Trial Score tensions."
+            "reopens, supersedes, or leaves active prior Trial Score discussion topics."
+        ),
+    })
+
+
+def _norm_for_state_compare(value: Any) -> str:
+    return str(value if value is not None else "").strip().lower()
+
+
+def _carryover_state_precheck(
+    previous_assessment: dict[str, Any],
+    field_changes: list[dict[str, Any]],
+) -> dict[str, Any]:
+    if not isinstance(previous_assessment, dict) or not field_changes:
+        return {"status": "not_evaluable", "reason": "No field-level carryover precheck was available."}
+
+    evidence_fields = set()
+    for field in previous_assessment.get("supported_evidence_fields") or previous_assessment.get("evidence_fields") or []:
+        if isinstance(field, str) and field.strip():
+            evidence_fields.add(field.strip())
+    for allocation in previous_assessment.get("allocation_points") or []:
+        if not isinstance(allocation, dict):
+            continue
+        evidence_fields.update(
+            field
+            for field in (allocation.get("evidence_fields") or [])
+            if isinstance(field, str) and field.strip()
+        )
+    if not evidence_fields:
+        return {"status": "not_evaluable", "reason": "Previous carryover issue has no field-level evidence reference."}
+
+    touched_evidence_changes = [
+        change
+        for change in field_changes
+        if isinstance(change, dict) and str(change.get("field") or "") in evidence_fields
+    ]
+    if not touched_evidence_changes:
+        return {
+            "status": "not_touched",
+            "evidence_fields": sorted(evidence_fields),
+            "reason": "No previous carryover evidence field changed in the latest iteration.",
+        }
+
+    restored_changes = []
+    unresolved_changes = []
+    for change in touched_evidence_changes:
+        current = _norm_for_state_compare(change.get("current_value"))
+        baseline = _norm_for_state_compare(change.get("baseline_value"))
+        previous = _norm_for_state_compare(change.get("previous_value"))
+        if current and baseline and current == baseline and current != previous:
+            restored_changes.append(change)
+        else:
+            unresolved_changes.append(change)
+
+    if restored_changes and not unresolved_changes:
+        return json_safe({
+            "status": "resolved_by_field_return",
+            "evidence_fields": sorted(evidence_fields),
+            "resolved_fields": [
+                {
+                    "field": change.get("field"),
+                    "previous_value": change.get("previous_value"),
+                    "previous_label": change.get("previous_label"),
+                    "current_value": change.get("current_value"),
+                    "current_label": change.get("current_label"),
+                    "baseline_value": change.get("baseline_value"),
+                    "baseline_label": change.get("baseline_label"),
+                }
+                for change in restored_changes
+            ],
+            "reason": "All touched carryover evidence fields returned to their baseline values.",
+        })
+
+    return json_safe({
+        "status": "touched_but_not_resolved",
+        "evidence_fields": sorted(evidence_fields),
+        "touched_fields": [
+            {
+                "field": change.get("field"),
+                "previous_value": change.get("previous_value"),
+                "previous_label": change.get("previous_label"),
+                "current_value": change.get("current_value"),
+                "current_label": change.get("current_label"),
+                "baseline_value": change.get("baseline_value"),
+                "baseline_label": change.get("baseline_label"),
+            }
+            for change in touched_evidence_changes
+        ],
+        "reason": "At least one touched carryover evidence field did not return to its baseline value.",
+    })
+
+
+def _reality_check_carryover_candidate(
+    previous_review_trace: dict[str, Any] | None,
+    field_changes: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    previous = _compact_review_context(previous_review_trace)
+    if not previous:
+        return {"active": False}
+    try:
+        previous_points = float(previous.get("reality_check_points"))
+    except (TypeError, ValueError):
+        return {"active": False}
+    if previous_points > REALITY_CHECK_CARRYOVER_MATERIALITY_THRESHOLD:
+        return {"active": False}
+
+    assessment = previous.get("reality_check_assessment") or {}
+    precheck = _carryover_state_precheck(assessment, field_changes or [])
+    return json_safe({
+        "active": True,
+        "source_iteration_id": previous.get("iteration_id"),
+        "source_input_hash": previous.get("input_hash"),
+        "previous_reality_check_points": previous_points,
+        "previous_reality_check_assessment": deepcopy(assessment),
+        "app_state_precheck": precheck,
+        "previous_reality_check_allocation_points": deepcopy(
+            assessment.get("allocation_points")
+            or (previous_review_trace or {}).get("reality_check_allocation_points")
+            or []
+        ),
+        "instruction": (
+            "Assess whether this previous negative Reality Check concern is still relevant after the latest scenario "
+            "change, partly mitigated, or resolved/superseded. If app_state_precheck.status is "
+            "resolved_by_field_return, treat the previous carryover as resolved unless there is a distinct new "
+            "independent issue."
         ),
     })
 
@@ -1582,6 +1761,8 @@ def build_review_packet(
         trial_identity or {},
     )
     changed_fields = _changed_fields(current_snapshot)
+
+    field_changes = _field_changes(current_snapshot, previous_snapshot, baseline_snapshot)
 
     packet = {
         "prompt_version": PROMPT_VERSION,
@@ -1639,14 +1820,40 @@ def build_review_packet(
             "current_snapshot_id": _snapshot_id(current_snapshot),
             "iteration_number": _iteration_number(current_snapshot, previous_snapshot),
             "changed_fields": changed_fields,
-            "field_changes": _field_changes(current_snapshot, previous_snapshot, baseline_snapshot),
+            "field_changes": field_changes,
             "text_change_evidence": _text_change_evidence(current_snapshot, previous_snapshot, baseline_snapshot),
             "trial_score_continuity": _trial_score_continuity(previous_review_trace),
+            "reality_check_carryover_candidate": _reality_check_carryover_candidate(
+                previous_review_trace,
+                field_changes,
+            ),
             "compact_storyline_memory": compact_storyline_memory,
         },
     }
 
     packet["scenario_state_hash"] = scenario_state_hash_from_packet(packet)
+    baseline_text = {
+        **_snapshot_text_context(baseline_snapshot),
+        **(text_context or {}),
+    }
+    baseline_identity = _merge_present_dicts(
+        _snapshot_trial_identity(baseline_snapshot),
+        trial_identity or {},
+    )
+    baseline_state_hash = _baseline_scenario_state_hash(
+        packet,
+        baseline_snapshot,
+        baseline_text_context=baseline_text,
+        baseline_trial_identity=baseline_identity,
+    )
+    if baseline_state_hash:
+        packet["iteration_context"]["baseline_scenario_state_hash"] = baseline_state_hash
+        packet["iteration_context"]["returned_to_hidden_baseline_state"] = (
+            packet["scenario_state_hash"] == baseline_state_hash
+            and _iteration_number(current_snapshot, previous_snapshot) > 0
+        )
+        if packet["iteration_context"]["returned_to_hidden_baseline_state"]:
+            packet["iteration_context"]["reality_check_carryover_candidate"] = {"active": False}
     packet["input_hash"] = stable_packet_hash(packet)
     return json_safe(packet)
 
