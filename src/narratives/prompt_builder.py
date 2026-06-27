@@ -87,9 +87,11 @@ VISIBLE_MOVEMENT_STATE_GUIDANCE = (
 )
 
 PASS2_MOVEMENT_READING_GUIDANCE = (
-    "In movement_reading, write the Completion Outlook paragraph only: describe the latest pre-reality check completion "
+    "In movement_reading, write the Completion Outlook paragraph only: describe the latest Completion Outlook "
     "outlook, combining model-visible completion-likelihood movement with app-rated execution scale, footprint, "
-    "duration, size, or operational dimensions when material. Describe only latest pre-reality check drivers as driving the latest shift. Persistent prior fields "
+    "duration, size, or operational dimensions when material. In participant-facing prose, do not use the phrase "
+    "'pre-reality check'; use Completion Outlook or Completion Outlook score instead. Describe only latest Completion Outlook "
+    "drivers as driving the latest shift. Persistent prior fields "
     "may be described as unresolved constraints or current-state context, not as drivers of the latest movement unless "
     "selected_model_evidence_context.model_movement_evidence shows their impact changed. Do not reframe a previously negative "
     "unchanged field as a positive argument unless the latest change demonstrably improves its fit or model impact; "
@@ -135,9 +137,9 @@ WIDER_STRATEGIC_QUESTION_GUIDANCE = (
 
 REALITY_CHECK_PARTICIPANT_WORDING_GUIDANCE = (
     "In score_interpretation, write the Reality Check paragraph only. When Reality Check is material, explain how it "
-    "changes the pre-reality check read using plain offset language: it may "
+    "changes the Completion Outlook read using plain offset language: it may "
     "offset an apparent gain, reinforce a movement, rarely soften a decline when the accepted scoring adjustment supports it, or reverse a "
-    "misleading pre-reality check movement. Do not expose points or exact scores. If Reality Check is neutral, say it does "
+    "misleading Completion Outlook movement. Do not expose points, exact scores, or the phrase 'pre-reality check'. If Reality Check is neutral, say it does "
     "not create an additional adjustment in one short sentence and explain why."
 )
 
@@ -284,6 +286,7 @@ def provider_response_contract() -> dict[str, Any]:
             "For hidden baseline, avoid generic summaries such as strong scientific foundation or execution constraints unless they are tied to concrete trial facts from text_context, reference_packs, or model evidence.",
             "For hidden baseline, return baseline orientation in development_landscape_read and leave development_discussion_options empty.",
             "For every visible iteration, return exactly one development_discussion_options item. Do not rely on analytical_narrative_draft.development_landscape_read as a substitute.",
+            "development_discussion_options must always be a JSON array containing exactly one object for visible iterations, never a bare object.",
             "The development_discussion_options item must contain topic, why_it_matters, supporting_evidence, relationship_to_previous_scenario, relationship_to_original_baseline, and one participant_wider_question assigned to that exact topic.",
             "Each development_discussion_options.topic should be a concise title-style label, ideally two to five words, suitable for display after 'Discussion Point:'.",
             "For the development_discussion_options item, include the development issue, why it matters now, the trial evidence behind it, and final participant-visible wider question text that the narrative pass must carry forward.",
@@ -777,7 +780,7 @@ def _score_alignment_notes(scoring: dict[str, Any]) -> dict[str, Any]:
             "scored_importance": _importance_label(reality),
             "wording_instruction": (
                 "Use Reality Check scoring only to calibrate wording. If material, explicitly explain whether it "
-                "softens, offsets, reinforces, compensates for, or reverses the pre-reality check movement. Do not expose "
+                "softens, offsets, reinforces, compensates for, or reverses the Completion Outlook movement. Do not expose "
                 "points or exact scores. Keep claims hypothetical."
             ),
             "allocation_themes": [
@@ -875,6 +878,54 @@ def _selected_model_evidence_context(pass1_review: dict[str, Any]) -> dict[str, 
     }
 
 
+def _is_no_like_value(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value is False
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return float(value) == 0.0
+    normalized = str(value or "").strip().lower()
+    return normalized in {"0", "no", "false", "n", "none", "without dmc", "no dmc"}
+
+
+def _is_yes_like_value(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value is True
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return float(value) == 1.0
+    normalized = str(value or "").strip().lower()
+    return normalized in {"1", "yes", "true", "y", "with dmc", "dmc"}
+
+
+def _dmc_removed_change(iteration: dict[str, Any]) -> dict[str, Any]:
+    for change in iteration.get("field_changes") or []:
+        if not isinstance(change, dict) or change.get("field") != "has_dmc_ml":
+            continue
+        current_candidates = [change.get("current_value"), change.get("current_label")]
+        previous_candidates = [change.get("previous_value"), change.get("previous_label")]
+        if any(_is_no_like_value(item) for item in current_candidates) and any(
+            _is_yes_like_value(item) for item in previous_candidates
+        ):
+            return {
+                "active": True,
+                "field": "has_dmc_ml",
+                "previous_value": change.get("previous_value"),
+                "current_value": change.get("current_value"),
+                "previous_label": change.get("previous_label"),
+                "current_label": change.get("current_label"),
+                "reality_check_calibration": (
+                    "DMC/oversight removal can create an artificial Completion Outlook gain by lowering apparent "
+                    "execution burden while weakening safety governance and decision credibility. If Completion "
+                    "Outlook improves after this change, Reality Check should strongly challenge that gain and may "
+                    "offset most or all of it within the -15/+15 rails when the population, phase, intervention, "
+                    "endpoint, or operational context makes oversight important."
+                ),
+            }
+    return {
+        "active": False,
+        "field": "has_dmc_ml",
+    }
+
+
 def build_scoring_input(packet: dict[str, Any], pass1_review: dict[str, Any]) -> dict[str, Any]:
     """Build the compact Pass 2 scoring-adjudication input."""
     model = packet.get("model_interpretation") or {}
@@ -909,6 +960,7 @@ def build_scoring_input(packet: dict[str, Any], pass1_review: dict[str, Any]) ->
         if matching_structured_feature_traces
         else None
     )
+    governance_shortcut_context = _dmc_removed_change(iteration)
     return {
         "schema_version": PASS2_SCHEMA_VERSION,
         "source_input_hash": packet.get("input_hash"),
@@ -961,6 +1013,7 @@ def build_scoring_input(packet: dict[str, Any], pass1_review: dict[str, Any]) ->
         },
         "reality_check_memory": _reality_check_memory(recent_score_traces_for_prompt),
         "carryover_candidate": carryover,
+        "governance_shortcut_context": governance_shortcut_context,
         "changed_fields": iteration.get("changed_fields") or [],
         "field_changes": iteration.get("field_changes") or [],
         "text_consistency_context": {
@@ -995,6 +1048,7 @@ def build_scoring_input(packet: dict[str, Any], pass1_review: dict[str, Any]) ->
             "Operational Fit is a current-state score. If operational_fit_continuity.previous_matching_score_traces is non-empty, reuse the latest matching trace's Operational Fit points.",
             "Reality Check points must be between -15 and +15.",
             "Reality Check must explain what is incremental beyond Completion Outlook and Operational Fit.",
+            "If governance_shortcut_context.active is true because DMC/oversight changed from present to absent, treat any favorable Completion Outlook movement as potentially shortcut-driven. Reality Check should strongly counterbalance the gain, often offsetting most or all of it within the -15/+15 rails when oversight remains clinically, ethically, or operationally important.",
             "If favorable pre-reality check movement is mainly caused by simplification, weaker governance, lower evidence burden, weaker endpoint/comparator credibility, or reduced decision fitness, Reality Check should usually offset the unsupported gain and may offset 50-120% of that gain when it is shortcut-driven or unrealistic.",
             "If newly changed Trial description fields add material inconsistency versus the authoritative structured features or operational assumptions, Reality Check should usually be negative and stronger than a mild wording concern; use text_context evidence refs and explain the contradiction in incremental_check.",
             "If description fields are unchanged, structured features and operational assumptions remain authoritative and the unchanged text must not dilute canonical changes.",
@@ -1163,6 +1217,11 @@ def build_scoring_provider_prompt(scoring_input: dict[str, Any]) -> str:
         "issues. Use 0 only after checking unresolved carryover, shortcut-driven simplification, contradictory score gain, "
         "and issue resolution. Use non-zero points only for incremental realism, coherence, shortcut, under-support, "
         "justified-rigor, carryover, or issue-resolution judgments beyond Completion Outlook and Operational Fit.\n"
+        "DMC/oversight downgrade rule: if governance_shortcut_context.active is true because DMC changed from present "
+        "to absent, treat any favorable Completion Outlook movement as a governance shortcut unless the scenario gives "
+        "strong evidence that oversight is no longer needed. Reality Check should strongly counterbalance that gain, "
+        "often offsetting most or all of it within the -15/+15 rails when the trial remains vulnerable, high-risk, "
+        "complex, blinded/placebo-controlled, safety-sensitive, pivotal, pediatric, acute, or operationally demanding.\n"
         "Reality Check calibration: if favorable pre-reality check movement is mainly caused by simplification, weaker governance, "
         "lower evidence burden, weaker endpoint/comparator credibility, or reduced decision fitness, usually offset the "
         "unsupported gain; use 50-120% offset when the gain is shortcut-driven or unrealistic. If newly changed Trial "
@@ -1282,7 +1341,7 @@ def build_pass2_input(
             "Do not tell the participant exactly which field to change next.",
             "Use cautious clinical-development language: may, might, could, appears, would need support.",
             "Final format: trial_score_narrative.summary is Overall Evolution, movement_reading is Completion Outlook, and score_interpretation is Reality Check; the UI combines them under one Trial Score section.",
-            "Make those three Trial Score paragraphs non-repetitive: Overall Evolution states the final direction and main latest driver; Completion Outlook explains the pre-reality check completion outlook from model movement plus app-rated execution scale/footprint/duration evidence when material; Reality Check explains only the realism/coherence calibration.",
+            "Make those three Trial Score paragraphs non-repetitive: Overall Evolution states the final direction and main latest driver; Completion Outlook explains the Completion Outlook score from model movement plus app-rated execution scale/footprint/duration evidence when material; Reality Check explains only the realism/coherence calibration.",
             "Return pillar_reading as 2-4 material bullets. Each bullet may cover one pillar or combine related pillars/subpillars; do not mechanically list every pillar and do not repeat the same central message from the Trial Score paragraphs.",
             "Use score_alignment_notes.participant_safe_summary.required_direction_phrase in the final wording.",
             PASS2_OPERATIONAL_WORDING_GUIDANCE,
@@ -1323,7 +1382,7 @@ def pass2_response_contract() -> dict[str, Any]:
             "Use the final participant format: one integrated Trial Score section, selective evidence bullets, and one discussion point.",
             "Map trial_score_narrative.summary to the Overall Evolution paragraph: 1-2 sentences stating the final direction versus the previous scenario and the main latest driver.",
             "The UI independently renders source_of_truth_policy.participant_default_preface_note before the Trial Score title; do not repeat that sentence inside trial_score_narrative, pillar_reading, central_tension, or broader_strategic_question.",
-            "Map trial_score_narrative.movement_reading to the Completion Outlook paragraph: explain the pre-reality check completion outlook, including model-visible completion-likelihood movement and app-rated execution scale/footprint/duration evidence when material.",
+            "Map trial_score_narrative.movement_reading to the Completion Outlook paragraph: explain the Completion Outlook score, including model-visible completion-likelihood movement and app-rated execution scale/footprint/duration evidence when material. Do not use the phrase 'pre-reality check' in participant-facing prose.",
             PASS2_MOVEMENT_READING_GUIDANCE,
             PASS2_RICHNESS_GUIDANCE,
             PASS2_PILLAR_GROUPING_GUIDANCE,
@@ -1420,7 +1479,7 @@ def build_pass2_provider_prompt(pass2_input: dict[str, Any]) -> str:
         "Do not reanalyze, re-rate Operational Fit, re-decide Reality Check, reinterpret model movement, or introduce new unsupported claims.\n"
         "Write the final participant output through three visible UI sections: Trial Score, What Is Driving The Score, and Discussion Point. "
         "Inside Trial Score, write three non-repetitive paragraphs: trial_score_narrative.summary is Overall Evolution, movement_reading is Completion Outlook, and score_interpretation is Reality Check. "
-        "Overall Evolution states the final direction versus the previous scenario and the main latest driver; Completion Outlook explains the pre-reality check completion outlook from model movement plus app-rated execution scale/footprint/duration evidence when material; Reality Check explains only the realism/coherence calibration and should be short when neutral or non-material. "
+        "Overall Evolution states the final direction versus the previous scenario and the main latest driver; Completion Outlook explains the Completion Outlook score from model movement plus app-rated execution scale/footprint/duration evidence when material; Reality Check explains only the realism/coherence calibration and should be short when neutral or non-material. "
         "The UI independently renders source_of_truth_policy.participant_default_preface_note before the Trial Score title; do not repeat that sentence inside the returned narrative fields. "
         f"{PASS2_MOVEMENT_READING_GUIDANCE} "
         f"{PASS2_RICHNESS_GUIDANCE} "

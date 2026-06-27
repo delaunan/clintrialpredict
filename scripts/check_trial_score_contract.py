@@ -101,6 +101,19 @@ def main() -> int:
         errors.append(f"Pass 1 evidence review should validate: {pass1['validated_review'].get('validation_errors')}")
     if pass1["scoring"].get("trial_score") is not None:
         errors.append("Pass 1 should not adjudicate Trial Score")
+    bare_discussion_option_review = deepcopy(pass1_review)
+    bare_discussion_option_review["development_discussion_options"] = deepcopy(
+        pass1_review["development_discussion_options"][0]
+    )
+    bare_discussion_option = validate_and_score_review(packet, bare_discussion_option_review)
+    if bare_discussion_option["validated_review"].get("validation_status") != "valid":
+        errors.append(
+            "Pass 1 should normalize a bare visible development_discussion_options object: "
+            f"{bare_discussion_option['validated_review'].get('validation_errors')}"
+        )
+    normalized_options = bare_discussion_option["validated_review"].get("development_discussion_options")
+    if not isinstance(normalized_options, list) or len(normalized_options) != 1:
+        errors.append("Bare visible development_discussion_options object should become one-item array")
     missing_evolution_review = deepcopy(pass1_review)
     missing_evolution_review.pop("evolution_evidence", None)
     missing_evolution = validate_and_score_review(packet, missing_evolution_review)

@@ -145,6 +145,12 @@ NARRATIVE_LIVE_REVIEW_ENABLED = str(os.getenv("NARRATIVE_LIVE_REVIEW_ENABLED", "
     "yes",
     "on",
 }
+SCENARIO_REVIEW_DEBUG_UI_ENABLED = str(os.getenv("SCENARIO_REVIEW_DEBUG_UI", "")).strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
 
 API_URL = os.getenv("API_URL", "").strip()
 if not API_URL and not IS_CLOUD_RUN:
@@ -154,9 +160,9 @@ API_TIMEOUT_SECONDS = 60
 logger = logging.getLogger(__name__)
 ID_COL = "nct_id"
 SCENARIO_IMPACT_PROGRESS_LABEL = "Evaluating Scenario Impact..."
-SCENARIO_REFINING_PROGRESS_LABEL = "Repairing Scenario Read..."
+SCENARIO_REFINING_PROGRESS_LABEL = "Finalizing Scenario Read..."
 SCENARIO_SCORING_PROGRESS_LABEL = "Scoring Scenario Fit..."
-SCENARIO_ANALYSIS_PROGRESS_LABEL = "Writing Scenario Narrative..."
+SCENARIO_ANALYSIS_PROGRESS_LABEL = "Preparing Trial Score Review..."
 SCENARIO_REVIEW_WORKFLOW_STATE_KEY = "scenario_review_live_workflow_state"
 SCENARIO_REVIEW_PROGRESS_LABEL_KEY = "simulation_review_progress_label"
 SCENARIO_REVIEW_PHASE_PASS1 = "pass1"
@@ -516,7 +522,7 @@ COMPLETION_WORKFLOW_INFO_HTML = """
   <div class="completion-workflow-note-text">
     To explore <strong>Simulation mode</strong>, access additional trials, or learn more
     about the prediction tool, please contact Nicolas at
-    <strong>delaunay80@gmail.com</strong> or via WhatsApp at
+    <strong>nicolas@etsdelaunay.fr</strong> or via WhatsApp at
     <strong>+33 7 86 72 21 43</strong>.
   </div>
 
@@ -4748,33 +4754,73 @@ def inject_custom_styles():
             html body .quality-review-components {{
                 display: grid !important;
                 grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+                justify-content: stretch !important;
                 gap: 6px !important;
-                margin-bottom: 8px !important;
+                margin-bottom: 7px !important;
+            }}
+
+            html body .quality-review-score-strip {{
+                min-width: 0 !important;
+            }}
+
+            html body .quality-review-score-strip .quality-review-components {{
+                height: 100% !important;
+                margin-bottom: 0 !important;
             }}
 
             html body .quality-review-metric {{
-                border: 1px solid #e2e8f0 !important;
+                border: 1px solid #cbd5e1 !important;
                 border-radius: 8px !important;
-                background: #ffffff !important;
-                padding: 6px 7px !important;
+                background: #f6f8fb !important;
+                padding: 8px 9px !important;
                 min-width: 0 !important;
+                min-height: 58px !important;
+                text-align: center !important;
             }}
 
             html body .quality-review-metric-label {{
                 color: #64748b !important;
-                font-size: 0.66rem !important;
+                font-size: 0.68rem !important;
                 font-weight: 750 !important;
                 line-height: 1.1 !important;
                 text-transform: uppercase !important;
+                text-align: center !important;
             }}
 
             html body .quality-review-metric-value {{
                 color: #1f2937 !important;
-                font-size: 0.95rem !important;
+                font-size: 1.08rem !important;
                 font-weight: 850 !important;
                 line-height: 1.2 !important;
-                margin-top: 2px !important;
+                margin-top: 4px !important;
                 overflow-wrap: anywhere !important;
+                text-align: center !important;
+            }}
+
+            html body .quality-review-narrative-grid {{
+                display: grid !important;
+                grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+                gap: 6px !important;
+                align-items: stretch !important;
+            }}
+
+            html body .quality-review-consistency {{
+                grid-column: span 2 !important;
+                border: 1px solid #e2e8f0 !important;
+                border-radius: 8px !important;
+                background: #ffffff !important;
+                padding: 8px 9px !important;
+                min-width: 0 !important;
+                min-height: 58px !important;
+            }}
+
+            html body .quality-review-narrative-card {{
+                border: 1px solid #e2e8f0 !important;
+                border-radius: 8px !important;
+                background: #ffffff !important;
+                padding: 9px 10px !important;
+                min-width: 0 !important;
+                min-height: 178px !important;
             }}
 
             html body .quality-review-row {{
@@ -4910,6 +4956,34 @@ def inject_custom_styles():
                 line-height: 1.38 !important;
                 margin-top: 6px !important;
                 font-weight: 500 !important;
+            }}
+
+            html body .quality-review-text p {{
+                margin: 0 0 7px 0 !important;
+            }}
+
+            html body .quality-review-text p:last-child {{
+                margin-bottom: 0 !important;
+            }}
+
+            html body .quality-review-text ul {{
+                margin: 0 !important;
+                padding-left: 18px !important;
+            }}
+
+            html body .quality-review-text li {{
+                margin: 0 0 6px 0 !important;
+            }}
+
+            @media (max-width: 760px) {{
+                html body .quality-review-components,
+                html body .quality-review-narrative-grid {{
+                    grid-template-columns: 1fr !important;
+                }}
+
+                html body .quality-review-consistency {{
+                    grid-column: auto !important;
+                }}
             }}
 
             html body .quality-review-muted {{
@@ -6732,6 +6806,8 @@ def _prompt_review_context_debug_payload(trace):
 
 
 def _render_prompt_review_context_debug(trace):
+    if not SCENARIO_REVIEW_DEBUG_UI_ENABLED:
+        return
     payload = _prompt_review_context_debug_payload(trace)
     if not payload:
         return
@@ -8831,14 +8907,19 @@ def render_header(is_landing=True, show_predict_button=False, show_back_button=F
                 logo_gap = "var(--ui-logo-gap-nonlanding)"
                 title_demo_gap = "8px"
 
+            version_tag = (
+                "Simulation"
+                if st.session_state.get("global_edit_mode", False)
+                else "Demo Version"
+            )
             subtitle_html = (
                 "<div style='color: #52606d; font-size: var(--ui-subtitle-size-landing); font-weight: 800; display: flex; align-items: baseline; gap: 15px; margin-top: 0px;'>"
                 "<span style='line-height: 1;'>Late-Stage Clinical Trial Predictive Engine</span>"
-                "<span style='font-size: var(--ui-demo-size); color: #94a3b8; text-transform: uppercase;'>demo version</span>"
+                f"<span style='font-size: var(--ui-demo-size); color: #94a3b8; text-transform: uppercase;'>{html.escape(version_tag)}</span>"
                 "</div>"
                 if is_landing
                 else
-                "<span style='font-size: var(--ui-demo-size); font-weight: 800; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.1em; line-height: 1; margin-bottom: 0px;'>Demo Version</span>"
+                f"<span style='font-size: var(--ui-demo-size); font-weight: 800; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.1em; line-height: 1; margin-bottom: 0px;'>{html.escape(version_tag)}</span>"
             )
 
             current_detail_value = get_s_detail_value()
@@ -8865,7 +8946,7 @@ def render_header(is_landing=True, show_predict_button=False, show_back_button=F
 
             home_cursor = "cursor: pointer; position: relative; width: fit-content;" if not is_landing else ""
 
-            html = (
+            header_html = (
                 f"<div style='display: flex; align-items: center; gap: {logo_gap}; {home_cursor}'>"
                 f"{home_link_overlay}"
                 f"<div style='background-color: white; border: {logo_border} solid #52606d; padding: var(--ui-logo-pad); border-radius: {logo_radius}; display: flex; align-items: center; justify-content: center; height: {logo_size}; width: {logo_size}; flex-shrink: 0; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-top: 0px;'>"
@@ -8878,7 +8959,7 @@ def render_header(is_landing=True, show_predict_button=False, show_back_button=F
                 f"</div>"
             )
 
-            st.markdown(html, unsafe_allow_html=True)
+            st.markdown(header_html, unsafe_allow_html=True)
 
     with t2:
 
@@ -10791,6 +10872,13 @@ def _format_candidate_score(value):
     return f"{int(numeric)}" if numeric.is_integer() else f"{numeric:.1f}"
 
 
+def _format_score_points(value, signed=False):
+    base = _format_quality_points(value) if signed else _format_candidate_score(value)
+    if base == "N/A":
+        return base
+    return f"{base} pts"
+
+
 def _quality_points_color(value):
     numeric = pd.to_numeric(value, errors="coerce")
     if pd.isna(numeric) or abs(float(numeric)) < 0.0001:
@@ -10969,13 +11057,43 @@ def _quality_review_metric(label, value, color="#1f2937"):
     )
 
 
+def _quality_review_narrative_card(title, body_html, extra_class=""):
+    clean_body = str(body_html or "").strip()
+    if not clean_body:
+        return ""
+    classes = "quality-review-narrative-card"
+    if extra_class:
+        classes += f" {html.escape(extra_class)}"
+    return (
+        f"<div class='{classes}'>"
+        "<div class='quality-review-section-title'>"
+        f"{html.escape(title)}</div>"
+        f"<div class='quality-review-text'>{clean_body}</div>"
+        "</div>"
+    )
+
+
+def _participant_narrative_display_text(text):
+    clean = str(text or "")
+    replacements = (
+        (r"\bpre-reality check completion outlook\b", "Completion Outlook score"),
+        (r"\bpre-reality check movement\b", "Completion Outlook movement"),
+        (r"\bpre-reality check read\b", "Completion Outlook read"),
+        (r"\bpre-reality check score\b", "Completion Outlook score"),
+        (r"\bpre-reality check\b", "Completion Outlook"),
+    )
+    for pattern, replacement in replacements:
+        clean = re.sub(pattern, replacement, clean, flags=re.IGNORECASE)
+    return clean
+
+
 def _scenario_review_text_block(title, text):
     if not isinstance(text, str) or not text.strip():
         return ""
     return (
         "<div class='quality-review-section-title'>"
         f"{html.escape(title)}</div>"
-        f"<div class='quality-review-text'>{html.escape(text.strip())}</div>"
+        f"<div class='quality-review-text'>{html.escape(_participant_narrative_display_text(text).strip())}</div>"
     )
 
 
@@ -10995,10 +11113,21 @@ def _scenario_review_multi_text_block(title, paragraphs):
     )
 
 
-def _trial_score_narrative_html(consistency_text, trial_score_narrative):
+def _scenario_consistency_html(consistency_text):
+    if not isinstance(consistency_text, str) or not consistency_text.strip():
+        return ""
+    return (
+        "<div class='quality-review-consistency'>"
+        "<div class='quality-review-text'>"
+        f"<p>Scenario Consistency Note: {html.escape(consistency_text.strip())}</p>"
+        "</div></div>"
+    )
+
+
+def _trial_score_narrative_html(trial_score_narrative):
     if not isinstance(trial_score_narrative, dict):
         trial_score_narrative = {}
-    rows = []
+    trial_score_rows = []
     for label, key in (
         ("Overall Evolution", "summary"),
         ("Completion Outlook", "movement_reading"),
@@ -11006,27 +11135,16 @@ def _trial_score_narrative_html(consistency_text, trial_score_narrative):
     ):
         value = trial_score_narrative.get(key)
         if isinstance(value, str) and value.strip():
-            rows.append((label, value.strip()))
-    if not rows:
+            trial_score_rows.append((label, _participant_narrative_display_text(value).strip()))
+    if not trial_score_rows:
         return ""
-    body = "".join(
+    trial_score_body = "".join(
         "<p>"
         f"<strong>{html.escape(label)}:</strong> {html.escape(text)}"
         "</p>"
-        for label, text in rows
+        for label, text in trial_score_rows
     )
-    consistency_html = (
-        "<div class='quality-review-text'><p>"
-        f"<strong>Scenario Consistency:</strong> {html.escape(consistency_text.strip())}"
-        "</p></div>"
-        if isinstance(consistency_text, str) and consistency_text.strip()
-        else ""
-    )
-    return (
-        consistency_html +
-        "<div class='quality-review-section-title'>Trial Score</div>"
-        f"<div class='quality-review-text'>{body}</div>"
-    )
+    return _quality_review_narrative_card("Trial Score", trial_score_body)
 
 
 def _participant_pillar_reading_html(pillar_reading):
@@ -11044,16 +11162,14 @@ def _participant_pillar_reading_html(pillar_reading):
             "<li>"
             f"<strong>{html.escape(pillar)}</strong>"
             f"{': ' if pillar and reading else ''}"
-            f"{html.escape(reading)}"
+            f"{html.escape(_participant_narrative_display_text(reading))}"
             "</li>"
         )
     if not bullet_items:
         return ""
-    return (
-        "<div class='quality-review-section-title'>What Is Driving The Score</div>"
-        "<div class='quality-review-text'><ul>"
-        f"{''.join(bullet_items)}"
-        "</ul></div>"
+    return _quality_review_narrative_card(
+        "What Is Driving The Score",
+        f"<ul>{''.join(bullet_items)}</ul>",
     )
 
 
@@ -11065,16 +11181,13 @@ def _discussion_point_html(topic, tension, question):
         return ""
     parts = []
     if tension_text:
-        parts.append(f"<p>{html.escape(tension_text)}</p>")
+        parts.append(f"<p>{html.escape(_participant_narrative_display_text(tension_text))}</p>")
     if question_text:
-        parts.append(f"<p><strong>{html.escape(question_text)}</strong></p>")
+        parts.append(f"<p><strong>{html.escape(_participant_narrative_display_text(question_text))}</strong></p>")
     title = "Discussion Point"
     if topic_text:
         title = f"Discussion Point: {topic_text}"
-    return (
-        f"<div class='quality-review-section-title'>{html.escape(title)}</div>"
-        f"<div class='quality-review-text'>{''.join(parts)}</div>"
-    )
+    return _quality_review_narrative_card(title, "".join(parts))
 
 
 def _reality_check_structured_html(reality_check, key_questions):
@@ -11915,6 +12028,9 @@ def _quality_review_diagnostics(trace, row=None, snapshot=None):
 
     persist_scenario_review_diagnostics(trace, row=row, snapshot=snapshot)
 
+    if not SCENARIO_REVIEW_DEBUG_UI_ENABLED:
+        return
+
     if trace.get("provider") == PROVIDER_MOCK:
         return
 
@@ -11950,11 +12066,16 @@ def render_scenario_review_report(row, trace=None, snapshot=None):
             "Click Review Scenario to update the Reality Check for the current scenario.",
             "The displayed Completion Outlook and previous review still reflect the last submitted prediction.",
         )
-        with st.expander("Pending scenario diagnostics", expanded=False):
-            st.json(pending_diagnostics)
+        if SCENARIO_REVIEW_DEBUG_UI_ENABLED:
+            with st.expander("Pending scenario diagnostics", expanded=False):
+                st.json(pending_diagnostics)
         return
 
     if not trace:
+        return
+
+    if trace.get("hidden_baseline") and not SCENARIO_REVIEW_DEBUG_UI_ENABLED:
+        _quality_review_diagnostics(trace, row=row, snapshot=snapshot)
         return
 
     status = str(trace.get("status") or "unavailable")
@@ -11996,25 +12117,30 @@ def render_scenario_review_report(row, trace=None, snapshot=None):
     key_questions = validated_review.get("key_questions") or {}
 
     operational_fit_points = trace.get("operational_fit_points")
+    completion_outlook_score = pd.to_numeric(completion_score, errors="coerce")
+    operational_fit_numeric = pd.to_numeric(operational_fit_points, errors="coerce")
+    if pd.isna(completion_outlook_score):
+        completion_outlook_value = None
+    elif pd.isna(operational_fit_numeric):
+        completion_outlook_value = float(completion_outlook_score)
+    else:
+        completion_outlook_value = float(completion_outlook_score) + float(operational_fit_numeric)
     metric_blocks = [
-        _quality_review_metric("Completion", f"{float(completion_score):.1f}" if completion_score is not None else "N/A"),
+        _quality_review_metric(
+            "Completion Outlook",
+            _format_score_points(completion_outlook_value),
+        ),
     ]
-    if operational_fit_points is not None:
-        metric_blocks.append(
-            _quality_review_metric(
-                "Operational",
-                _format_quality_points(operational_fit_points),
-                _quality_points_color(operational_fit_points),
-            )
-        )
     metric_blocks.extend([
         _quality_review_metric(
-            "Reality",
-            _format_quality_points(reality_check_points),
+            "Reality Check",
+            _format_score_points(reality_check_points, signed=True),
             _quality_points_color(reality_check_points),
         ),
-        _quality_review_metric("Trial",
-            _format_candidate_score(trial_score)),
+        _quality_review_metric(
+            "Trial Score",
+            _format_score_points(trial_score),
+        ),
     ])
     metric_html = "".join(metric_blocks)
 
@@ -12080,8 +12206,15 @@ def render_scenario_review_report(row, trace=None, snapshot=None):
     participant_narrative_warning = str(trace.get("participant_narrative_warning") or "").strip()
     participant_narrative_warning_rendered = False
     if participant_narrative_available:
-        narrative_html = "".join([
-            _trial_score_narrative_html(consistency_text, trial_score_narrative),
+        score_strip_html = (
+            "<div class='quality-review-score-strip'>"
+            f"<div class='quality-review-components'>{metric_html}</div>"
+            "</div>"
+        )
+        narrative_sections_html = "".join([
+            score_strip_html,
+            _scenario_consistency_html(consistency_text),
+            _trial_score_narrative_html(trial_score_narrative),
             _participant_pillar_reading_html(participant_pillar_reading),
             _discussion_point_html(
                 participant_central_tension_text,
@@ -12089,6 +12222,11 @@ def render_scenario_review_report(row, trace=None, snapshot=None):
                 participant_wider_question_text,
             ),
         ])
+        narrative_html = (
+            "<div class='quality-review-narrative-grid'>"
+            f"{narrative_sections_html}"
+            "</div>"
+        )
     elif participant_narrative_warning and not trace.get("hidden_baseline"):
         participant_narrative_warning_rendered = True
         narrative_html = (
@@ -12112,7 +12250,6 @@ def render_scenario_review_report(row, trace=None, snapshot=None):
             "" if structured_strategic_html else _scenario_review_text_block("Strategic Development Question", strategic_question),
         ])
 
-    cached_note = narrative_trace_provider_note(trace)
     participant_narrative_warning_html = (
         "<div class='quality-review-muted'>"
         f"{html.escape(participant_narrative_warning)}"
@@ -12120,15 +12257,19 @@ def render_scenario_review_report(row, trace=None, snapshot=None):
         if participant_narrative_warning and not participant_narrative_warning_rendered
         else ""
     )
+    metric_row_html = (
+        ""
+        if participant_narrative_available
+        else f"<div class='quality-review-components'>{metric_html}</div>"
+    )
     st.markdown(
         (
             "<div class='quality-review-card'>"
             f"<div class='quality-review-title'>{html.escape(report_title)}</div>"
             f"{pending_review_html}"
-            f"<div class='quality-review-components'>{metric_html}</div>"
+            f"{metric_row_html}"
             f"{narrative_html}"
             f"{participant_narrative_warning_html}"
-            f"<div class='quality-review-muted'>{html.escape(cached_note)}</div>"
             "</div>"
         ),
         unsafe_allow_html=True,

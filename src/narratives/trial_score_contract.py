@@ -20,7 +20,7 @@ TRIAL_SCORE_CONTRACT_VERSION = "trial_score_v1"
 PASS1_SCHEMA_VERSION = "trial_score_evidence_pass_schema_v4"
 PASS2_SCHEMA_VERSION = "trial_score_scoring_pass_schema_v1"
 PASS3_SCHEMA_VERSION = "trial_score_narrative_pass_schema_v1"
-PROMPT_TEMPLATE_VERSION = "trial_score_three_pass_prompt_v2_2"
+PROMPT_TEMPLATE_VERSION = "trial_score_three_pass_prompt_v2_3"
 MIN_PASS2_PILLAR_READINGS = 2
 MAX_PASS2_PILLAR_READINGS = 4
 SCORE_TRACE_HISTORY_LIMIT = 5
@@ -242,6 +242,8 @@ def _word_count(value: Any) -> int:
 def _normalize_development_discussion_options(raw_options: Any) -> list[dict[str, Any]]:
     """Return canonical visible discussion options only."""
     options: list[dict[str, Any]] = []
+    if isinstance(raw_options, dict):
+        raw_options = [raw_options]
     if isinstance(raw_options, list):
         for item in raw_options:
             if not isinstance(item, dict):
@@ -515,19 +517,18 @@ def validate_pass1_review(packet: dict[str, Any], review: dict[str, Any]) -> dic
             if not isinstance(strongest_tension.get("evidence_fields"), list):
                 errors.append("evolution_evidence.strongest_current_development_tension.evidence_fields must be an array")
     discussion_options_provided = "development_discussion_options" in review
-    if discussion_options_provided and not isinstance(review.get("development_discussion_options"), list):
-        errors.append("development_discussion_options must be an array")
-        development_discussion_options = []
-    elif not discussion_options_provided:
+    raw_discussion_options = review.get("development_discussion_options")
+    if not discussion_options_provided:
         if is_hidden_baseline:
             development_discussion_options = []
         else:
             errors.append("development_discussion_options must be an array")
             development_discussion_options = []
+    elif isinstance(raw_discussion_options, (list, dict)):
+        development_discussion_options = _normalize_development_discussion_options(raw_discussion_options)
     else:
-        development_discussion_options = _normalize_development_discussion_options(
-            review.get("development_discussion_options")
-        )
+        errors.append("development_discussion_options must be an array")
+        development_discussion_options = []
     if is_hidden_baseline and development_discussion_options:
         errors.append("hidden baseline must not return development_discussion_options")
     draft = review.get("analytical_narrative_draft") or {}

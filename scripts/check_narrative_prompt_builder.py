@@ -188,6 +188,22 @@ def main() -> int:
         errors.append("Pass 2 scoring input should include material recent Reality Check memory")
     elif material_memory[-1].get("iteration_id") != SCORE_TRACE_PROMPT_RECENT_LIMIT + 3:
         errors.append("Pass 2 Reality Check memory should include retained material interpretations")
+    dmc_removed_packet = deepcopy(packet)
+    dmc_removed_packet.setdefault("iteration_context", {})["changed_fields"] = ["has_dmc_ml"]
+    dmc_removed_packet["iteration_context"]["field_changes"] = [{
+        "field": "has_dmc_ml",
+        "change_type": "structured_feature",
+        "previous_value": 1,
+        "current_value": 0,
+        "previous_label": "Yes",
+        "current_label": "No",
+    }]
+    dmc_removed_scoring_input = build_scoring_input(dmc_removed_packet, pass1)
+    governance_shortcut = dmc_removed_scoring_input.get("governance_shortcut_context") or {}
+    if governance_shortcut.get("active") is not True:
+        errors.append("Pass 2 scoring input should flag DMC present-to-absent as active governance shortcut context")
+    if "strongly challenge" not in str(governance_shortcut.get("reality_check_calibration") or ""):
+        errors.append("DMC governance shortcut context should calibrate Reality Check to strongly challenge favorable gains")
     scoring_contract = scoring_response_contract()
     if SCORING_RESPONSE_SCHEMA_VERSION != PASS2_SCHEMA_VERSION:
         errors.append("Pass 2 scoring schema version mismatch")
@@ -204,6 +220,8 @@ def main() -> int:
         "Reality Check calibration",
         "structured-feature continuity",
         "newly changed Trial description fields",
+        "DMC/oversight downgrade rule",
+        "governance_shortcut_context.active",
         "text_context evidence refs",
         "incremental scenario-coherence issue",
         "50-120%",

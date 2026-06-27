@@ -365,7 +365,7 @@ COMPLETION_WORKFLOW_INFO_HTML = """
   <div class="completion-workflow-note-text">
     To explore <strong>Simulation mode</strong>, access additional trials, or learn more
     about the prediction tool, please contact Nicolas at
-    <strong>delaunay80@gmail.com</strong> or via WhatsApp at
+    <strong>nicolas@etsdelaunay.fr</strong> or via WhatsApp at
     <strong>+33 7 86 72 21 43</strong>.
   </div>
 
