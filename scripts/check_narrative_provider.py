@@ -403,7 +403,7 @@ def main() -> int:
         'GEMINI_PRIMARY_THINKING_LEVEL = "medium"',
         'GEMINI_PASS1_THINKING_LEVEL = "medium"',
         'GEMINI_HIDDEN_BASELINE_THINKING_LEVEL = "medium"',
-        "GEMINI_HIDDEN_BASELINE_OUTPUT_TOKENS = 8000",
+        "GEMINI_HIDDEN_BASELINE_OUTPUT_TOKENS = DEFAULT_HIDDEN_BASELINE_MAX_OUTPUT_TOKENS",
         "GEMINI_HIDDEN_BASELINE_TIMEOUT_SECONDS = 100",
         "GEMINI_HIDDEN_BASELINE_REPAIR_ATTEMPTS = 2",
         'metadata["hidden_baseline_repair_profile"] = "bounded_compact_repair"',

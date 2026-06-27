@@ -10,15 +10,16 @@ Use this file as the project architecture hub. It should stay concise and point 
 | `ARCHITECTURAL_LOG.md` | Current high-level system map: production architecture, shared core, variants, artifacts, and documentation index. | Product topology, core architecture, artifact inventory, or variant list changes. |
 | `docs/architecture_edit.md` | Live trial-edit/trial-simulator UI and `/predict` simulation contract. | UI behavior, prediction workflow, editable feature state, or simulation scoring contract changes. |
 | `docs/architecture_estimation.md` | Operational-assumption benchmark architecture. | Planned enrollment, planned sites, duration benchmarks, operational artifacts, or defaulting logic changes. |
-| `docs/architecture_narratives.md` | Future serious-game narrative, Coherence Score, and LLM commentary plan. | Narrative payloads, LLM outputs, Coherence scoring, or adjusted trial value design changes. |
-| `docs/estimation_v1_completion.md` | Short completion snapshot for estimation v1. | Only when closing/superseding an estimation milestone. |
+| `docs/architecture_narratives.md` | Trial Simulator narrative, Scenario Review, Trial Score, LLM provider, and participant output architecture. | Narrative payloads, LLM outputs, Trial Score behavior, Scenario Review scoring, or provider contracts change. |
+| `docs/trial_score_narrative_direction.md` | Active Trial Score workflow and component contract. | Pass 1/2/3 workflow, score stack, Reality Check, or participant narrative direction changes. |
+| `docs/operational_fit_scoring.md` | Operational Fit scoring rationale and historical calibration notes. | Operational Fit rails, continuity, benchmark interpretation, or additive scoring guidance changes. |
 | `.gemini/tmp/clintrialpredict/memory/MEMORY.md` | Short private handoff notes, not an architecture source of truth. | End of meaningful work; prefix by architecture scope and branch. |
 
 Update rules:
 
 - Prefer updating one domain file per decision. Cross-link instead of duplicating the same contract in multiple docs.
 - Keep this hub current but short: variants, shared core, artifact inventory, and document routing only.
-- Move long implementation history into the relevant `docs/architecture_*.md` file or a milestone note.
+- Move durable implementation history into the relevant `docs/architecture_*.md` file; avoid adding short-lived milestone notes unless they are needed for an active handoff.
 - Memory entries should cite the architecture scope first and branch provenance second, for example `[architecture_edit][trial-edit]`. They should not preserve obsolete instructions as active guidance.
 
 ## **1. Production Deployment (v1.0 - "Steel Shield")**
@@ -82,6 +83,9 @@ To ensure the UI and API match the Notebook precisely, the system implements **R
 - **Ordinal Encoding**: Most features are mapped to 0-4 range enums (e.g., `innovation_tier_ml`: 0=Established, 1=Next-Gen, 2=First-in-Class).
 - **Target Encoding**: `gbd_cause_id_3_ml` uses smoothed binary target encoding (smooth=200.0).
 - **Numeric Scaling**: `number_of_arms_ml` and `primary_duration_months_ml` use `StandardScaler`.
+
+### **C. GBD Indication Mapping**
+`gbd_cause_id_3_ml` is the model-facing indication feature. Trial text is mapped to IHME GBD Level 3 causes during enrichment using the fixed menu in `docs/prompts/gbd_codes.md`; `src/prep/gbd_master_merge.py` owns hierarchy/menu generation support. The UI indication labels and lookup are derived artifacts, while the model consumes the encoded cause id through the preprocessing registry in `src/prep/pipeline.py`.
 
 ---
 

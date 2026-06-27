@@ -16,10 +16,12 @@ if str(ROOT) not in sys.path:
 from src.narratives.provider_config import (  # noqa: E402
     DEFAULT_GEMINI_MODEL,
     DEFAULT_GEMINI_THINKING_LEVEL,
+    DEFAULT_HIDDEN_BASELINE_MAX_OUTPUT_TOKENS,
     DEFAULT_MAX_OUTPUT_TOKENS,
     DEFAULT_MAX_RETRIES,
     DEFAULT_OPENAI_MODEL,
     DEFAULT_OPENAI_REASONING_EFFORT,
+    DEFAULT_REPAIR_MAX_OUTPUT_TOKENS,
     DEFAULT_TIMEOUT_SECONDS,
     PROVIDER_GEMINI,
     PROVIDER_OPENAI,
@@ -44,6 +46,10 @@ def _check_defaults(errors: list[str]) -> None:
         errors.append("gemini model should use pinned default when env is absent")
     if config.max_output_tokens != DEFAULT_MAX_OUTPUT_TOKENS:
         errors.append("default max_output_tokens mismatch")
+    if DEFAULT_HIDDEN_BASELINE_MAX_OUTPUT_TOKENS != DEFAULT_MAX_OUTPUT_TOKENS:
+        errors.append("hidden baseline max output tokens should share the central default")
+    if DEFAULT_REPAIR_MAX_OUTPUT_TOKENS != DEFAULT_MAX_OUTPUT_TOKENS:
+        errors.append("repair max output tokens should share the central default")
     if config.timeout_seconds != DEFAULT_TIMEOUT_SECONDS:
         errors.append("default timeout_seconds mismatch")
     if DEFAULT_TIMEOUT_SECONDS != 100:

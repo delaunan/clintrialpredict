@@ -1031,23 +1031,6 @@ def _check_operational_movement_context(errors: list[str]) -> None:
         errors.append("duration movement context should include residual benchmark status")
 
 
-def _check_storyline_report_compatibility(errors: list[str]) -> None:
-    exporter = (ROOT / "scripts" / "export_storyline_review_pack.py").read_text(encoding="utf-8")
-    if "Clinical operations:" in exporter or "Strategic/field:" in exporter:
-        errors.append("storyline review pack exporter should use the new two-question framing")
-    if "Medical / clinical development:" not in exporter or "Strategic development:" not in exporter:
-        errors.append("storyline review pack exporter should label the two visible questions")
-
-    temperature_compare = (ROOT / "scripts" / "compare_narrative_temperature_reports.py").read_text(
-        encoding="utf-8"
-    )
-    signature_start = temperature_compare.find("def _narrative_signature")
-    subcategory_start = temperature_compare.find("def _subcategory_signature")
-    signature_body = temperature_compare[signature_start:subcategory_start]
-    if '"operations_question"' in signature_body:
-        errors.append("temperature narrative signature should ignore the retired operations question")
-
-
 def _check_submitted_text_context_is_authoritative(errors: list[str]) -> None:
     baseline_text = {
         "title": "Baseline PV trial",
@@ -1221,7 +1204,6 @@ def main() -> int:
     _check_canonical_values_prefer_compare_values(errors)
     _check_field_and_impact_changes(errors)
     _check_operational_movement_context(errors)
-    _check_storyline_report_compatibility(errors)
     _check_submitted_text_context_is_authoritative(errors)
 
     if errors:

@@ -24,6 +24,10 @@ get_api_url() {
     fi
 }
 
+get_narrative_max_output_tokens() {
+    python -c "from src.narratives.provider_config import DEFAULT_MAX_OUTPUT_TOKENS; print(DEFAULT_MAX_OUTPUT_TOKENS)"
+}
+
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -172,10 +176,12 @@ deploy_ui() {
     local variant="${2:-"trial_audit"}"
     local api_url
     local env_vars
+    local narrative_max_output_tokens
     api_url=$(get_api_url)
     env_vars="API_URL=$api_url,APP_VARIANT=$variant"
 
     if [ "$variant" == "trial_simulator" ]; then
+        narrative_max_output_tokens=$(get_narrative_max_output_tokens)
         env_vars="${env_vars},NARRATIVE_LIVE_REVIEW_ENABLED=true"
         env_vars="${env_vars},NARRATIVE_LLM_PROVIDER=gemini"
         env_vars="${env_vars},GEMINI_NARRATIVE_MODEL=gemini-3.1-flash-lite"
@@ -183,7 +189,7 @@ deploy_ui() {
         env_vars="${env_vars},GEMINI_THINKING_LEVEL=medium"
         env_vars="${env_vars},NARRATIVE_LLM_SEED=20260607"
         env_vars="${env_vars},NARRATIVE_LLM_TIMEOUT_SECONDS=100"
-        env_vars="${env_vars},NARRATIVE_LLM_MAX_OUTPUT_TOKENS=20000"
+        env_vars="${env_vars},NARRATIVE_LLM_MAX_OUTPUT_TOKENS=$narrative_max_output_tokens"
         env_vars="${env_vars},NARRATIVE_LLM_MAX_RETRIES=0"
     fi
 

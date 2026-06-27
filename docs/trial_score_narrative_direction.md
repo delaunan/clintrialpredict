@@ -4,7 +4,7 @@
 
 Architecture scope: `architecture_narratives`
 
-This document is the active planning source for the next narrative/scoring direction. It supersedes the older `Design Confidence / Total Scenario Score` plans and the first `Strategic Review / Trial Score` migration contract in `docs/strategic_review_phase1.md`.
+This document is the active planning source for the current narrative/scoring direction. It supersedes the older `Design Confidence / Total Scenario Score` plans and the first `Strategic Review / Trial Score` migration notes, which were removed during the deployment-focused documentation cleanup.
 
 Use this document before changing prompts, provider schemas, scoring code, simulator UI labels, eval scripts, or narrative memory behavior.
 

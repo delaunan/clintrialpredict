@@ -19,8 +19,8 @@ COPY frontend/ frontend/
 COPY src/ src/
 # Models
 COPY models/ models/
-# Scripts
-COPY scripts/ scripts/
+# Runtime patch helper
+COPY scripts/patch_streamlit_og.py scripts/patch_streamlit_og.py
 
 # 5. Patch Streamlit for LinkedIn Open Graph
 RUN python scripts/patch_streamlit_og.py
