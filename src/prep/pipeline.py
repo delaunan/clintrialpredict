@@ -707,7 +707,7 @@ PIPELINE_REGISTRY = {
         },
         "adult_ml": {
             "ui": {
-                "label": "Adult Profile Eligibility Status",
+                "label": "Adult Profiles",
                 "pillar": "Patient Profile",
                 "subgroup": "Population Scope",
                 "priority": 28,
@@ -728,7 +728,7 @@ PIPELINE_REGISTRY = {
         },
         "child_ml": {
             "ui": {
-                "label": "Pediatric Profile Eligibility Status",
+                "label": "Pediatric Profiles",
                 "pillar": "Patient Profile",
                 "subgroup": "Population Scope",
                 "priority": 29,
@@ -749,7 +749,7 @@ PIPELINE_REGISTRY = {
         },
         "older_adult_ml": {
             "ui": {
-                "label": "Geriatric Profile Eligibility Status",
+                "label": "Geriatric Profiles",
                 "pillar": "Patient Profile",
                 "subgroup": "Population Scope",
                 "priority": 30,
@@ -1170,6 +1170,57 @@ def preprocessor():
         verbose_feature_names_out=True
     )
 
+NARRATIVE_FIELD_MEANINGS = {
+    "therapeutic_area_ml": "Broad clinical domain used to contextualize disease biology, standard-of-care expectations, endpoint norms, operational benchmarks, and calibration limits.",
+    "gbd_cause_id_3_ml": "Specific GBD Level 3 disease or condition category used to anchor clinical context, patient relevance, feasibility assumptions, and similar-trial comparisons.",
+    "is_rare_disease_ml": "Rare-condition flag used to interpret feasible population size, recruitment difficulty, evidence expectations, endpoint maturity, and tolerance for smaller or more targeted designs.",
+    "phase_ml": "Clinical development phase used to judge whether evidence ambition, endpoint maturity, comparator strength, population scope, and operational scale fit the decision being tested.",
+    "strategic_ambition_ml": "Implied development objective, such as dose characterization, signal detection, or registration-enabling confirmation; sets the evidence standard the scenario should be able to defend.",
+    "target_precedent_ml": "Degree of prior target precedent used to interpret biological risk, evidentiary burden, and how much uncertainty a scenario can reasonably carry.",
+    "target_pathway_class_ml": "Biological pathway or mechanism class used to contextualize scientific novelty, plausibility, modality risk, and whether the endpoint can credibly capture mechanism-related benefit.",
+    "therapeutic_modality_ml": "Therapeutic product modality used to interpret mechanism, delivery burden, safety oversight, endpoint expectations, site capability, and operational complexity.",
+    "innovation_tier_ml": "Relative innovation level used to interpret uncertainty, precedent, evidence burden, and whether a scenario requires stronger safeguards or clearer endpoint logic.",
+    "intervention_model_ml": "Study arm structure used to interpret comparison credibility, bias risk, treatment-effect interpretability, participant burden, and operational complexity.",
+    "primary_purpose_ml": "Primary study purpose used to judge whether the scenario is asking a treatment, prevention, supportive-care, or other question and whether the design can answer it.",
+    "adaptive_design_ml": "Adaptive or static design structure used to interpret flexibility, governance burden, operating-characteristic expectations, and whether adaptations strengthen or complicate inference.",
+    "endpoint_rigor_ml": "Primary endpoint type and evidentiary rigor used to judge clinical meaningfulness, susceptibility to bias, endpoint maturity, and decision interpretability.",
+    "endpoint_structure_ml": "Single versus multi/composite primary endpoint structure used to interpret clarity of the primary question, multiplicity, component relevance, and endpoint interpretability.",
+    "biomarker_stratification_ml": "Biomarker selection or stratification flag used to interpret enrichment strategy, treatment-effect clarity, external validity, assay burden, and recruitment feasibility.",
+    "patient_severity_ml": "Clinical severity or burden used to interpret acceptable risk, endpoint relevance, ethical threshold, recruitment urgency, and proportionality of trial burden.",
+    "line_of_therapy_ml": "Treatment-line or disease-course setting used to interpret unmet need, comparator expectations, endpoint relevance, prior-treatment heterogeneity, and patient-selection fit.",
+    "gender_ml": "Gender eligibility scope used to interpret target-population fit, generalizability, exclusion risk, and whether restrictions are clinically justified by the scenario.",
+    "healthy_volunteers_ml": "Healthy-volunteer inclusion flag used to interpret phase appropriateness, safety tolerance, endpoint relevance, and whether population choice fits the development question.",
+    "adult_ml": "Adult eligibility flag used to interpret population fit, generalizability, ethical threshold, and whether excluding or including adults is justified by the indication.",
+    "child_ml": "Pediatric eligibility flag used to interpret ethical safeguards, dosing uncertainty, endpoint relevance, recruitment feasibility, and whether pediatric inclusion fits the evidence objective.",
+    "older_adult_ml": "Older-adult eligibility flag used to interpret representativeness, frailty or comorbidity relevance, safety monitoring needs, and whether exclusions weaken intended-use evidence.",
+    "masking_ml": "Masking/blinding approach used to interpret bias control, endpoint subjectivity, operational feasibility, and confidence that observed effects are not assessment-driven.",
+    "allocation_ml": "Allocation method used to interpret comparison credibility, selection bias risk, treatment-effect interpretability, and whether the design supports causal inference.",
+    "has_dmc_ml": "Data Monitoring Committee or similar oversight flag used to interpret safety governance, risk proportionality, vulnerable-population protection, and complex-modality oversight.",
+    "has_placebo_ml": "Placebo-control flag used to interpret assay sensitivity, ethical acceptability, comparator credibility, endpoint interpretability, and patient-burden trade-offs.",
+    "comparator_benchmark_ml": "Comparator or control strategy used to interpret whether the treatment effect can be meaningfully judged against current care, placebo, historical context, or no control.",
+    "administration_complexity_ml": "Administration and delivery complexity used to interpret site capability, participant burden, safety oversight, adherence risk, and whether operational burden is evidence-justified.",
+    "number_of_arms_ml": "Number of intervention or comparator arms used to interpret evidentiary breadth, multiplicity, recruitment burden, site complexity, and whether added arms answer a necessary question.",
+    "sponsor_tier_ml": "Sponsor scale/type proxy used only as execution-capability and trial-footprint context; it should not be treated as a direct judgment of scientific quality.",
+    "primary_duration_months_ml": "Primary endpoint timing horizon used to interpret endpoint maturity, follow-up burden, attrition risk, operational feasibility, and whether duration fits the outcome being measured.",
+    "title": "Trial title used as concise identity and high-level study-objective context for narrative review.",
+    "summary_ui": "Editable study summary used as the main text context for design rationale, intent, and structured-field coherence.",
+    "criteria_ui": "Eligibility criteria text; deferred from default V1 narrative packets because it can be long and noisy.",
+    "conditions_ui": "Condition/disease text used as supporting clinical context for indication and population coherence.",
+    "interventions_ui": "Intervention text used as supporting context for modality, mechanism, delivery complexity, and comparator coherence.",
+    "primary_outcomes_ui": "Primary outcome text used for endpoint coherence, endpoint structure, timing, and interpretability review.",
+}
+
+
+def _apply_narrative_field_meanings(registry):
+    fields = registry.get("FIELDS", {})
+    for field_id, meaning in NARRATIVE_FIELD_MEANINGS.items():
+        field = fields.get(field_id)
+        if not isinstance(field, dict):
+            continue
+        ui = field.setdefault("ui", {})
+        ui["meaning"] = meaning
+
+
 def export_pipeline_taxonomy(output_path):
     """
     Exports the PIPELINE_REGISTRY as a JSON file to serve as the source of truth
@@ -1195,6 +1246,7 @@ def export_pipeline_taxonomy(output_path):
         return obj
 
     sanitized_registry = sanitize(PIPELINE_REGISTRY)
+    _apply_narrative_field_meanings(sanitized_registry)
 
     out_p = Path(output_path)
     out_p.parent.mkdir(parents=True, exist_ok=True)

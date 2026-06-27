@@ -31,15 +31,58 @@ Before you attempt to deploy, always run a diagnostic check to ensure everything
 *   **If Docker is missing/not running**: Open Docker Desktop and rerun the check.
 *   **If Auth/Project is missing**: Run `./scripts/deploy.sh auth`.
 
+## UI variants
+
+The same Docker image is used for the API and all UI services. The UI service selects its Streamlit view through the `APP_VARIANT` environment variable.
+
+| Command | Cloud Run service | `APP_VARIANT` | View module |
+| :--- | :--- | :--- | :--- |
+| `./scripts/deploy.sh trial-audit` or `./scripts/deploy.sh ui` | `clintrial-ui` | `trial_audit` | `frontend/views/trial_audit.py` |
+| `./scripts/deploy.sh trial-edit` | `clintrial-edit` | `trial_edit` | `frontend/views/trial_edit.py` |
+| `./scripts/deploy.sh trial-simulator` | `clintrial-simulator` | `trial_simulator` | `frontend/views/trial_simulator.py` |
+
+The simulator deploy also sets the non-secret live Scenario Review configuration for Gemini:
+
+```text
+NARRATIVE_LIVE_REVIEW_ENABLED=true
+NARRATIVE_LLM_PROVIDER=gemini
+GEMINI_NARRATIVE_MODEL=gemini-3.1-flash-lite
+NARRATIVE_LLM_TEMPERATURE=omit
+GEMINI_THINKING_LEVEL=medium
+NARRATIVE_LLM_SEED=20260607
+NARRATIVE_LLM_TIMEOUT_SECONDS=100
+NARRATIVE_LLM_MAX_OUTPUT_TOKENS=25000
+NARRATIVE_LLM_MAX_RETRIES=0
+```
+
+`GEMINI_THINKING_LEVEL=medium` applies to Pass 2 scoring and Pass 3 narrative. Visible Pass 1 is fixed to medium in the provider code.
+
+The Gemini API key is not stored in this repository or Docker image. Configure it once on the Cloud Run `clintrial-simulator` service as `GEMINI_API_KEY` or `GOOGLE_API_KEY`, preferably from Secret Manager:
+
+```bash
+gcloud run services update clintrial-simulator \
+  --region europe-west1 \
+  --project clintrial-predict-2025 \
+  --update-secrets GEMINI_API_KEY=gemini-api-key:latest
+```
+
+The deploy script uses non-destructive environment updates for UI services, so existing secrets and unrelated service environment variables are preserved.
+
 ## Normal UI update
 
-If you have only made changes to the frontend (e.g., editing `frontend/app.py`), use this command:
+If you have only made changes to one frontend variant, use the matching command above. To update only the default audit UI:
 
 ```bash
 ./scripts/deploy.sh ui
 ```
 
 This will build a new Docker image, push it to the registry, and update **only** the `clintrial-ui` service. It does not touch the API service.
+
+To update all three UI services without deploying the API:
+
+```bash
+./scripts/deploy.sh uis
+```
 
 ## API update
 
@@ -51,7 +94,7 @@ If you have made changes to the backend or model (e.g., `api/main.py` or files i
 
 This will build a new Docker image, push it to the registry, and update **only** the `clintrial-api` service.
 
-## Full update: API + UI
+## Full update: API + all UIs
 
 If you have made major changes or are unsure, deploy both services at once:
 
@@ -59,7 +102,7 @@ If you have made major changes or are unsure, deploy both services at once:
 ./scripts/deploy.sh all
 ```
 
-This builds and pushes the image once, then updates both the API and the UI services sequentially.
+This builds and pushes the image once, then updates the API and all three UI services sequentially.
 
 ## What each command does
 
@@ -67,13 +110,16 @@ This builds and pushes the image once, then updates both the API and the UI serv
 *   **`auth`**: Performs the necessary logins and configurations for Google Cloud and Docker.
 *   **`build`**: Locally builds the Docker image for the `linux/amd64` platform.
 *   **`push`**: Uploads the locally built image to the Google Artifact Registry.
-*   **`ui` / `api` / `all`**: These commands perform the full workflow: **Check -> Build -> Push -> Deploy**. Pushing the image alone is not enough; the Cloud Run service must be explicitly updated to use the new image.
+*   **`ui` / `trial-audit` / `trial-edit` / `trial-simulator` / `uis` / `api` / `all`**: These commands perform the full workflow: **Check -> Build -> Push -> Deploy**. Pushing the image alone is not enough; the Cloud Run service must be explicitly updated to use the new image.
 
 ## How to verify after deployment
 
 Once the script finishes successfully, follow these steps to verify:
 
 1.  **Open the UI URL**: The script will provide the URL, or you can find it in the Google Cloud Console.
+    * Audit: Cloud Run service `clintrial-ui`.
+    * Edit: Cloud Run service `clintrial-edit`.
+    * Simulator: Cloud Run service `clintrial-simulator`.
 2.  **Test Search**: Use the "Search Trials" feature to ensure the database connection and search registry are working.
 3.  **Test Prediction**:
     *   Open one trial from the search results.
@@ -101,6 +147,9 @@ The UI is configured to talk to the API at:
 | :--- | :--- |
 | Check environment | `./scripts/deploy.sh check` |
 | First-time setup | `./scripts/deploy.sh auth` |
-| **Update Frontend/UI only** | `./scripts/deploy.sh ui` |
+| **Update audit UI only** | `./scripts/deploy.sh ui` or `./scripts/deploy.sh trial-audit` |
+| **Update edit UI only** | `./scripts/deploy.sh trial-edit` |
+| **Update simulator UI only** | `./scripts/deploy.sh trial-simulator` |
+| **Update all UI services only** | `./scripts/deploy.sh uis` |
 | Update Backend/API only | `./scripts/deploy.sh api` |
-| Update everything | `./scripts/deploy.sh all` |
+| Update API and all UI services | `./scripts/deploy.sh all` |

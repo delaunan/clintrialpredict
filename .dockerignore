@@ -8,11 +8,24 @@ env
 venv
 .env
 .git
+.antigravitycli
+.claude
+.codexrc
+.gemini
+reports/
+screenshots/
+README_LOAD_TEST.md
+requirements-load-test.txt
+load_test_ui.py
+safe_nb_injector.py
+landing_pitch_content.txt
 
 # Ignore notebooks and research data (Keep the image light)
 notebooks/
 data/
 docs/
+frontend/data/operational_benchmarks_v1.xlsx
+frontend/data/operational_benchmarks_v1_report.json
 *.tmp
 *.xlsm
 *.txt

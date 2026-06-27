@@ -24,6 +24,10 @@ get_api_url() {
     fi
 }
 
+get_narrative_max_output_tokens() {
+    python -c "from src.narratives.provider_config import DEFAULT_MAX_OUTPUT_TOKENS; print(DEFAULT_MAX_OUTPUT_TOKENS)"
+}
+
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -171,15 +175,34 @@ deploy_ui() {
     local service_name="${1:-$UI_SERVICE}"
     local variant="${2:-"trial_audit"}"
     local api_url
+    local env_vars
+    local narrative_max_output_tokens
     api_url=$(get_api_url)
+    env_vars="API_URL=$api_url,APP_VARIANT=$variant"
+
+    if [ "$variant" == "trial_simulator" ]; then
+        narrative_max_output_tokens=$(get_narrative_max_output_tokens)
+        env_vars="${env_vars},NARRATIVE_LIVE_REVIEW_ENABLED=true"
+        env_vars="${env_vars},NARRATIVE_LLM_PROVIDER=gemini"
+        env_vars="${env_vars},GEMINI_NARRATIVE_MODEL=gemini-3.1-flash-lite"
+        env_vars="${env_vars},NARRATIVE_LLM_TEMPERATURE=omit"
+        env_vars="${env_vars},GEMINI_THINKING_LEVEL=medium"
+        env_vars="${env_vars},NARRATIVE_LLM_SEED=20260607"
+        env_vars="${env_vars},NARRATIVE_LLM_TIMEOUT_SECONDS=100"
+        env_vars="${env_vars},NARRATIVE_LLM_MAX_OUTPUT_TOKENS=$narrative_max_output_tokens"
+        env_vars="${env_vars},NARRATIVE_LLM_MAX_RETRIES=0"
+    fi
 
     echo -e "${BLUE}Deploying UI service: $service_name (Variant: $variant)...${NC}"
     echo -e "${BLUE}Targeting API URL: $api_url${NC}"
+    if [ "$variant" == "trial_simulator" ]; then
+        echo -e "${BLUE}Enabling live Gemini Scenario Review. Ensure GEMINI_API_KEY or GOOGLE_API_KEY is configured as a Cloud Run secret/env var.${NC}"
+    fi
     
     gcloud run deploy "$service_name" \
        --image "$IMAGE" \
        --command "streamlit","run","frontend/app.py","--server.port","8080","--server.address","0.0.0.0" \
-       --set-env-vars API_URL="$api_url",APP_VARIANT="$variant" \
+       --update-env-vars "$env_vars" \
        --memory 3Gi \
        --port 8080 \
        --concurrency 4 \
@@ -225,19 +248,35 @@ case $COMMAND in
         push_image
         deploy_ui "$UI_SERVICE" "trial_audit"
         ;;
-    game)
+    trial-audit)
         print_header
         require_ready
         build_image
         push_image
-        deploy_ui "clintrial-game" "serious_game"
+        deploy_ui "$UI_SERVICE" "trial_audit"
         ;;
-    simulator)
+    uis)
         print_header
         require_ready
         build_image
         push_image
-        deploy_ui "clintrial-simulator" "simulator"
+        deploy_ui "$UI_SERVICE" "trial_audit"
+        deploy_ui "clintrial-edit" "trial_edit"
+        deploy_ui "clintrial-simulator" "trial_simulator"
+        ;;
+    trial-simulator)
+        print_header
+        require_ready
+        build_image
+        push_image
+        deploy_ui "clintrial-simulator" "trial_simulator"
+        ;;
+    trial-edit)
+        print_header
+        require_ready
+        build_image
+        push_image
+        deploy_ui "clintrial-edit" "trial_edit"
         ;;
     all)
         print_header
@@ -246,11 +285,11 @@ case $COMMAND in
         push_image
         deploy_api
         deploy_ui "$UI_SERVICE" "trial_audit"
-        deploy_ui "clintrial-game" "serious_game"
-        deploy_ui "clintrial-simulator" "simulator"
+        deploy_ui "clintrial-edit" "trial_edit"
+        deploy_ui "clintrial-simulator" "trial_simulator"
         ;;
     *)
-        echo "Usage: $0 {check|auth|build|push|api|ui|game|simulator|all}"
+        echo "Usage: $0 {check|auth|build|push|api|ui|trial-audit|trial-edit|trial-simulator|uis|all}"
         exit 1
         ;;
 esac

@@ -1,0 +1,236 @@
+#!/usr/bin/env python
+"""Validate narrative provider config parsing without calling LLM providers."""
+
+from __future__ import annotations
+
+import os
+import sys
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from src.narratives.provider_config import (  # noqa: E402
+    DEFAULT_GEMINI_MODEL,
+    DEFAULT_GEMINI_THINKING_LEVEL,
+    DEFAULT_HIDDEN_BASELINE_MAX_OUTPUT_TOKENS,
+    DEFAULT_MAX_OUTPUT_TOKENS,
+    DEFAULT_MAX_RETRIES,
+    DEFAULT_OPENAI_MODEL,
+    DEFAULT_OPENAI_REASONING_EFFORT,
+    DEFAULT_REPAIR_MAX_OUTPUT_TOKENS,
+    DEFAULT_TIMEOUT_SECONDS,
+    PROVIDER_GEMINI,
+    PROVIDER_OPENAI,
+    load_narrative_provider_config,
+    provider_config_cache_namespace,
+)
+
+
+def _check_defaults(errors: list[str]) -> None:
+    config = load_narrative_provider_config({})
+    if config.provider != PROVIDER_OPENAI:
+        errors.append("default narrative provider should be openai")
+    if config.fallback_provider != PROVIDER_GEMINI:
+        errors.append("default narrative fallback provider should be gemini")
+    if config.provider_available():
+        errors.append("openai provider should not be available without OPENAI_API_KEY")
+    if config.fallback_available():
+        errors.append("gemini fallback should not be available without GEMINI_API_KEY or GOOGLE_API_KEY")
+    if config.provider_settings(PROVIDER_OPENAI).model != DEFAULT_OPENAI_MODEL:
+        errors.append("openai model should use pinned default when env is absent")
+    if config.provider_settings(PROVIDER_GEMINI).model != DEFAULT_GEMINI_MODEL:
+        errors.append("gemini model should use pinned default when env is absent")
+    if config.max_output_tokens != DEFAULT_MAX_OUTPUT_TOKENS:
+        errors.append("default max_output_tokens mismatch")
+    if DEFAULT_HIDDEN_BASELINE_MAX_OUTPUT_TOKENS != DEFAULT_MAX_OUTPUT_TOKENS:
+        errors.append("hidden baseline max output tokens should share the central default")
+    if DEFAULT_REPAIR_MAX_OUTPUT_TOKENS != DEFAULT_MAX_OUTPUT_TOKENS:
+        errors.append("repair max output tokens should share the central default")
+    if config.timeout_seconds != DEFAULT_TIMEOUT_SECONDS:
+        errors.append("default timeout_seconds mismatch")
+    if DEFAULT_TIMEOUT_SECONDS != 100:
+        errors.append("default timeout_seconds should remain calibrated to 100 seconds")
+    if config.max_retries != DEFAULT_MAX_RETRIES:
+        errors.append("default max_retries mismatch")
+    if config.openai_reasoning_effort != DEFAULT_OPENAI_REASONING_EFFORT:
+        errors.append("default openai reasoning effort mismatch")
+    if config.gemini_thinking_level != DEFAULT_GEMINI_THINKING_LEVEL:
+        errors.append("default Gemini thinking level should resolve explicitly")
+    if DEFAULT_GEMINI_THINKING_LEVEL != "medium":
+        errors.append("default Gemini thinking level should remain medium for live latency control")
+    default_namespace = provider_config_cache_namespace(config)
+    if "gemini_thinking_level=medium" not in default_namespace:
+        errors.append("default provider cache namespace should include effective medium Gemini thinking")
+    if "gemini_thinking_level=default" in default_namespace:
+        errors.append("provider cache namespace should not use ambiguous default Gemini thinking")
+    if config.temperature is not None:
+        errors.append("default temperature should be omitted")
+
+
+def _check_env_values(errors: list[str]) -> None:
+    env = {
+        "NARRATIVE_LLM_PROVIDER": " OpenAI ",
+        "NARRATIVE_LLM_FALLBACK_PROVIDER": "Gemini",
+        "OPENAI_API_KEY": "openai-secret",
+        "GOOGLE_API_KEY": "google-secret",
+        "OPENAI_NARRATIVE_MODEL": "openai-model",
+        "GEMINI_NARRATIVE_MODEL": "gemini-model",
+        "NARRATIVE_LLM_TEMPERATURE": "0",
+        "NARRATIVE_LLM_SEED": "20260607",
+        "NARRATIVE_LLM_MAX_OUTPUT_TOKENS": "3000",
+        "NARRATIVE_LLM_TIMEOUT_SECONDS": "45",
+        "NARRATIVE_LLM_MAX_RETRIES": "1",
+        "OPENAI_REASONING_EFFORT": "high",
+    }
+    config = load_narrative_provider_config(env)
+    if config.validation_errors:
+        errors.append(f"valid env should not produce validation errors: {config.validation_errors}")
+    if not config.provider_available():
+        errors.append("openai provider should be available when OPENAI_API_KEY is present")
+    if not config.fallback_available():
+        errors.append("gemini fallback should be available when GOOGLE_API_KEY is present")
+    if config.provider_settings().model != "openai-model":
+        errors.append("openai model should come from OPENAI_NARRATIVE_MODEL")
+    if config.fallback_settings().model != "gemini-model":
+        errors.append("gemini model should come from GEMINI_NARRATIVE_MODEL")
+    if config.temperature != 0.0:
+        errors.append("explicit temperature should parse as float")
+    if config.seed != 20260607:
+        errors.append("seed should parse as int")
+    if config.max_output_tokens != 3000:
+        errors.append("max output tokens should parse as int")
+    if config.timeout_seconds != 45:
+        errors.append("timeout seconds should parse as int")
+    if config.max_retries != 1:
+        errors.append("max retries should parse as int")
+    if config.openai_reasoning_effort != "high":
+        errors.append("openai reasoning effort should come from OPENAI_REASONING_EFFORT")
+
+    metadata = config.sanitized_trace_metadata()
+    if "openai-secret" in str(metadata) or "google-secret" in str(metadata):
+        errors.append("sanitized metadata should not expose API key values")
+
+
+def _check_gemini_key_precedence(errors: list[str]) -> None:
+    env = {
+        "GEMINI_API_KEY": "gemini-secret",
+        "GOOGLE_API_KEY": "google-secret",
+    }
+    config = load_narrative_provider_config(env)
+    settings = config.provider_settings(PROVIDER_GEMINI)
+    if settings.api_key != "gemini-secret":
+        errors.append("GEMINI_API_KEY should take precedence over GOOGLE_API_KEY")
+
+
+def _check_temperature_omit(errors: list[str]) -> None:
+    config = load_narrative_provider_config({"NARRATIVE_LLM_TEMPERATURE": "omit"})
+    if config.validation_errors:
+        errors.append(f"temperature omit should not produce validation errors: {config.validation_errors}")
+    if config.temperature is not None:
+        errors.append("temperature omit should parse as None")
+    metadata = config.sanitized_trace_metadata()
+    if metadata.get("temperature") is not None:
+        errors.append("sanitized metadata should preserve omitted temperature as None")
+
+    explicit = load_narrative_provider_config({"NARRATIVE_LLM_TEMPERATURE": "0.3"})
+    if provider_config_cache_namespace(config) == provider_config_cache_namespace(explicit):
+        errors.append("provider cache namespace should distinguish omitted and explicit temperatures")
+
+
+def _check_gemini_thinking_level(errors: list[str]) -> None:
+    config = load_narrative_provider_config({"GEMINI_THINKING_LEVEL": "high"})
+    if config.validation_errors:
+        errors.append(f"valid Gemini thinking level should not produce validation errors: {config.validation_errors}")
+    if config.gemini_thinking_level != "high":
+        errors.append("Gemini thinking level should parse as high")
+    metadata = config.sanitized_trace_metadata()
+    if metadata.get("gemini_thinking_level") != "high":
+        errors.append("sanitized metadata should include Gemini thinking level")
+
+    default = load_narrative_provider_config({})
+    if provider_config_cache_namespace(config) == provider_config_cache_namespace(default):
+        errors.append("provider cache namespace should distinguish Gemini thinking level")
+
+
+def _check_invalid_values(errors: list[str]) -> None:
+    env = {
+        "NARRATIVE_LLM_PROVIDER": "bad-provider",
+        "NARRATIVE_LLM_FALLBACK_PROVIDER": "bad-fallback",
+        "NARRATIVE_LLM_TEMPERATURE": "not-a-number",
+        "NARRATIVE_LLM_SEED": "not-an-int",
+        "NARRATIVE_LLM_MAX_OUTPUT_TOKENS": "0",
+        "NARRATIVE_LLM_TIMEOUT_SECONDS": "-1",
+        "NARRATIVE_LLM_MAX_RETRIES": "9",
+        "GEMINI_THINKING_LEVEL": "maximum",
+        "OPENAI_REASONING_EFFORT": "too-high",
+    }
+    config = load_narrative_provider_config(env)
+    if len(config.validation_errors) != 9:
+        errors.append(f"invalid env should produce nine validation errors, got {config.validation_errors}")
+    if config.provider != PROVIDER_OPENAI:
+        errors.append("invalid primary provider should fall back to openai")
+    if config.fallback_provider != PROVIDER_GEMINI:
+        errors.append("invalid fallback provider should fall back to gemini")
+
+
+def _check_same_provider_disables_fallback(errors: list[str]) -> None:
+    config = load_narrative_provider_config({
+        "NARRATIVE_LLM_PROVIDER": "openai",
+        "NARRATIVE_LLM_FALLBACK_PROVIDER": "openai",
+    })
+    if config.fallback_provider is not None:
+        errors.append("fallback should be disabled when it matches primary provider")
+
+
+def _check_cache_namespace_tracks_generation_controls(errors: list[str]) -> None:
+    base = load_narrative_provider_config({
+        "OPENAI_API_KEY": "openai-secret",
+        "GEMINI_API_KEY": "gemini-secret",
+        "NARRATIVE_LLM_SEED": "20260607",
+    })
+    changed = load_narrative_provider_config({
+        "OPENAI_API_KEY": "openai-secret",
+        "GEMINI_API_KEY": "gemini-secret",
+        "NARRATIVE_LLM_SEED": "20260608",
+    })
+    if provider_config_cache_namespace(base) == provider_config_cache_namespace(changed):
+        errors.append("provider cache namespace should change when generation controls change")
+
+
+def _check_local_env_loads_without_printing_secrets(errors: list[str]) -> None:
+    load_dotenv()
+    config = load_narrative_provider_config(os.environ)
+    if config.provider not in {PROVIDER_OPENAI, PROVIDER_GEMINI, "mock"}:
+        errors.append("local env provider should normalize to a supported provider")
+    # Intentionally do not print or assert real secret values. This only proves
+    # local .env can be parsed without requiring the user's account state.
+    _ = config.sanitized_trace_metadata()
+
+
+def main() -> int:
+    errors: list[str] = []
+    _check_defaults(errors)
+    _check_env_values(errors)
+    _check_gemini_key_precedence(errors)
+    _check_temperature_omit(errors)
+    _check_gemini_thinking_level(errors)
+    _check_invalid_values(errors)
+    _check_same_provider_disables_fallback(errors)
+    _check_cache_namespace_tracks_generation_controls(errors)
+    _check_local_env_loads_without_printing_secrets(errors)
+
+    if errors:
+        for error in errors:
+            print(f"ERROR: {error}")
+        return 1
+
+    print("Validated narrative provider config parsing without provider API calls.")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

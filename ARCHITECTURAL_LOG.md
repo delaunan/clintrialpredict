@@ -1,5 +1,27 @@
 # **Clinical Trial Prediction: Project Status & Architecture (v56.0)**
 
+## **0. Documentation Map**
+Use this file as the project architecture hub. It should stay concise and point to the domain-specific architecture files rather than absorbing every implementation detail.
+
+| File | Role | Update When |
+| :--- | :--- | :--- |
+| `GEMINI.md` | Shared agent operating rules and safety gates. | Agent workflow, parity rules, or memory policy changes. |
+| `AGENTS.md` | Codex-specific startup and workflow wrapper around `GEMINI.md`. | Codex-only workflow instructions change. |
+| `ARCHITECTURAL_LOG.md` | Current high-level system map: production architecture, shared core, variants, artifacts, and documentation index. | Product topology, core architecture, artifact inventory, or variant list changes. |
+| `docs/architecture_edit.md` | Live trial-edit/trial-simulator UI and `/predict` simulation contract. | UI behavior, prediction workflow, editable feature state, or simulation scoring contract changes. |
+| `docs/architecture_estimation.md` | Operational-assumption benchmark architecture. | Planned enrollment, planned sites, duration benchmarks, operational artifacts, or defaulting logic changes. |
+| `docs/architecture_narratives.md` | Trial Simulator narrative, Scenario Review, Trial Score, LLM provider, and participant output architecture. | Narrative payloads, LLM outputs, Trial Score behavior, Scenario Review scoring, or provider contracts change. |
+| `docs/trial_score_narrative_direction.md` | Active Trial Score workflow and component contract. | Pass 1/2/3 workflow, score stack, Reality Check, or participant narrative direction changes. |
+| `docs/operational_fit_scoring.md` | Operational Fit scoring rationale and historical calibration notes. | Operational Fit rails, continuity, benchmark interpretation, or additive scoring guidance changes. |
+| `.gemini/tmp/clintrialpredict/memory/MEMORY.md` | Short private handoff notes, not an architecture source of truth. | End of meaningful work; prefix by architecture scope and branch. |
+
+Update rules:
+
+- Prefer updating one domain file per decision. Cross-link instead of duplicating the same contract in multiple docs.
+- Keep this hub current but short: variants, shared core, artifact inventory, and document routing only.
+- Move durable implementation history into the relevant `docs/architecture_*.md` file; avoid adding short-lived milestone notes unless they are needed for an active handoff.
+- Memory entries should cite the architecture scope first and branch provenance second, for example `[architecture_edit][trial-edit]`. They should not preserve obsolete instructions as active guidance.
+
 ## **1. Production Deployment (v1.0 - "Steel Shield")**
 - **Production URL**: [https://clintrial-ui-835962039082.europe-west1.run.app/](https://clintrial-ui-835962039082.europe-west1.run.app/)
 - **Infrastructure**: Google Cloud Run (Serverless).
@@ -62,6 +84,9 @@ To ensure the UI and API match the Notebook precisely, the system implements **R
 - **Target Encoding**: `gbd_cause_id_3_ml` uses smoothed binary target encoding (smooth=200.0).
 - **Numeric Scaling**: `number_of_arms_ml` and `primary_duration_months_ml` use `StandardScaler`.
 
+### **C. GBD Indication Mapping**
+`gbd_cause_id_3_ml` is the model-facing indication feature. Trial text is mapped to IHME GBD Level 3 causes during enrichment using the fixed menu in `docs/prompts/gbd_codes.md`; `src/prep/gbd_master_merge.py` owns hierarchy/menu generation support. The UI indication labels and lookup are derived artifacts, while the model consumes the encoded cause id through the preprocessing registry in `src/prep/pipeline.py`.
+
 ---
 
 ## **4. Simulation Roadmap (v2.0 - "Strategic Forecaster")**
@@ -81,7 +106,12 @@ To ensure the UI and API match the Notebook precisely, the system implements **R
 ## **6. Reference & Audit Tools**
 - **Database Refresh**: `python refresh_registry.py` (Re-calculates `search_registry.csv`).
 - **Parity Audit**: `python audit_parity.py` (Checks for mathematical drift).
-- **Deployment**: `scripts/deploy.sh` (Standard Cloud Run push).
+- **Deployment**: `scripts/deploy.sh` (Cloud Run build/push/deploy helper).
+  - `./scripts/deploy.sh trial-audit`: deploys `clintrial-ui` with `APP_VARIANT=trial_audit`.
+  - `./scripts/deploy.sh trial-edit`: deploys `clintrial-edit` with `APP_VARIANT=trial_edit`.
+  - `./scripts/deploy.sh trial-simulator`: deploys `clintrial-simulator` with `APP_VARIANT=trial_simulator`.
+  - `./scripts/deploy.sh uis`: deploys all three UI services from the same image.
+  - `./scripts/deploy.sh all`: deploys API plus all three UI services.
 
 ---
 
@@ -95,8 +125,8 @@ All variants share the same **Scoring Engine**, **Parity Logic**, and **Data Reg
 | Variant (`APP_VARIANT`) | Primary Focus | UI Components |
 | :--- | :--- | :--- |
 | **`trial_audit` (Default)** | Standard Discovery | Landing Search + Static Forensic View. |
-| **`simulator`** | Interactive Forecasting | Adds "Simulation Mode" (Live FastAPI /predict calls). |
-| **`serious_game`** | Strategic Management | Adds Portfolio View, Cost Estimation, and Market Potential layers. |
+| **`trial_edit`** | Trial Editing | Stable edit-mode workflow maintained separately from the simulator branch. |
+| **`trial_simulator`** | Interactive Forecasting | Simulation/game workflow with live FastAPI `/predict` calls and operational assumptions. |
 
 ### **D. Frontend Structure (Modular)**
 - `frontend/app.py`: Lightweight router/entry point.

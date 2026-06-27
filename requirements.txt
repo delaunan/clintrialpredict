@@ -17,3 +17,6 @@ requests==2.32.5
 # --- UTILS ---
 python-dotenv==1.2.1
 python-multipart==0.0.22
+
+# --- LLM PROVIDERS ---
+google-genai==1.61.0

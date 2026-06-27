@@ -15,10 +15,10 @@ TAXONOMY_PATH = BASE_DIR / "models" / "taxonomy_01.json"
 REGISTRY_PATH = BASE_DIR / "frontend" / "data" / "search_registry.csv"
 
 # --- DYNAMIC PIPELINE IMPORT ---
-from src.prep.pipeline import preprocessor, create_search_label, PIPELINE_REGISTRY
+from src.prep.pipeline import create_search_label, export_pipeline_taxonomy, PIPELINE_REGISTRY
 
 BIG_PHARMA = [
-    'ROCHE', 'GENENTECH (ROCHE)', 'CHUGAI (ROCHE)', 'SPARK (ROCHE)', 'CARMOT (ROCHE)',
+    'ROCHE', 'GENENTECH (ROCHE)', 'CHUGAI (ROCHE)', 'SPARK (ROCHE)',
     'J&J', 'ACTELION (J&J)', 'CENTOCOR (J&J)', 'CRUCELL (J&J)', 'MOMENTA (J&J)',
     'PFIZER', 'SEAGEN', 'HOSPIRA (PFIZER)', 'WARNER-LAMBERT (PFIZER)',
     'AZN', 'ALEXION (AZN)', 'MEDIMMUNE (AZN)', 'PEARL THERAPEUTICS (AZN)', 'ALEXION',
@@ -39,12 +39,15 @@ BIG_PHARMA = [
     'SUN PHARMACEUTICAL INDUSTRIES', 'SUN PHARMACEUTICAL', 'MALLINCKRODT', 'ALMIRALL', 'CELLTRION', 'INCYTE', 'NEUROCRINE BIOSCIENCES',
     'HENGRUI', 'BEIGENE', 'INNOVENT', 'AKESO', 'REMEGEN'
 ]
-MIN_YEAR = 2019
+MIN_YEAR = 2017
 
 def refresh_registry():
     print(">>> Refreshing Search Registry (Dynamic Registry-Based Generation)...")
+    export_pipeline_taxonomy(TAXONOMY_PATH)
     
     df_full = pd.read_csv(DATA_CLINPRED_PATH, low_memory=False)
+    if df_full.index.name == 'nct_id':
+        df_full = df_full.reset_index()
     
     # 1. Prediction Probabilities
     model = joblib.load(MODEL_PATH)
@@ -156,7 +159,7 @@ def refresh_registry():
             if p_totals[p] == -0.0: p_totals[p] = 0.0
 
         all_scores.append(final_score)
-        all_zones.append("High Risk" if final_score < 25 else "Watchlist" if final_score < 50 else "Favorable" if final_score < 75 else "Low Risk")
+        all_zones.append("High Risk" if final_score <= 25 else "Watchlist" if final_score <= 50 else "Favorable" if final_score <= 75 else "Low Risk")
         for p in pillars: pillar_scores[p].append(p_totals[p])
 
     df_full['Clinical_Score'] = all_scores
@@ -172,12 +175,6 @@ def refresh_registry():
     
     df_full['is_correct'] = df_full.apply(check_accuracy, axis=1)
 
-    # 5. Canonical Sponsor Overrides (M&A Logic)
-    # Based on Historian Protocol: Post-2024 Carmot trials are ROCHE
-    df_full.loc[(df_full['lead_sponsor_canonical'] == 'CARMOT THERAPEUTICS') & (df_full['start_year'] >= 2024), 'lead_sponsor_canonical'] = 'ROCHE'
-    # Pre-2024 Carmot trials are CARMOT (ROCHE)
-    df_full.loc[(df_full['lead_sponsor_canonical'] == 'CARMOT THERAPEUTICS') & (df_full['start_year'] < 2024), 'lead_sponsor_canonical'] = 'CARMOT (ROCHE)'
-
     # 6. DYNAMIC SELECTION
     registry_fields = list(PIPELINE_REGISTRY["FIELDS"].keys())
     calculated_artifacts = [
@@ -187,13 +184,23 @@ def refresh_registry():
     ]
     ui_derived = [c for c in df_full.columns if c.endswith('_ui')]
     
-    cols_to_export = list(set(registry_fields + calculated_artifacts + ui_derived))
+    cols_to_export = list(dict.fromkeys(registry_fields + calculated_artifacts + ui_derived))
     existing_cols = [c for c in cols_to_export if c in df_full.columns]
+    if REGISTRY_PATH.exists():
+        current_header = list(pd.read_csv(REGISTRY_PATH, nrows=0).columns)
+        if set(current_header) == set(existing_cols):
+            existing_cols = current_header
 
-    # 6. Filter & Save
-    df_filtered = df_full[(df_full['lead_sponsor_canonical'].isin(BIG_PHARMA)) & (df_full['start_year'] > MIN_YEAR)].copy()
+    print(f">>> Applying Custom Filter for CSV: {len(BIG_PHARMA)} companies after {MIN_YEAR}...")
+    df_filtered = df_full[
+        (df_full['lead_sponsor_canonical'].isin(BIG_PHARMA)) &
+        (df_full['start_year'] > MIN_YEAR)
+    ][existing_cols].copy()
+
+    if 'nct_id' in df_filtered.columns:
+        df_filtered = df_filtered.set_index('nct_id')
     
-    df_filtered[existing_cols].to_csv(REGISTRY_PATH, index=False, quoting=csv.QUOTE_ALL)
+    df_filtered.to_csv(REGISTRY_PATH, index=True, quoting=csv.QUOTE_ALL)
     print(f">>> Registry Refreshed: {len(df_filtered):,} trials saved to {REGISTRY_PATH}")
 
 if __name__ == "__main__":

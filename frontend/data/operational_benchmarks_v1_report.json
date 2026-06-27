@@ -1,0 +1,101 @@
+{
+  "artifact_rows": 9267,
+  "benchmark_rows_by_level": {
+    "phase_endpoint_bin": 32,
+    "phase_indication_rare": 656,
+    "phase_indication_rare_endpoint_bin": 2232,
+    "phase_indication_rare_modality": 1948,
+    "phase_indication_rare_non_vaccine_infections": 81,
+    "phase_indication_rare_strategic_intent": 1304,
+    "phase_only": 4,
+    "phase_ta": 72,
+    "phase_ta_endpoint_bin": 438,
+    "phase_ta_modality": 440,
+    "phase_ta_non_vaccine_infections": 4,
+    "phase_ta_rare": 133,
+    "phase_ta_rare_endpoint_bin": 698,
+    "phase_ta_rare_modality": 660,
+    "phase_ta_rare_non_vaccine_infections": 8,
+    "phase_ta_rare_strategic_intent": 347,
+    "phase_ta_strategic_intent": 210
+  },
+  "calibration_notes": "Deterministic combined operational benchmark for planned enrollment, site-count proxy, enrollment-coherent patients-per-site defaults, and duration defaults; same-level therapeutic modality and strategic-intent fallback refinement are used for enrollment and patients-per-site only; duration uses endpoint-duration-bin clinical fallback; no operational ML model.",
+  "completed_actual_enrollment_targets": 20526,
+  "completed_actual_primary_completion_targets": 20681,
+  "completed_actual_total_duration_targets": 20476,
+  "completed_patients_per_site_targets": 19689,
+  "completed_positive_site_count_targets": 19880,
+  "coverage_qa": {
+    "duration_months": {
+      "low_confidence_matches": 0,
+      "match_counts": {
+        "phase_endpoint_bin": 6344,
+        "phase_indication_rare": 306,
+        "phase_indication_rare_endpoint_bin": 11503,
+        "phase_only": 290,
+        "phase_ta": 48,
+        "phase_ta_endpoint_bin": 2740,
+        "phase_ta_rare": 107,
+        "phase_ta_rare_endpoint_bin": 12728
+      },
+      "not_available": 0
+    },
+    "enrollment": {
+      "low_confidence_matches": 0,
+      "match_counts": {
+        "phase_indication_rare": 23299,
+        "phase_only": 1193,
+        "phase_ta": 2269,
+        "phase_ta_rare": 7305
+      },
+      "not_available": 0
+    },
+    "patients_per_site": {
+      "low_confidence_matches": 0,
+      "match_counts": {
+        "phase_indication_rare": 23299,
+        "phase_only": 1193,
+        "phase_ta": 2269,
+        "phase_ta_rare": 7305
+      },
+      "not_available": 0
+    },
+    "primary_completion_months": {
+      "low_confidence_matches": 0,
+      "match_counts": {
+        "phase_endpoint_bin": 6253,
+        "phase_indication_rare": 306,
+        "phase_indication_rare_endpoint_bin": 11714,
+        "phase_only": 290,
+        "phase_ta": 48,
+        "phase_ta_endpoint_bin": 2749,
+        "phase_ta_rare": 107,
+        "phase_ta_rare_endpoint_bin": 12599
+      },
+      "not_available": 0
+    },
+    "site_count": {
+      "low_confidence_matches": 0,
+      "match_counts": {
+        "phase_indication_rare": 23439,
+        "phase_only": 1193,
+        "phase_ta": 2230,
+        "phase_ta_rare": 7204
+      },
+      "not_available": 0
+    }
+  },
+  "created_at": "2026-06-09T08:36:11+00:00",
+  "duplicate_benchmark_keys": 0,
+  "low_confidence_rows_by_metric": {
+    "duration_months": 3748,
+    "enrollment": 5137,
+    "patients_per_site": 5121,
+    "primary_completion_months": 3755,
+    "site_count": 656
+  },
+  "minimum_confident_cohort_threshold": 50,
+  "outlier_policy": "positive completed ACTUAL enrollment, positive completed registry-derived facility-count proxy, completed ACTUAL enrollment per positive facility-count proxy, completed ACTUAL total duration, and completed ACTUAL primary completion duration; percentiles used without winsorization",
+  "source_data_version": "41bcafd6226cd999",
+  "source_records_loaded": 34066
+}

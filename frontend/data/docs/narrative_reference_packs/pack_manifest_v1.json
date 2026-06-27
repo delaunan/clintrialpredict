@@ -1,0 +1,170 @@
+{
+"manifest_id": "narrative_reference_packs_v1",
+"version": "v1",
+"purpose": "Routing manifest for CTPredict narrative reference packs.",
+"runtime_policy": {
+"default_inclusion": [
+"core_clinical_development_v1",
+"strategic_context_2026_v1",
+"ich_e8_quality_by_design_v1"
+],
+"max_specialist_packs": 3,
+"scenario_packet_precedence": true,
+"recommended_runtime_sections": [
+"Prompt-Safe Summary",
+"Relevance To Simulator Pillars",
+"Do Not Infer"
+],
+"do_not_include_full_packs_by_default": true
+},
+"packs": [
+{
+"pack_id": "core_clinical_development_v1",
+"filename": "core_clinical_development_v1.md",
+"role": "always_on",
+"priority": 100,
+"tags": [
+"clinical_development",
+"phase_intent",
+"design_coherence",
+"feasibility",
+"tradeoffs"
+],
+"include_when": [
+"Always include unless the prompt must be extremely short."
+]
+},
+{
+"pack_id": "strategic_context_2026_v1",
+"filename": "strategic_context_2026_v1.md",
+"role": "current_context",
+"priority": 95,
+"tags": [
+"current_strategy",
+"decentralized_elements",
+"diversity",
+"digital_data",
+"access",
+"governance",
+"strategic_questions"
+],
+"include_when": [
+"Always include for simulator sessions in 2026 unless the prompt must be extremely short.",
+"The narrative should raise strategic debate questions grounded in current clinical-trial practice.",
+"The scenario concerns access, representativeness, decentralized elements, digital data collection, governance, or strategic defensibility."
+]
+},
+{
+"pack_id": "ich_e8_quality_by_design_v1",
+"filename": "ich_e8_quality_by_design_v1.md",
+"role": "specialist",
+"priority": 90,
+"tags": [
+"quality_by_design",
+"critical_to_quality",
+"patient_relevance",
+"study_design",
+"operational_feasibility"
+],
+"include_when": [
+"The narrative concerns study objective and design alignment.",
+"The narrative concerns quality by design or critical-to-quality factors.",
+"The narrative concerns patient relevance, feasibility, recruitment, retention, endpoint relevance, or whether the trial can answer its intended question."
+]
+},
+{
+"pack_id": "ich_e6_r3_gcp_v1",
+"filename": "ich_e6_r3_gcp_v1.md",
+"role": "specialist",
+"priority": 80,
+"tags": [
+"gcp",
+"participant_protection",
+"data_integrity",
+"sponsor_oversight",
+"site_burden",
+"risk_proportionate_conduct"
+],
+"include_when": [
+"The narrative concerns participant protection, data integrity, monitoring, sponsor oversight, or site capability.",
+"The scenario introduces many sites, vendors, decentralised elements, complex procedures, or operational controls.",
+"The narrative concerns whether the operational model is credible and proportionate."
+]
+},
+{
+"pack_id": "ich_e9_statistical_principles_v1",
+"filename": "ich_e9_statistical_principles_v1.md",
+"role": "specialist",
+"priority": 75,
+"tags": [
+"statistics",
+"bias_control",
+"randomisation",
+"blinding",
+"sample_size",
+"analysis_sets",
+"missing_data"
+],
+"include_when": [
+"The narrative concerns statistical design, endpoint hierarchy, bias control, randomisation, blinding, sample size, or analysis sets.",
+"The scenario changes affect exploratory versus confirmatory interpretation.",
+"The narrative concerns missing data, protocol deviations, interim analysis, subgroup interpretation, or confidence in trial conclusions."
+]
+},
+{
+"pack_id": "ich_e9_r1_estimands_v1",
+"filename": "ich_e9_r1_estimands_v1.md",
+"role": "specialist",
+"priority": 85,
+"tags": [
+"estimands",
+"endpoint_interpretation",
+"intercurrent_events",
+"treatment_effect",
+"sensitivity_analysis",
+"missing_data"
+],
+"include_when": [
+"The narrative concerns endpoint clarity, treatment-effect definition, estimands, intercurrent events, or sensitivity analysis.",
+"The scenario includes treatment discontinuation, rescue medication, treatment switching, death, terminal events, or ambiguity about missing data.",
+"The narrative concerns whether objective, endpoint, population, treatment comparison, and analysis logic are aligned."
+]
+}
+],
+"selection_guidance": {
+"preferred_default": [
+"core_clinical_development_v1",
+"ich_e8_quality_by_design_v1"
+],
+"common_combinations": [
+{
+"use_case": "General design coherence",
+"packs": [
+"core_clinical_development_v1",
+"ich_e8_quality_by_design_v1"
+]
+},
+{
+"use_case": "Operational feasibility and trial conduct",
+"packs": [
+"core_clinical_development_v1",
+"ich_e6_r3_gcp_v1"
+]
+},
+{
+"use_case": "Endpoint and analysis interpretation",
+"packs": [
+"core_clinical_development_v1",
+"ich_e9_r1_estimands_v1"
+]
+},
+{
+"use_case": "Statistical design credibility",
+"packs": [
+"core_clinical_development_v1",
+"ich_e9_statistical_principles_v1"
+]
+}
+]
+}
+}

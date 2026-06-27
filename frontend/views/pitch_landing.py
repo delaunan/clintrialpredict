@@ -1653,7 +1653,7 @@ def render_pitch_page(audit_log=None):
                 This demo focuses on single-trial exploration and includes a limited set of trials - additional trials can be made available on request. Broader capabilities are available or in development, including sponsor full-portfolio screening, therapeutic-area benchmarking, and simulation-based use cases. Feedback, questions, and ideas for future development are very welcome.
             </div>
             <div class="pitch-p-strong">Contact: Nicolas Delaunay</div>
-            <div class="pitch-p">Email: <a href="mailto:delaunay80@gmail.com" style="color: var(--pitch-brand-dark); text-decoration: none; font-weight: 700;">delaunay80@gmail.com</a></div>
+            <div class="pitch-p">Email: <a href="mailto:nicolas@etsdelaunay.fr" style="color: var(--pitch-brand-dark); text-decoration: none; font-weight: 700;">nicolas@etsdelaunay.fr</a></div>
         </div>
     """, unsafe_allow_html=True)
 

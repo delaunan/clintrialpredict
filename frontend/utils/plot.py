@@ -161,7 +161,7 @@ def plot_success_gauge(score_val, height=220):
 
     fig.add_annotation(
         x=0.5,
-        y=0.25,
+        y=0.27,
         xref="paper",
         yref="paper",
         text=f"<span style='font-weight:700'>{score_val:.1f}</span>",
@@ -184,12 +184,113 @@ def plot_success_gauge(score_val, height=220):
     )
     return fig
 
+
+def plot_adjustment_gauge(adjustment, limit=25, height=220):
+    adjustment = float(adjustment or 0)
+    limit = max(float(limit or 25), 1.0)
+    bounded_adjustment = max(-limit, min(limit, adjustment))
+    gauge_value = 50 + (bounded_adjustment / limit) * 50
+    half_limit = limit / 2.0
+
+    steps = []
+    c = STYLE_CONFIG["colors"]
+    gauge_segment_step = (GAUGE_MAX - GAUGE_MIN) / SEGMENT_COUNT
+    gauge_separator_width = gauge_segment_step
+
+    for start in np.arange(GAUGE_MIN, GAUGE_MAX, gauge_segment_step):
+        end = min(start + gauge_segment_step, GAUGE_MAX)
+        mid = (start + end) / 2
+
+        if mid < 25:
+            color = interpolate_color(c["red_deep"], c["red_soft"], mid / 25.0)
+        elif mid < 50:
+            color = interpolate_color(c["red_soft"], c["grey_warm"], (mid - 25) / 25.0)
+        elif mid < 75:
+            color = interpolate_color(c["grey_warm"], c["blue_soft"], (mid - 50) / 25.0)
+        else:
+            color = interpolate_color(c["blue_soft"], c["blue_deep"], (mid - 75) / 25.0)
+
+        steps.append({"range": [start, end], "color": get_rgb_str(color)})
+
+    for sep in [25, 50, 75]:
+        steps.append({
+            "range": [
+                max(GAUGE_MIN, sep - gauge_separator_width / 2),
+                min(GAUGE_MAX, sep + gauge_separator_width / 2),
+            ],
+            "color": "white",
+        })
+
+    fig = go.Figure(go.Indicator(
+        mode="gauge",
+        value=gauge_value,
+        domain={"x": [0.0, 1], "y": [0.0, 0.78]},
+        gauge={
+            "axis": {
+                "range": [GAUGE_MIN, GAUGE_MAX],
+                "tickmode": "array",
+                "tickvals": [0, 25, 50, 75, 100],
+                "ticktext": [
+                    f"-{limit:.0f}",
+                    f"-{half_limit:.0f}",
+                    "0",
+                    f"+{half_limit:.0f}",
+                    f"+{limit:.0f}",
+                ],
+                "tickfont": {
+                    "size": 14,
+                    "color": "#475569",
+                    "family": STYLE_CONFIG["font_family"],
+                    "weight": "bold",
+                },
+            },
+            "bar": {"color": "rgba(0,0,0,0)"},
+            "bgcolor": "white",
+            "borderwidth": 0,
+            "steps": steps,
+            "threshold": {
+                "line": {
+                    "color": STYLE_CONFIG["font_color"],
+                    "width": GAUGE_MARKER_LINE_WIDTH,
+                },
+                "thickness": GAUGE_MARKER_THICKNESS,
+                "value": gauge_value,
+            },
+        },
+    ))
+
+    fig.add_annotation(
+        x=0.5,
+        y=0.27,
+        xref="paper",
+        yref="paper",
+        text=f"<span style='font-weight:700'>{adjustment:+.1f}</span>",
+        showarrow=False,
+        font=dict(
+            size=max(34, int(height * 0.12)),
+            color=STYLE_CONFIG["font_color"],
+            family=STYLE_CONFIG["font_family"],
+        ),
+        xanchor="center",
+        yanchor="middle",
+        align="center",
+    )
+
+    fig.update_layout(
+        margin=dict(l=26, r=26, t=30, b=5),
+        height=height,
+        paper_bgcolor="white",
+        hovermode=False,
+    )
+    return fig
+
 # ==========================
 # 2. IMPACT BAR CHART
 # ==========================
 
-def plot_impact_bar(df_pillars, height=240):
+def plot_impact_bar(df_pillars, height=240, delta_by_pillar=None):
     df_plot = df_pillars.copy()
+    delta_by_pillar = delta_by_pillar or {}
 
     df_plot['Pillar_Clean'] = df_plot['Pillar'].apply(
         lambda x: f"<b>{re.sub(r'^\\d+\\.\\s*', '', x)}</b>"
@@ -251,7 +352,8 @@ def plot_impact_bar(df_pillars, height=240):
         ))
 
     label_offset = max(limit * 0.05, 0.35)
-    axis_limit = limit + label_offset + 0.35
+    delta_gutter = max(limit * 0.36, 2.4) if delta_by_pillar else 0
+    axis_limit = limit + label_offset + 0.35 + delta_gutter
 
     for _, row in df_plot.iterrows():
         val = row["Impact"]
@@ -272,12 +374,42 @@ def plot_impact_bar(df_pillars, height=240):
             )
         )
 
+        pillar_key = re.sub(r'^\\d+\\.\\s*', '', str(row["Pillar"]))
+        if pillar_key in delta_by_pillar:
+            delta_val = delta_by_pillar[pillar_key]
+            is_flat_delta = abs(delta_val) < 0.0001
+            delta_color = (
+                "#64748b"
+                if is_flat_delta
+                else get_rgb_str(c["blue_deep"])
+                if delta_val > 0
+                else get_rgb_str(c["red_deep"])
+            )
+            delta_text = "-" if is_flat_delta else f"{delta_val:+.1f}"
+            fig.add_annotation(
+                x=0.985,
+                y=row["Pillar_Clean"],
+                xref="paper",
+                yref="y",
+                text=f"<b>{delta_text}</b>",
+                showarrow=False,
+                xanchor="right",
+                yanchor="middle",
+                align="right",
+                font=dict(
+                    size=14,
+                    color=delta_color,
+                    family=STYLE_CONFIG["font_family"]
+                )
+            )
+
     fig.add_vline(x=0, line_width=1, line_color="#333333")
     fig.update_layout(
         barmode='relative',
         xaxis=dict(
             showticklabels=False,
             range=[-axis_limit, axis_limit],
+            domain=[0.0, 0.78] if delta_by_pillar else [0.0, 1.0],
             zeroline=False,
             showgrid=False
         ),
@@ -289,7 +421,7 @@ def plot_impact_bar(df_pillars, height=240):
                 family=STYLE_CONFIG["font_family"]
             )
         ),
-        margin=dict(l=10, r=10, t=10, b=10),
+        margin=dict(l=10, r=24 if delta_by_pillar else 10, t=10, b=10),
         height=height,
         paper_bgcolor="white",
         plot_bgcolor="white",
@@ -330,6 +462,7 @@ def plot_treemap(subcat_impacts, pillar_impacts, show_values=True, height=600):
         subtopic = item['Subcategory']
         impact = item['Impact']
         feat_details = item.get('FeatureDetails', [])
+        show_impact_value = item.get("ShowImpactValue", True)
 
         if not show_values:
             # Strip the value part (": <b>...</b>") using regex or splitting
@@ -343,11 +476,16 @@ def plot_treemap(subcat_impacts, pillar_impacts, show_values=True, height=600):
 
         bullet_separator = "<br>• "
         feat_html = "• " + bullet_separator.join(feat_details) if feat_details else ""
+        impact_html = (
+            f"<br><b style='font-size:{TREEMAP_IMPACT_FONT_SIZE}px; color:#F4F7FB;'>{impact:+.1f} pts</b>"
+            if show_impact_value
+            else ""
+        )
 
         label_html = (
             f"<span style='font-family:{STYLE_CONFIG['font_family']}; line-height:1.05;'>"
             f"<b style='font-size:{TREEMAP_SUBTOPIC_FONT_SIZE}px; color:#F4F7FB;'>{subtopic}</b>"
-            f"<br><b style='font-size:{TREEMAP_IMPACT_FONT_SIZE}px; color:#F4F7FB;'>{impact:+.1f} pts</b>"
+            f"{impact_html}"
             f"<br><br><span style='font-size:{TREEMAP_DETAIL_FONT_SIZE}px; font-weight:500; color:#F4F7FB;'>{feat_html}</span>"
             f"</span>"
         )
@@ -358,7 +496,7 @@ def plot_treemap(subcat_impacts, pillar_impacts, show_values=True, height=600):
             "parent": parent_id,
             "label": label_html,
             "color": get_rgb_str(color),
-            "value": max(0.5, abs(impact))
+            "value": item.get("TreemapValue", max(0.5, abs(impact)))
         })
 
     for item in leaf_data:
@@ -383,7 +521,7 @@ def plot_treemap(subcat_impacts, pillar_impacts, show_values=True, height=600):
     ))
 
     fig.update_layout(
-        margin=dict(t=28, l=8, r=8, b=2),
+        margin=dict(t=24, l=6, r=6, b=0),
         height=height,
         font=dict(family=STYLE_CONFIG["font_family"], color=STYLE_CONFIG["font_color"]),
         paper_bgcolor='white',
