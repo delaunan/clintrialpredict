@@ -663,7 +663,7 @@ def main() -> int:
         "_discussion_point_html",
         "SCENARIO_SOURCE_OF_TRUTH_PREFACE",
         "In case of misalignment across Trial description fields and structured fields",
-        "consistency_html",
+        "_scenario_consistency_html",
         "participant_pillar_reading",
         "Trial Score",
         "Overall Evolution",
@@ -675,12 +675,12 @@ def main() -> int:
     ):
         if required_token not in frontend_source:
             errors.append(f"frontend trial simulator should render Pass 2 participant format token {required_token!r}.")
-    renderer_start = frontend_source.find("def _trial_score_narrative_html")
-    renderer_end = frontend_source.find("def _participant_pillar_reading_html")
+    renderer_start = frontend_source.find("def render_scenario_review_report")
+    renderer_end = frontend_source.find("def get_simulation_pillar_delta_map")
     renderer_source = frontend_source[renderer_start:renderer_end]
-    if "consistency_html" not in renderer_source or "quality-review-section-title'>Trial Score" not in renderer_source:
+    if "_scenario_consistency_html(consistency_text)" not in renderer_source or "_trial_score_narrative_html(trial_score_narrative)" not in renderer_source:
         errors.append("frontend trial simulator should render consistency preface and Trial Score title")
-    elif renderer_source.find("consistency_html") > renderer_source.find("quality-review-section-title'>Trial Score"):
+    elif renderer_source.find("_scenario_consistency_html(consistency_text)") > renderer_source.find("_trial_score_narrative_html(trial_score_narrative)"):
         errors.append("frontend trial simulator should render consistency preface before the Trial Score title")
     for obsolete_token in (
         "central_tension_candidate",
