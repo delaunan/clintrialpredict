@@ -13,7 +13,7 @@ from typing import Any
 from src.narratives.contract_fixtures import get_contract_fixtures
 from src.narratives.packet_builder import build_review_packet_from_fixture, stable_packet_hash
 from src.narratives.prompt_builder import build_pass2_input
-from src.narratives.scoring import validate_and_score_review
+from src.narratives.scoring import validate_and_score_adjudication, validate_and_score_review
 from src.narratives.trial_score_contract import GATED_PREMISE_SENSITIVE_FIELDS, validate_pass2_review_with_input
 
 FAILURE_PROVIDER_ERROR = "provider_error"
@@ -162,24 +162,20 @@ def _synthesized_trial_score_pass1_review(packet: dict[str, Any], fixture: dict[
                 else "No mock fixture premise shift is evaluated."
             ),
         },
-        "operational_fit": {
-            "enrollment_fit": {"rating": "neutral_or_unclear", "materiality": "minor", "rationale": "Mock field-level context."},
-            "site_footprint_fit": {"rating": "neutral_or_unclear", "materiality": "minor", "rationale": "Mock field-level context."},
-            "timeline_fit": {"rating": "neutral_or_unclear", "materiality": "minor", "rationale": "Mock field-level context."},
-            "combined_operational_fit": {
-                "rating": operational_fit_rating,
-                "materiality": operational_fit_materiality,
-                "interaction_with_completion_outlook": operational_interaction,
-                "central_reason": "Fixture-backed Operational Fit generated for deterministic local checks.",
-                "evidence_fields": operational_changed or evidence_fields,
+        "evolution_evidence": {
+            "latest_meaningful_changes": evidence_fields,
+            "model_movement_evidence": ["model_interpretation.score_delta"],
+            "operational_movement_evidence": operational_changed,
+            "new_issues": ["Fixture-backed issue evolution generated for deterministic local checks."],
+            "persistent_issues": [],
+            "resolved_or_mitigated_issues": [],
+            "strongest_current_development_tension": {
+                "topic": source.get("main_tension") or "Feasibility vs Evidence Strength.",
+                "why_this_is_strongest_now": "The latest mock change makes this the strongest current development tension.",
+                "relationship_to_previous_scenario": "new_issue",
+                "relationship_to_original_baseline": "Compared with the original baseline, this remains the clearest mock tension.",
+                "evidence_fields": evidence_fields,
             },
-        },
-        "reality_check": {
-            "effect": reality_effect,
-            "strength": reality_strength,
-            "central_reason": "Fixture-backed Reality Check generated for deterministic local checks.",
-            "evidence_fields": evidence_fields,
-            "allocations": allocations,
         },
         "continuity_update": {
             "active_tension": "" if is_hidden_baseline else source.get("main_tension") or "Feasibility vs Evidence Strength.",
@@ -218,7 +214,7 @@ def _synthesized_trial_score_pass1_review(packet: dict[str, Any], fixture: dict[
                 "to support the decision implied by its phase and stated purpose."
             ),
             "reality_check_read": (
-                "Reality Check may reinforce, soften, or leave neutral the pre-Reality read depending on scenario coherence. "
+                "Reality Check may reinforce, soften, or leave neutral the pre-reality check read depending on scenario coherence. "
                 "The draft should frame residual concerns as trade-offs, robustness questions, or development issues in the evidence "
                 "package. It should examine whether vulnerable populations, safety oversight, comparator context, endpoint timing, "
                 "or follow-up demands change confidence in the design beyond what the model and Operational Fit already capture. "
@@ -248,32 +244,10 @@ def _synthesized_trial_score_pass1_review(packet: dict[str, Any], fixture: dict[
                 "topic": source.get("main_tension") or "Feasibility vs Evidence Strength.",
                 "why_it_matters": "The scenario should be discussed as a total-score trade-off.",
                 "supporting_evidence": evidence_fields,
+                "relationship_to_previous_scenario": "new_issue",
+                "relationship_to_original_baseline": "This is the strongest current tension relative to the baseline context.",
                 "participant_wider_question": {
                     "question": "When should operational feasibility change confidence in the development story, and when does it only make an uncertain evidence package easier to run?",
-                    "supporting_evidence": evidence_fields,
-                },
-            },
-            {
-                "topic": "Operational feasibility versus evidence interpretability.",
-                "why_it_matters": (
-                    "This frames whether a scenario looks easier to execute while still leaving uncertainty about "
-                    "what decision the resulting evidence could credibly support."
-                ),
-                "supporting_evidence": evidence_fields,
-                "participant_wider_question": {
-                    "question": "How should a team distinguish a scenario that is operationally practical from one that is genuinely more decision-ready?",
-                    "supporting_evidence": evidence_fields,
-                },
-            },
-            {
-                "topic": "Safety governance versus participant and site burden.",
-                "why_it_matters": (
-                    "This gives later iterations a non-prescriptive topic for discussing whether oversight, follow-up, "
-                    "or monitoring requirements remain proportionate to the population and study purpose."
-                ),
-                "supporting_evidence": evidence_fields,
-                "participant_wider_question": {
-                    "question": "When does additional governance strengthen credibility, and when might it become a burden that changes what the trial can realistically show?",
                     "supporting_evidence": evidence_fields,
                 },
             },
@@ -324,7 +298,7 @@ def _synthesized_pass2_narrative(
     if operational_importance == "none":
         execution_reading = (
             operational_instruction
-            or "Operational Fit has no app-scored participant-facing effect in this scenario."
+            or "Operational Fit has no accepted participant-facing effect in this scenario."
         )
     else:
         execution_reading = (
@@ -373,7 +347,7 @@ def _synthesized_pass2_narrative(
         },
         "trial_score_narrative": {
             "summary": (
-                f"The final reading appears {direction_phrase}. The model-pattern Completion Outlook and app-scored "
+                f"The final reading appears {direction_phrase}. The model-pattern Completion Outlook and accepted "
                 "review layers need to be read together."
             ),
             "movement_reading": movement_reading,
@@ -394,6 +368,79 @@ def _synthesized_pass2_narrative(
         "broader_strategic_question": {
             "mapped_tension": tension.get("summary") or continuity.get("active_tension") or "Completion favorability versus scenario defensibility.",
             "question": broader_question.get("question") or "What broader development trade-off does this scenario expose?",
+        },
+    }
+
+
+def _synthesized_scoring_review(
+    packet: dict[str, Any],
+    fixture: dict[str, Any],
+    pass1_review: dict[str, Any],
+) -> dict[str, Any]:
+    expected = fixture.get("expected_behavior") or {}
+    operational_points = expected.get("expected_operational_fit_points")
+    if not isinstance(operational_points, (int, float)):
+        operational_points = 0.0
+    reality_points = expected.get("expected_reality_check_points")
+    if not isinstance(reality_points, (int, float)):
+        reality_points = 0.0
+    evidence_fields = _default_evidence_fields(packet)
+    operational_fields = [
+        field for field in evidence_fields
+        if str(field).startswith("operational_assumptions.")
+    ]
+    if not operational_fields:
+        operational_points = 0.0
+    allocation_target = (
+        "execution_framework.operational_fit"
+        if operational_fields
+        else "scientific_challenge.protocol_architecture"
+    )
+    allocations = []
+    if reality_points:
+        allocations = [
+            {
+                "allocation_target_id": allocation_target,
+                "share": 1.0,
+                "movement_label": "Reality Check: mock score adjudication",
+                "rationale": "The mock scoring pass assigns a deterministic adjudication for local checks.",
+                "incremental_check": "This adjudicates coherence after Completion Outlook and Operational Fit rather than duplicating either layer.",
+            }
+        ]
+    review_mode = (pass1_review.get("review_metadata") or {}).get("review_mode", "first_visible_iteration")
+    return {
+        "review_metadata": {
+            "review_mode": review_mode,
+            "visible": bool((pass1_review.get("review_metadata") or {}).get("visible", True)),
+        },
+        "operational_fit": {
+            "points": float(operational_points),
+            "relationship_to_previous": "changed" if operational_points else "unchanged_or_neutral",
+            "reason": "Fixture-backed scoring adjudication assigned Operational Fit directly.",
+            "evidence_fields": operational_fields or evidence_fields,
+            "boundary_check": (
+                "Operational assumptions changed and support direct scoring."
+                if operational_fields
+                else "No operational assumptions changed, so Operational Fit is neutral."
+            ),
+        },
+        "reality_check": {
+            "points": float(reality_points),
+            "relationship_to_previous": "mock_comparison",
+            "carryover_status": "none",
+            "new_issue_status": "new_independent_issue" if reality_points else "none",
+            "reason": "Fixture-backed scoring adjudication assigned Reality Check directly.",
+            "incremental_check": "This scoring judgment is incremental beyond Completion Outlook and Operational Fit.",
+            "evidence_fields": evidence_fields,
+            "allocations": allocations,
+        },
+        "score_evolution_read": {
+            "direction": "improved" if (expected.get("expected_trial_score") or 0) > (expected.get("expected_pre_reality_score") or 0) else "mixed",
+            "main_reason": "Fixture-backed score evolution read for deterministic local checks.",
+            "active_issue_to_carry_forward": (
+                ((pass1_review.get("evolution_evidence") or {}).get("strongest_current_development_tension") or {}).get("topic")
+                or "Mock development tension"
+            ),
         },
     }
 
@@ -478,13 +525,21 @@ def review_packet_with_mock(
             },
         }
 
-    review = deepcopy(fixture["mock_review"])
-    if isinstance(review, dict) and "reality_check" not in review:
-        review = _synthesized_trial_score_pass1_review(packet, fixture)
+    review = _synthesized_trial_score_pass1_review(packet, fixture)
     if failure_mode == FAILURE_MALFORMED_JSON:
         review = {"reality_check": "malformed"}
 
     scored = validate_and_score_review(packet, review)
+    if failure_mode != FAILURE_MALFORMED_JSON and scored["scoring"].get("validation_status") == "valid":
+        scoring_review = _synthesized_scoring_review(packet, fixture, scored["validated_review"])
+        scored["scoring"] = validate_and_score_adjudication(packet, scored["validated_review"], scoring_review)
+        scored["validated_review"] = {
+            **scored["validated_review"],
+            "operational_fit": deepcopy(scoring_review.get("operational_fit") or {}),
+            "reality_check": deepcopy(scoring_review.get("reality_check") or {}),
+        }
+    else:
+        scoring_review = None
     pass2_review = None
     validated_pass2 = {"validation_status": "valid", "validation_errors": []}
     if failure_mode != FAILURE_MALFORMED_JSON and scored["scoring"].get("validation_status") == "valid":
@@ -493,6 +548,8 @@ def review_packet_with_mock(
             pass2_input = build_pass2_input(packet, scored["validated_review"], scored["scoring"])
             validated_pass2 = validate_pass2_review_with_input(pass2_review, pass2_input)
     status = "malformed_response" if failure_mode == FAILURE_MALFORMED_JSON else "reviewed"
+    if scored["scoring"].get("validation_status") != "valid":
+        status = "malformed_response"
     if validated_pass2.get("validation_status") != "valid":
         status = "malformed_response"
     return {
@@ -504,6 +561,7 @@ def review_packet_with_mock(
         "failure_reason": None if status == "reviewed" else "Mock Pass 2 narrative did not satisfy the Trial Score contract.",
         "review": review,
         "validated_review": scored["validated_review"],
+        "scoring_review": scoring_review,
         "participant_narrative": pass2_review,
         "validated_participant_narrative": validated_pass2,
         "scoring": scored["scoring"],

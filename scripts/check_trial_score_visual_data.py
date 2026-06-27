@@ -150,6 +150,41 @@ def main() -> int:
     if any(row.get("Impact") != 0.0 for row in neutral_rows):
         errors.append(f"Neutral Reality Check rows must all be zero-impact: {neutral_rows!r}.")
 
+    duplicate_pillar_trace = _trace(
+        3,
+        xgb_pillars=_pillars(),
+        reality_check=5.0,
+        allocations=[
+            {
+                "pillar": "Execution Framework",
+                "subpillar": "Reality Check",
+                "points": 3.0,
+                "short_explanation": "Methodology strengthened",
+            },
+            {
+                "pillar": "Execution Framework",
+                "subpillar": "Reality Check",
+                "points": 2.0,
+                "short_explanation": "Execution realism improved",
+            },
+        ],
+    )
+    duplicate_pillar_rows = ts._design_pillar_impacts(duplicate_pillar_trace)
+    if duplicate_pillar_rows != [{"Pillar": "Execution Framework", "Impact": 5.0}]:
+        errors.append(
+            "Reality Check barchart should aggregate multiple allocations in the same pillar: "
+            f"{duplicate_pillar_rows!r}."
+        )
+    duplicate_subcat_rows = ts.design_subcategory_impacts(duplicate_pillar_trace)
+    if len(duplicate_subcat_rows) != 1 or duplicate_subcat_rows[0].get("Impact") != 5.0:
+        errors.append(
+            "Reality Check treemap should aggregate duplicate pillar/subcategory allocations: "
+            f"{duplicate_subcat_rows!r}."
+        )
+    duplicate_details = duplicate_subcat_rows[0].get("FeatureDetails") if duplicate_subcat_rows else []
+    if duplicate_details != ["Methodology strengthened", "Execution realism improved"]:
+        errors.append(f"Reality Check details should keep concise unique phrases: {duplicate_details!r}.")
+
     completion_subcats = [
         {"Pillar": "Scientific Challenge", "Subcategory": "Biological Profile", "Impact": 1.2}
     ]
@@ -285,9 +320,26 @@ def main() -> int:
         "xgboost_completion_outlook": 64.7,
         "operational_fit_points": 0.0,
         "pre_reality_score": 64.7,
-        "reality_check_points": 0.0,
-        "reality_check_allocation_points": [],
-        "trial_score": 64.7,
+        "reality_check_points": -4.2,
+        "trial_score": 60.5,
+        "reality_check_assessment": {
+            "points": -4.2,
+            "central_reason": "Prior same-state Reality Check should be restored with the same visual allocation.",
+            "allocation_points": [
+                {
+                    "allocation_target_id": "execution_framework.methodological_setup",
+                    "pillar": "Execution Framework",
+                    "subpillar": "Reality Check",
+                    "source_subpillar": "Methodological Setup",
+                    "label": "Reality Check",
+                    "short_explanation": "Prior methodological concern",
+                    "share": 1.0,
+                    "points": -4.2,
+                    "rationale": "Prior methodological concern.",
+                    "incremental_check": "Prior concern was incremental to Completion Outlook.",
+                }
+            ],
+        },
         "validated_review": {
             "review_metadata": {"review_mode": "later_visible_iteration", "visible": True},
             "completion_outlook_analysis": {},
@@ -319,7 +371,7 @@ def main() -> int:
             "iteration_context": {"current_snapshot_id": "snapshot-2"},
         },
     }
-    same_state_trace = ts._same_state_pass2_only_trace_for_packet(
+    same_state_trace = ts._same_state_replay_trace_for_packet(
         packet=same_state_packet,
         prior_trace=same_state_prior,
         runtime={"provider": "mock", "config": None, "runtime_key": active_runtime["runtime_key"]},
@@ -331,20 +383,88 @@ def main() -> int:
     )
     if same_state_trace.get("provider_metadata", {}).get("pass1_skipped") is not True:
         errors.append("Same-state replay should skip Pass 1 scoring reinterpretation.")
-    if same_state_trace.get("trial_score") != 64.7 or same_state_trace.get("operational_fit_points") != 0:
+    if same_state_trace.get("trial_score") != 60.5 or same_state_trace.get("operational_fit_points") != 0:
         errors.append("Same-state replay should reuse prior app-owned scores.")
     same_state_delta = (same_state_trace.get("trial_score_diagnostics") or {}).get("delta_vs_previous_trial_score")
-    if same_state_delta != -1.4:
+    if same_state_delta != -5.6:
         errors.append("Same-state replay should recalculate delta versus the immediate previous iteration.")
+    same_state_allocations = same_state_trace.get("reality_check_allocation_points") or []
+    if not same_state_allocations or same_state_allocations[0].get("points") != -4.2:
+        errors.append("Same-state replay should restore Reality Check allocation impacts from the prior trace.")
+    same_state_design_impacts = ts._design_pillar_impacts(same_state_trace)
+    if same_state_design_impacts != [{"Pillar": "Execution Framework", "Impact": -4.2}]:
+        errors.append("Same-state replay should render the same Reality Check visual impact as the prior state.")
+    same_state_design_subcats = ts.design_subcategory_impacts(same_state_trace)
+    if not same_state_design_subcats or same_state_design_subcats[0].get("Subcategory") != "Reality Check":
+        errors.append("Same-state replay should render Reality Check as the pillar-level Reality Check subgroup.")
     if not ts._trace_is_successful_visible_review(same_state_trace):
         errors.append("Same-state replay should be treated as a successful visible review using current V1 fields.")
     same_state_continuity = (same_state_trace.get("validated_review") or {}).get("continuity_update") or {}
     if "Returned" not in str(same_state_continuity.get("what_changed") or ""):
         errors.append("Same-state replay should store current return-to-prior-state continuity, not stale prior continuity.")
     if same_state_trace.get("participant_narrative_status") != "valid":
-        errors.append("Same-state replay should retain a fallback participant narrative when Pass 2 cannot regenerate.")
-    if not (same_state_trace.get("provider_metadata") or {}).get("pass2_same_state_fallback_narrative"):
-        errors.append("Same-state fallback participant narrative should be explicit in provider metadata.")
+        errors.append("Same-state replay should retain the prior participant narrative.")
+    same_state_metadata = same_state_trace.get("provider_metadata") or {}
+    if same_state_metadata.get("pass2_skipped") is not True:
+        errors.append("Same-state replay should skip Pass 2 narrative regeneration.")
+    if same_state_metadata.get("same_state_participant_narrative_reused") is not True:
+        errors.append("Same-state replay should explicitly mark participant narrative reuse.")
+    if same_state_trace.get("participant_narrative_warning"):
+        errors.append("Same-state replay should not warn when prior participant narrative was intentionally reused.")
+    long_path_store = get_review_store(ts.st.session_state)
+    long_path_store["trace_history"] = [
+        {
+            **same_state_prior,
+            "trace_id": "old-session:1:long-path-match",
+            "iteration_id": 1,
+            "review_runtime_key": active_runtime["runtime_key"],
+            "scenario_state_hash": "long-path-state",
+            "input_hash": "long-path-match",
+            "input_packet": {
+                **(same_state_prior.get("input_packet") or {}),
+                "scenario_state_hash": "long-path-state",
+                "iteration_context": {"current_snapshot_id": "snapshot-long-1"},
+            },
+        },
+        *[
+            {
+                **same_state_prior,
+                "trace_id": f"old-session:{index}:long-path-distractor",
+                "iteration_id": index,
+                "review_runtime_key": active_runtime["runtime_key"],
+                "scenario_state_hash": f"other-state-{index}",
+                "input_hash": f"long-path-distractor-{index}",
+                "input_packet": {
+                    **(same_state_prior.get("input_packet") or {}),
+                    "scenario_state_hash": f"other-state-{index}",
+                    "iteration_context": {"current_snapshot_id": f"snapshot-long-{index}"},
+                },
+            }
+            for index in range(2, 9)
+        ],
+    ]
+    long_path_packet = {
+        **same_state_packet,
+        "scenario_state_hash": "long-path-state",
+        "iteration_context": {
+            **(same_state_packet.get("iteration_context") or {}),
+            "current_snapshot_id": "snapshot-long-current",
+        },
+    }
+    long_path_prior = ts._prior_state_equivalent_review_trace(
+        long_path_packet,
+        runtime={"provider": "mock", "config": None, "runtime_key": active_runtime["runtime_key"]},
+        nct_id=NCT_ID,
+        current_snapshot_id="snapshot-long-current",
+    )
+    if (long_path_prior or {}).get("input_hash") != "long-path-match":
+        errors.append("Same-state lookup should find an older full-state match after several later iterations")
+    long_path_scoring = ts._same_state_reused_scoring(long_path_prior or {}, long_path_packet)
+    if (
+        long_path_scoring.get("operational_fit_points") != same_state_prior.get("operational_fit_points")
+        or long_path_scoring.get("reality_check_points") != same_state_prior.get("reality_check_points")
+    ):
+        errors.append("Long-path same-state scoring should restore both Operational Fit and Reality Check")
     same_state_snapshot = {
         "nct_id": NCT_ID,
         "source": "simulation_ptc",
@@ -541,6 +661,9 @@ def main() -> int:
         "_participant_pillar_reading_html",
         "_scenario_review_multi_text_block",
         "_discussion_point_html",
+        "SCENARIO_SOURCE_OF_TRUTH_PREFACE",
+        "In case of misalignment across Trial description fields and structured fields",
+        "consistency_html",
         "participant_pillar_reading",
         "Trial Score",
         "Overall Evolution",
@@ -552,6 +675,13 @@ def main() -> int:
     ):
         if required_token not in frontend_source:
             errors.append(f"frontend trial simulator should render Pass 2 participant format token {required_token!r}.")
+    renderer_start = frontend_source.find("def _trial_score_narrative_html")
+    renderer_end = frontend_source.find("def _participant_pillar_reading_html")
+    renderer_source = frontend_source[renderer_start:renderer_end]
+    if "consistency_html" not in renderer_source or "quality-review-section-title'>Trial Score" not in renderer_source:
+        errors.append("frontend trial simulator should render consistency preface and Trial Score title")
+    elif renderer_source.find("consistency_html") > renderer_source.find("quality-review-section-title'>Trial Score"):
+        errors.append("frontend trial simulator should render consistency preface before the Trial Score title")
     for obsolete_token in (
         "central_tension_candidate",
         "alternative_tension_candidates",

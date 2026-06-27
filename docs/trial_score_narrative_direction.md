@@ -36,7 +36,52 @@ Definitions:
 - `Reality Check`: second interpretation layer where the LLM judges how the scenario evolved and may constructively reinforce, penalize, moderate, or offset the score.
 - `Trial Score`: final serious-game score assessed in the participant narrative.
 
-Operational Fit uses a simple app-owned `rating + materiality -> points` mapping recorded in `docs/operational_fit_scoring.md`. Reality Check uses a percentage of the pre-Reality movement, with default `0` when the movement is coherent and realistic.
+Active implementation note, 2026-06-22: the earlier app-owned `rating + materiality -> points` Operational Fit mapping and mechanical Reality Check fraction mapping are superseded for the live Scenario Review path. The application now protects boundaries and arithmetic, while the LLM owns the judgmental Operational Fit and Reality Check point values inside hard rails.
+
+## Active Three-Pass Workflow
+
+The active Scenario Review workflow is:
+
+```text
+Pass 1: Evolution and Evidence
+Pass 2: Score Adjudication
+Pass 3: Participant Narrative
+```
+
+Pass 1 receives the scenario packet and prior context. It does not score. It generates:
+
+- protected Completion Outlook interpretation;
+- latest meaningful changes;
+- model movement evidence;
+- operational movement evidence;
+- new, persistent, mitigated, or resolved issues;
+- one strongest current development tension and one paired wider question;
+- an analytical draft for later scoring and narrative shaping.
+
+Pass 1 should identify the strongest current development tension by comparing the current scenario with the previous visible scenario first. The original baseline is background context. A persistent old issue should not become the current discussion point unless the latest change materially affects it or no newer issue is more important.
+
+Pass 2 receives Pass 1 evidence, current Completion Outlook, previous visible score trace, previous Operational Fit and Reality Check values/assessments, previous score-evolution read, up to five compact recent score traces when available, carryover candidate, changed fields, compact operational context, Operational Fit hash/match continuity, structured-feature continuity, and compact Reality Check memory. It does not need the full duplicated Operational Fit state payload in the LLM-facing prompt; that payload can remain diagnostic/audit material. It directly assigns:
+
+- `operational_fit.points`, from `-5` to `+5`;
+- `reality_check.points`, from `-15` to `+15`;
+- Reality Check allocation rows using canonical `allocation_target_id` values;
+- carryover/new-issue relationship text;
+- a compact score-evolution read.
+
+The app validates Pass 2 rather than reinterpreting it. App-owned rails remain:
+
+- XGBoost Completion Outlook, SHAP, calibration, artifacts, and `/predict` are unchanged;
+- Operational Fit is a current-state score. If the current operational assumptions, operational benchmark/movement context, and structured scenario context match a previous accepted trace, the app requires the same Operational Fit points. If they do not match, Pass 2 may assess the current operational plan inside the `-5/+5` rail;
+- a full return to hidden baseline neutralizes Operational Fit and Reality Check;
+- point ranges, evidence references, allocation targets, and arithmetic must validate;
+- same-state reuse preserves the prior accepted score trace instead of asking the LLM to rescore;
+- compact score continuity retains the latest 5 accepted traces for component continuity, structured-feature interpretation continuity, and compact Reality Check memory without sending bulky raw prompts or narratives back to the scoring pass. Full same-state replay remains separate and uses visible trace history keyed by scenario state.
+
+This intentionally gives up deterministic reproducibility for new states. Reproducibility is preserved only for identical same-state replay/cache behavior and deterministic app rails.
+
+Reality Check should be more aggressive on the negative side when a favorable or neutral-looking movement depends on simplification that weakens evidence robustness, endpoint credibility, comparator strength, population relevance, governance, interpretability, decision fitness, or leaves a prior issue materially unresolved. This is scoring calibration inside the hard `-15` to `+15` range, not a mechanical formula or movement-relative cap.
+
+Pass 3 receives the accepted score trace and writes participant-facing narrative only. It must not re-score Operational Fit, re-decide Reality Check, reinterpret model movement, or select among multiple hidden alternatives. The participant flow uses one discussion point, not three candidate questions.
 
 ## Completion Outlook Boundary
 
@@ -133,7 +178,7 @@ pre_reality_delta = pre_reality_score - previous visible Trial Score or baseline
 Default behavior:
 
 ```text
-If the pre-Reality movement is coherent, realistic, and well explained:
+If the pre-reality check movement is coherent, realistic, and well explained:
   Reality Check = 0
 ```
 
@@ -146,69 +191,57 @@ Do not automatically adjust every large move. Reality Check activates only when 
 - negative movement caused by justified robustness or necessary complexity;
 - prior development issue resolved, worsened, bypassed, or reopened.
 
-When Reality Check activates, use a percentage of the pre-Reality movement:
+When Reality Check activates, Pass 2 directly assigns `reality_check.points` inside the hard `-15` to `+15` range. The score should reflect the materiality of the incremental issue, the previous score trace, carryover context, and whether the current move creates, resolves, bypasses, or worsens a development concern. It is not calculated as a percentage of pre-reality check movement.
+
+Direction is determined by the sign of `reality_check.points`:
 
 ```text
-slight      20%
-moderate    40%
-strong      70%
-reversal    125-150%
+negative points: the Reality Check penalizes, offsets, or challenges the pre-reality check read
+positive points: the Reality Check supports, compensates for, or softens the pre-reality check read
+zero points: the pre-reality check movement is accepted as coherent enough without additional adjustment
 ```
 
-Direction is determined by effect:
+Reality Check does not automatically follow the pre-reality check movement. For positive pre-reality check movement, Completion Outlook plus Operational Fit already gives the main credit. Positive movements should usually be accepted with `0` or moderated with a negative adjustment when the after-review judgment finds simplification, brittleness, unrealistic assumptions, or unresolved development issue. Positive reinforcement should remain rare and well supported.
 
-```text
-positive pre-Reality movement:
-  reinforce_gain -> positive Reality Check, slight only by default
-  offset_gain / reversal -> negative Reality Check
-
-negative pre-Reality movement:
-  soften_decline / reversal -> positive Reality Check
-  reinforce_decline -> negative Reality Check
-
-near-flat pre-Reality movement:
-  reward_coherence or penalize_incoherence can be small, evidence-backed adjustments
-```
-
-Reality Check does not automatically follow the pre-Reality movement. For positive pre-Reality movement, Completion Outlook plus Operational Fit already gives the main credit. Therefore positive reinforcement is capped at `slight` by default in V1, and `strong` positive reinforcement is not allowed. Positive movements should usually be accepted with `0` or moderated with an offset when the after-review judgment finds simplification, brittleness, unrealistic assumptions, or unresolved development issue.
+If pre-reality check movement is already positive, Reality Check must be `0` or negative. Accept the gain with `0`, or challenge it with a negative adjustment when the improved score depends on unsupported simplification, unrealistic burden, unresolved carryover, or under-supported operational/scientific assumptions. Positive Reality Check offsets are reserved for unfavorable pre-reality check movement where the model-plus-operational score appears to under-credit a concrete realism, rigor, or fit-for-purpose improvement.
 
 Reality Check should be conservative and challenging. It defaults to neutral unless there is a clear incremental reason not already captured by Completion Outlook or Operational Fit. It should be more willing to challenge favorable movements than to soften unfavorable movements.
 
-For negative pre-Reality movement, Reality Check should usually stay neutral unless there is a distinct incremental concern that reinforces the decline. It may soften the decline only rarely, when the decline is materially harsh and the changed scenario adds a concrete compensating strength not already captured elsewhere. Unchanged strengths can provide context, but should not be the main basis for a non-neutral adjustment.
+For negative pre-reality check movement, Reality Check should usually stay neutral unless there is a distinct incremental concern that reinforces the decline. It may soften the decline only rarely, when the decline is materially harsh and the changed scenario adds a concrete compensating strength not already captured elsewhere. Unchanged strengths can provide context, but should not be the main basis for a non-neutral adjustment.
 
-For near-flat pre-Reality movement, Reality Check reward or penalty should normally be `slight` only.
+For near-flat pre-reality check movement, Reality Check should usually remain neutral unless a material simplification, contradiction, carryover issue, or newly resolved concern justifies a non-zero adjustment.
 
-No hard absolute cap is locked for now. Percentages are the first control. If live testing produces unstable swings, add caps later.
+The hard active range is `-15` to `+15`. There is no movement-relative percentage control in the live workflow.
 
-Reversal is exceptional. It requires an explicit critical label and rationale that the apparent pre-Reality movement is actively misleading, not merely imperfect.
+A large Reality Check is exceptional. It requires explicit rationale that the apparent pre-reality check movement is materially misleading, under-supported, shortcut-driven, or missing an important resolved/compensating issue, not merely imperfect.
 
 Examples:
 
 ```text
-Pre-Reality movement: +6
-Reality Check strong offset: -4.2
-Final movement: +1.8
+Pre-reality check movement: +6
+Reality Check negative adjustment: -6
+Final movement: 0
 
-Pre-Reality movement: -6
-Reality Check strong softening: +4.2
-Final movement: -1.8
+Pre-reality check movement: -6
+Reality Check positive adjustment: +3
+Final movement: -3
 
-Pre-Reality movement: +6
-Reality Check reversal at 125%: -7.5
+Pre-reality check movement: +6
+Reality Check large negative adjustment: -7.5
 Final movement: -1.5
 ```
 
-There is no separate `full_offset` category in V1. If the concern is material but should not reverse the direction, use `strong`. If the apparent movement is actively misleading and should cross through neutral, use `reversal`.
+There is no separate `full_offset` category in V1. If the apparent movement is materially misleading, Pass 2 may assign enough negative or positive Reality Check points to cross through neutral, provided the point value remains inside the hard range and the rationale/evidence/allocation fields validate.
 
-The participant narrative should explain Reality Check as an after-review scoring judgment about whether the pre-Reality score movement is coherent, realistic, and incrementally supported by the scenario evidence. It should not describe Reality Check as a mechanical component essay, and it should not treat Reality Check as the selector of the participant-visible central discussion topic or broader strategic question. Preferred language should connect the adjustment to the score movement, for example whether a simplification made the profile less robust, whether increased robustness made recruitment or execution riskier, or whether the adjustment changes how the Trial Score movement should be read.
+The participant narrative should explain Reality Check as an after-review scoring judgment about whether the pre-reality check score movement is coherent, realistic, and incrementally supported by the scenario evidence. It should not describe Reality Check as a mechanical component essay, and it should not treat Reality Check as the selector of the participant-visible central discussion topic or broader strategic question. Preferred language should connect the adjustment to the score movement, for example whether a simplification made the profile less robust, whether increased robustness made recruitment or execution riskier, or whether the adjustment changes how the Trial Score movement should be read.
 
 ### Pillar And Subpillar Allocation
 
-Reality Check defines one overall app-calculated adjustment first, then allocates that adjustment to existing pillars/subpillars for traceability.
+Reality Check defines one overall accepted adjustment first, then allocates that adjustment to existing pillars for traceability.
 
-The LLM may choose where the Reality Check lands, but it must target existing pillars/subpillars rather than creating a new visible pillar. V1 should keep this deliberately small and readable: allocate to 1-3 subpillars, not a long list of tiny effects.
+The LLM may choose where the Reality Check lands by using canonical target IDs, but the visible subgroup/subcategory is always `Reality Check` under the affected pillar. The source subpillar remains stored for audit, while the participant-facing visual gets one concise `Reality Check` row with an app-owned deterministic short explanation. V1 should keep this deliberately small and readable: allocate to 1-3 rows, not a long list of tiny effects.
 
-Reality Check allocations must use canonical `allocation_target_id` values. The application maps those IDs to exact pillar/subpillar display labels, so the provider should not free-type pillar or subpillar names. For V1, use the current taxonomy subpillars plus the new additive `Operational Fit` subpillar:
+Reality Check allocations must use canonical `allocation_target_id` values. The application maps those IDs to exact pillars and source subpillars, so the provider should not free-type pillar or subpillar names. For V1, use the current taxonomy subpillars plus the new additive `Operational Fit` subpillar as source targets:
 
 | allocation_target_id | Pillar | Subpillar | Included Fields / Inputs | Broader Meaning | Reality Check Allocation Guidance |
 | --- | --- | --- | --- | --- | --- |
@@ -227,10 +260,13 @@ Example:
 ```json
 {
   "reality_check": {
-    "effect": "offset_gain",
-    "strength": "moderate",
-    "correction_fraction": 0.4,
-    "central_reason": "The score gain depends on simplification that improves completion resemblance but leaves endpoint interpretability less robust.",
+    "points": -6,
+    "relationship_to_previous": "new_issue",
+    "carryover_status": "none",
+    "new_issue_status": "new_independent_issue",
+    "reason": "The score gain depends on simplification that improves completion resemblance but leaves endpoint interpretability less robust.",
+    "incremental_check": "This is incremental beyond Completion Outlook because the score gain comes with evidence loss that the completion-likelihood movement does not price directly.",
+    "evidence_fields": ["endpoint_rigor_ml"],
     "allocations": [
       {
         "allocation_target_id": "scientific_challenge.protocol_architecture",
@@ -251,7 +287,7 @@ Example:
 }
 ```
 
-The app calculates the Reality Check points from effect/strength/fraction and distributes them by validated allocation shares. If provider-defined shares are missing, invalid, or do not sum to `1.0`, the app assigns equal shares deterministically across the valid allocation rows.
+Pass 2 returns the accepted Reality Check point proposal directly. The app validates range, evidence references, allocation target IDs, and arithmetic, then distributes accepted points by validated allocation shares. If provider-defined shares are missing, invalid, or do not sum to `1.0`, the app assigns equal shares deterministically across the valid allocation rows.
 
 Each allocation must include:
 
@@ -279,9 +315,9 @@ Why?
 Where did it land?
 ```
 
-The barchart should show allocated Reality Check rows under existing pillar/subpillar paths with human-readable labels such as `Reality Check: endpoint robustness`, not provider effect codes.
+The barchart should show allocated Reality Check rows under the affected pillar with the visible subcategory `Reality Check` and a short human-readable explanation, not provider effect codes.
 
-The Trial Score treemap should show Reality Check as allocated leaves inside impacted existing subpillars. It must not render Reality Check as a fifth top-level pillar.
+The Trial Score treemap should show Reality Check as allocated leaves inside impacted existing pillars. It must not render Reality Check as a fifth top-level pillar or as a separate Reality Check row under every source subpillar.
 
 Participant default view should show one final Trial Score story. Drilldown/facilitator view may show where Reality Check was allocated.
 
@@ -332,8 +368,8 @@ Use `supported` when the changed strategy is coherently supported by endpoint, c
 If the Strategy Shift Check is `unsupported_or_incoherent`:
 
 - Reality Check cannot be positive;
-- positive pre-Reality movement can only be accepted with `0` or offset downward;
-- negative pre-Reality movement cannot be softened;
+- positive pre-reality check movement can only be accepted with `0` or offset downward;
+- negative pre-reality check movement cannot be softened;
 - material incoherence should produce a challenging Reality Check narrative.
 
 Structured categorical fields prevail over unchanged or stale descriptive text. If text was not edited in the same change, treat mismatch as stale context first. Stale text alone should not create a major penalty unless it materially undermines interpretation.
@@ -372,7 +408,7 @@ The narrative should be concise, conditional, and constructive. It should challe
 
 The broader strategic question may mention adjustable feature families at a high level, such as eligibility breadth, endpoint ambition, comparator/control strategy, enrollment target, site footprint, follow-up duration, population focus, or design complexity. It should not prescribe exact field values or direct optimization instructions.
 
-Optional hidden discussion prompts are deferred out of the main Pass 2 participant-narrative flow. If reintroduced, they should be generated separately after the participant narrative succeeds.
+Optional hidden discussion prompts are deferred out of the main participant-narrative flow. If reintroduced, they should be generated separately after the participant narrative succeeds.
 
 Avoid:
 
@@ -403,23 +439,23 @@ Required guardrails:
 - structured evidence references for any material positive or negative adjustment;
 - one central discussion topic by default.
 
-## Two-Pass Narrative Architecture
+## Three-Pass Narrative Architecture
 
-Locked direction: use two LLM passes with deterministic app scoring between them.
+Locked direction: use three targeted LLM passes with app validation rails between them.
 
-The application cannot insert app-calculated scores into a single running LLM response. If the final participant narrative needs exact Operational Fit, Reality Check, and Trial Score values, scoring must happen between provider calls.
+The application cannot insert accepted score context into a single running LLM response. The active flow separates evolution/evidence generation, score adjudication, and participant-facing narrative shaping so the scoring LLM can judge Operational Fit and Reality Check against previous score trace, carryover, and current evolution without overloading the final narrative pass.
 
 Recommended flow:
 
 ```text
-Pass 1: Analytical Review
-App scoring
-Pass 2: Participant Narrative
+Pass 1: Evolution and Evidence
+Pass 2: Score Adjudication
+Pass 3: Participant Narrative
 ```
 
-### Pass 1: Analytical Review
+### Pass 1: Evolution and Evidence
 
-Pass 1 receives the full scenario packet and prior continuity context. It returns structured, auditable judgments rather than a polished participant narrative.
+Pass 1 receives the full scenario packet and prior continuity context. It returns structured, auditable evidence and interpretation rather than score decisions or polished participant narrative. Its evidence arrays should be bullet-first and compact; `analytical_narrative_draft` should remain short source-note prose that Pass 2 and Pass 3 can use without making Pass 1 write the final participant narrative.
 
 V1 top-level output sections:
 
@@ -427,10 +463,10 @@ V1 top-level output sections:
 review_metadata
 completion_outlook_analysis
 strategy_shift_check
-operational_fit
-reality_check
+evolution_evidence
 development_discussion_options
 continuity_update
+analytical_narrative_draft
 ```
 
 Pass 1 should produce:
@@ -440,19 +476,16 @@ Pass 1 should produce:
 - raw current state, baseline state, previous state, and residual state for total score, pillars, subpillars, features, and operational assumptions where available;
 - feature, subpillar, and pillar reading with definitions and values;
 - consistency update versus prior XGBoost interpretation;
-- Operational Fit field ratings for enrollment, site footprint, and total duration;
-- combined Operational Fit rating and materiality;
-- Reality Check effect, strength, allocation targets, and anti-double-counting rationale;
-- three complete development discussion options for Pass 2 selection;
+- current-vs-previous and current-vs-baseline evolution evidence;
+- new, persistent, resolved, or mitigated issues for the scoring pass;
+- one strongest current development tension and one wider participant question for Pass 3;
 - continuity update for later iterations.
 
 `strategy_shift_check` is required when gated premise-sensitive fields changed. Allowed status values are `supported`, `partly_supported`, `unsupported_or_incoherent`, and `not_applicable`.
 
-`operational_fit` should include field-level analysis for enrollment, site footprint / patients per site, and timeline, plus one `combined_operational_fit` object. The app scores only the combined rating/materiality.
+Pass 1 must not return `operational_fit`, `reality_check`, score points, allocation rows, or carryover assessment fields. Those belong to Pass 2.
 
-`reality_check` should include effect, strength, central reason, and 1-4 allocations. It should not include app-owned Reality Check points. `central_reason` explains the scoring adjustment only; it is not the selected participant discussion point.
-
-`development_discussion_options` is the canonical visible-iteration Pass 1 structure. Hidden baseline should not return this field. Visible iterations should contain two or three complete options, with no main/alternative split. Each option pairs one development discussion topic with one participant-visible wider question assigned to that exact topic.
+`development_discussion_options` is the canonical visible-iteration Pass 1 structure. Hidden baseline should not return this field. Visible iterations should contain exactly one complete option, with no main/alternative split. The option pairs the strongest current development tension with one participant-visible wider question assigned to that exact topic.
 
 Each option should use this shape:
 
@@ -468,33 +501,30 @@ Each option should use this shape:
 }
 ```
 
-Pass 1 should focus on analytical substance for each option: the development issue, why it matters, the trial evidence behind it, and final participant-visible wider question text that Pass 2 can select verbatim.
+Pass 1 should focus on analytical substance for the option: the development issue, why it matters now, the trial evidence behind it, how it compares with the previous scenario and original baseline, and final participant-visible wider question text that Pass 3 can use verbatim.
 
-The validated contract does not emit old main/alternative Pass 1 candidate fields. Storage, debug context, and Pass 2 input should carry `development_discussion_options` directly, plus the Pass 2 selected participant-facing `central_tension` and `broader_strategic_question` once available.
+The validated contract does not emit old main/alternative Pass 1 candidate fields. Storage, debug context, and Pass 3 input should carry `development_discussion_options` directly, plus the Pass 3 selected participant-facing `central_tension` and `broader_strategic_question` once available.
 
-The participant-visible `broader_strategic_question` selected by Pass 2 should be stored and passed forward with the participant-visible central discussion topic in `recent_participant_visible_questions`. Later Pass 2 calls should use this history to preserve continuity while avoiding unnecessary repetition: prefer a different wider debate question when the scenario supports a different discussion topic, but reuse or closely echo the previous question when same-state reuse or a clear return to a prior state calls for consistency.
+The participant-visible `broader_strategic_question` selected by Pass 3 should be stored and passed forward with the participant-visible central discussion topic in `recent_participant_visible_questions`. Later Pass 1 and Pass 3 calls should use this history to preserve continuity while avoiding unnecessary repetition: prefer a different wider debate question when the scenario supports a different discussion topic, but reuse or closely echo the previous question when same-state reuse or a clear return to a prior state calls for consistency.
 
-Facilitator questions are no longer part of the Pass 2 participant-narrative contract. If needed later, they should be generated as a separate optional/lazy step after the participant narrative has succeeded, using final score context and the selected development discussion without slowing or destabilizing the main review flow.
+Facilitator questions are no longer part of the main participant-narrative contract. If needed later, they should be generated as a separate optional/lazy step after the participant narrative has succeeded, using final score context and the selected development discussion without slowing or destabilizing the main review flow.
 
-`continuity_update` should be compact and carry what changed since the previous visible iteration and what to watch next. Hidden baseline should not define an active participant-visible discussion topic. Visible participant-facing continuity is stored from the Pass 2 selected central development discussion pair, not from hidden baseline.
+`continuity_update` should be compact and carry what changed since the previous visible iteration and what to watch next. Hidden baseline should not define an active participant-visible discussion topic. Visible participant-facing continuity is stored from the Pass 3 selected central development discussion pair, not from hidden baseline.
 
-For visible iterations, Pass 1 proposes two or three analytical development discussion options. Pass 2 selects one supplied pair using priority 1 state reuse/direct continuity, priority 2 latest material change, and priority 3 history diversity. Pass 2 should not introduce a new analytical basis that was absent from the validated Pass 1 options. Provider validation enforces that the selected participant-visible central discussion topic and wider question match one of the supplied Pass 1 option pairs. Repetition avoidance is handled at the prompt-selection level: Pass 2 compares candidate discussion topics against recent participant-visible history. Same-state reuse or direct storyline continuity may keep the same topic. Otherwise, Pass 2 should prefer a supplied option anchored in a newly changed material issue when available, and use history diversity to avoid repeating the same development issue or wider-question framing among similarly relevant options. A prior issue that remains unresolved can stay visible in the Trial Score narrative or Reality Check when material without automatically becoming the selected `Discussion Point`.
+For visible iterations, Pass 1 proposes one analytical development discussion option. Pass 3 must use that supplied pair unless same-state reuse requires direct continuity with a prior reviewed state. Provider validation enforces that the selected participant-visible central discussion topic and wider question match the supplied Pass 1 option pair. Repetition avoidance is handled at the prompt-selection level: Pass 1 and Pass 3 compare the current tension against recent participant-visible history and should avoid unnecessary repetition when the scenario supports a different strongest tension. A prior issue that remains unresolved can stay visible in the Trial Score narrative or Reality Check when material without automatically becoming the selected `Discussion Point`.
 
-Pass 1 should not write the final participant-facing score narrative, because it does not yet know the app-calculated Operational Fit points, Reality Check points, or final Trial Score.
+Pass 1 should not write the final participant-facing score narrative, because it does not yet know the accepted Operational Fit points, Reality Check points, or final Trial Score.
 
-### App Scoring Between Passes
+### Pass 2: Score Adjudication
 
-The application validates Pass 1 and calculates:
+The application validates Pass 1 and then sends a compact scoring input to Pass 2. Pass 2 calculates:
 
 - Operational Fit points;
-- pre-Reality score and pre-Reality movement;
+- pre-reality check score and pre-reality check movement;
 - Reality Check points and allocations to existing pillars/subpillars;
-- updated pillar and subpillar contributions;
-- final Trial Score;
-- score deltas versus previous visible iteration;
-- compact continuity state.
+- score-evolution read and active issue to carry forward.
 
-The app owns numeric scoring. The LLM provides ratings, materiality, target pillars/subpillars, evidence references, and rationale.
+The LLM owns new-state Operational Fit and Reality Check points. The app owns hard validation rails, evidence-reference validation, canonical allocation targets, baseline-return neutralization, same-state replay, arithmetic, storage, and UI rendering.
 
 V1 validation/scoring order:
 
@@ -503,16 +533,15 @@ V1 validation/scoring order:
 2. Run Pass 1.
 3. Validate Pass 1 schema.
 4. Validate Strategy Shift Check.
-5. Score Operational Fit.
-6. Build pre-Reality score and movement.
-7. Validate Reality Check effect against actual pre-Reality movement.
-8. Score Reality Check.
-9. Allocate Reality Check.
-10. Calculate Trial Score.
-11. Build Pass 2 packet.
-12. Run Pass 2.
-13. Validate Pass 2 schema/prose.
-14. Store final trace.
+5. Build Pass 2 scoring input for visible scenarios.
+6. Run Pass 2 Score Adjudication.
+7. Validate scoring JSON, point ranges, evidence references, allocation target IDs, same-state/baseline rails, and arithmetic.
+8. If needed, run one targeted scoring repair.
+9. Calculate accepted Trial Score from Completion Outlook + Operational Fit + Reality Check.
+10. Build Pass 3 narrative input.
+11. Run Pass 3 Participant Narrative.
+12. Validate Pass 3 schema/prose.
+13. Store final trace.
 ```
 
 Reality Check is scored only after Operational Fit points are calculated:
@@ -525,9 +554,7 @@ Trial Score = pre_reality_score + Reality Check
 
 For the first visible iteration, compare `pre_reality_score` against baseline XGBoost Completion Outlook when no previous visible Trial Score exists.
 
-Reality Check effect must be compatible with the actual `pre_reality_delta` after Operational Fit scoring. If Pass 1 returns an incompatible effect, downgrade Reality Check to neutral in V1 unless the mapping is trivial and explicitly safe. This protects against Pass 1 proposing `offset_gain` before app scoring later makes the actual pre-Reality movement negative.
-
-If Pass 1 or app scoring validation fails, do not show a Trial Score narrative. Preserve XGBoost Completion Outlook and show review unavailable / needs rerun behavior instead.
+If Pass 1 or Pass 2 scoring validation fails after targeted repair, do not show a Trial Score narrative. Preserve XGBoost Completion Outlook and show review unavailable / needs rerun behavior instead.
 
 Store diagnostics for transparency:
 
@@ -544,14 +571,16 @@ delta_vs_baseline_xgboost
 validation_notes
 ```
 
-### Pass 2: Participant Narrative
+### Pass 3: Participant Narrative
 
-Pass 2 receives:
+Pass 3 receives:
 
-- exact app-calculated score stack;
+- accepted score stack;
 - Pass 1 structured analysis;
+- Pass 2 scoring review;
 - previous visible iteration context;
 - compact continuity state;
+- selected model evidence from Pass 1 rather than broad raw model evidence;
 - participant-facing guardrails.
 
 V1 top-level output sections:
@@ -564,7 +593,7 @@ central_tension
 broader_strategic_question
 ```
 
-Pass 2 writes:
+Pass 3 writes:
 
 - one integrated Trial Score narrative explaining state, movement, and interpretation;
 - pillar-level bullets that use subpillar and feature evidence inside prose rather than nested bullet lists;
@@ -576,13 +605,13 @@ Pass 2 writes:
 
 `pillar_reading` is the main UI reading structure. It should include one concise reading per pillar. Subpillar and feature evidence should appear inside the prose, not as nested subpillar/feature bullet lists.
 
-`central_tension` should be the final participant-facing discussion topic selected from the visible Pass 1 `development_discussion_options`.
+`central_tension` should be the final participant-facing discussion topic from the visible Pass 1 `development_discussion_options`.
 
 `broader_strategic_question` should be reflective and debate-oriented, but still contextualized to the scenario, condition, population, evidence goal, operational setting, or trial context. It should not be a generic conference question detached from the current scenario, and it should not become a direct instruction to change a specific field value.
 
-Pass 2 should use the validated score explanation from Pass 1 and app scoring. It should not make new scoring decisions, invent a supplied discussion topic outside the supplied options, or introduce a new analytical basis.
+Pass 3 should use the validated evidence from Pass 1 and accepted score review from Pass 2. It should not make new scoring decisions, invent a supplied discussion topic outside the supplied option, or introduce a new analytical basis.
 
-Pass 2 repair is separate from Pass 1 repair. If Pass 2 returns invalid participant narrative JSON after Pass 1 and app scoring succeeded, the app may send one targeted Pass 2 correction prompt with the same Pass 2 input, previous Pass 2 JSON, and exact Pass 2 validation errors. The provider must repair only invalid or missing participant-narrative fields and must not rerun Pass 1, change app-calculated scores, or change the analytical basis. If the second Pass 2 attempt still fails, Trial Score remains visible and the trace/UI should show a participant narrative warning instead of failing the scenario score.
+Pass 3 repair is separate from Pass 1 and Pass 2 scoring repair. If Pass 3 returns invalid participant narrative JSON after scoring succeeded, the app may send one targeted correction prompt with the same narrative input, previous narrative JSON, and exact validation errors. The provider must repair only invalid or missing participant-narrative fields and must not rerun Pass 1, change accepted scores, or change the analytical basis. If the second narrative attempt still fails, Trial Score remains visible and the trace/UI should show a participant narrative warning instead of failing the scenario score.
 
 This preserves exact scoring, continuity, and participant-readable narrative quality without forcing an extra LLM call on valid Pass 2 responses.
 
@@ -600,129 +629,37 @@ For now, these views mean:
 
 - `Completion Outlook`: show `XGBoost Completion Outlook + Operational Fit`. Keep the familiar model pillar rows, and add `Operational Fit` only under `Execution Framework`.
 - `Reality Check`: replace the current `Strategic Review` radio behavior with Reality Check. Show the adjustment, short rationale, central discussion topic, and allocation trace.
-- `Trial Score`: show `Completion Outlook + Reality Check`. In this view, expose Reality Check as allocated subpillar leaves inside impacted existing subpillars, for example `Scientific Challenge / Protocol Architecture / Reality Check: endpoint robustness` or `Execution Framework / Operational Fit / Reality Check: operational support`. Do not show Reality Check as a fifth pillar.
+- `Trial Score`: show `Completion Outlook + Operational Fit + Reality Check`. In this view, expose Reality Check as a `Reality Check` subgroup/subcategory inside impacted existing pillars, using `source_subpillar` only for audit and an app-owned deterministic short explanation for display. Do not show Reality Check as a fifth pillar.
 
 Future participant-facing UI may eventually show only `Trial Score`, but that is not the V1 target. During implementation and current product use, keep all three radio buttons visible so scoring behavior can be inspected.
 
 The final participant narrative should assess the total Trial Score, not write separate essays for Completion Outlook, Operational Fit, and Reality Check.
 
-Reality Check allocations should appear within existing subpillars, not directly under pillars. In the Reality Check radio, the treemap may use `Reality Check` as the root view, but the visible allocation path should still be existing pillar -> existing subpillar -> Reality Check leaf. In the Trial Score radio, the full composition treemap should embed Reality Check leaves inside impacted existing subpillars. Operational Fit and Reality Check must not render as top-level fifth pillars.
+Reality Check allocations should appear within existing pillars as one visible `Reality Check` subgroup/subcategory per allocation row, not as provider-created subpillar labels. In the Reality Check radio, the treemap may use `Reality Check` as the root view, but the visible allocation path should still be existing pillar -> `Reality Check`. In the Trial Score radio, the full composition treemap should embed Reality Check leaves inside impacted existing pillars. Operational Fit and Reality Check must not render as top-level fifth pillars.
 
 ## Migration Plan
 
-Implementation status: V1 contract/schema constants, deterministic Operational Fit and Reality Check scoring, registry-owned Reality Check allocation IDs, active Pass 1 provider prompt/schema, targeted Pass 1 repair retry, Pass 2 participant-narrative prompt/schema, targeted Pass 2 repair retry, real-provider Pass 2 routing, mock-provider adaptation, storage trace fields, facilitator-question collapsed rendering, and initial simulator labels/rendering are implemented in `src/narratives/trial_score_contract.py` and the adjacent narrative modules. The active prompt builder has been simplified to the V1 Trial Score contract only. Remaining work should continue from those files rather than recreating a separate schema plan.
+Implementation status: the active flow is implemented as three provider-facing stages in `src/narratives/trial_score_contract.py`, `src/narratives/prompt_builder.py`, `src/narratives/provider.py`, and adjacent narrative modules:
 
-Current implementation also passes `operational_movement_context` into Pass 1 so the provider can compare current enrollment, site count, calculated patients per site, and duration against neutral baseline assumptions and residual cohort percentiles. The prompt explicitly separates movement from baseline, residual percentile/status, and benchmark-context changes caused by cohort-defining field edits. Percentiles may counterbalance movement, and distance from P50 alone must not drive Operational Fit.
+- Pass 1 Evidence/Evolution: validates `completion_outlook_analysis`, `evolution_evidence`, `strategy_shift_check`, exactly one visible `development_discussion_options` item, `continuity_update`, and `analytical_narrative_draft`.
+- Pass 2 Score Adjudication: the LLM assigns direct Operational Fit and Reality Check points; the app validates point ranges, evidence refs, allocation target IDs, baseline-return neutralization, same-state replay, and arithmetic. One targeted scoring repair retry is allowed for invalid scoring JSON.
+- Pass 3 Participant Narrative: the LLM shapes the accepted score trace into `trial_score_narrative`, two to four `pillar_reading` bullets, `central_tension`, and `broader_strategic_question`; it must not re-score or introduce unsupported claims. One targeted narrative repair retry is allowed.
 
-Current implementation also passes compact model state and movement evidence into Pass 1. Model state is the fixed snapshot of signed model forces: positive impacts are favorable by definition and negative impacts are unfavorable by definition. Model movement is the delta from baseline and/or previous visible iteration, including whether a pillar, subpillar, or direct feature contribution crossed zero, improved while still negative, worsened while still positive, or reversed sign. Visible-iteration movement ranking is previous-first: latest delta from the immediately prior iteration determines top positive/negative movement when available, while baseline delta remains context; baseline delta is used for ranking only when no previous iteration exists. Feature-level evidence is sourced only from direct XGBoost-backed `feature_level_impacts` exported by the decomposition helper and is capped to the top three positive and top three negative rows for prompt use. Therapeutic-area threshold offsets, residual/clipping adjustments, unmapped internal factors, and non-model registry fields are excluded from feature-level prompt evidence. Baseline reviews should use state evidence even when movement evidence is empty. Pass 2 receives the same compact model evidence as narrative context only, so it can explain the validated analysis without recalculating Completion Outlook.
+Current packet and prompt rules:
 
-The packet includes `model_interpretation.model_signal_guidance` so the provider has explicit rules for `completion_outlook_analysis.main_model_signals`. Baseline signals should be state-only. Visible iteration signals should prioritize movement first, then current-state anchors. Signal wording should prefer feature label/value with parent subpillar and pillar, then subpillar, then pillar-only fallback; generic pillar slogans should be avoided.
-
-Hidden-baseline compaction now preserves the baseline Completion Outlook summary when available and carries compact baseline orientation/watch context into the first visible prompt. Hidden baseline output remains qualitative context only: no hidden Trial Score, hidden Operational Fit points, hidden Reality Check points, participant-visible questions, or active discussion topic should be treated as prior visible history.
-
-Pass 1 should explicitly act as a clinical development, trial design, regulatory strategy, and clinical operations expert. Its goal is to review the evidence package, summarize the current design logic, observe scenario dynamics across iterations, and identify weak assumptions or development issues. Pass 1 should prioritize rich analytical material over participant-facing wording; Pass 2 owns final phrasing and participant-facing style constraints.
-
-Hidden-baseline analysis should be deep enough to anchor the later visible storyline. It should use the trial text, structured fields, model evidence, operational context, therapeutic-area context, relevant reference-pack summaries, and general clinical-development expertise to explain the actual development problem: population, intervention, endpoints, follow-up windows, oversight needs, scientific purpose, feasibility, and what development decision the evidence package could credibly support. Reference packs can support clinical, regulatory, or development interpretation, but the provider must not imply a document supports a claim unless the pack actually provides that support; if no reference pack is relevant, Pass 1 should rely on packet evidence and expert interpretation. The Pass 1 `analytical_narrative_draft` should read like a substantive source note for the future storyline, not a short score recap: it should name concrete trial facts, endpoint/follow-up logic, safety or monitoring burden, evidence ambition, similar-trial operational pattern, and the decision the baseline evidence can or cannot support. Across hidden and visible reviews, Pass 1 should use packet evidence to cover the most relevant supported dimensions: population/setting/clinical context, endpoint interpretability, safety governance, comparator or standard-of-care context, development decision supported, evidence completeness risk, and program-level meaning. When immune markers, disease-control measures, clinically confirmed events, long follow-up, vulnerable populations, or special settings are present, Pass 1 should explain why they matter for interpreting safety, response, feasibility, generalizability, or confidence in the next development step. Participant-facing and draft narrative wording should describe operational context as similar-trial patterns or comparable studies, not as benchmark data. Underlying operational benchmark metadata remains available as structured context and audit evidence, but the narrative should translate it into clinical-development language. Validation enforces a minimum total draft depth before Pass 2 receives the draft: at least 320 words for visible reviews and at least 450 words for hidden baseline.
-
-Pass 1 routes evidence by section to avoid prompt overload. `completion_outlook_analysis` should use XGBoost score, pillar/subpillar/feature impacts, model movement, current-state drivers, and changed structured features. `operational_fit` should use planned enrollment, planned sites, planned duration, patients per site, operational movement context, similar-trial operational context, and trial text only when it directly affects feasibility; non-operational edits should not drive Operational Fit scoring unless they directly change enrollment, sites, or duration assumptions. `reality_check` should use pre-Reality movement direction, changed fields, model movement, Operational Fit result, trial text, relevant reference packs, and general expert judgment to assess coherence, realism, shortcut risk, under-support, or justified rigor. If the packet contains an active prior negative Reality Check carryover candidate, Pass 1 should also return `reality_check_carryover_assessment` with `status` (`still_relevant`, `partly_mitigated`, or `resolved_or_superseded`) and `current_issue_relation` (`same_issue`, `new_independent_issue`, or `mixed_or_unclear`). This field decides whether the previous concern remains active after the latest scenario change and whether the latest Reality Check concern is distinct enough to cumulate. `strategy_shift_check` should use gated premise-sensitive changed fields and the development premise. `development_discussion_options` should use material changes, Pass 1 interpretation, score-aligned movement, participant-visible history, and the strongest unresolved development trade-offs.
-
-Reality Check carryover is app-scored, not provider-scored. The app creates a carryover candidate only from the immediately previous visible review when its Reality Check was materially negative. If Pass 1 marks the carryover `still_relevant`, the previous negative adjustment remains as a floor. If it marks `partly_mitigated`, half of the previous negative adjustment remains. If it marks `resolved_or_superseded`, the carryover is released. If the current Reality Check is negative and Pass 1 marks the latest issue as `new_independent_issue`, the app can cumulate the current negative adjustment with the active carryover under a bounded cap. If the issue is the same or unclear, the app uses the more negative of the current adjustment and the carryover floor rather than adding both. This prevents unresolved serious concerns from disappearing while avoiding repeated penalties for the same issue.
-
-Gated premise-sensitive changes do not automatically clear carryover. They are evidence that may support `resolved_or_superseded` if the development premise changed enough to make the previous concern irrelevant. Exact same-state reuse remains separate and higher priority: when the canonical scenario state matches a prior visible review, the app reuses that prior score trace rather than recalculating the carryover.
-
-Hidden baseline should keep baseline development issues inside `analytical_narrative_draft.development_landscape_read` and should not return `development_discussion_options`. Visible Pass 1 should return two or three `development_discussion_options`. They let later iterations continue a prior participant-visible storyline when direct continuity supports it, or shift to another discussion topic when the scenario dynamic changes. Pass 1 should include at least one option anchored in a newly changed material issue when available, while prior unresolved issues can remain visible in Reality Check or the analytical draft. Each option includes its own wider-perspective strategic question so Pass 2 can select and shape a coherent pair without remapping questions after the fact. Topics should be concise title-style labels for display and should prefer analytically specific evidence trade-offs, such as long-term safety confidence versus evidence completeness, over short operational labels when packet evidence supports the richer framing.
-
-Provider repair prompts and Pass 1 validation now use one shared recursive packet-evidence reference helper from the Trial Score contract. This allows provider citations to point to deep movement evidence, such as patients-per-site benchmark position or movement relative to P50 inside `operational_movement_context`, without failing evidence validation.
-
-Current contract refinement: the two-pass role split is asymmetric.
-
-- Pass 1 is the full analyst and rough narrative drafter. It keeps structured outputs for Completion Outlook, Operational Fit, Reality Check, strategy shift, visible-iteration `development_discussion_options`, and continuity, plus `analytical_narrative_draft`.
-- The Pass 1 draft is provisional and intentionally richer than the final output. It may explain current model state, model movement, Operational Fit reasoning, pre-Reality direction, Reality Check reasoning, the development landscape, relevant reference-pack implications, and score-aware implications used in the analysis. This draft is not participant-facing, so the final-output score-language rule does not apply here.
-- The implemented shape is:
-
-```json
-"analytical_narrative_draft": {
-  "current_state_read": "...",
-  "movement_read": "...",
-  "operational_fit_read": "...",
-  "reality_check_read": "...",
-  "development_landscape_read": "..."
-}
-```
-
-- Hidden baseline produces the same draft object as qualitative context, and draft fields must be non-empty even though the review remains hidden, `visible=false`, and score-free. The compacted hidden baseline preserves only useful qualitative development discussion summary context, not hidden numeric component scores.
-- After Pass 1 validation, the application calculates app-owned scores and adds `score_alignment_notes`. These notes may include internal numeric values for calibration, but they also expose participant-safe labels such as `trial_score_direction`, `required_direction_phrase`, `pre_reality_direction`, `operational_fit_importance`, `operational_fit_wording_instruction`, `reality_check_importance`, `wording_calibration`, and `conflicts`.
-- Participant-facing text should prefer direction and importance over numeric points or exact Trial Score values. Pass 2 may use internal values to calibrate wording. This is prompt/style guidance, not a validation blocker.
-- Pass 2 is an editor/formatter, not a second analyst. It receives the Pass 1 draft, validated Pass 1 structured analysis, app-calculated scores, score-alignment notes, trajectory/reuse context, and compact model evidence. Its task is to restructure into the final participant-facing sections, align wording with score direction/materiality, remove repetition, and preserve the Pass 1 analytical conclusion.
-- The Pass 2 final participant format is:
-- `Trial Score`: combines three labeled subparagraphs into one participant read: `trial_score_narrative.summary` as `Overall Evolution`, `movement_reading` as `Completion Outlook`, and `score_interpretation` as `Reality Check`. It must reflect `required_direction_phrase` without exposing exact score values, and the three subparagraphs should not repeat the same central sentence. The `Completion Outlook` paragraph is the pre-Reality read: model-visible completion-likelihood movement plus app-rated execution scale, footprint, duration, size, or operational dimensions when material.
-- `What Is Driving The Score`: renders `pillar_reading` as two to four material bullets only. A bullet may cover one pillar or combine related pillars/subpillars. Pass 2 should not mechanically list every pillar, and each bullet should add a distinct driver or evidence angle rather than restating the Trial Score paragraphs.
-  - `Discussion Point: <topic>`: renders the selected concise `central_tension.summary` as the section title, followed by `central_tension.why_it_matters` and the paired participant-visible wider `broader_strategic_question.question`.
-  - `central_tension.summary`: a stable title-like key for validation/history, not necessarily the full display sentence.
-- Operational Fit is app-owned score context. Participant prose presents app-rated operational evidence inside the relevant score driver, usually Execution Framework, using plain wording such as right scale, footprint, duration, size, or operational dimensions. If `operational_fit_importance` is `none`, Pass 2 must keep the operational scale, footprint, duration, size, or fit neutral and may only describe a non-scored execution-burden implication when supported.
-- Pass 2 should use `pass1_draft` and `pass1_analysis` as the source for richer interpretation. When Pass 1 contains trial-specific detail, the final narrative should stay concise while carrying forward the most relevant rationale, illustration, or clinical-development implication instead of reducing the read to generic score movement language. Elaboration should appear only where it helps explain the current score movement, Reality Check, or selected discussion topic, and wording should remain conditional.
-- Reality Check should appear in the final participant narrative only when it is material, conflict-relevant, or interpretation-changing. When mentioned, describe it as a realism/coherence qualifier, not as points or a standalone component essay.
-- Pass 2 should use cautious hypothesis language throughout, such as "may", "might", "could", "appears", "suggests", and "would need support", because the narrative interprets scenario evidence rather than asserting external truth.
-- Pass 2 must not re-rate Operational Fit, re-decide Reality Check, reinterpret model movement, introduce new clinical/regulatory claims, or change the central analytical conclusion except to soften/align wording when app-generated alignment notes identify overstatement or inconsistency.
-- FDA/EMA/reference packs should primarily enrich Pass 1. Pass 2 should receive reference implications through the Pass 1 draft and validated analysis rather than re-reading or reinterpreting full reference packs by default.
+- `operational_movement_context` is supplied as evidence for Pass 1 and Pass 2. Planned enrollment, planned sites, planned duration, patients per site, and the operational benchmark/context define Operational Fit continuity. Non-operational edits do not erase a previous Operational Fit assessment when the operational state remains equivalent; Reality Check may still move for non-operational coherence changes.
+- Compact model state and movement evidence are supplied so `completion_outlook_analysis.main_model_signals` can use concrete score-pattern evidence without treating every model movement as a direct causal claim.
+- Hidden baseline remains compact qualitative context only: no hidden Trial Score, hidden Operational Fit points, hidden Reality Check points, participant-visible questions, or active discussion topic are treated as prior visible history. Hidden baseline uses a bounded fast provider profile and deterministic compact fallback so Simulation Mode is not blocked by rich baseline generation.
+- Pass 1 should act as the clinical development, trial design, regulatory strategy, and clinical operations analyst. It should produce substantive compact source-note material, but no scoring objects.
+- Pass 2 should compare the current evidence against previous score trace, carryover candidate, new issues, resolved issues, and persistent issues. Carryover is now a scoring-LLM judgment inside validated rails, not the old app formula.
+- Pass 3 should use cautious hypothesis language, avoid exact score/point wording in participant-facing prose, use the supplied Pass 1 discussion pair, and describe Reality Check only when material, conflict-relevant, or interpretation-changing.
 
 Validation and repair implementation:
 
-- Pass 1 schema is `trial_score_pass1_schema_v3`, Pass 2 schema is `trial_score_pass2_schema_v2`, and prompt template is `trial_score_two_pass_prompt_v1_8`.
-- Pass 1 validation checks draft shape and non-empty string fields for hidden baseline and visible reviews. Semantic validation remains light; structured ratings remain the scoring source of truth. Numeric wording inside the draft is allowed so Pass 2 can edit it rather than failing the run.
-- Targeted Pass 1 repair prompts can repair missing/malformed draft fields without changing valid Operational Fit, Reality Check, strategy-shift, or evidence-field content.
-- App-owned `score_alignment_notes` are generated after scoring. These translate app points into qualitative direction/materiality and identify wording conflicts such as capped Operational Fit, neutral Reality Check despite concern language, slight movement being described as major, or same-state reuse requiring reversion language.
-- Pass 2 input includes `pass1_draft` and `score_alignment_notes`.
-- Pass 2 prompt and repair prompts say: edit the Pass 1 draft, do not reanalyze, do not introduce new unsupported claims, app-calculated direction/materiality overrides draft intensity, use `required_direction_phrase`, prefer qualitative direction/materiality over numeric score/point language in the final participant-facing prose, return two to four material pillar-reading bullets, express material app-rated operational evidence inside the relevant pillar/subpillar using scale, footprint, duration, size, or operational-dimension language, and mention Reality Check only when it materially changes the interpretation.
-- Pass 2 validation mirrors the response schema shape and rejects returned app-owned score fields. It does not reject numeric prose; exact score wording is handled as prompt/style guidance.
-- Live simulator debug output shows `pass2_editor_input_debug_summary` with `app_calculated_scores_shared_with_pass2`, Pass 1 draft, selected Pass 1 analytical basis, score-alignment notes, model evidence, and participant guardrails. This is a compact summary, not the full raw Pass 2 input. Full raw Pass 2 input remains available in the audit bundle. Exact app scores are part of Pass 2 input calibration, and the score-language restriction applies only to final participant-facing prose.
-- Keep existing bounded retry counts: Pass 1 uses the existing malformed JSON and targeted validation repair path; Pass 2 uses the existing one-shot participant-narrative repair path. Do not add a third LLM pass unless a later live-provider audit proves the editor-only flow is insufficient.
-
-1. Freeze the current uncommitted narrative/scoring implementation until the new contract is specified.
-2. Use this document as the active source of truth.
-3. Use `docs/operational_fit_scoring.md` as the detailed Operational Fit scoring source of truth.
-4. Before reusing any existing code, inspect it against this contract and keep only contract-compatible behavior.
-5. Reuse generic reviewed-snapshot and consistency-warning plumbing only when it matches the new contract.
-6. Preserve structured/text consistency behavior: structured categorical fields prevail over unchanged or stale descriptive text, with warnings before penalties.
-7. Rewrite obsolete `Strategic Review`, `Design Confidence`, `Total Scenario Score`, and visible `Quality Review` concepts rather than carrying them forward as implementation names.
-8. Update old operational-only behavior: operational assumptions remain outside XGBoost, but they now contribute to displayed `Completion Outlook` through Operational Fit.
-9. Define the new provider schema around:
-   - total-score assessment;
-   - operational-fit assessment;
-   - reality-check judgment;
-   - central discussion topic;
-   - broader strategic question;
-   - evidence references;
-   - optional facilitator/debug trace fields.
-10. Rework deterministic scoring tests around the new score stack before changing the UI.
-11. Add consistency/field-change checks for hard-locked fields, gated Strategy Shift Check behavior, and structured-text conflict warnings.
-12. Update packet builder and mock/provider outputs after deterministic scoring checks pass.
-13. Update simulator UI labels and narrative rendering after the schema/scoring contract is stable.
-14. Rebuild live evals only after the new prompt shape is testable on one or two trials.
-
-Implementation should proceed autonomously in small slices with a bounded audit after each slice before moving on. Each audit should compare the current diff against this document and `docs/operational_fit_scoring.md`, identify gaps, apply targeted fixes, and repeat until there are no material findings for that slice.
-
-High-risk implementation points and required mitigations:
-
-- **Old contract leakage**: active new code must not emit visible `Strategic Review`, `Design Confidence`, `Quality Review`, or `Total Scenario Score` fields. Old aliases are allowed only in clearly marked legacy-cache adapters. Add a checker that fails if new scoring/provider outputs use obsolete visible fields.
-- **Reality Check movement mismatch**: score Operational Fit first, calculate actual `pre_reality_delta`, then validate Reality Check effect compatibility. Incompatible effects downgrade to neutral in V1 unless the mapping is trivial and explicitly safe.
-- **Operational Fit over-crediting**: score only combined Operational Fit; enforce materiality guardrails from `docs/operational_fit_scoring.md`; require coherent support across at least two operational fields for a positive `+5.0`.
-- **Noisy Reality Check allocations**: require 1-4 allocations, canonical `allocation_target_id` values, and present `movement_label`, `rationale`, and `incremental_check`. If provider shares are missing, invalid, or do not sum to `1.0`, assign equal app-owned shares rather than neutralizing an otherwise valid Reality Check. Do not invent fallback subpillars.
-- **Over-punitive Strategy Shift Check**: use `unsupported_or_incoherent` only for direct contradiction or multiple missing core supports. Use `partly_supported` for plausible but incomplete shifts.
-- **Structured/text conflict over-penalty**: structured categorical fields prevail, but unchanged or stale text should create warning/context first. Penalize only when the conflict materially undermines interpretation.
-
-Recommended slice order:
-
-```text
-1. Contract/schema constants and old-name boundary cleanup.
-2. Deterministic scoring and validation checkers.
-3. Packet builder and prompt/provider schemas.
-4. Mock provider and storage trace updates.
-5. Simulator UI rendering and score-view data.
-6. Narrow command verification and manual-test scenario handoff.
-```
-
-Do not run Playwright/browser automation for this migration by default. If visual or interaction confidence requires browser validation, stop and provide a concise manual scenario for the user to test instead.
+- Active versions are `trial_score_evidence_pass_schema_v4`, `trial_score_scoring_pass_schema_v1`, `trial_score_narrative_pass_schema_v1`, and `trial_score_three_pass_prompt_v2_2`.
+- Pass 1 repair can fix schema/evidence/draft scaffolding but must not introduce Pass 2 scoring objects.
+- Pass 2 scoring repair can fix schema, required fields, ranges, evidence refs, and allocation target IDs without rerunning interpretation.
+- Pass 3 repair can fix participant-narrative fields without rerunning interpretation or changing accepted scores.
 
 ## Obsolete Direction
 
@@ -740,44 +677,48 @@ Historical implementation details may remain useful when recycling code, but the
 
 ### 2026-06-18 Trial Score V1 Narrative Production Cleanup
 
+Historical note: this subsection records the 2026-06-18 cleanup direction and is superseded by the active 2026-06-22 three-pass workflow above where it conflicts.
+
 Main goal: fix and enhance Scenario Review / Trial Score narrative production while simplifying the active implementation around the current contract.
 
 Implemented direction:
 
 - `Trial Score = Completion Outlook + Operational Fit + Reality Check`.
 - `Completion Outlook` remains the protected XGBoost/SHAP model anchor.
-- `Operational Fit` is app-scored and shown under `Execution Framework`, including feature-value detail lines for planned enrollment, planned sites, and planned duration.
-- `Reality Check` is app-scored from validated classifications and allocated to canonical existing pillar/subpillar targets.
-- The participant-facing output is generated in Pass 2 as one integrated Trial Score narrative, one central discussion topic, and one broader strategic question. Facilitator questions are not part of the Pass 2 contract.
+- Superseded: `Operational Fit` was app-scored in this earlier direction; the active workflow gives Pass 2 LLM ownership of `operational_fit.points` inside app validation rails.
+- Superseded: `Reality Check` was app-scored from validated classifications in this earlier direction; the active workflow gives Pass 2 LLM ownership of `reality_check.points` and validated allocation targets.
+- Superseded: participant-facing output was generated in Pass 2 in this earlier direction; the active workflow uses Pass 3 for one integrated Trial Score narrative, one central discussion topic, and one broader strategic question. Facilitator questions are not part of the main participant-narrative contract.
 
 Provider and prompt flow:
 
-- Pass 1 is the analytical scoring/classification pass.
-- App scoring runs between Pass 1 and Pass 2 and owns all numeric score values.
-- Pass 2 receives exact app-calculated scores plus validated Pass 1 analysis and writes participant narrative only.
-- The active prompt builder is simplified to the current Trial Score V1 contract.
-- OpenAI and Gemini provider paths use the same staged behavior conceptually: Pass 1, targeted repair when needed, then Pass 2 narrative generation.
+- Superseded: Pass 1 was the analytical scoring/classification pass in this earlier direction. The active Pass 1 is evolution/evidence only.
+- Superseded: app scoring ran between Pass 1 and Pass 2 in this earlier direction. The active Pass 2 scoring call owns new-state Operational Fit and Reality Check point proposals inside app validation rails.
+- Superseded: Pass 2 wrote participant narrative in this earlier direction. The active Pass 3 receives accepted scores plus validated Pass 1 and Pass 2 context and writes participant narrative only.
+- The active prompt builder is simplified to the current Trial Score V1 three-pass contract.
+- OpenAI and Gemini provider paths use the same staged behavior conceptually: Pass 1, targeted repair when needed, Pass 2 scoring, targeted scoring repair when needed, then Pass 3 narrative generation.
 
 Retry and validation behavior:
 
 - Gemini malformed JSON / max-token Pass 1 retry remains reserved for parse failure or provider truncation.
 - Pass 1 validation repair retries target invalid classifications, invalid allocation targets, anti-double-counting failures, and invalid scoring structure.
-- Pass 2 repair is separate and targets only invalid participant-narrative fields; it does not rerun Pass 1 or change app-owned scores.
+- Pass 2 scoring repair is separate and targets only invalid scoring fields; it does not rerun Pass 1. Pass 3 narrative repair targets only invalid participant-narrative fields and does not change accepted scores.
 - Retry history records stage, attempt, validation messages, parse status, latency, response length, and remaining errors.
 - After retries are exhausted, failure messages identify the failed level clearly.
 
 Operational Fit and same-state behavior:
 
-- Operational Fit is deterministic/app-owned once Pass 1 classifications validate.
+- Superseded: Operational Fit was deterministic/app-owned once Pass 1 classifications validated in this earlier direction. The active workflow accepts Pass 2 `operational_fit.points` after app validation.
 - A provider cannot keep Operational Fit credit when the current operational state returns to a prior identical scenario state.
-- Same-state deterministic app scoring is reused; Pass 2 may regenerate narrative with explicit reversion/path context.
-- This applies to deterministic app scoring state, not to replaying old participant narrative.
+- Same-state accepted scoring is reused; Pass 3 may regenerate narrative with explicit reversion/path context.
+- This applies to accepted scoring state, not to replaying old participant narrative.
 
 Reality Check behavior:
 
-- Reality Check defaults to zero when the pre-Reality movement is coherent and realistic.
+- Reality Check defaults to zero when the pre-reality check movement is coherent and realistic.
+- Positive Reality Check on an already positive pre-reality check movement is not allowed; use `0` to accept the gain or negative points to challenge it. Positive offsets are for unfavorable pre-reality check moves that appear to under-credit rigor, realism, or fit-for-purpose.
 - Reality Check is not a fifth pillar.
 - Reality Check allocations use canonical allocation target IDs, not free-typed subpillar labels.
+- Reality Check allocation display uses the subcategory `Reality Check` with a deterministic short explanation; the canonical target's source subpillar remains audit metadata.
 - Invalid or invented allocation labels are repaired through targeted validation; after repair exhaustion, scoring fails clearly rather than accepting arbitrary text.
 
 UI behavior:

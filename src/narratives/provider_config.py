@@ -20,8 +20,9 @@ DEFAULT_OPENAI_MODEL = "gpt-5.5-2026-04-23"
 DEFAULT_GEMINI_MODEL = "gemini-3.1-flash-lite"
 DEFAULT_TEMPERATURE = None
 DEFAULT_MAX_OUTPUT_TOKENS = 20000
-DEFAULT_TIMEOUT_SECONDS = 90
+DEFAULT_TIMEOUT_SECONDS = 100
 DEFAULT_MAX_RETRIES = 1
+DEFAULT_GEMINI_THINKING_LEVEL = "medium"
 DEFAULT_OPENAI_REASONING_EFFORT = "high"
 OPENAI_REASONING_EFFORTS = {"none", "minimal", "low", "medium", "high", "xhigh"}
 GEMINI_THINKING_LEVELS = {"low", "medium", "high"}
@@ -217,12 +218,13 @@ def load_narrative_provider_config(env: Mapping[str, str]) -> NarrativeProviderC
 
     temperature = _parse_optional_float_or_omit(env, "NARRATIVE_LLM_TEMPERATURE", DEFAULT_TEMPERATURE, errors)
     seed = _parse_optional_int(env, "NARRATIVE_LLM_SEED", errors)
-    gemini_thinking_level = _env_value(env, "GEMINI_THINKING_LEVEL")
-    if gemini_thinking_level is not None:
-        gemini_thinking_level = str(gemini_thinking_level).strip().lower()
-        if gemini_thinking_level not in GEMINI_THINKING_LEVELS:
-            errors.append(f"GEMINI_THINKING_LEVEL must be one of {sorted(GEMINI_THINKING_LEVELS)}")
-            gemini_thinking_level = None
+    gemini_thinking_level = str(
+        _env_value(env, "GEMINI_THINKING_LEVEL", DEFAULT_GEMINI_THINKING_LEVEL)
+        or DEFAULT_GEMINI_THINKING_LEVEL
+    ).strip().lower()
+    if gemini_thinking_level not in GEMINI_THINKING_LEVELS:
+        errors.append(f"GEMINI_THINKING_LEVEL must be one of {sorted(GEMINI_THINKING_LEVELS)}")
+        gemini_thinking_level = DEFAULT_GEMINI_THINKING_LEVEL
     openai_reasoning_effort = str(
         _env_value(env, "OPENAI_REASONING_EFFORT", DEFAULT_OPENAI_REASONING_EFFORT)
         or DEFAULT_OPENAI_REASONING_EFFORT
@@ -279,7 +281,7 @@ def provider_config_cache_namespace(config: NarrativeProviderConfig) -> str:
         f"gemini_model={(gemini.model if gemini else '')}",
         f"temperature={config.temperature}",
         f"seed={config.seed}",
-        f"gemini_thinking_level={config.gemini_thinking_level or 'default'}",
+        f"gemini_thinking_level={config.gemini_thinking_level}",
         f"openai_reasoning_effort={config.openai_reasoning_effort}",
         f"max_output_tokens={config.max_output_tokens}",
     ])

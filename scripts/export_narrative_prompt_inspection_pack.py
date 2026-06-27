@@ -9,7 +9,7 @@ import sys
 DISABLED_MESSAGE = (
     "scripts/export_narrative_prompt_inspection_pack.py is disabled. "
     "The previous exporter targeted a superseded narrative contract and should be rebuilt "
-    "around the active Trial Score two-pass contract before use."
+    "around the active Trial Score three-pass contract before use."
 )
 
 

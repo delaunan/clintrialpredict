@@ -371,15 +371,16 @@ Current defaults:
 - OpenAI model default: `gpt-5.5-2026-04-23`
 - Gemini model default: `gemini-3.1-flash-lite`
 - temperature: omitted/default
-- max output tokens: `12000`
-- timeout: `60` seconds
+- max output tokens: `20000`
+- timeout: `100` seconds
 - max retries: `1`
 - OpenAI reasoning effort: `high`
 
 Current Gemini live behavior in `src/narratives/provider.py`:
 
 - minimum output tokens: `12000`
-- primary thinking level: `high`
+- visible Pass 1 thinking level: `medium`
+- Pass 2 scoring and Pass 3 narrative thinking level: `medium`
 - malformed/MAX_TOKENS retry thinking level: `low`
 - retry output tokens: `16000`
 - one malformed JSON retry

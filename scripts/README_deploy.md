@@ -48,12 +48,14 @@ NARRATIVE_LIVE_REVIEW_ENABLED=true
 NARRATIVE_LLM_PROVIDER=gemini
 GEMINI_NARRATIVE_MODEL=gemini-3.1-flash-lite
 NARRATIVE_LLM_TEMPERATURE=omit
-GEMINI_THINKING_LEVEL=high
+GEMINI_THINKING_LEVEL=medium
 NARRATIVE_LLM_SEED=20260607
-NARRATIVE_LLM_TIMEOUT_SECONDS=90
+NARRATIVE_LLM_TIMEOUT_SECONDS=100
 NARRATIVE_LLM_MAX_OUTPUT_TOKENS=20000
 NARRATIVE_LLM_MAX_RETRIES=0
 ```
+
+`GEMINI_THINKING_LEVEL=medium` applies to Pass 2 scoring and Pass 3 narrative. Visible Pass 1 is fixed to medium in the provider code.
 
 The Gemini API key is not stored in this repository or Docker image. Configure it once on the Cloud Run `clintrial-simulator` service as `GEMINI_API_KEY` or `GOOGLE_API_KEY`, preferably from Secret Manager:
 

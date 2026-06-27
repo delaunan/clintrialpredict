@@ -180,9 +180,9 @@ deploy_ui() {
         env_vars="${env_vars},NARRATIVE_LLM_PROVIDER=gemini"
         env_vars="${env_vars},GEMINI_NARRATIVE_MODEL=gemini-3.1-flash-lite"
         env_vars="${env_vars},NARRATIVE_LLM_TEMPERATURE=omit"
-        env_vars="${env_vars},GEMINI_THINKING_LEVEL=high"
+        env_vars="${env_vars},GEMINI_THINKING_LEVEL=medium"
         env_vars="${env_vars},NARRATIVE_LLM_SEED=20260607"
-        env_vars="${env_vars},NARRATIVE_LLM_TIMEOUT_SECONDS=90"
+        env_vars="${env_vars},NARRATIVE_LLM_TIMEOUT_SECONDS=100"
         env_vars="${env_vars},NARRATIVE_LLM_MAX_OUTPUT_TOKENS=20000"
         env_vars="${env_vars},NARRATIVE_LLM_MAX_RETRIES=0"
     fi

@@ -134,18 +134,21 @@ def main() -> int:
         "reality_check_allocation_points": [
             {
                 "pillar": "Scientific Challenge",
-                "subpillar": "Endpoint Evidence Strength",
+                "subpillar": "Reality Check",
                 "points": 0.5,
+                "short_explanation": "Comparator clarity",
                 "rationale": "Comparator supports clearer endpoint interpretation.",
             }
         ],
     }
     treemap_rows = design_subcategory_impacts(treemap_trace)
+    if treemap_rows and treemap_rows[0].get("Subcategory") != "Reality Check":
+        errors.append("Reality Check treemap should use the pillar-level Reality Check subgroup")
     if not treemap_rows or not any(
-        "Comparator supports clearer endpoint interpretation." in detail
+        "Comparator clarity" in detail
         for detail in treemap_rows[0].get("FeatureDetails", [])
     ):
-        errors.append("Reality Check treemap details should include concise allocation rationale")
+        errors.append("Reality Check treemap details should include concise allocation explanation")
     details_text = " ".join(str(detail) for detail in (treemap_rows[0].get("FeatureDetails", []) if treemap_rows else []))
     if "Rating:" in details_text or "Score Materiality:" in details_text:
         errors.append("Reality Check treemap details should not expose internal rating or score_materiality labels")

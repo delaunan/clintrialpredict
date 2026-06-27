@@ -199,12 +199,23 @@ def _check_review_continuity_context(errors: list[str]) -> None:
         "trial_score": 66,
         "pre_reality_score": 68,
         "operational_fit_points": 0,
+        "operational_fit_assessment": {
+            "points": 0,
+            "relationship_to_previous": "unchanged",
+            "central_reason": "The prior operational plan remained neutral.",
+            "evidence_fields": ["operational_assumptions.planned_enrollment"],
+        },
         "reality_check_points": -2,
         "reality_check_assessment": {
             "effect": "offset_gain",
             "strength": "moderate",
             "points": -2,
             "central_reason": "The prior move simplified evidence.",
+            "score_evolution_read": {
+                "direction": "improved_but_weaker",
+                "main_reason": "The prior move improved feasibility while weakening evidence confidence.",
+                "active_issue_to_carry_forward": "endpoint credibility",
+            },
             "allocation_points": [
                 {
                     "allocation_target_id": "scientific_challenge.protocol_architecture",
@@ -225,6 +236,27 @@ def _check_review_continuity_context(errors: list[str]) -> None:
         "changed_fields": ["operational_assumptions.planned_enrollment"],
         "score_delta": 0,
         "central_tension": "",
+        "recent_score_traces": [
+            {
+                "iteration_id": 0,
+                "input_hash": "raw-prior-score-trace",
+                "trial_score": 61,
+                "participant_narrative_json": {"should_not": "reach_scoring_prompt"},
+                "input_packet": {"should_not": "reach_scoring_prompt"},
+                "reality_check_assessment": {
+                    "score_evolution_read": {
+                        "direction": "worsened",
+                        "main_reason": "Prior raw trace should be compacted before reuse.",
+                    },
+                },
+            },
+            {
+                "iteration_id": 1,
+                "input_hash": "previous-input-hash",
+                "trial_score": 66,
+                "input_packet": {"should_not": "duplicate_or_reach_scoring_prompt"},
+            },
+        ],
         "recent_participant_visible_questions": [
             {
                 "question": "How should teams debate feasibility gains when evidence strength remains uncertain?",
@@ -385,6 +417,34 @@ def _check_review_continuity_context(errors: list[str]) -> None:
         errors.append("Trial Score continuity should carry previous_trial_score")
     if trial_score_continuity.get("previous_reality_check_points") != -2:
         errors.append("Trial Score continuity should carry previous_reality_check_points")
+    if (
+        (trial_score_continuity.get("previous_operational_fit_assessment") or {}).get("central_reason")
+        != "The prior operational plan remained neutral."
+    ):
+        errors.append("Trial Score continuity should carry previous Operational Fit assessment")
+    if (
+        (trial_score_continuity.get("previous_reality_check_assessment") or {}).get("central_reason")
+        != "The prior move simplified evidence."
+    ):
+        errors.append("Trial Score continuity should carry previous Reality Check assessment")
+    if (
+        (trial_score_continuity.get("previous_score_evolution_read") or {}).get("active_issue_to_carry_forward")
+        != "endpoint credibility"
+    ):
+        errors.append("Trial Score continuity should carry previous score evolution read")
+    recent_score_traces = trial_score_continuity.get("recent_score_traces") or []
+    if not recent_score_traces or recent_score_traces[-1].get("trial_score") != 66:
+        errors.append("Trial Score continuity should carry compact recent score traces")
+    if len(recent_score_traces) != 2:
+        errors.append("Trial Score continuity should retain prior compact score trace plus current previous trace")
+    forbidden_score_trace_keys = {"participant_narrative_json", "input_packet", "output_json", "validated_review"}
+    if any(forbidden_score_trace_keys.intersection(trace) for trace in recent_score_traces):
+        errors.append("Trial Score continuity should sanitize raw score trace history before prompt use")
+    if (
+        (recent_score_traces[0].get("score_evolution_read") or {}).get("main_reason")
+        != "Prior raw trace should be compacted before reuse."
+    ):
+        errors.append("Trial Score continuity should preserve compact score evolution history from prior traces")
     if trial_score_continuity.get("protected_gains") != ["reduced execution burden"]:
         errors.append("Trial Score continuity should carry protected gains")
     if trial_score_continuity.get("regression_watch") != ["endpoint credibility"]:
@@ -988,6 +1048,170 @@ def _check_storyline_report_compatibility(errors: list[str]) -> None:
         errors.append("temperature narrative signature should ignore the retired operations question")
 
 
+def _check_submitted_text_context_is_authoritative(errors: list[str]) -> None:
+    baseline_text = {
+        "title": "Baseline PV trial",
+        "conditions_ui": "Polycythemia Vera",
+        "summary_ui": "Baseline summary.",
+        "interventions_ui": "Baseline intervention.",
+        "primary_outcomes_ui": "Baseline primary outcome.",
+    }
+    live_row_text = dict(baseline_text)
+    changed_text = {
+        "title": "Submitted title contradiction",
+        "conditions_ui": "Polycythemia Vera\n- breast cancer\n- prostate cancer\n- hemophilia",
+        "summary_ui": "Submitted summary adds unrelated solid tumors and hemophilia.",
+        "interventions_ui": "Submitted intervention text contradicts the hematology drug context.",
+        "primary_outcomes_ui": "Submitted primary outcome no longer matches the PV endpoint set.",
+    }
+    baseline_snapshot = {
+        "snapshot_id": "baseline",
+        "compare_values": {
+            "therapeutic_area_ml": "HEMATOLOGY",
+            "gbd_cause_id_3_ml": 490,
+            "phase_ml": "PHASE2",
+        },
+        "text_context": baseline_text,
+        "score": 50,
+        "operational_assumptions": {
+            "planned_enrollment": {"value": 100},
+            "planned_sites": {"value": 10},
+            "planned_duration_months": {"value": 24},
+        },
+    }
+    previous_snapshot = {
+        **baseline_snapshot,
+        "snapshot_id": "previous",
+        "text_context": baseline_text,
+        "changed_text_context_fields": [],
+    }
+    previous_packet = build_review_packet(
+        current_snapshot=previous_snapshot,
+        baseline_snapshot=baseline_snapshot,
+        text_context=live_row_text,
+    )
+
+    cases = [
+        (
+            "text-only",
+            {
+                **previous_snapshot,
+                "snapshot_id": "text-only-current",
+                "text_context": changed_text,
+                "changed_text_context_fields": list(changed_text),
+            },
+        ),
+        (
+            "text-plus-canonical",
+            {
+                **previous_snapshot,
+                "snapshot_id": "text-plus-canonical-current",
+                "compare_values": {
+                    **(previous_snapshot.get("compare_values") or {}),
+                    "phase_ml": "PHASE3",
+                },
+                "text_context": changed_text,
+                "changed_fields": ["phase_ml"],
+                "changed_text_context_fields": list(changed_text),
+            },
+        ),
+        (
+            "text-plus-operational",
+            {
+                **previous_snapshot,
+                "snapshot_id": "text-plus-operational-current",
+                "text_context": changed_text,
+                "changed_text_context_fields": list(changed_text),
+                "operational_assumptions": {
+                    "planned_enrollment": {"value": 180},
+                    "planned_sites": {"value": 18},
+                    "planned_duration_months": {"value": 30},
+                },
+                "changed_operational_assumptions": [
+                    "planned_enrollment",
+                    "planned_sites",
+                    "planned_duration_months",
+                ],
+            },
+        ),
+    ]
+
+    for label, current_snapshot in cases:
+        packet = build_review_packet(
+            current_snapshot=current_snapshot,
+            previous_snapshot=previous_snapshot,
+            baseline_snapshot=baseline_snapshot,
+            text_context=live_row_text,
+        )
+        packet_text = packet.get("text_context") or {}
+        for key, expected in changed_text.items():
+            if packet_text.get(key) != expected:
+                errors.append(
+                    f"{label}: submitted text_context.{key} should override stale live-row text in packet"
+                )
+
+        field_changes = (packet.get("iteration_context") or {}).get("field_changes") or []
+        for key, expected in changed_text.items():
+            field = f"text_context.{key}"
+            change = next((item for item in field_changes if item.get("field") == field), None)
+            if not change or change.get("current_value") != expected:
+                errors.append(f"{label}: field_changes should preserve submitted current value for {field}")
+
+        if packet.get("scenario_state_hash") == previous_packet.get("scenario_state_hash"):
+            errors.append(f"{label}: changed submitted text should prevent same-state hash reuse")
+
+    unchanged_text_cases = [
+        (
+            "canonical-only",
+            {
+                **previous_snapshot,
+                "snapshot_id": "canonical-only-current",
+                "compare_values": {
+                    **(previous_snapshot.get("compare_values") or {}),
+                    "phase_ml": "PHASE3",
+                },
+                "text_context": baseline_text,
+                "changed_fields": ["phase_ml"],
+            },
+        ),
+        (
+            "operational-only",
+            {
+                **previous_snapshot,
+                "snapshot_id": "operational-only-current",
+                "text_context": baseline_text,
+                "operational_assumptions": {
+                    "planned_enrollment": {"value": 180},
+                    "planned_sites": {"value": 18},
+                    "planned_duration_months": {"value": 30},
+                },
+                "changed_operational_assumptions": [
+                    "planned_enrollment",
+                    "planned_sites",
+                    "planned_duration_months",
+                ],
+            },
+        ),
+    ]
+    for label, current_snapshot in unchanged_text_cases:
+        packet = build_review_packet(
+            current_snapshot=current_snapshot,
+            previous_snapshot=previous_snapshot,
+            baseline_snapshot=baseline_snapshot,
+            text_context=live_row_text,
+        )
+        if (packet.get("text_context") or {}) != baseline_text:
+            errors.append(f"{label}: unchanged text_context should remain unchanged")
+        if packet.get("scenario_state_hash") == previous_packet.get("scenario_state_hash"):
+            errors.append(f"{label}: canonical or operational changes should prevent same-state hash reuse")
+
+        changed_fields = (packet.get("iteration_context") or {}).get("changed_fields") or []
+        if label == "canonical-only" and "phase_ml" not in changed_fields:
+            errors.append("canonical-only: canonical field should remain a changed field when text is unchanged")
+        if label == "operational-only" and "operational_assumptions.planned_enrollment" not in changed_fields:
+            errors.append("operational-only: operational estimate should remain a changed field when text is unchanged")
+
+
 def main() -> int:
     errors: list[str] = []
     fixtures = get_contract_fixtures()
@@ -998,6 +1222,7 @@ def main() -> int:
     _check_field_and_impact_changes(errors)
     _check_operational_movement_context(errors)
     _check_storyline_report_compatibility(errors)
+    _check_submitted_text_context_is_authoritative(errors)
 
     if errors:
         for error in errors:

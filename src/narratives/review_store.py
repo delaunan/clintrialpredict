@@ -19,6 +19,13 @@ from src.narratives.question_history import (
 )
 from src.narratives.review_controls import apply_review_control_overrides, attach_review_controls
 from src.narratives.storyline import build_storyline_state
+from src.narratives.trial_score_contract import (
+    SCORE_TRACE_HISTORY_LIMIT,
+    operational_fit_state_hash,
+    operational_fit_state_payload,
+    xgboost_structured_state_hash,
+    xgboost_structured_state_payload,
+)
 
 NARRATIVE_REVIEW_STATE_KEY = "narrative_review_store_v2"
 
@@ -96,6 +103,79 @@ def _cache_key(
     return f"{provider_key}:{model_key}:{namespace_key}:{input_hash}"
 
 
+def _score_evolution_read(trace: dict[str, Any]) -> dict[str, Any]:
+    reality_check_assessment = trace.get("reality_check_assessment") or {}
+    scoring_review = trace.get("scoring_review") or {}
+    value = (
+        reality_check_assessment.get("score_evolution_read")
+        or (scoring_review.get("score_evolution_read") if isinstance(scoring_review, dict) else {})
+        or trace.get("score_evolution_read")
+        or {}
+    )
+    return deepcopy(value) if isinstance(value, dict) else {}
+
+
+def _compact_score_trace(trace: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "iteration_id": trace.get("iteration_id"),
+        "input_hash": trace.get("input_hash"),
+        "trial_score": trace.get("trial_score"),
+        "pre_reality_score": trace.get("pre_reality_score"),
+        "operational_fit_points": trace.get("operational_fit_points"),
+        "operational_fit_state_hash": trace.get("operational_fit_state_hash"),
+        "operational_fit_state_payload": deepcopy(trace.get("operational_fit_state_payload") or {}),
+        "xgboost_structured_state_hash": trace.get("xgboost_structured_state_hash"),
+        "xgboost_structured_state_payload": deepcopy(trace.get("xgboost_structured_state_payload") or {}),
+        "reality_check_points": trace.get("reality_check_points"),
+        "operational_fit_assessment": deepcopy(trace.get("operational_fit_assessment") or {}),
+        "reality_check_assessment": deepcopy(trace.get("reality_check_assessment") or {}),
+        "score_evolution_read": _score_evolution_read(trace),
+        "central_tension": trace.get("central_tension"),
+        "changed_fields": deepcopy(trace.get("changed_fields") or []),
+    }
+
+
+def _score_trace_identity(trace: dict[str, Any]) -> tuple[Any, Any] | None:
+    identity = (trace.get("input_hash"), trace.get("iteration_id"))
+    return identity if any(value is not None for value in identity) else None
+
+
+def _dedupe_score_traces(traces: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    deduped: list[dict[str, Any]] = []
+    seen: set[tuple[Any, Any]] = set()
+    for trace in traces:
+        identity = _score_trace_identity(trace)
+        if identity is not None:
+            if identity in seen:
+                continue
+            seen.add(identity)
+        deduped.append(trace)
+    return deduped
+
+
+def _rolling_score_traces(packet: dict[str, Any], trace: dict[str, Any]) -> list[dict[str, Any]]:
+    continuity = (packet.get("iteration_context") or {}).get("trial_score_continuity") or {}
+    previous_review_context = (packet.get("review_context") or {}).get("previous_review") or {}
+    previous_recent_traces = continuity.get("recent_score_traces")
+    if not isinstance(previous_recent_traces, list):
+        previous_recent_traces = previous_review_context.get("recent_score_traces")
+
+    recent_score_traces: list[dict[str, Any]] = []
+    if isinstance(previous_recent_traces, list):
+        recent_score_traces.extend(
+            _compact_score_trace(item)
+            for item in previous_recent_traces
+            if isinstance(item, dict)
+        )
+    current_score_trace = _compact_score_trace(trace)
+    current_identity = _score_trace_identity(current_score_trace)
+    if current_identity is None or current_identity not in {
+        _score_trace_identity(item) for item in recent_score_traces
+    }:
+        recent_score_traces.append(current_score_trace)
+    return _dedupe_score_traces(recent_score_traces)[-SCORE_TRACE_HISTORY_LIMIT:]
+
+
 def _build_trace(
     *,
     packet: dict[str, Any],
@@ -107,6 +187,12 @@ def _build_trace(
 ) -> dict[str, Any]:
     iteration_context = packet.get("iteration_context") or {}
     scoring = review_result.get("scoring") or {}
+    scoring_operational_hash = scoring.get("operational_fit_state_hash") or operational_fit_state_hash(packet)
+    scoring_operational_payload = scoring.get("operational_fit_state_payload") or operational_fit_state_payload(packet)
+    scoring_structured_hash = scoring.get("xgboost_structured_state_hash") or xgboost_structured_state_hash(packet)
+    scoring_structured_payload = (
+        scoring.get("xgboost_structured_state_payload") or xgboost_structured_state_payload(packet)
+    )
     validated_review = review_result.get("validated_review")
     participant_narrative = review_result.get("participant_narrative")
     validated_participant_narrative = review_result.get("validated_participant_narrative")
@@ -196,15 +282,22 @@ def _build_trace(
         "validation_errors": deepcopy(scoring.get("validation_errors") or []),
         "xgboost_completion_outlook": scoring.get("xgboost_completion_outlook"),
         "operational_fit_points": operational_fit_points,
+        "operational_fit_state_hash": scoring_operational_hash,
+        "operational_fit_state_payload": deepcopy(scoring_operational_payload or {}),
+        "xgboost_structured_state_hash": scoring_structured_hash,
+        "xgboost_structured_state_payload": deepcopy(scoring_structured_payload or {}),
         "operational_fit_assessment": deepcopy(scoring.get("operational_fit_assessment") or {}),
         "pre_reality_score": pre_reality_score,
         "pre_reality_delta": pre_reality_delta,
         "reality_check_points": reality_check_points,
         "reality_check_assessment": reality_check_assessment,
+        "score_evolution_read": _score_evolution_read({"reality_check_assessment": reality_check_assessment}),
         "reality_check_allocation_points": reality_check_allocation_points,
         "trial_score_diagnostics": {
             "xgboost_completion_outlook": scoring.get("xgboost_completion_outlook"),
             "operational_fit_points": operational_fit_points,
+            "operational_fit_state_hash": scoring_operational_hash,
+            "xgboost_structured_state_hash": scoring_structured_hash,
             "pre_reality_score": pre_reality_score,
             "pre_reality_delta": pre_reality_delta,
             "reality_check_points": reality_check_points,
@@ -241,6 +334,7 @@ def _build_trace(
         "score_movement": (packet.get("model_interpretation") or {}).get("score_delta"),
         "compact_storyline_memory": compact_storyline_from_trace({"validated_review": validated_review}),
     }
+    trace["recent_score_traces"] = _rolling_score_traces(packet, trace)
     return trace
 
 

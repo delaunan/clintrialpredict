@@ -4,12 +4,67 @@ import traceback
 from datetime import datetime, timezone
 
 
+def _positive_int(value):
+    try:
+        numeric = int(value)
+    except (TypeError, ValueError):
+        return None
+    return numeric if numeric > 0 else None
+
+
+def _stage_latency_payload(metadata):
+    stages = {
+        "pass1_initial": _positive_int(metadata.get("latency_ms")),
+        "pass1_repair": _positive_int(metadata.get("validation_retry_latency_ms")),
+        "pass2_scoring": _positive_int(metadata.get("pass2_scoring_latency_ms")),
+        "pass2_scoring_repair": _positive_int(metadata.get("pass2_scoring_retry_latency_ms")),
+        "pass3_narrative": _positive_int(metadata.get("pass2_latency_ms")),
+        "pass3_narrative_repair": _positive_int(metadata.get("pass2_retry_latency_ms")),
+        "malformed_json_retry": _positive_int(metadata.get("malformed_json_retry_latency_ms")),
+    }
+    return {key: value for key, value in stages.items() if value is not None}
+
+
+def _response_length_payload(metadata):
+    lengths = {
+        "pass1_initial": _positive_int(metadata.get("response_text_length")),
+        "pass1_repair": _positive_int(metadata.get("validation_retry_response_text_length")),
+        "pass2_scoring": _positive_int(metadata.get("pass2_scoring_response_text_length")),
+        "pass2_scoring_repair": _positive_int(metadata.get("pass2_scoring_retry_response_text_length")),
+        "pass3_narrative": _positive_int(metadata.get("pass2_response_text_length")),
+        "pass3_narrative_repair": _positive_int(metadata.get("pass2_retry_response_text_length")),
+    }
+    return {key: value for key, value in lengths.items() if value is not None}
+
+
+def _stage_metadata_payload(metadata, suffix):
+    stages = {
+        "pass1_initial": metadata.get(f"pass1_initial_{suffix}"),
+        "pass1_repair": metadata.get(f"pass1_repair_{suffix}"),
+        "pass2_scoring": metadata.get(f"pass2_scoring_{suffix}"),
+        "pass2_scoring_repair": metadata.get(f"pass2_scoring_retry_{suffix}"),
+        "pass3_narrative": metadata.get(f"pass2_{suffix}"),
+        "pass3_narrative_repair": metadata.get(f"pass2_retry_{suffix}"),
+        "malformed_json_retry": metadata.get(f"malformed_json_retry_{suffix}"),
+    }
+    return {
+        key: value
+        for key, value in stages.items()
+        if value not in (None, "", [], {})
+    }
+
+
 def diagnostics_payload(trace):
     if not trace:
         return {}
 
     metadata = trace.get("provider_metadata") or {}
     workflow = trace.get("workflow_metadata") or {}
+    stage_latency = _stage_latency_payload(metadata)
+    response_lengths = _response_length_payload(metadata)
+    stage_usage = _stage_metadata_payload(metadata, "usage_metadata")
+    stage_finish = _stage_metadata_payload(metadata, "finish_metadata")
+    model_call_latency = sum(stage_latency.values()) if stage_latency else None
     diagnostics = {
         "status": trace.get("status"),
         "failure_reason": trace.get("failure_reason"),
@@ -33,7 +88,14 @@ def diagnostics_payload(trace):
         "prompt_mode": metadata.get("prompt_mode"),
         "attempts": metadata.get("attempts"),
         "provider_latency_ms": metadata.get("latency_ms"),
+        "provider_latency_scope": "pass1_initial_only" if len(stage_latency) > 1 else None,
+        "stage_latency_ms": stage_latency,
+        "model_call_latency_ms": model_call_latency,
         "response_text_length": metadata.get("response_text_length"),
+        "response_text_length_scope": "pass1_initial_only" if len(response_lengths) > 1 else None,
+        "stage_response_text_length": response_lengths,
+        "stage_usage_metadata": stage_usage,
+        "stage_finish_metadata": stage_finish,
         "parsed_json_object": metadata.get("parsed_json_object"),
         "parsed_payload_type": metadata.get("parsed_payload_type"),
         "usage_metadata": metadata.get("usage_metadata"),

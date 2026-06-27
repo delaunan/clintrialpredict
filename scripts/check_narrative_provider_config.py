@@ -15,6 +15,7 @@ if str(ROOT) not in sys.path:
 
 from src.narratives.provider_config import (  # noqa: E402
     DEFAULT_GEMINI_MODEL,
+    DEFAULT_GEMINI_THINKING_LEVEL,
     DEFAULT_MAX_OUTPUT_TOKENS,
     DEFAULT_MAX_RETRIES,
     DEFAULT_OPENAI_MODEL,
@@ -45,10 +46,21 @@ def _check_defaults(errors: list[str]) -> None:
         errors.append("default max_output_tokens mismatch")
     if config.timeout_seconds != DEFAULT_TIMEOUT_SECONDS:
         errors.append("default timeout_seconds mismatch")
+    if DEFAULT_TIMEOUT_SECONDS != 100:
+        errors.append("default timeout_seconds should remain calibrated to 100 seconds")
     if config.max_retries != DEFAULT_MAX_RETRIES:
         errors.append("default max_retries mismatch")
     if config.openai_reasoning_effort != DEFAULT_OPENAI_REASONING_EFFORT:
         errors.append("default openai reasoning effort mismatch")
+    if config.gemini_thinking_level != DEFAULT_GEMINI_THINKING_LEVEL:
+        errors.append("default Gemini thinking level should resolve explicitly")
+    if DEFAULT_GEMINI_THINKING_LEVEL != "medium":
+        errors.append("default Gemini thinking level should remain medium for live latency control")
+    default_namespace = provider_config_cache_namespace(config)
+    if "gemini_thinking_level=medium" not in default_namespace:
+        errors.append("default provider cache namespace should include effective medium Gemini thinking")
+    if "gemini_thinking_level=default" in default_namespace:
+        errors.append("provider cache namespace should not use ambiguous default Gemini thinking")
     if config.temperature is not None:
         errors.append("default temperature should be omitted")
 

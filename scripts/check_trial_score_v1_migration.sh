@@ -11,6 +11,7 @@ python scripts/check_narrative_packet_builder.py
 python scripts/check_completion_decomposition.py
 python scripts/check_narrative_live_snapshot_flow.py
 python scripts/check_scenario_review_failure_formatting.py
+python scripts/check_scenario_review_diagnostics.py
 python scripts/check_trial_score_visual_data.py
 python -m py_compile \
   src/narratives/trial_score_contract.py \
@@ -30,6 +31,7 @@ python -m py_compile \
   scripts/check_trial_score_contract.py \
   scripts/check_completion_decomposition.py \
   scripts/check_trial_score_no_obsolete_active_fields.py \
+  scripts/check_scenario_review_diagnostics.py \
   scripts/check_trial_score_visual_data.py
 git diff --check
 

@@ -67,6 +67,7 @@ from src.narratives.provider import (
     review_packet_pass1_initial_with_provider,
     review_packet_pass1_repair_with_provider,
     review_packet_pass2_with_provider,
+    review_packet_scoring_with_provider,
 )
 from src.narratives.provider_config import (
     PROVIDER_GEMINI,
@@ -153,13 +154,19 @@ API_TIMEOUT_SECONDS = 60
 logger = logging.getLogger(__name__)
 ID_COL = "nct_id"
 SCENARIO_IMPACT_PROGRESS_LABEL = "Evaluating Scenario Impact..."
-SCENARIO_REFINING_PROGRESS_LABEL = "Refining Score..."
-SCENARIO_ANALYSIS_PROGRESS_LABEL = "Generating Analysis..."
+SCENARIO_REFINING_PROGRESS_LABEL = "Repairing Scenario Read..."
+SCENARIO_SCORING_PROGRESS_LABEL = "Scoring Scenario Fit..."
+SCENARIO_ANALYSIS_PROGRESS_LABEL = "Writing Scenario Narrative..."
 SCENARIO_REVIEW_WORKFLOW_STATE_KEY = "scenario_review_live_workflow_state"
 SCENARIO_REVIEW_PROGRESS_LABEL_KEY = "simulation_review_progress_label"
 SCENARIO_REVIEW_PHASE_PASS1 = "pass1"
 SCENARIO_REVIEW_PHASE_REPAIR = "pass1_repair"
-SCENARIO_REVIEW_PHASE_PASS2 = "pass2"
+SCENARIO_REVIEW_PHASE_SCORING = "pass2_scoring"
+SCENARIO_REVIEW_PHASE_NARRATIVE = "pass3_narrative"
+SCENARIO_SOURCE_OF_TRUTH_PREFACE = (
+    "In case of misalignment across Trial description fields and structured fields, "
+    "the value in the structured fields drives the analysis, while the Trial description fields are used as supporting context."
+)
 
 
 # ==========================
@@ -7000,6 +7007,15 @@ def _attach_state_equivalence_context(packet, prior_trace):
     return updated
 
 
+def _reality_check_allocations_from_trace(trace):
+    top_level = (trace or {}).get("reality_check_allocation_points")
+    if isinstance(top_level, list) and top_level:
+        return deepcopy(top_level)
+    assessment = (trace or {}).get("reality_check_assessment") or {}
+    nested = assessment.get("allocation_points")
+    return deepcopy(nested) if isinstance(nested, list) else []
+
+
 def _same_state_reused_scoring(prior_trace, packet):
     model = packet.get("model_interpretation") or {}
     continuity = (packet.get("iteration_context") or {}).get("trial_score_continuity") or {}
@@ -7027,13 +7043,14 @@ def _same_state_reused_scoring(prior_trace, packet):
         "pre_reality_score": pre_reality_score,
         "pre_reality_delta": _delta(pre_reality_score, previous_pre_reality_score),
         "reality_check_points": prior_trace.get("reality_check_points"),
-        "reality_check_allocation_points": deepcopy(prior_trace.get("reality_check_allocation_points") or []),
+        "reality_check_allocation_points": _reality_check_allocations_from_trace(prior_trace),
         "trial_score": trial_score,
         "delta_vs_previous_trial_score": _delta(trial_score, previous_trial_score),
         "delta_vs_previous_pre_reality_score": _delta(pre_reality_score, previous_pre_reality_score),
         "delta_vs_baseline_xgboost": _delta(trial_score, baseline_completion_score),
         "operational_fit_assessment": deepcopy(prior_trace.get("operational_fit_assessment") or {}),
         "reality_check_assessment": deepcopy(prior_trace.get("reality_check_assessment") or {}),
+        "scoring_review": deepcopy(prior_trace.get("scoring_review") or {}),
         "input_hash": packet.get("input_hash"),
     }
 
@@ -7063,27 +7080,27 @@ def _same_state_validated_review(prior_trace, packet):
     return validated
 
 
-def _same_state_result_with_fallback_narrative(result, prior_trace):
-    if result.get("validated_participant_narrative") or result.get("participant_narrative_status") == "valid":
-        return result
+def _same_state_result_with_replayed_narrative(result, prior_trace):
     prior_validated = deepcopy(prior_trace.get("validated_participant_narrative") or {})
     prior_raw = deepcopy(prior_trace.get("participant_narrative_json") or prior_validated)
     if not prior_validated:
         return result
     updated = dict(result)
     metadata = dict(updated.get("provider_metadata") or {})
-    metadata["pass2_same_state_fallback_narrative"] = True
+    metadata["pass2_skipped"] = True
+    metadata["pass2_skip_reason"] = (
+        "scenario_state_hash matched a previous visible review; participant narrative was replayed"
+    )
+    metadata["same_state_participant_narrative_reused"] = True
     updated["provider_metadata"] = metadata
     updated["participant_narrative"] = prior_raw
     updated["validated_participant_narrative"] = prior_validated
     updated["participant_narrative_status"] = "valid"
-    updated["participant_narrative_warning"] = (
-        "Pass 2 narrative was not regenerated; reused the prior same-state participant narrative."
-    )
+    updated["participant_narrative_warning"] = None
     return updated
 
 
-def _same_state_pass2_only_trace_for_packet(
+def _same_state_replay_trace_for_packet(
     *,
     packet,
     prior_trace,
@@ -7096,7 +7113,7 @@ def _same_state_pass2_only_trace_for_packet(
 ):
     provider = runtime.get("provider")
     provider_metadata = {
-        "workflow_stage": "same_state_pass2_only",
+        "workflow_stage": "same_state_replay",
         "same_state_reuse": True,
         "same_state_source_trace_id": prior_trace.get("trace_id"),
         "same_state_source_input_hash": prior_trace.get("input_hash"),
@@ -7105,6 +7122,8 @@ def _same_state_pass2_only_trace_for_packet(
         or ((prior_trace.get("input_packet") or {}).get("scenario_state_hash")),
         "pass1_skipped": True,
         "pass1_skip_reason": "scenario_state_hash matched a previous visible review; app-owned scoring was reused",
+        "pass2_skipped": True,
+        "pass2_skip_reason": "scenario_state_hash matched a previous visible review; participant narrative was replayed",
     }
     validated_review = _same_state_validated_review(prior_trace, packet)
     result = {
@@ -7119,14 +7138,7 @@ def _same_state_pass2_only_trace_for_packet(
         "validated_review": validated_review,
         "scoring": _same_state_reused_scoring(prior_trace, packet),
     }
-    st.session_state[SCENARIO_REVIEW_PROGRESS_LABEL_KEY] = SCENARIO_ANALYSIS_PROGRESS_LABEL
-    result = review_packet_pass2_with_provider(
-        packet,
-        result,
-        provider=provider,
-        config=runtime.get("config"),
-    )
-    result = _same_state_result_with_fallback_narrative(result, prior_trace)
+    result = _same_state_result_with_replayed_narrative(result, prior_trace)
     return _finalize_staged_scenario_review_trace(
         packet=packet,
         review_result=result,
@@ -7170,6 +7182,7 @@ def _staged_quality_review_trace_for_packet(
             "visible_started_at": time.monotonic(),
             "active_provider": runtime.get("provider"),
             "pass1_result": None,
+            "scoring_result": None,
         }
         st.session_state[SCENARIO_REVIEW_WORKFLOW_STATE_KEY] = workflow
 
@@ -7204,8 +7217,8 @@ def _staged_quality_review_trace_for_packet(
             st.session_state[SCENARIO_REVIEW_WORKFLOW_STATE_KEY] = workflow
             st.rerun()
         if result.get("status") == "reviewed":
-            workflow["phase"] = SCENARIO_REVIEW_PHASE_PASS2
-            st.session_state[SCENARIO_REVIEW_PROGRESS_LABEL_KEY] = SCENARIO_ANALYSIS_PROGRESS_LABEL
+            workflow["phase"] = SCENARIO_REVIEW_PHASE_SCORING
+            st.session_state[SCENARIO_REVIEW_PROGRESS_LABEL_KEY] = SCENARIO_SCORING_PROGRESS_LABEL
             st.session_state[SCENARIO_REVIEW_WORKFLOW_STATE_KEY] = workflow
             st.rerun()
         return _finalize_staged_scenario_review_trace(
@@ -7241,7 +7254,44 @@ def _staged_quality_review_trace_for_packet(
             workflow["active_provider"] = result.get("provider") or fallback_provider
         workflow["pass1_result"] = result
         if result.get("status") == "reviewed" and not pass1_result_needs_repair(result):
-            workflow["phase"] = SCENARIO_REVIEW_PHASE_PASS2
+            workflow["phase"] = SCENARIO_REVIEW_PHASE_SCORING
+            st.session_state[SCENARIO_REVIEW_PROGRESS_LABEL_KEY] = SCENARIO_SCORING_PROGRESS_LABEL
+            st.session_state[SCENARIO_REVIEW_WORKFLOW_STATE_KEY] = workflow
+            st.rerun()
+        return _finalize_staged_scenario_review_trace(
+            packet=packet,
+            review_result=result,
+            session_id=session_id,
+            baseline_id=(packet.get("iteration_context") or {}).get("baseline_snapshot_id"),
+            runtime=runtime,
+            workflow_started_at=workflow_started_at,
+            visible_review_started_at=visible_started_at,
+            baseline_latency_ms=baseline_latency_ms,
+            baseline_trace=baseline_trace,
+            current_snapshot_id=current_snapshot_id,
+        )
+
+    if phase == SCENARIO_REVIEW_PHASE_SCORING:
+        st.session_state[SCENARIO_REVIEW_PROGRESS_LABEL_KEY] = SCENARIO_SCORING_PROGRESS_LABEL
+        result = review_packet_scoring_with_provider(
+            packet,
+            workflow.get("pass1_result") or {},
+            provider=workflow.get("active_provider") or provider,
+            config=config,
+        )
+        fallback_provider = _staged_provider_with_fallback(result, runtime)
+        if fallback_provider:
+            fallback_result = review_packet_scoring_with_provider(
+                packet,
+                workflow.get("pass1_result") or {},
+                provider=fallback_provider,
+                config=config,
+            )
+            result = _apply_staged_fallback_metadata(result, fallback_result)
+            workflow["active_provider"] = result.get("provider") or fallback_provider
+        workflow["scoring_result"] = result
+        if result.get("status") == "reviewed":
+            workflow["phase"] = SCENARIO_REVIEW_PHASE_NARRATIVE
             st.session_state[SCENARIO_REVIEW_PROGRESS_LABEL_KEY] = SCENARIO_ANALYSIS_PROGRESS_LABEL
             st.session_state[SCENARIO_REVIEW_WORKFLOW_STATE_KEY] = workflow
             st.rerun()
@@ -7261,7 +7311,7 @@ def _staged_quality_review_trace_for_packet(
     st.session_state[SCENARIO_REVIEW_PROGRESS_LABEL_KEY] = SCENARIO_ANALYSIS_PROGRESS_LABEL
     result = review_packet_pass2_with_provider(
         packet,
-        workflow.get("pass1_result") or {},
+        workflow.get("scoring_result") or workflow.get("pass1_result") or {},
         provider=workflow.get("active_provider") or provider,
         config=config,
     )
@@ -7377,7 +7427,7 @@ def get_quality_review_trace_for_snapshot(row, snapshot):
         })
 
     if same_state_prior_trace:
-        same_state_trace = _same_state_pass2_only_trace_for_packet(
+        same_state_trace = _same_state_replay_trace_for_packet(
             packet=packet,
             prior_trace=same_state_prior_trace,
             runtime=runtime,
@@ -10949,8 +10999,6 @@ def _trial_score_narrative_html(consistency_text, trial_score_narrative):
     if not isinstance(trial_score_narrative, dict):
         trial_score_narrative = {}
     rows = []
-    if isinstance(consistency_text, str) and consistency_text.strip():
-        rows.append(("Scenario Consistency", consistency_text.strip()))
     for label, key in (
         ("Overall Evolution", "summary"),
         ("Completion Outlook", "movement_reading"),
@@ -10967,7 +11015,15 @@ def _trial_score_narrative_html(consistency_text, trial_score_narrative):
         "</p>"
         for label, text in rows
     )
+    consistency_html = (
+        "<div class='quality-review-text'><p>"
+        f"<strong>Scenario Consistency:</strong> {html.escape(consistency_text.strip())}"
+        "</p></div>"
+        if isinstance(consistency_text, str) and consistency_text.strip()
+        else ""
+    )
     return (
+        consistency_html +
         "<div class='quality-review-section-title'>Trial Score</div>"
         f"<div class='quality-review-text'>{body}</div>"
     )
@@ -11125,17 +11181,22 @@ def _design_pillar_impacts(trace):
     )
     if strategic_assessment and pd.notna(strategic_points):
         allocation_rows = (trace or {}).get("reality_check_allocation_points") or []
-        rows = []
+        impacts_by_pillar = {}
+        order = []
         for allocation in allocation_rows:
             impact = pd.to_numeric(allocation.get("points"), errors="coerce")
             if pd.isna(impact):
                 continue
-            rows.append({
-                "Pillar": allocation.get("pillar") or "Reality Check",
-                "Impact": float(impact),
-            })
-        if rows:
-            return rows
+            pillar = allocation.get("pillar") or "Reality Check"
+            if pillar not in impacts_by_pillar:
+                impacts_by_pillar[pillar] = 0.0
+                order.append(pillar)
+            impacts_by_pillar[pillar] += float(impact)
+        if order:
+            return [
+                {"Pillar": pillar, "Impact": round(float(impacts_by_pillar[pillar]), 4)}
+                for pillar in order
+            ]
         if (
             (trace or {}).get("reality_check_points") is not None
             or (trace or {}).get("operational_fit_points") is not None
@@ -11370,9 +11431,10 @@ def _score_view_pillar_delta_map(score_view, snapshot, scenario_trace, current_c
 def _combined_subcategory_impacts(completion_subcats, design_subcats):
     rows = [dict(item) for item in (completion_subcats or [])]
     for item in design_subcats or []:
+        subcategory = item.get("Subcategory")
         rows.append({
             **dict(item),
-            "Subcategory": f"Reality Check: {item.get('Subcategory')}",
+            "Subcategory": subcategory if subcategory == "Reality Check" else f"Reality Check: {subcategory}",
         })
     return rows
 
@@ -11611,7 +11673,7 @@ def _pass2_input_debug_view(pass2_input):
             "reality_check_alignment": alignment.get("reality_check_alignment") or {},
         },
         "score_alignment_conflicts": alignment.get("conflicts") or [],
-        "model_evidence_context": pass2_input.get("model_evidence_context") or {},
+        "selected_model_evidence_context": pass2_input.get("selected_model_evidence_context") or {},
         "participant_guardrails": pass2_input.get("participant_guardrails") or [],
         "debug_boundary_note": (
             "Pass 2 receives app_calculated_scores and may use them for calibration. "
@@ -11682,7 +11744,7 @@ def _scenario_review_audit_walkthrough(trace, packet, scoring, pass2_input, bund
 
 - XGBoost Completion Outlook: `{scoring.get("xgboost_completion_outlook")}`
 - Operational Fit: `{scoring.get("operational_fit_points")}`
-- Pre-Reality Score: `{scoring.get("pre_reality_score")}`
+- Pre-reality check score: `{scoring.get("pre_reality_score")}`
 - Reality Check: `{scoring.get("reality_check_points")}`
 - Trial Score: `{scoring.get("trial_score")}`
 
@@ -11989,11 +12051,7 @@ def render_scenario_review_report(row, trace=None, snapshot=None):
     )
     strategic_text = reality_text
     structured_strategic_html = _reality_check_structured_html(reality_check, key_questions)
-    consistency_text = (
-        consistency_note.get("message")
-        if consistency_note.get("has_clear_mismatch")
-        else ""
-    )
+    consistency_text = SCENARIO_SOURCE_OF_TRUTH_PREFACE
     medical_question = (
         key_questions.get("medical_clinical_development_question")
         or participant.get("medical_clinical_development_question")

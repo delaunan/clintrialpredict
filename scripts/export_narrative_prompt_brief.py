@@ -48,6 +48,7 @@ from src.narratives.prompt_builder import (  # noqa: E402
 from src.narratives.provider import (  # noqa: E402
     GEMINI_MALFORMED_JSON_RETRY_ATTEMPTS,
     GEMINI_MIN_SCHEMA_OUTPUT_TOKENS,
+    GEMINI_PASS1_THINKING_LEVEL,
     GEMINI_PRIMARY_THINKING_LEVEL,
     GEMINI_RETRY_OUTPUT_TOKENS,
     GEMINI_RETRY_THINKING_LEVEL,
@@ -89,7 +90,8 @@ def _safe_provider_settings() -> dict[str, Any]:
         "cache_namespace": provider_config_cache_namespace(config),
         "gemini_runtime_overrides": {
             "minimum_schema_output_tokens": GEMINI_MIN_SCHEMA_OUTPUT_TOKENS,
-            "primary_thinking_level": GEMINI_PRIMARY_THINKING_LEVEL,
+            "pass1_thinking_level": GEMINI_PASS1_THINKING_LEVEL,
+            "pass2_pass3_primary_thinking_level": GEMINI_PRIMARY_THINKING_LEVEL,
             "retry_thinking_level": GEMINI_RETRY_THINKING_LEVEL,
             "retry_output_tokens": GEMINI_RETRY_OUTPUT_TOKENS,
             "malformed_json_retry_attempts": GEMINI_MALFORMED_JSON_RETRY_ATTEMPTS,

@@ -8,7 +8,7 @@ This document records the planning decisions for adding `Operational Fit` as a s
 
 It supports `docs/trial_score_narrative_direction.md` and should be read before changing narrative packet fields, provider prompts, scoring code, barcharts, treemaps, or simulator UI behavior for planned enrollment, planned site count, and planned total duration.
 
-Operational Fit ratings belong in Pass 1 of the two-pass architecture defined in `docs/trial_score_narrative_direction.md`. The application then calculates Operational Fit points before Pass 2 writes the participant narrative.
+Active implementation note, 2026-06-25: the detailed `rating + materiality -> points` table below is retained as historical calibration guidance, not the live scoring algorithm. The active Scenario Review flow gives the LLM direct responsibility for `Operational Fit` points in the Pass 2 Score Adjudication call, while the app validates hard rails: `-5/+5`, evidence references, baseline-return neutralization, arithmetic, and deterministic reuse when the current operational assumptions, operational benchmark/movement context, and structured scenario context match a previous accepted trace. The app retains the latest 5 compact accepted score traces for score/component continuity checks, structured-feature interpretation continuity, and Reality Check memory; full same-state replay uses the review store's visible trace history keyed by scenario state.
 
 ## Core Decision
 
@@ -38,13 +38,14 @@ At scenario start, `Operational Fit = 0`.
 
 The opening operational values are treated as the neutral reference for that trial. They are not assumed to be perfect, clinically optimal, or executable in an absolute sense. They are the best available neutral operational assumption for the selected trial state.
 
-Operational Fit should move only when the participant changes one or more of:
+Operational Fit is assessed as a current-state operational proportionality score. It must be reassessed when the participant changes one or more of:
 
 - planned enrollment;
 - planned site count;
-- planned total duration.
+- planned total duration;
+- structured scenario fields that can alter the operational meaning, benchmark context, execution burden, duration proportionality, patient-per-site interpretation, or evidence ambition attached to the same operational estimates.
 
-Changes to cohort-defining structured fields, such as rare-disease status, may change the context used to interpret the same operational plan. They should not by themselves create Operational Fit points when planned enrollment, planned sites, and planned total duration are unchanged. If the unchanged plan becomes incoherent or under-supported in the new clinical context, the concern belongs in Reality Check and the analytical narrative.
+If the full scenario state matches a previous accepted scenario, same-state replay reuses the whole prior score trace, including Operational Fit and Reality Check. If only the Operational Fit state matches a previous accepted trace, the app reuses that prior Operational Fit points value while Reality Check may still reassess incremental coherence or shortcut concerns. If the operational estimates are unchanged but the structured scenario context changes, Pass 2 may reassess Operational Fit inside the `-5/+5` rail.
 
 The LLM should not ask:
 
@@ -401,7 +402,7 @@ Operational Fit should ask:
 Does the operational plan make the current completion-pattern movement more credible, less credible, or materially unresolved?
 ```
 
-For unchanged operational assumptions after a non-operational scenario change, Operational Fit should remain score-neutral. The narrative may still explain that the operational plan now looks more or less proportionate for the revised scenario, and Reality Check may correct the total score if that mismatch makes the pre-Reality movement unrealistic or under-supported.
+For unchanged operational assumptions after a non-operational scenario change, Operational Fit should remain score-neutral. The narrative may still explain that the operational plan now looks more or less proportionate for the revised scenario, and Reality Check may correct the total score if that mismatch makes the pre-reality check movement unrealistic or under-supported.
 
 Useful interaction labels:
 

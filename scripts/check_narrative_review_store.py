@@ -12,7 +12,7 @@ if str(ROOT) not in sys.path:
 
 from src.narratives.contract_fixtures import get_contract_fixtures  # noqa: E402
 from src.narratives.mock_reviewer import FAILURE_PROVIDER_ERROR  # noqa: E402
-from src.narratives.packet_builder import build_review_packet_from_fixture  # noqa: E402
+from src.narratives.packet_builder import build_review_packet, build_review_packet_from_fixture  # noqa: E402
 from src.narratives.review_store import (  # noqa: E402
     NARRATIVE_REVIEW_STATE_KEY,
     cached_review_trace,
@@ -23,6 +23,13 @@ from src.narratives.review_store import (  # noqa: E402
     store_review_trace,
 )
 from src.narratives.provider_config import load_narrative_provider_config  # noqa: E402
+from src.narratives.trial_score_contract import (  # noqa: E402
+    SCORE_TRACE_HISTORY_LIMIT,
+    operational_fit_state_hash,
+    operational_fit_state_payload,
+    xgboost_structured_state_hash,
+    xgboost_structured_state_payload,
+)
 
 
 def main() -> int:
@@ -39,6 +46,14 @@ def main() -> int:
         errors.append("first review should not be cached")
     if first.get("operational_fit_points") is None:
         errors.append("stored trace did not preserve Operational Fit points")
+    if not first.get("operational_fit_state_hash"):
+        errors.append("stored trace did not preserve Operational Fit state hash")
+    if not first.get("operational_fit_state_payload"):
+        errors.append("stored trace did not preserve Operational Fit state payload")
+    if not first.get("xgboost_structured_state_hash"):
+        errors.append("stored trace did not preserve XGBoost structured state hash")
+    if not first.get("xgboost_structured_state_payload"):
+        errors.append("stored trace did not preserve XGBoost structured state payload")
     if first.get("reality_check_points") is None:
         errors.append("stored trace did not preserve Reality Check points")
     if first.get("trial_score") is None:
@@ -82,6 +97,23 @@ def main() -> int:
         errors.append("stored trace did not preserve provider metadata")
     if not compact_storyline_from_trace(first):
         errors.append("stored trace should expose compact storyline memory")
+    first_score_history = first.get("recent_score_traces") or []
+    if len(first_score_history) != 1:
+        errors.append("first stored trace should initialize compact score trace history")
+    elif first_score_history[-1].get("trial_score") != first.get("trial_score"):
+        errors.append("first compact score trace should describe the stored score")
+    elif not first_score_history[-1].get("operational_fit_state_hash"):
+        errors.append("first compact score trace should preserve Operational Fit state hash")
+    forbidden_score_trace_keys = {
+        "input_packet",
+        "output_json",
+        "participant_narrative_json",
+        "validated_review",
+        "validated_participant_narrative",
+        "trial_score_narrative",
+    }
+    if any(forbidden_score_trace_keys.intersection(item) for item in first_score_history if isinstance(item, dict)):
+        errors.append("compact score trace history should not store bulky narrative payloads")
 
     cached = cached_review_trace(state, packet["input_hash"])
     if not cached:
@@ -144,6 +176,8 @@ def main() -> int:
             "validation_status": first.get("validation_status"),
             "validation_errors": first.get("validation_errors") or [],
             "operational_fit_points": first.get("operational_fit_points"),
+            "operational_fit_state_hash": first.get("operational_fit_state_hash"),
+            "operational_fit_state_payload": first.get("operational_fit_state_payload") or {},
             "reality_check_points": first.get("reality_check_points"),
             "trial_score": first.get("trial_score"),
             "operational_fit_assessment": first.get("operational_fit_assessment") or {},
@@ -178,6 +212,8 @@ def main() -> int:
             "validation_status": first.get("validation_status"),
             "validation_errors": first.get("validation_errors") or [],
             "operational_fit_points": first.get("operational_fit_points"),
+            "operational_fit_state_hash": first.get("operational_fit_state_hash"),
+            "operational_fit_state_payload": first.get("operational_fit_state_payload") or {},
             "reality_check_points": first.get("reality_check_points"),
             "trial_score": first.get("trial_score"),
             "operational_fit_assessment": first.get("operational_fit_assessment") or {},
@@ -185,11 +221,22 @@ def main() -> int:
             "input_hash": f"{packet['input_hash']}-manual-history-check",
         },
     }
+    prior_score_trace = {
+        **(first_score_history[-1] if first_score_history else {}),
+        "input_packet": {"should_not": "persist_in_score_history"},
+        "output_json": {"should_not": "persist_in_score_history"},
+    }
     history_trace = store_review_trace(
         state,
         packet={
             **packet,
             "input_hash": f"{packet['input_hash']}-manual-history-check",
+            "iteration_context": {
+                **(packet.get("iteration_context") or {}),
+                "trial_score_continuity": {
+                    "recent_score_traces": [prior_score_trace],
+                },
+            },
             "review_context": {
                 "previous_review": {
                     "recent_participant_visible_questions": [
@@ -214,6 +261,107 @@ def main() -> int:
         errors.append("participant-visible question history should retain previous questions and append current question")
     elif visible_history[-1].get("question") != current_question:
         errors.append("participant-visible question history should put the current question last")
+    score_history = history_trace.get("recent_score_traces") or []
+    if len(score_history) != 2:
+        errors.append("stored trace should carry previous compact score trace history and append current trace")
+    elif score_history[-1].get("input_hash") != f"{packet['input_hash']}-manual-history-check":
+        errors.append("stored trace should put the current compact score trace last")
+    if any(forbidden_score_trace_keys.intersection(item) for item in score_history if isinstance(item, dict)):
+        errors.append("stored rolling score trace history should sanitize raw prior trace payloads")
+    if score_history and not score_history[0].get("operational_fit_state_hash"):
+        errors.append("stored rolling score trace history should preserve prior Operational Fit state hash")
+
+    long_prior_score_traces = [
+        {
+            "iteration_id": index,
+            "input_hash": f"older-score-trace-{index}",
+            "trial_score": 50 + index,
+            "pre_reality_score": 49 + index,
+            "operational_fit_points": 1.0,
+            "operational_fit_state_hash": f"operational-state-{index}",
+            "operational_fit_state_payload": {"index": index},
+            "xgboost_structured_state_hash": f"structured-state-{index}",
+            "xgboost_structured_state_payload": {"index": index},
+            "reality_check_points": 0.0,
+        }
+        for index in range(SCORE_TRACE_HISTORY_LIMIT + 5)
+    ]
+    long_history_packet = {
+        **packet,
+        "input_hash": f"{packet['input_hash']}-manual-long-history-check",
+        "iteration_context": {
+            **(packet.get("iteration_context") or {}),
+            "trial_score_continuity": {
+                "recent_score_traces": long_prior_score_traces,
+            },
+        },
+    }
+    long_history_hash = operational_fit_state_hash(long_history_packet)
+    long_structured_hash = xgboost_structured_state_hash(long_history_packet)
+    long_history_trace = store_review_trace(
+        state,
+        packet=long_history_packet,
+        review_result={
+            **history_result,
+            "scoring": {
+                **history_result["scoring"],
+                "input_hash": long_history_packet.get("input_hash"),
+                "operational_fit_state_hash": long_history_hash,
+                "operational_fit_state_payload": operational_fit_state_payload(long_history_packet),
+                "xgboost_structured_state_hash": long_structured_hash,
+                "xgboost_structured_state_payload": xgboost_structured_state_payload(long_history_packet),
+            },
+        },
+        session_id="long-score-history-manual",
+    )
+    long_score_history = long_history_trace.get("recent_score_traces") or []
+    if len(long_score_history) != SCORE_TRACE_HISTORY_LIMIT:
+        errors.append(f"stored score trace history should retain exactly {SCORE_TRACE_HISTORY_LIMIT} compact traces")
+    elif long_score_history[-1].get("operational_fit_state_hash") != long_history_hash:
+        errors.append("stored score trace history should retain current Operational Fit state hash after trimming")
+    elif long_score_history[-1].get("xgboost_structured_state_hash") != long_structured_hash:
+        errors.append("stored score trace history should retain current XGBoost structured state hash after trimming")
+
+    lifecycle_packet = build_review_packet(
+        current_snapshot={
+            "snapshot_id": "score-history-lifecycle-current",
+            "structured_features": packet.get("structured_features", {}),
+            "operational_assumptions": packet.get("operational_assumptions", {}),
+            "model_interpretation": packet.get("model_interpretation", {}),
+            "changed_fields": ["phase_ml"],
+            "changed_operational_assumptions": [],
+        },
+        previous_snapshot={"snapshot_id": "score-history-lifecycle-previous", "score": first.get("trial_score")},
+        baseline_snapshot={"snapshot_id": "score-history-lifecycle-baseline"},
+        previous_review_trace=first,
+        compact_storyline_memory=first.get("compact_storyline_memory"),
+    )
+    lifecycle_continuity = lifecycle_packet.get("iteration_context", {}).get("trial_score_continuity") or {}
+    lifecycle_previous_history = lifecycle_continuity.get("recent_score_traces") or []
+    if len(lifecycle_previous_history) != 1:
+        errors.append("packet builder should not duplicate previous trace already present in stored score history")
+    lifecycle_trace = store_review_trace(
+        state,
+        packet=lifecycle_packet,
+        review_result={
+            **history_result,
+            "scoring": {
+                **history_result["scoring"],
+                "input_hash": lifecycle_packet.get("input_hash"),
+            },
+        },
+        session_id="score-history-lifecycle-session",
+    )
+    lifecycle_score_history = lifecycle_trace.get("recent_score_traces") or []
+    lifecycle_identities = [
+        (item.get("input_hash"), item.get("iteration_id"))
+        for item in lifecycle_score_history
+        if isinstance(item, dict)
+    ]
+    if len(lifecycle_score_history) != 2:
+        errors.append("stored lifecycle score history should contain previous trace and current trace once each")
+    if len(set(lifecycle_identities)) != len(lifecycle_identities):
+        errors.append("stored lifecycle score history should not duplicate trace identities")
 
     invalid_pass2_result = {
         "review_needed": True,
@@ -381,7 +529,7 @@ def main() -> int:
         session_id="app-reality-effect-session-manual",
     )
     if (app_reality_effect_trace.get("storyline_state") or {}).get("last_effect_label") != "neutral":
-        errors.append("storyline_state.last_effect_label should use app-scored Reality Check effect")
+        errors.append("storyline_state.last_effect_label should use accepted Reality Check effect")
 
     missing_key_config = load_narrative_provider_config({
         "NARRATIVE_LLM_PROVIDER": "openai",
